@@ -27,7 +27,6 @@ export const plantFormCategoryOrder: PlantFormCategory[] = [
 
 const fieldCategoryMap: Record<string, PlantFormCategory> = {
   // Section 1: Base
-  encyclopediaCategory: 'base',
   scientificNameSpecies: 'base',
   scientificNameVariety: 'base',
   family: 'base',
@@ -122,21 +121,17 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   ecologicalImpact: 'ecology',
 
   // Section 7: Consumption
-  infusion: 'consumption',
   infusionParts: 'consumption',
   infusionBenefits: 'consumption',
   infusionRecipeIdeas: 'consumption',
-  medicinal: 'consumption',
   medicinalBenefits: 'consumption',
   medicinalUsage: 'consumption',
   medicinalWarning: 'consumption',
   medicinalHistory: 'consumption',
   nutritionalValue: 'consumption',
   recipes: 'consumption',
-  aromatherapy: 'consumption',
   aromatherapyBenefits: 'consumption',
   essentialOilBlends: 'consumption',
-  fragrance: 'consumption',
   edibleOil: 'consumption',
   spiceMixes: 'consumption',
 
@@ -145,7 +140,6 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   biotopePlants: 'misc',
   beneficialPlants: 'misc',
   harmfulPlants: 'misc',
-  varieties: 'misc',
   plantTags: 'misc',
   biodiversityTags: 'misc',
   sources: 'misc',
@@ -153,7 +147,6 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   // Section 9: Meta
   status: 'meta',
   adminCommentary: 'meta',
-  userNotes: 'meta',
   contributors: 'meta',
 
   // Legacy aliases (map old names to new categories)
@@ -186,28 +179,53 @@ export const BOOLEAN_GATE_DEPS: Record<string, string[]> = {
   staking: ['stakingAdvice'],
   transplanting: ['transplantingTime', 'outdoorPlantingTime'],
   pruning: ['pruningMonth', 'pruningAdvice'],
-  // Consumption section
-  infusion: ['infusionParts', 'infusionBenefits', 'infusionRecipeIdeas', 'infusionMixes'],
-  medicinal: ['medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory'],
-  aromatherapy: ['aromatherapyBenefits', 'essentialOilBlends'],
 }
 
-/** Reverse lookup: dependent field → its gate field */
+/**
+ * Map of utility enum values (DB format) → dependent fields.
+ * When the utility array does NOT include the value, dependent fields are hidden.
+ */
+export const UTILITY_GATE_DEPS: Record<string, string[]> = {
+  infusion: ['infusionParts', 'infusionBenefits', 'infusionRecipeIdeas', 'infusionMixes'],
+  medicinal: ['medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory'],
+  aromatic: ['aromatherapyBenefits', 'essentialOilBlends'],
+}
+
+/** Reverse lookup: dependent field → its boolean gate field */
 const _gateForField: Record<string, string> = {}
 for (const [gate, deps] of Object.entries(BOOLEAN_GATE_DEPS)) {
   for (const dep of deps) _gateForField[dep] = gate
 }
 
-/** Return the gate field key that guards this field, or undefined if ungated */
-export function getGateForField(fieldKey: string): string | undefined {
-  return _gateForField[fieldKey]
+/** Reverse lookup: dependent field → its utility gate value (DB format) */
+const _utilityGateForField: Record<string, string> = {}
+for (const [utilVal, deps] of Object.entries(UTILITY_GATE_DEPS)) {
+  for (const dep of deps) _utilityGateForField[dep] = utilVal
 }
 
-/** Check whether a field is gated off (its gate is explicitly false) */
+/** Return the gate field key that guards this field, or undefined if ungated */
+export function getGateForField(fieldKey: string): string | undefined {
+  return _gateForField[fieldKey] || (_utilityGateForField[fieldKey] ? 'utility' : undefined)
+}
+
+/** Check whether a field is gated off (its boolean gate is false or utility value is missing) */
 export function isFieldGatedOff(plant: Record<string, unknown>, fieldKey: string): boolean {
-  const gate = _gateForField[fieldKey]
-  if (!gate) return false
-  return plant[gate] === false
+  // Boolean gate check
+  const boolGate = _gateForField[fieldKey]
+  if (boolGate) return plant[boolGate] === false
+
+  // Utility-based gate check
+  const utilGate = _utilityGateForField[fieldKey]
+  if (utilGate) {
+    const utility = plant.utility
+    if (!Array.isArray(utility)) return true
+    const needle = utilGate.toLowerCase().replace(/[_\s-]/g, '')
+    return !(utility as string[]).some(u =>
+      typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle
+    )
+  }
+
+  return false
 }
 
 export type CategoryProgress = Record<

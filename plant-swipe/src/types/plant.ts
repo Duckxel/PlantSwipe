@@ -4,14 +4,6 @@
 
 // -- Section 1: Base ----------------------------------------------------------
 
-export type EncyclopediaCategory =
-  | "tree" | "shrub" | "small_shrub" | "fruit_tree" | "bamboo"
-  | "cactus_succulent" | "herbaceous" | "palm" | "fruit_plant"
-  | "aromatic_plant" | "medicinal_plant" | "climbing_plant"
-  | "vegetable_plant" | "perennial_plant" | "bulb_plant"
-  | "rhizome_plant" | "indoor_plant" | "fern" | "moss_lichen"
-  | "aquatic_semi_aquatic"
-
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
   | "july" | "august" | "september" | "october" | "november" | "december"
@@ -20,7 +12,7 @@ export type MonthSlug =
 
 export type PlantUtility =
   | "edible" | "ornamental" | "aromatic" | "medicinal"
-  | "fragrant" | "cereal" | "spice"
+  | "fragrant" | "cereal" | "spice" | "infusion"
 
 export type EdiblePart =
   | "flower" | "fruit" | "seed" | "leaf" | "stem"
@@ -174,7 +166,6 @@ export interface Plant {
   scientificNameSpecies?: string
   scientificNameVariety?: string
   family?: string
-  encyclopediaCategory?: EncyclopediaCategory[]
   featuredMonth?: MonthSlug[]
 
   // -- Section 2: Identity ----------------------------------------------------
@@ -272,11 +263,7 @@ export interface Plant {
   symbiosisNotes?: string
 
   // -- Section 7: Consumption -------------------------------------------------
-  infusion?: boolean
   infusionParts?: string[]
-  medicinal?: boolean
-  aromatherapy?: boolean
-  fragrance?: boolean
   edibleOil?: "yes" | "no" | "unknown"
   // Translatable
   nutritionalValue?: string
@@ -299,7 +286,6 @@ export interface Plant {
   biotopePlants?: string[]
   beneficialPlants?: string[]
   harmfulPlants?: string[]
-  varieties?: string[]
   sponsoredShopIds?: string[]
   // Translatable
   plantTags?: string[]
@@ -308,7 +294,6 @@ export interface Plant {
   // -- Section 9: Meta --------------------------------------------------------
   status?: PlantStatus
   adminCommentary?: string
-  userNotes?: string
   createdBy?: string
   createdTime?: string
   updatedBy?: string
@@ -423,7 +408,7 @@ export type ColorOption = {
 // Legacy type aliases — kept so existing imports don't break
 // ============================================================================
 
-/** @deprecated Use EncyclopediaCategory */
+/** @deprecated */
 export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree" | "cactus" | "succulent"
 /** @deprecated Use EdiblePart */
 export type PlantComestiblePart = EdiblePart

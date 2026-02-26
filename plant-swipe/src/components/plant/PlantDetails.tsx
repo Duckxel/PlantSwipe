@@ -244,7 +244,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
-                {translatePlantType(Array.isArray(plant.encyclopediaCategory) && plant.encyclopediaCategory[0] ? plant.encyclopediaCategory[0] : plant.plantType)}
+                {translatePlantType(plant.plantType)}
               </Badge>
               {utilityBadges.map((u) => (
                 <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">

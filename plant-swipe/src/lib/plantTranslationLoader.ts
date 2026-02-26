@@ -7,7 +7,6 @@ import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant, PlantImage, PlantWateringSchedule, MonthSlug } from '@/types/plant'
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -100,7 +99,6 @@ function mapDbRowToPlant(
     scientificNameSpecies: (basePlant.scientific_name_species as string) || undefined,
     scientificNameVariety: (basePlant.scientific_name_variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toDbArray(basePlant.encyclopedia_category) as Plant['encyclopediaCategory'],
     featuredMonth: (basePlant.featured_month as MonthSlug[]) || [],
 
     // Section 2: Identity (non-translatable from plants table)
@@ -198,11 +196,7 @@ function mapDbRowToPlant(
     symbiosisNotes: (translation.symbiosis_notes as string) || undefined,
 
     // Section 7: Consumption (non-translatable)
-    infusion: (basePlant.infusion as boolean) ?? false,
     infusionParts: (basePlant.infusion_parts as string[]) || [],
-    medicinal: (basePlant.medicinal as boolean) ?? false,
-    aromatherapy: (basePlant.aromatherapy as boolean) ?? false,
-    fragrance: (basePlant.fragrance as boolean) ?? false,
     edibleOil: (basePlant.edible_oil as Plant['edibleOil']) || undefined,
     // Translatable
     nutritionalValue: (translation.nutritional_value as string) || undefined,
@@ -236,7 +230,6 @@ function mapDbRowToPlant(
     biotopePlants: (basePlant.biotope_plants as string[]) || [],
     beneficialPlants: (basePlant.beneficial_plants as string[]) || [],
     harmfulPlants: (basePlant.harmful_plants as string[]) || [],
-    varieties: (basePlant.varieties as string[]) || [],
     plantTags: (translation.plant_tags as string[]) || [],
     biodiversityTags: (translation.biodiversity_tags as string[]) || [],
     sources,
@@ -246,7 +239,6 @@ function mapDbRowToPlant(
     // Section 9: Meta
     status: (basePlant.status as Plant['status']) || undefined,
     adminCommentary: (basePlant.admin_commentary as string) || undefined,
-    userNotes: (basePlant.user_notes as string) || (translation.user_notes as string) || undefined,
     createdBy: (basePlant.created_by as string) || undefined,
     createdTime: (basePlant.created_time as string) || undefined,
     updatedBy: (basePlant.updated_by as string) || undefined,
@@ -397,14 +389,13 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const plantColumns = [
       'id', 'name',
       'scientific_name_species', 'family',
-      'encyclopedia_category', 'featured_month',
+      'featured_month',
       'climate', 'season', 'utility', 'edible_part',
       'thorny', 'toxicity_human', 'toxicity_pets',
       'life_cycle', 'foliage_persistence',
       'living_space', 'landscaping', 'plant_habit',
       'multicolor', 'bicolor',
       'care_level', 'sunlight',
-      'infusion', 'medicinal', 'aromatherapy', 'fragrance',
       'conservation_status',
       'biodiversity_role', 'ecological_tolerance',
       'companion_plants',

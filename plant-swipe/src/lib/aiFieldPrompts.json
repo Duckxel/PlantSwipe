@@ -1,7 +1,6 @@
 {
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
-    "- `encyclopediaCategory`: array from ONLY these values: [\"tree\",\"shrub\",\"small_shrub\",\"fruit_tree\",\"bamboo\",\"cactus_succulent\",\"herbaceous\",\"palm\",\"fruit_plant\",\"aromatic_plant\",\"medicinal_plant\",\"climbing_plant\",\"vegetable_plant\",\"perennial_plant\",\"bulb_plant\",\"rhizome_plant\",\"indoor_plant\",\"fern\",\"moss_lichen\",\"aquatic_semi_aquatic\"]",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
     "- `scientificNameVariety`: variety/cultivar name if applicable, or null",
     "- `family`: plant family (e.g. \"Araceae\")",
@@ -17,7 +16,7 @@
     "- `origin`: array of countries/regions (e.g. [\"South Africa\", \"Madagascar\"])",
     "- `climate`: array from ONLY: [\"polar\",\"montane\",\"oceanic\",\"degraded_oceanic\",\"temperate_continental\",\"mediterranean\",\"tropical_dry\",\"tropical_humid\",\"tropical_volcanic\",\"tropical_cyclonic\",\"humid_insular\",\"subtropical_humid\",\"equatorial\",\"windswept_coastal\"]",
     "- `season`: array from [\"spring\",\"summer\",\"autumn\",\"winter\"]",
-    "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\"]",
+    "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\",\"infusion\"]. Use \"infusion\" if plant can be used for tea/tisane, \"aromatic\" also covers aromatherapy, \"fragrant\" for notable fragrance, \"medicinal\" for medicinal uses.",
     "- `ediblePart`: array from ONLY: [\"flower\",\"fruit\",\"seed\",\"leaf\",\"stem\",\"bulb\",\"rhizome\",\"bark\",\"wood\"]. Empty array if not edible.",
     "- `thorny`: boolean",
     "- `toxicityHuman`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
@@ -103,22 +102,18 @@
     "Populate the CONSUMPTION section for {{plantName}}. Return a JSON object with ALL applicable fields:",
     "- `nutritionalValue`: text describing nutritional content if edible",
     "- `recipes`: array of recipe objects [{\"name\":\"...\",\"category\":\"...\",\"time\":\"...\"}]. Categories: \"Breakfast & Brunch\",\"Starters & Appetizers\",\"Soups & Salads\",\"Main Courses\",\"Side Dishes\",\"Desserts\",\"Drinks\",\"Other\". Time: \"Quick and Effortless\",\"30+ minutes Meals\",\"Slow Cooking\",\"Undefined\".",
-    "- `infusion`: boolean (usable for tea/infusion?)",
-    "- `infusionParts`: array of parts (e.g. [\"leaf\",\"flower\"]) if infusion=true",
-    "- `infusionBenefits`: text describing benefits",
+    "- `infusionParts`: array of parts (e.g. [\"leaf\",\"flower\"]) if utility includes \"infusion\"",
+    "- `infusionBenefits`: text describing infusion benefits",
     "- `infusionRecipeIdeas`: text with recipe ideas",
-    "- `medicinal`: boolean",
-    "- `medicinalBenefits`: text",
-    "- `medicinalUsage`: text describing how to use",
+    "- `medicinalBenefits`: text (if utility includes \"medicinal\")",
+    "- `medicinalUsage`: text describing how to use medicinally",
     "- `medicinalWarning`: text (safety: historical vs recommended today)",
     "- `medicinalHistory`: text (historical use, e.g. \"Used in China since X century\")",
-    "- `fragrance`: boolean",
-    "- `aromatherapy`: boolean",
-    "- `aromatherapyBenefits`: text if aromatherapy=true",
+    "- `aromatherapyBenefits`: text (if utility includes \"aromatic\")",
     "- `essentialOilBlends`: text with blend ideas",
     "- `edibleOil`: \"yes\", \"no\", or \"unknown\"",
     "- `spiceMixes`: array of spice blend uses",
-    "If the plant has no consumption uses, set booleans to false and texts to empty strings."
+    "Note: infusion/medicinal/aromatic/fragrant are set in the utility field (identity section), not here."
   ],
   "misc": [
     "Populate the MISC section for {{plantName}}. Return a JSON object:",
@@ -131,7 +126,6 @@
   "meta": [
     "When meta data is requested for {{plantName}}, return:",
     "- `adminCommentary`: string for internal editor notes",
-    "- `userNotes`: string for user-facing notes",
     "Leave status and timestamps untouched."
   ]
 }

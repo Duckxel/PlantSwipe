@@ -14,7 +14,6 @@ import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
 import type { Plant, PlantColor, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -733,7 +732,6 @@ export async function processPlantRequest(
       scientific_name_species: plant.scientificNameSpecies || null,
       scientific_name_variety: plant.scientificNameVariety || null,
       family: plant.family || null,
-      encyclopedia_category: encyclopediaCategoryEnum.toDbArray(plant.encyclopediaCategory),
       featured_month: plant.featuredMonth || [],
       // Section 2: Identity
       climate: climateEnum.toDbArray(plant.climate),
@@ -797,22 +795,16 @@ export async function processPlantRequest(
       ecological_management: plant.ecologicalManagement || [],
       ecological_impact: ecologicalImpactEnum.toDbArray(plant.ecologicalImpact),
       // Section 7: Consumption
-      infusion: coerceBoolean(plant.infusion, false),
       infusion_parts: plant.infusionParts || [],
-      medicinal: coerceBoolean(plant.medicinal, false),
-      aromatherapy: coerceBoolean(plant.aromatherapy, false),
-      fragrance: coerceBoolean(plant.fragrance, false),
       edible_oil: plant.edibleOil || null,
       // Section 8: Misc
       companion_plants: plant.companionPlants || [],
       biotope_plants: plant.biotopePlants || [],
       beneficial_plants: plant.beneficialPlants || [],
       harmful_plants: plant.harmfulPlants || [],
-      varieties: plant.varieties || [],
       // Section 9: Meta
       status: normalizedStatus,
       admin_commentary: plant.adminCommentary || null,
-      user_notes: plant.userNotes || null,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,
@@ -894,7 +886,6 @@ export async function processPlantRequest(
       biodiversity_tags: plant.biodiversityTags || [],
       source_name: primarySource?.name || null,
       source_url: primarySource?.url || null,
-      user_notes: plant.userNotes || null,
       // Deprecated
       spice_mixes: plant.spiceMixes || [],
     }

@@ -64,7 +64,6 @@ import {
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -140,7 +139,6 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
   name?: string
   scientificName?: string
   family?: string
-  encyclopediaCategory?: string[]
   sunlight?: string[]
   livingSpace?: string[]
   lifeCycle?: string[]
@@ -154,7 +152,7 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
   const [plantResult, translationResult, imageResult] = await Promise.all([
     supabase
       .from('plants')
-      .select('id, name, scientific_name_species, status, family, encyclopedia_category, sunlight, living_space, life_cycle, season, care_level')
+      .select('id, name, scientific_name_species, status, family, sunlight, living_space, life_cycle, season, care_level')
       .eq('id', id)
       .maybeSingle(),
     supabase
@@ -181,7 +179,6 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
     name: translationResult.data?.name || data.name,
     scientificName: data.scientific_name_species || undefined,
     family: data.family || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toUiArray(data.encyclopedia_category),
     sunlight: sunlightEnum.toUiArray(data.sunlight),
     livingSpace: livingSpaceEnum.toUiArray(data.living_space),
     lifeCycle: lifeCycleEnum.toUiArray(data.life_cycle),
@@ -279,7 +276,6 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     scientificNameSpecies: data.scientific_name_species || undefined,
     scientificNameVariety: data.scientific_name_variety || undefined,
     family: data.family || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toUiArray(data.encyclopedia_category) as Plant['encyclopediaCategory'],
     featuredMonth: data.featured_month || [],
 
     // Section 2: Identity (non-translatable)
@@ -374,11 +370,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     symbiosisNotes: translation?.symbiosis_notes || undefined,
 
     // Section 7: Consumption (non-translatable)
-    infusion: data.infusion ?? false,
     infusionParts: data.infusion_parts || [],
-    medicinal: data.medicinal ?? false,
-    aromatherapy: data.aromatherapy ?? false,
-    fragrance: data.fragrance ?? false,
     edibleOil: data.edible_oil || undefined,
     // Section 7: Consumption (translatable)
     nutritionalValue: translation?.nutritional_value || undefined,
@@ -404,7 +396,6 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     biotopePlants: data.biotope_plants || [],
     beneficialPlants: data.beneficial_plants || [],
     harmfulPlants: data.harmful_plants || [],
-    varieties: data.varieties || [],
     plantTags: translation?.plant_tags || [],
     biodiversityTags: translation?.biodiversity_tags || [],
     sources: sourceList,
@@ -414,7 +405,6 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     // Section 9: Meta
     status: data.status || undefined,
     adminCommentary: data.admin_commentary || undefined,
-    userNotes: data.user_notes || translation?.user_notes || undefined,
     createdBy: data.created_by || undefined,
     createdTime: data.created_time || undefined,
     updatedBy: data.updated_by || undefined,
@@ -596,7 +586,7 @@ const PlantInfoPage: React.FC = () => {
             scientificName: basicInfo.scientificName,
             status: basicInfo.status || 'in progress',
             family: basicInfo.family,
-            plantType: basicInfo.encyclopediaCategory?.[0],
+            plantType: undefined,
             levelSun: basicInfo.sunlight?.[0],
             livingSpace: basicInfo.livingSpace?.[0],
             lifeCycle: basicInfo.lifeCycle?.[0],
@@ -1269,7 +1259,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'edibleOil',
-      'status', 'month', 'encyclopediaCategory',
+      'status', 'month',
     ]
     
     for (const group of enumGroups) {
@@ -1381,7 +1371,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.landscaping'), value: joinArr(plant.landscaping) },
         { label: tp('labels.plantHabit'), value: joinArr(plant.plantHabit) },
         { label: tp('labels.colorTraits'), value: [plant.multicolor ? tp('values.multicolor') : null, plant.bicolor ? tp('values.bicolor') : null].filter(Boolean).join(' • ') || null },
-        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), tp('values.neutralScent')) },
       ])
 
       // ── Utility & Safety (Info Block Cards) ──
@@ -1460,18 +1449,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       // ── Section 7: Consumption / Usage ──
       const consumptionItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
-        { label: tp('labels.infusionFriendly'), value: formatBooleanDescriptor(plant.infusion, tp('values.infusionReady'), tp('values.notForInfusions')) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
         { label: tp('labels.infusionBenefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
         { label: tp('labels.infusionRecipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
         { label: tp('labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
-        { label: tp('labels.medicinal'), value: formatBooleanDescriptor(plant.medicinal, tp('values.medicinalPlant'), null) },
         { label: tp('labels.medicinalBenefits'), value: formatTextValue(plant.medicinalBenefits), variant: 'note' },
         { label: tp('labels.medicinalUsage'), value: formatTextValue(plant.medicinalUsage), variant: 'note' },
         { label: tp('labels.medicinalWarning'), value: formatTextValue(plant.medicinalWarning), variant: 'note' },
         { label: tp('labels.medicinalHistory'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
-        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), null) },
-        { label: tp('labels.aromatherapy'), value: formatBooleanDescriptor(plant.aromatherapy, tp('values.essentialOils'), tp('values.notForOils')) },
         { label: tp('labels.aromatherapyBenefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
         { label: tp('labels.essentialOilBlends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
         { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
@@ -1484,7 +1469,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.biotopePlants'), value: joinRaw(plant.biotopePlants) },
         { label: tp('labels.beneficialPlants'), value: joinRaw(plant.beneficialPlants) },
         { label: tp('labels.harmfulPlants'), value: joinRaw(plant.harmfulPlants) },
-        { label: tp('labels.varieties'), value: joinRaw(plant.varieties) },
         { label: tp('labels.tags'), value: joinRaw(plant.plantTags) },
         { label: tp('labels.biodiversityTags'), value: joinRaw(plant.biodiversityTags) },
       ])

@@ -89,31 +89,6 @@ function createEnumTools(configs: readonly EnumConfig[]): EnumTools {
   }
 }
 
-// -- Section 1: Base ----------------------------------------------------------
-
-export const encyclopediaCategoryEnum = createEnumTools([
-  { dbValue: 'tree', uiValue: 'Tree', aliases: ['trees'] },
-  { dbValue: 'shrub', uiValue: 'Shrub', aliases: ['shrubs', 'bush', 'bushes'] },
-  { dbValue: 'small_shrub', uiValue: 'Small Shrub', aliases: ['subshrub', 'sub-shrub'] },
-  { dbValue: 'fruit_tree', uiValue: 'Fruit Tree', aliases: ['fruit trees'] },
-  { dbValue: 'bamboo', uiValue: 'Bamboo', aliases: ['bamboos'] },
-  { dbValue: 'cactus_succulent', uiValue: 'Cactus & Succulent', aliases: ['cactus', 'succulent', 'cacti', 'succulents'] },
-  { dbValue: 'herbaceous', uiValue: 'Herbaceous', aliases: ['herb', 'herbs', 'herbaceous plant'] },
-  { dbValue: 'palm', uiValue: 'Palm', aliases: ['palms', 'palm tree'] },
-  { dbValue: 'fruit_plant', uiValue: 'Fruit Plant', aliases: ['fruit plants'] },
-  { dbValue: 'aromatic_plant', uiValue: 'Aromatic Plant', aliases: ['aromatic', 'aromatics'] },
-  { dbValue: 'medicinal_plant', uiValue: 'Medicinal Plant', aliases: ['medicinal'] },
-  { dbValue: 'climbing_plant', uiValue: 'Climbing Plant', aliases: ['climber', 'climbing', 'vine', 'vines'] },
-  { dbValue: 'vegetable_plant', uiValue: 'Vegetable Plant', aliases: ['vegetable', 'vegetables'] },
-  { dbValue: 'perennial_plant', uiValue: 'Perennial Plant', aliases: ['perennial', 'flower', 'flowering plant'] },
-  { dbValue: 'bulb_plant', uiValue: 'Bulb Plant', aliases: ['bulb', 'bulbs'] },
-  { dbValue: 'rhizome_plant', uiValue: 'Rhizome Plant', aliases: ['rhizome'] },
-  { dbValue: 'indoor_plant', uiValue: 'Indoor Plant', aliases: ['houseplant', 'indoor', 'house plant'] },
-  { dbValue: 'fern', uiValue: 'Fern', aliases: ['ferns'] },
-  { dbValue: 'moss_lichen', uiValue: 'Moss & Lichen', aliases: ['moss', 'lichen', 'mosses'] },
-  { dbValue: 'aquatic_semi_aquatic', uiValue: 'Aquatic / Semi-Aquatic', aliases: ['aquatic', 'semi-aquatic', 'water plant'] },
-])
-
 // -- Section 2: Identity ------------------------------------------------------
 
 export const utilityEnum = createEnumTools([
@@ -124,6 +99,7 @@ export const utilityEnum = createEnumTools([
   { dbValue: 'fragrant', uiValue: 'Fragrant', aliases: ['odorous', 'scented'] },
   { dbValue: 'cereal', uiValue: 'Cereal', aliases: ['grain'] },
   { dbValue: 'spice', uiValue: 'Spice', aliases: ['spices'] },
+  { dbValue: 'infusion', uiValue: 'Infusion', aliases: ['tea', 'tisane', 'herbal tea'] },
 ])
 
 export const ediblePartEnum = createEnumTools([
@@ -327,8 +303,6 @@ export const recipeTimeEnum = createEnumTools([
 // Legacy aliases — old names still imported by existing code
 // ============================================================================
 
-/** @deprecated Use encyclopediaCategoryEnum */
-export const plantTypeEnum = encyclopediaCategoryEnum
 /** @deprecated Use ediblePartEnum */
 export const comestiblePartEnum = ediblePartEnum
 /** @deprecated Use foliagePersistenceEnum */

@@ -6,11 +6,6 @@
 
 export const plantSchema = {
   // -- Section 1: Base --------------------------------------------------------
-  encyclopediaCategory: {
-    type: 'enum[]',
-    options: ['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic'],
-    description: 'Plant type for encyclopedia sorting (multi-select)',
-  },
   scientificNameSpecies: {
     type: 'text',
     description: 'Scientific (Latin) species name, e.g. "Monstera deliciosa"',
@@ -54,7 +49,7 @@ export const plantSchema = {
   },
   utility: {
     type: 'enum[]',
-    options: ['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice'],
+    options: ['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion'],
     description: 'Practical or ornamental uses',
   },
   ediblePart: {
@@ -261,14 +256,12 @@ export const plantSchema = {
   },
 
   // -- Section 7: Consumption -------------------------------------------------
-  infusion: { type: 'boolean', description: 'Whether plant can be used for infusions/tea' },
   infusionParts: {
     type: 'tag[]',
     description: 'Which parts can be used for infusion (e.g. ["leaf", "flower"])',
   },
   infusionBenefits: { type: 'text', description: 'Benefits of infusion/tea from this plant' },
   infusionRecipeIdeas: { type: 'text', description: 'Infusion/tea recipe ideas' },
-  medicinal: { type: 'boolean', description: 'Whether plant has medicinal uses' },
   medicinalBenefits: { type: 'text', description: 'Medicinal benefits' },
   medicinalUsage: { type: 'text', description: 'How to use medicinally' },
   medicinalWarning: { type: 'text', description: 'Safety warning (historical vs modern use)' },
@@ -291,10 +284,8 @@ export const plantSchema = {
       },
     },
   },
-  aromatherapy: { type: 'boolean', description: 'Whether used in aromatherapy' },
   aromatherapyBenefits: { type: 'text', description: 'Aromatherapy benefits' },
   essentialOilBlends: { type: 'text', description: 'Essential oil blend ideas' },
-  fragrance: { type: 'boolean', description: 'Whether plant has a notable fragrance' },
   edibleOil: {
     type: 'enum',
     options: ['yes', 'no', 'unknown'],
@@ -313,7 +304,6 @@ export const plantSchema = {
 
   // -- Section 9: Meta --------------------------------------------------------
   adminCommentary: { type: 'longtext', description: 'Internal notes for editors' },
-  userNotes: { type: 'text', description: 'User-contributed notes' },
 } as const
 
 export type PlantSchema = typeof plantSchema

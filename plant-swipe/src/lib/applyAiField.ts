@@ -8,7 +8,6 @@ import type { Plant } from "@/types/plant"
 import { mapFieldToCategory, isFieldGatedOff, BOOLEAN_GATE_DEPS, type PlantFormCategory } from "./plantFormCategories"
 import type { EnumTools } from "@/lib/composition"
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -138,7 +137,6 @@ const IGNORED_FIELDS = new Set([
 
 // Enum field → EnumTools mapping
 const ENUM_FIELDS: Record<string, EnumTools> = {
-  encyclopediaCategory: encyclopediaCategoryEnum as EnumTools,
   utility: utilityEnum as EnumTools,
   ediblePart: ediblePartEnum as EnumTools,
   poisoningMethod: poisoningMethodEnum as EnumTools,
@@ -171,7 +169,7 @@ const MONTH_FIELDS = new Set([
 // Boolean fields
 const BOOLEAN_FIELDS = new Set([
   'thorny', 'multicolor', 'bicolor', 'mulchingNeeded', 'staking',
-  'transplanting', 'pruning', 'infusion', 'medicinal', 'aromatherapy', 'fragrance',
+  'transplanting', 'pruning',
 ])
 
 // Integer fields
@@ -191,7 +189,7 @@ const TEXT_FIELDS = new Set([
   'nutritionalValue', 'infusionBenefits', 'infusionRecipeIdeas',
   'medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory',
   'aromatherapyBenefits', 'essentialOilBlends',
-  'symbiosisNotes', 'adminCommentary', 'userNotes',
+  'symbiosisNotes', 'adminCommentary',
 ])
 
 // String array (tag) fields
@@ -206,7 +204,7 @@ const TAG_FIELDS = new Set([
   'beneficialRoles', 'harmfulRoles', 'symbiosis',
   'ecologicalManagement',
   'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
-  'varieties', 'plantTags', 'biodiversityTags', 'spiceMixes',
+  'plantTags', 'biodiversityTags', 'spiceMixes',
 ])
 
 /**
@@ -232,7 +230,6 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
 
   // Legacy section names → map to new names
   const legacyMap: Record<string, string> = {
-    plantType: 'encyclopediaCategory',
     plantCare: 'care',
     usage: 'consumption',
     miscellaneous: 'misc',

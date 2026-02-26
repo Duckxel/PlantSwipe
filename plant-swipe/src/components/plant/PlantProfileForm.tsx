@@ -12,8 +12,24 @@ import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWate
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant form data handling */
+
+export interface PlantReport {
+  id: string
+  note: string
+  imageUrl: string | null
+  createdAt: string
+  userName: string
+}
+
+export interface PlantVariety {
+  id: string
+  name: string
+  variety: string | null
+  imageUrl: string | null
+}
 
 export type PlantProfileFormProps = {
   value: Plant
@@ -25,6 +41,10 @@ export type PlantProfileFormProps = {
   language?: string
   /** Called when an image is removed. Use to delete from storage if needed. */
   onImageRemove?: (imageUrl: string) => void
+  /** Plant reports submitted by users (displayed read-only in the Meta section) */
+  plantReports?: PlantReport[]
+  /** Auto-detected varieties (same species, different variety) */
+  plantVarieties?: PlantVariety[]
 }
 
 const neuCardClass =
@@ -174,8 +194,8 @@ const TagInput: React.FC<{
   )
 }
 
-const CompanionSelector: React.FC<{ 
-  value: string[]; 
+const CompanionSelector: React.FC<{
+  value: string[];
   onChange: (ids: string[]) => void;
   suggestions?: string[];
   showSuggestions?: boolean;
@@ -186,12 +206,14 @@ const CompanionSelector: React.FC<{
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('common')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [results, setResults] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
-  const [loading, setLoading] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+
+  // Track disabled IDs (current plant + already selected)
+  const disabledIds = React.useMemo(() => {
+    const ids = new Set(value)
+    if (currentPlantId) ids.add(currentPlantId)
+    return ids
+  }, [value, currentPlantId])
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
@@ -203,23 +225,21 @@ const CompanionSelector: React.FC<{
     if (!missing.length) return
     const loadMissing = async () => {
       let plantNames: { id: string; name: string }[] = []
-      
+
       if (language !== 'en') {
-        // For non-English, fetch translated names from plant_translations
         const { data: translationData } = await supabase
           .from('plant_translations')
           .select('plant_id, name')
           .in('plant_id', missing)
           .eq('language', language)
-        
+
         if (translationData && translationData.length > 0) {
           plantNames = translationData.map((t) => ({
             id: t.plant_id as string,
             name: t.name as string
           }))
         }
-        
-        // For any plants without translations, fall back to English
+
         const foundIds = new Set(plantNames.map(p => p.id))
         const missingTranslations = missing.filter(id => !foundIds.has(id))
         if (missingTranslations.length > 0) {
@@ -235,7 +255,6 @@ const CompanionSelector: React.FC<{
           }
         }
       } else {
-        // For English, fetch from plants table
         const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
         if (plantsData) {
           plantNames = plantsData.map((p) => ({
@@ -244,29 +263,27 @@ const CompanionSelector: React.FC<{
           }))
         }
       }
-      
+
       if (plantNames.length > 0) {
-        // Fetch images
         const { data: imagesData } = await supabase
           .from('plant_images')
           .select('plant_id, link')
           .in('plant_id', plantNames.map(p => p.id))
           .eq('use', 'primary')
-        
+
         const imageMap = new Map<string, string>()
         if (imagesData) {
           imagesData.forEach((img) => {
             if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
           })
         }
-        
+
         setCompanions((prev) => {
-          // Filter out duplicates - only add companions not already in the list
           const existingIds = new Set(prev.map(c => c.id))
           const newCompanions = plantNames
             .filter(p => !existingIds.has(p.id))
-            .map((p) => ({ 
-              id: p.id, 
+            .map((p) => ({
+              id: p.id,
               name: p.name,
               imageUrl: imageMap.get(p.id)
             }))
@@ -275,113 +292,62 @@ const CompanionSelector: React.FC<{
       }
     }
     loadMissing()
-    // Note: companions intentionally excluded from deps to prevent infinite loop
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, language])
 
-  // Search plants - use translations for non-English languages
-  const searchPlants = async (searchTerm?: string) => {
-    setLoading(true)
-    const term = searchTerm ?? search
+  // Async search for SearchItem: returns SearchItemOption[] with plant images as icons
+  const searchPlantsAsync = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
     let plantResults: { id: string; name: string }[] = []
-    
+
     if (language !== 'en') {
-      // For non-English, search in plant_translations table
-      let query = supabase
+      let q = supabase
         .from('plant_translations')
         .select('plant_id, name')
         .eq('language', language)
         .order('name')
         .limit(30)
-      
-      if (term.trim()) {
-        query = query.ilike('name', `%${term.trim()}%`)
-      }
-      
-      const { data: translationData } = await query
-      
-      if (translationData) {
-        plantResults = translationData.map((t) => ({
-          id: t.plant_id as string,
-          name: t.name as string
-        }))
-      }
+      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      const { data } = await q
+      if (data) plantResults = data.map((t) => ({ id: t.plant_id as string, name: t.name as string }))
     } else {
-      // For English, search in plants table
-      let query = supabase.from('plants').select('id,name').order('name').limit(30)
-      if (term.trim()) query = query.ilike('name', `%${term.trim()}%`)
-      const { data: plantsData } = await query
-      
-      if (plantsData) {
-        plantResults = plantsData.map((p) => ({
-          id: p.id as string,
-          name: (p as any).name as string
-        }))
-      }
+      let q = supabase.from('plants').select('id,name').order('name').limit(30)
+      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      const { data } = await q
+      if (data) plantResults = data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))
     }
-    
+
+    // Fetch images for results
+    const imageMap = new Map<string, string>()
     if (plantResults.length > 0) {
-      // Fetch images for results
-      const ids = plantResults.map(p => p.id)
       const { data: imagesData } = await supabase
         .from('plant_images')
         .select('plant_id, link')
-        .in('plant_id', ids)
+        .in('plant_id', plantResults.map(p => p.id))
         .eq('use', 'primary')
-      
-      const imageMap = new Map<string, string>()
-      if (imagesData) {
-        imagesData.forEach((img) => {
-          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
-        })
-      }
-      
-      setResults(plantResults.map((p) => ({ 
-        id: p.id, 
-        name: p.name,
-        imageUrl: imageMap.get(p.id)
-      })))
-    } else {
-      setResults([])
+      if (imagesData) imagesData.forEach((img) => {
+        if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+      })
     }
-    setLoading(false)
-  }
 
-  React.useEffect(() => {
-    if (open) {
-      searchPlants()
-      setSelectedIds(new Set())
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+    return plantResults.map((p) => ({
+      id: p.id,
+      label: p.name,
+      description: imageMap.get(p.id) || null,
+    }))
+  }, [language])
 
-  const toggleSelect = (id: string) => {
-    // Prevent selecting current plant as its own companion
-    if (id === currentPlantId) return
-    
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const addSelectedCompanions = () => {
-    const newIds = Array.from(selectedIds).filter(id => !value.includes(id) && id !== currentPlantId)
-    if (newIds.length === 0) {
-      setOpen(false)
-      return
-    }
-    
-    const newCompanions = results.filter(r => newIds.includes(r.id))
+  const handleMultiSelect = (selected: SearchItemOption[]) => {
+    const newIds = selected.map(o => o.id).filter(id => !value.includes(id) && id !== currentPlantId)
+    if (!newIds.length) return
     onChange([...value, ...newIds])
-    setCompanions(prev => [...prev, ...newCompanions])
-    setSelectedIds(new Set())
-    setOpen(false)
+    // Add to companions cache for immediate display
+    setCompanions(prev => {
+      const existingIds = new Set(prev.map(c => c.id))
+      const added = selected
+        .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
+        .map(o => ({ id: o.id, name: o.label, imageUrl: undefined as string | undefined }))
+      return [...prev, ...added]
+    })
   }
 
   const removeCompanion = (id: string) => {
@@ -390,23 +356,20 @@ const CompanionSelector: React.FC<{
   }
 
   // Search for a suggested companion by name and add it
-  // Uses current language for non-English search
   const addSuggestedCompanion = async (suggestedName: string) => {
     setSuggestionSearching(suggestedName)
     try {
       let foundPlant: { id: string; name: string } | null = null
-      
+
       if (language !== 'en') {
-        // For non-English, search in plant_translations first
         let { data: translationData } = await supabase
           .from('plant_translations')
           .select('plant_id, name')
           .eq('language', language)
           .ilike('name', suggestedName)
           .limit(1)
-        
+
         if (!translationData?.length) {
-          // Try partial match
           const { data } = await supabase
             .from('plant_translations')
             .select('plant_id, name')
@@ -415,74 +378,35 @@ const CompanionSelector: React.FC<{
             .limit(1)
           translationData = data
         }
-        
+
         if (translationData?.length) {
-          foundPlant = {
-            id: translationData[0].plant_id as string,
-            name: translationData[0].name as string
-          }
+          foundPlant = { id: translationData[0].plant_id as string, name: translationData[0].name as string }
         }
       }
-      
-      // Fall back to English search if not found or if language is English
+
       if (!foundPlant) {
-        let { data } = await supabase
-          .from('plants')
-          .select('id,name')
-          .ilike('name', suggestedName)
-          .limit(1)
-        
+        let { data } = await supabase.from('plants').select('id,name').ilike('name', suggestedName).limit(1)
         if (!data?.length) {
-          const result = await supabase
-            .from('plants')
-            .select('id,name')
-            .ilike('name', `%${suggestedName}%`)
-            .limit(1)
+          const result = await supabase.from('plants').select('id,name').ilike('name', `%${suggestedName}%`).limit(1)
           data = result.data
         }
-        
         if (data?.length) {
-          // If language is not English, try to fetch the translated name
           if (language !== 'en') {
             const { data: translatedName } = await supabase
-              .from('plant_translations')
-              .select('name')
-              .eq('plant_id', data[0].id)
-              .eq('language', language)
-              .limit(1)
-            
-            foundPlant = {
-              id: data[0].id as string,
-              name: translatedName?.[0]?.name || (data[0] as any).name as string
-            }
+              .from('plant_translations').select('name').eq('plant_id', data[0].id).eq('language', language).limit(1)
+            foundPlant = { id: data[0].id as string, name: translatedName?.[0]?.name || (data[0] as any).name as string }
           } else {
-            foundPlant = {
-              id: data[0].id as string,
-              name: (data[0] as any).name as string
-            }
+            foundPlant = { id: data[0].id as string, name: (data[0] as any).name as string }
           }
         }
       }
-      
+
       if (foundPlant) {
-        const plantId = foundPlant.id
-        // Prevent adding current plant as its own companion
-        if (plantId === currentPlantId) return
-        
-        if (!value.includes(plantId)) {
-          // Fetch image
+        if (foundPlant.id === currentPlantId) return
+        if (!value.includes(foundPlant.id)) {
           const { data: imgData } = await supabase
-            .from('plant_images')
-            .select('link')
-            .eq('plant_id', plantId)
-            .eq('use', 'primary')
-            .limit(1)
-          
-          const plant = { 
-            id: plantId, 
-            name: foundPlant.name,
-            imageUrl: imgData?.[0]?.link
-          }
+            .from('plant_images').select('link').eq('plant_id', foundPlant.id).eq('use', 'primary').limit(1)
+          const plant = { id: foundPlant.id, name: foundPlant.name, imageUrl: imgData?.[0]?.link }
           onChange([...value, plant.id])
           setCompanions((prev) => [...prev, plant])
         }
@@ -494,13 +418,6 @@ const CompanionSelector: React.FC<{
 
   const isSuggestionAdded = (suggestedName: string) => {
     return companions.some(c => c.name.toLowerCase() === suggestedName.toLowerCase())
-  }
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      searchPlants()
-    }
   }
 
   return (
@@ -534,7 +451,7 @@ const CompanionSelector: React.FC<{
                       disabled={alreadyAdded || isSearching}
                       onClick={() => addSuggestedCompanion(suggestedName)}
                       className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                        alreadyAdded 
+                        alreadyAdded
                           ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 cursor-default'
                           : 'bg-white dark:bg-[#1a1a1a] border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
                       }`}
@@ -555,13 +472,13 @@ const CompanionSelector: React.FC<{
           )}
         </div>
       )}
-      
+
       {/* Current Companions - Enhanced Grid */}
       {value.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
           {companions.map((c) => (
-            <div 
-              key={c.id} 
+            <div
+              key={c.id}
               className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
             >
               <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
@@ -592,117 +509,39 @@ const CompanionSelector: React.FC<{
           {t('plantAdmin.noCompanions', 'No companion or related plants added yet.')}
         </div>
       )}
-      
-      {/* Add Button */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button type="button" variant="outline" className="w-full">
-            <span className="mr-2">+</span>
-            {t('plantAdmin.addCompanionBtn', 'Add Companion / Related Plants')}
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t('plantAdmin.selectCompanionTitle', 'Select Companion & Related Plants')}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              {t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add as companions or related varieties.')}
-            </p>
-          </DialogHeader>
-          
-          <div className="flex gap-2 items-center py-2">
-            <SearchInput 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              onKeyDown={handleSearchKeyDown}
-              placeholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')} 
-              loading={loading} 
-              className="flex-1" 
-            />
-            <Button type="button" onClick={() => searchPlants()} disabled={loading}>
-              {loading ? t('plantAdmin.searchingBtn', 'Searching...') : t('plantAdmin.searchBtn', 'Search')}
-            </Button>
-          </div>
-          
-          {/* Selection summary */}
-          {selectedIds.size > 0 && (
-            <div className="flex items-center justify-between py-2 px-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {selectedIds.size} plant{selectedIds.size > 1 ? 's' : ''} selected
-              </span>
-              <Button type="button" size="sm" onClick={addSelectedCompanions}>
-                Add Selected
-              </Button>
+
+      {/* Add Button — uses SearchItem in multi-select mode */}
+      <SearchItem
+        multiSelect
+        value={null}
+        values={value}
+        onSelect={() => {}}
+        onMultiSelect={handleMultiSelect}
+        onSearch={searchPlantsAsync}
+        disabledIds={disabledIds}
+        placeholder={t('plantAdmin.addCompanionBtn', 'Add Plants')}
+        title={t('plantAdmin.selectCompanionTitle', 'Select Plants')}
+        description={t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add.')}
+        searchPlaceholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')}
+        emptyMessage={t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
+        confirmLabel={t('plantAdmin.addSelectedBtn', 'Add Selected')}
+        renderItem={(option) => (
+          <div className="flex flex-col w-full h-full">
+            <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+              {option.description ? (
+                <img src={option.description} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
+                  <Leaf className="h-8 w-8" />
+                </div>
+              )}
             </div>
-          )}
-          
-          {/* Results Grid */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 py-2">
-              {results.map((plant) => {
-                const isSelected = selectedIds.has(plant.id)
-                const isAlreadyAdded = value.includes(plant.id)
-                const isCurrentPlant = plant.id === currentPlantId
-                const isDisabled = isAlreadyAdded || isCurrentPlant
-                
-                return (
-                  <button
-                    key={plant.id}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => toggleSelect(plant.id)}
-                    className={`relative text-left rounded-xl border overflow-hidden transition-all ${
-                      isDisabled
-                        ? 'opacity-50 cursor-not-allowed border-stone-200 dark:border-stone-700'
-                        : isSelected
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/50 bg-emerald-50 dark:bg-emerald-900/30'
-                        : 'border-stone-200 dark:border-stone-700 hover:border-emerald-300 dark:hover:border-emerald-600'
-                    }`}
-                  >
-                    <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
-                      {plant.imageUrl ? (
-                        <img src={plant.imageUrl} alt={plant.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-stone-400">
-                          <Leaf className="h-6 w-6" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2">
-                      <p className="text-sm font-medium truncate">{plant.name}</p>
-                      {isCurrentPlant && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">Current plant</p>
-                      )}
-                      {isAlreadyAdded && !isCurrentPlant && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Already added</p>
-                      )}
-                    </div>
-                    {isSelected && (
-                      <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                        ✓
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
+            <div className="flex-1 flex items-center px-3 py-2">
+              <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
             </div>
-            {!results.length && !loading && (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                {t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
-              </div>
-            )}
           </div>
-          
-          {/* Footer */}
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={addSelectedCompanions} disabled={selectedIds.size === 0}>
-              Add {selectedIds.size > 0 ? `(${selectedIds.size})` : ''} Selected
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      />
     </div>
   )
 }
@@ -1008,7 +847,6 @@ const baseFields: FieldConfig[] = [
   { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
   { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
-  { key: "encyclopediaCategory", label: "Encyclopedia Category", description: "Plant type for encyclopedia sorting", type: "multiselect", options: ["Tree","Shrub","Small Shrub","Fruit Tree","Bamboo","Cactus & Succulent","Herbaceous","Palm","Fruit Plant","Aromatic Plant","Medicinal Plant","Climbing Plant","Vegetable Plant","Perennial Plant","Bulb Plant","Rhizome Plant","Indoor Plant","Fern","Moss & Lichen","Aquatic / Semi-Aquatic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
 ]
@@ -1020,7 +858,7 @@ const identityFields: FieldConfig[] = [
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
-  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice"] },
+  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
   { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"] },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
@@ -1029,8 +867,6 @@ const identityFields: FieldConfig[] = [
   { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Both","Terrarium","Greenhouse"] },
   { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
   { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
-  { key: "multicolor", label: "Multicolor?", description: "Plant has 3+ distinct colors", type: "boolean" },
-  { key: "bicolor", label: "Bicolor?", description: "Plant has exactly 2 colors", type: "boolean" },
 ]
 
 // ============================================================================
@@ -1132,22 +968,18 @@ const ecologyFields: FieldConfig[] = [
 // ============================================================================
 const consumptionFields: FieldConfig[] = [
   { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
-  { key: "infusion", label: "Usable for Infusion?", description: "Can be used for tea/infusion", type: "boolean" },
-  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "infusion" },
-  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "infusion" },
-  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "infusion" },
-  { key: "medicinal", label: "Medicinal Plant?", description: "Does the plant have medicinal uses?", type: "boolean" },
-  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "medicinal" },
-  { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
-  { key: "aromatherapy", label: "Aromatherapy?", description: "Used in aromatherapy?", type: "boolean" },
-  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "aromatherapy" },
-  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "aromatherapy" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "utility:infusion" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "utility:aromatic" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "utility:aromatic" },
   { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
   { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
-  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "infusion" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "utility:infusion" },
 ]
 
 // ============================================================================
@@ -1155,10 +987,9 @@ const consumptionFields: FieldConfig[] = [
 // ============================================================================
 const miscFields: FieldConfig[] = [
   { key: "companionPlants", label: "Companion Plants", description: "Good garden companions", type: "companions" },
-  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "tags" },
-  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "tags" },
-  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "tags" },
-  { key: "varieties", label: "Varieties", description: "Related varieties and cultivars", type: "tags" },
+  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "companions" },
+  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "companions" },
+  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "companions" },
   { key: "plantTags", label: "Plant Tags", description: "Searchable tags and keywords", type: "tags" },
   { key: "biodiversityTags", label: "Biodiversity Tags", description: "Biodiversity-specific tags", type: "tags" },
   { key: "sources", label: "Sources", description: "Reference links and citations", type: "sources" },
@@ -1170,7 +1001,6 @@ const miscFields: FieldConfig[] = [
 const metaFields: FieldConfig[] = [
   { key: "status", label: "Status", description: "Editorial status", type: "select", options: ["approved","rework","review","in_progress"] },
   { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
-  { key: "userNotes", label: "User Notes", description: "User-contributed notes", type: "textarea" },
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
@@ -2490,7 +2320,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     base: null,
@@ -2663,9 +2493,19 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
-                        if (cat === 'misc' && f.key === 'companionPlants') return null
-                        // Hide dependent fields when their boolean gate is false
-                        if (f.gatedBy && getValue(value, f.gatedBy) !== true) return null
+                        if (cat === 'misc' && ['companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants'].includes(f.key)) return null
+                        // Hide dependent fields when their gate condition is not met
+                        if (f.gatedBy) {
+                          if (f.gatedBy.startsWith('utility:')) {
+                            const utilVal = f.gatedBy.slice(8)
+                            const utility = getValue(value, 'utility')
+                            const arr = Array.isArray(utility) ? utility as string[] : []
+                            const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+                            if (!arr.some(u => typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle)) return null
+                          } else if (getValue(value, f.gatedBy) !== true) {
+                            return null
+                          }
+                        }
                         return renderField(value, setPath, f, t)
                       })}
                     {cat === 'consumption' && (
@@ -2677,18 +2517,122 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                       </div>
                     )}
                     {cat === 'misc' && (
-                      <div className="md:col-span-2">
-                        <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
-                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
-                        <CompanionSelector
-                          value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
-                          onChange={(v) => setPath('companionPlants', v)}
-                          suggestions={companionSuggestions}
-                          showSuggestions={showCompanionRecommendations}
-                          onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
-                          currentPlantId={value.id}
-                          language={language}
-                        />
+                      <>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
+                            onChange={(v) => setPath('companionPlants', v)}
+                            suggestions={companionSuggestions}
+                            showSuggestions={showCompanionRecommendations}
+                            onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.biotopePlants.label', 'Biotope Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.biotopePlants.description', 'Plants from the same biotope')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
+                            onChange={(v) => setPath('biotopePlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.beneficialPlants.label', 'Beneficial Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.beneficialPlants.description', 'Plants that benefit this one')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
+                            onChange={(v) => setPath('beneficialPlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.harmfulPlants.label', 'Harmful Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.harmfulPlants.description', 'Plants to avoid nearby')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
+                            onChange={(v) => setPath('harmfulPlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        {plantVarieties && plantVarieties.length > 0 && (
+                          <div className="md:col-span-2">
+                            <Label className="text-base font-semibold">
+                              {t('plantAdmin.varieties', 'Varieties')}
+                              <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                {plantVarieties.length}
+                              </span>
+                            </Label>
+                            <p className="text-xs text-muted-foreground mb-3">
+                              {t('plantAdmin.varietiesDescription', 'Other plants with the same scientific name but a different variety.')}
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                              {plantVarieties.map((v) => (
+                                <a
+                                  key={v.id}
+                                  href={`/create-plant?id=${v.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 rounded-xl border border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-2 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-colors"
+                                >
+                                  {v.imageUrl ? (
+                                    <img src={v.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                                  ) : (
+                                    <div className="h-10 w-10 rounded-lg bg-emerald-200/50 dark:bg-emerald-800/30 flex-shrink-0" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">{v.name}</p>
+                                    {v.variety && <p className="text-xs text-muted-foreground truncate italic">{v.variety}</p>}
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {cat === 'meta' && plantReports && plantReports.length > 0 && (
+                      <div className="md:col-span-2 mt-2">
+                        <Label className="text-base font-semibold">
+                          {t('plantAdmin.userReports', 'User Reports')}
+                          <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                            {plantReports.length}
+                          </span>
+                        </Label>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          {t('plantAdmin.userReportsDescription', 'Reports submitted by users about missing or incorrect information.')}
+                        </p>
+                        <div className="space-y-3">
+                          {plantReports.map((report) => (
+                            <div
+                              key={report.id}
+                              className="rounded-xl border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-4"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                                  {report.userName}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{report.note}</p>
+                              {report.imageUrl && (
+                                <img
+                                  src={report.imageUrl}
+                                  alt="Report attachment"
+                                  className="mt-2 rounded-lg max-h-48 object-contain border border-amber-200/50 dark:border-amber-800/30"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {cat === 'identity' && (

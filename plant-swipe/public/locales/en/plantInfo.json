@@ -207,28 +207,6 @@
     "smoothStems": "Smooth stems"
   },
   "enums": {
-    "encyclopediaCategory": {
-      "tree": "Tree",
-      "shrub": "Shrub",
-      "small_shrub": "Small Shrub",
-      "fruit_tree": "Fruit Tree",
-      "bamboo": "Bamboo",
-      "cactus_succulent": "Cactus & Succulent",
-      "herbaceous": "Herbaceous",
-      "palm": "Palm",
-      "fruit_plant": "Fruit Plant",
-      "aromatic_plant": "Aromatic Plant",
-      "medicinal_plant": "Medicinal Plant",
-      "climbing_plant": "Climbing Plant",
-      "vegetable_plant": "Vegetable Plant",
-      "perennial_plant": "Perennial Plant",
-      "bulb_plant": "Bulb Plant",
-      "rhizome_plant": "Rhizome Plant",
-      "indoor_plant": "Indoor Plant",
-      "fern": "Fern",
-      "moss_lichen": "Moss & Lichen",
-      "aquatic_semi_aquatic": "Aquatic / Semi-Aquatic"
-    },
     "utility": {
       "edible": "Edible",
       "ornamental": "Ornamental",

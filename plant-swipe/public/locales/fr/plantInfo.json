@@ -207,28 +207,6 @@
     "smoothStems": "Tiges lisses"
   },
   "enums": {
-    "encyclopediaCategory": {
-      "tree": "Arbre",
-      "shrub": "Arbuste",
-      "small_shrub": "Arbrisseau",
-      "fruit_tree": "Arbre fruitier",
-      "bamboo": "Bambou",
-      "cactus_succulent": "Cactus & Succulente",
-      "herbaceous": "Herbacée",
-      "palm": "Palmier",
-      "fruit_plant": "Plante à fruit",
-      "aromatic_plant": "Plante aromatique",
-      "medicinal_plant": "Plante médicinale",
-      "climbing_plant": "Plante grimpante",
-      "vegetable_plant": "Plante potagère",
-      "perennial_plant": "Plante vivace",
-      "bulb_plant": "Plante à bulbe",
-      "rhizome_plant": "Plante à rhizome",
-      "indoor_plant": "Plante d'intérieur",
-      "fern": "Fougère",
-      "moss_lichen": "Mousses & Lichen",
-      "aquatic_semi_aquatic": "Aquatique / Semi-aquatique"
-    },
     "utility": {
       "edible": "Comestible",
       "ornamental": "Ornementale",

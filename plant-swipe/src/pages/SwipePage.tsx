@@ -1089,9 +1089,7 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const hasMedicinalContent = (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) &&
-    typeof (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) === "string"
-  if (utilitySet.has("medicinal") || hasMedicinalContent) {
+  if (utilitySet.has("medicinal")) {
     items.push({
       key: "medicinal",
       label: t("discoveryPage.indicators.medicinal", { defaultValue: "Medicinal" }),
@@ -1101,9 +1099,7 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
     })
   }
 
-  const hasAromatherapy = plant.aromatherapy === true || plant.usage?.aromatherapy === true
-  const hasFragrance = plant.fragrance === true
-  if (utilitySet.has("aromatic") || hasAromatherapy || hasFragrance) {
+  if (utilitySet.has("aromatic") || utilitySet.has("fragrant")) {
     items.push({
       key: "aromatic",
       label: t("discoveryPage.indicators.aromatic", { defaultValue: "Aromatic" }),

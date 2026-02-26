@@ -9,19 +9,19 @@
 --   When saving in English, BOTH plants.name AND plant_translations.name are updated
 --
 -- SCHEMA SECTIONS:
---   1) Base: Identity & naming, encyclopedia categories, featured months, images
+--   1) Base: Identity & naming, featured months, images
 --   2) Identity: Origin, climate, utility, safety, life cycle, habitat, plant form
 --   3) Care: Difficulty, watering, substrate, mulch, nutrition
 --   4) Growth: Calendar, dimensions, propagation, pruning
 --   5) Danger: Pests & diseases (in translations)
 --   6) Ecology: Conservation, biotopes, tolerance, biodiversity, fauna
 --   7) Consumption: Nutrition, infusion, medicinal, fragrance
---   8) Misc: Tags, companions, varieties
+--   8) Misc: Tags, companions
 --   9) Meta: Status, notes, contributors, sources
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
 --   Section 1: id, name, scientific_name_species, scientific_name_variety, family,
---              encyclopedia_category, featured_month
+--              featured_month
 --   Section 2: climate, season, utility, edible_part, thorny, toxicity_human, toxicity_pets,
 --              poisoning_method, life_cycle, average_lifespan, foliage_persistence,
 --              living_space, landscaping, plant_habit, multicolor, bicolor
@@ -34,10 +34,10 @@
 --   Section 6: conservation_status, ecological_status, biotopes, urban_biotopes,
 --              ecological_tolerance, biodiversity_role, pollinators_attracted,
 --              birds_attracted, mammals_attracted, ecological_management, ecological_impact
---   Section 7: infusion, infusion_parts, medicinal, aromatherapy, fragrance, edible_oil
+--   Section 7: infusion_parts, edible_oil
 --   Section 8: companion_plants, biotope_plants, beneficial_plants, harmful_plants,
---              varieties, sponsored_shop_ids
---   Section 9: status, admin_commentary, user_notes, created_by, created_time,
+--              sponsored_shop_ids
+--   Section 9: status, admin_commentary, created_by, created_time,
 --              updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
@@ -49,7 +49,7 @@
 --   medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history
 --   aromatherapy_benefits, essential_oil_blends
 --   beneficial_roles, harmful_roles, symbiosis, symbiosis_notes
---   plant_tags, biodiversity_tags, source_name, source_url, user_notes
+--   plant_tags, biodiversity_tags, source_name, source_url
 --   spice_mixes (deprecated)
 
 create table if not exists public.plants (
@@ -60,12 +60,6 @@ create table if not exists public.plants (
   scientific_name_species text,
   scientific_name_variety text,
   family text,
-  encyclopedia_category text[] not null default '{}'::text[] check (encyclopedia_category <@ array[
-    'tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent',
-    'herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant',
-    'climbing_plant','vegetable_plant','perennial_plant','bulb_plant',
-    'rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic'
-  ]),
   featured_month text[] not null default '{}'::text[],
 
   -- Section 2: Identity — Origin & environment
@@ -78,7 +72,7 @@ create table if not exists public.plants (
   season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
 
   -- Section 2: Identity — Utility & safety
-  utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']),
+  utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']),
   edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
   thorny boolean default false,
   toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
@@ -272,11 +266,7 @@ create table if not exists public.plants (
   ecological_impact text[] not null default '{}'::text[] check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']),
 
   -- Section 7: Consumption
-  infusion boolean default false,
   infusion_parts text[] not null default '{}'::text[],
-  medicinal boolean default false,
-  aromatherapy boolean default false,
-  fragrance boolean default false,
   edible_oil text check (edible_oil in ('yes','no','unknown')),
 
   -- Section 8: Misc
@@ -284,13 +274,11 @@ create table if not exists public.plants (
   biotope_plants text[] not null default '{}'::text[],
   beneficial_plants text[] not null default '{}'::text[],
   harmful_plants text[] not null default '{}'::text[],
-  varieties text[] not null default '{}'::text[],
   sponsored_shop_ids text[] not null default '{}'::text[],
 
   -- Section 9: Meta
   status text check (status in ('in_progress','rework','review','approved')),
   admin_commentary text,
-  user_notes text,
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -421,36 +409,12 @@ begin
 end $rename_cols$;
 
 -- For text→text[] type-change renames, rename first then alter type in Phase 2.
--- plant_type→encyclopedia_category, promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
+-- promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
 do $rename_and_retype$ declare
   r record;
 begin
   if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
     return;
-  end if;
-
-  -- plant_type (text) → encyclopedia_category (text[])
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type')
-     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='encyclopedia_category')
-  then
-    update public.plants set plant_type = case
-      when plant_type = 'tree' then 'tree'
-      when plant_type = 'shrub' then 'shrub'
-      when plant_type = 'bamboo' then 'bamboo'
-      when plant_type = 'cactus' then 'cactus_succulent'
-      when plant_type = 'succulent' then 'cactus_succulent'
-      when plant_type = 'flower' then 'perennial_plant'
-      when plant_type = 'plant' then 'herbaceous'
-      else plant_type
-    end where plant_type is not null;
-    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_type') loop
-      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
-    end loop;
-    alter table public.plants rename column plant_type to encyclopedia_category;
-    alter table public.plants alter column encyclopedia_category type text[]
-      using case when encyclopedia_category is not null and trim(encyclopedia_category::text) <> '' then array[encyclopedia_category::text] else '{}'::text[] end;
-    alter table public.plants alter column encyclopedia_category set default '{}'::text[];
-    begin alter table public.plants alter column encyclopedia_category set not null; exception when others then null; end;
   end if;
 
   -- promotion_month (text) → featured_month (text[])
@@ -535,7 +499,6 @@ declare
     array['scientific_name_species', 'text'],
     array['scientific_name_variety', 'text'],
     array['family', 'text'],
-    array['encyclopedia_category', 'text[] not null default ''{}''::text[]'],
     array['featured_month', 'text[] not null default ''{}''::text[]'],
     -- Section 2: Identity
     array['climate', 'text[] not null default ''{}''::text[]'],
@@ -599,23 +562,17 @@ declare
     array['ecological_management', 'text[] not null default ''{}''::text[]'],
     array['ecological_impact', 'text[] not null default ''{}''::text[]'],
     -- Section 7: Consumption
-    array['infusion', 'boolean default false'],
     array['infusion_parts', 'text[] not null default ''{}''::text[]'],
-    array['medicinal', 'boolean default false'],
-    array['aromatherapy', 'boolean default false'],
-    array['fragrance', 'boolean default false'],
     array['edible_oil', 'text'],
     -- Section 8: Misc
     array['companion_plants', 'text[] not null default ''{}''::text[]'],
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],
     array['beneficial_plants', 'text[] not null default ''{}''::text[]'],
     array['harmful_plants', 'text[] not null default ''{}''::text[]'],
-    array['varieties', 'text[] not null default ''{}''::text[]'],
     array['sponsored_shop_ids', 'text[] not null default ''{}''::text[]'],
     -- Section 9: Meta
     array['status', 'text'],
     array['admin_commentary', 'text'],
-    array['user_notes', 'text'],
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
     array['updated_by', 'text'],
@@ -654,25 +611,6 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name') then
     update public.plants set scientific_name_species = scientific_name
       where scientific_name is not null and (scientific_name_species is null or trim(scientific_name_species) = '');
-  end if;
-
-  -- plant_type (text) → encyclopedia_category (text[])
-  -- Old values: plant, flower, bamboo, shrub, tree, cactus, succulent
-  -- New values: tree, shrub, small_shrub, fruit_tree, bamboo, cactus_succulent,
-  --   herbaceous, palm, fruit_plant, aromatic_plant, medicinal_plant,
-  --   climbing_plant, vegetable_plant, perennial_plant, bulb_plant,
-  --   rhizome_plant, indoor_plant, fern, moss_lichen, aquatic_semi_aquatic
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type') then
-    update public.plants set encyclopedia_category = case
-      when plant_type = 'tree' then array['tree']
-      when plant_type = 'shrub' then array['shrub']
-      when plant_type = 'bamboo' then array['bamboo']
-      when plant_type = 'cactus' then array['cactus_succulent']
-      when plant_type = 'succulent' then array['cactus_succulent']
-      when plant_type = 'flower' then array['perennial_plant']
-      when plant_type = 'plant' then array['herbaceous']
-      else '{}'::text[]
-    end where plant_type is not null and (encyclopedia_category is null or array_length(encyclopedia_category, 1) is null);
   end if;
 
   -- promotion_month (text) → featured_month (text[])
@@ -1102,6 +1040,7 @@ end $migrate_plants$;
 do $update_constraints$
 declare
   r record;
+  _col text;
 begin
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
     return;
@@ -1119,21 +1058,57 @@ begin
   exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- encyclopedia_category
-  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop
+  -- Drop encyclopedia_category column if it still exists (removed from schema)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='encyclopedia_category') then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants drop column encyclopedia_category;
+  end if;
+
+  -- Drop utility check constraints first, before any UPDATEs to the utility column
+  -- (existing data may contain values not in the allowed set)
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_encyclopedia_category_check check (encyclopedia_category <@ array['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
+
+  -- Drop duplicate boolean columns (infusion, medicinal, aromatherapy, fragrance) — now driven by utility enum
+  for _col in select unnest(array['infusion','medicinal','aromatherapy','fragrance']) loop
+    if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name=_col) then
+      -- Migrate boolean true → add equivalent to utility array before dropping
+      if _col = 'infusion' then
+        update public.plants set utility = array_append(utility, 'infusion')
+          where infusion = true and not ('infusion' = any(utility));
+      elsif _col = 'aromatherapy' then
+        update public.plants set utility = array_append(utility, 'aromatic')
+          where aromatherapy = true and not ('aromatic' = any(utility));
+      elsif _col = 'fragrance' then
+        update public.plants set utility = array_append(utility, 'fragrant')
+          where fragrance = true and not ('fragrant' = any(utility));
+      elsif _col = 'medicinal' then
+        update public.plants set utility = array_append(utility, 'medicinal')
+          where medicinal = true and not ('medicinal' = any(utility));
+      end if;
+      execute 'alter table public.plants drop column ' || quote_ident(_col);
+    end if;
+  end loop;
+
+  -- Drop user_notes from plants table — replaced by plant_reports
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='user_notes') then
+    alter table public.plants drop column user_notes;
+  end if;
+
+  -- Drop varieties from plants table — auto-detected from scientific_name_species
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='varieties') then
+    alter table public.plants drop column varieties;
+  end if;
 
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']) not valid;
+    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1423,7 +1398,6 @@ do $$ declare
     'scientific_name_species',
     'scientific_name_variety',
     'family',
-    'encyclopedia_category',
     'featured_month',
     -- Section 2: Identity
     'climate',
@@ -1487,23 +1461,17 @@ do $$ declare
     'ecological_management',
     'ecological_impact',
     -- Section 7: Consumption
-    'infusion',
     'infusion_parts',
-    'medicinal',
-    'aromatherapy',
-    'fragrance',
     'edible_oil',
     -- Section 8: Misc
     'companion_plants',
     'biotope_plants',
     'beneficial_plants',
     'harmful_plants',
-    'varieties',
     'sponsored_shop_ids',
     -- Section 9: Meta
     'status',
     'admin_commentary',
-    'user_notes',
     'created_by',
     'created_time',
     'updated_by',

@@ -865,7 +865,7 @@ export default function PlantSwipe() {
       let _cachedSeasonsSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
-      // Type — use flat encyclopediaCategory (array), take first entry
+      // Type — use plantType or classification fallback
       const rawTypeLabel = getPlantTypeLabel(p)
       if (rawTypeLabel) typeLabelsSet.add(rawTypeLabel)
       const typeLabel = rawTypeLabel?.toLowerCase() ?? null
@@ -2804,9 +2804,8 @@ export default function PlantSwipe() {
 }
 
 function getPlantTypeLabel(plant: Plant): string | null {
-  const cats = Array.isArray(plant.encyclopediaCategory) ? plant.encyclopediaCategory : []
-  if (cats.length > 0) {
-    const label = formatClassificationLabel(cats[0])
+  if (plant.plantType) {
+    const label = formatClassificationLabel(plant.plantType)
     return label || null
   }
   if (plant.classification?.type) {
@@ -2842,19 +2841,8 @@ function getPlantUsageLabels(plant: Plant): string[] {
     }
   }
   
-  if (plant.aromatherapy || plant.usage?.aromatherapy) {
-    const aromaticLabel = formatClassificationLabel('aromatic')
-    if (aromaticLabel && !labels.includes(aromaticLabel)) {
-      labels.push(aromaticLabel)
-    }
-  }
-  
-  if (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) {
-    const medicinalLabel = formatClassificationLabel('medicinal')
-    if (medicinalLabel && !labels.includes(medicinalLabel)) {
-      labels.push(medicinalLabel)
-    }
-  }
+  // Aromatic and medicinal are now derived from the utility array (handled above)
+  // No additional boolean-based checks needed
   
   return labels
 }

@@ -14,7 +14,7 @@
 --     medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history,
 --     aromatherapy_benefits, essential_oil_blends
 --   Ecology: beneficial_roles, harmful_roles, symbiosis, symbiosis_notes
---   Misc: plant_tags, biodiversity_tags, source_name, source_url, user_notes
+--   Misc: plant_tags, biodiversity_tags, source_name, source_url
 --   Deprecated (kept for backward compat): spice_mixes
 
 create table if not exists public.plant_translations (
@@ -71,7 +71,6 @@ create table if not exists public.plant_translations (
   biodiversity_tags text[] not null default '{}',
   source_name text,
   source_url text,
-  user_notes text,
 
   -- Deprecated (kept for backward compatibility)
   spice_mixes text[] not null default '{}',
@@ -140,7 +139,7 @@ alter table if exists public.plant_translations add column if not exists plant_t
 alter table if exists public.plant_translations add column if not exists biodiversity_tags text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists source_name text;
 alter table if exists public.plant_translations add column if not exists source_url text;
-alter table if exists public.plant_translations add column if not exists user_notes text;
+alter table if exists public.plant_translations drop column if exists user_notes;
 -- Deprecated
 alter table if exists public.plant_translations add column if not exists spice_mixes text[] not null default '{}';
 

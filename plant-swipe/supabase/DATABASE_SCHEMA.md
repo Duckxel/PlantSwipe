@@ -422,7 +422,6 @@ name                      TEXT NOT NULL UNIQUE   -- Canonical English name
 scientific_name_species   TEXT                   -- Latin species name
 scientific_name_variety   TEXT                   -- Latin variety name
 family                    TEXT                   -- Botanical family (Latin)
-encyclopedia_category     TEXT[]                 -- CHECK: tree, shrub, small_shrub, fruit_tree, bamboo, cactus_succulent, herbaceous, palm, fruit_plant, aromatic_plant, medicinal_plant, climbing_plant, vegetable_plant, perennial_plant, bulb_plant, rhizome_plant, indoor_plant, fern, moss_lichen, aquatic_semi_aquatic
 featured_month            TEXT[]                 -- Multi-select months for promotion
 
 -- Section 2: Identity — Origin & environment
@@ -430,7 +429,7 @@ climate                   TEXT[]                 -- CHECK: polar, montane, ocean
 season                    TEXT[]                 -- CHECK: spring, summer, autumn, winter
 
 -- Section 2: Identity — Utility & safety
-utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice
+utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
 edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
@@ -512,11 +511,7 @@ ecological_management     TEXT[]                 -- CHECK (9 values): let_seed, 
 ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, potentially_invasive, locally_invasive
 
 -- Section 7: Consumption
-infusion                  BOOLEAN DEFAULT false
 infusion_parts            TEXT[]                 -- Which plant parts can be used for infusion
-medicinal                 BOOLEAN DEFAULT false
-aromatherapy              BOOLEAN DEFAULT false
-fragrance                 BOOLEAN DEFAULT false
 edible_oil                TEXT                   -- CHECK: yes, no, unknown
 
 -- Section 8: Misc
@@ -524,13 +519,11 @@ companion_plants          TEXT[]                 -- Plant IDs for garden pairing
 biotope_plants            TEXT[]                 -- Plant IDs typical of same biotope
 beneficial_plants         TEXT[]                 -- Plant IDs
 harmful_plants            TEXT[]                 -- Plant IDs
-varieties                 TEXT[]                 -- Related variety IDs
 sponsored_shop_ids        TEXT[]                 -- Merchant IDs (future sponsor feature)
 
 -- Section 9: Meta
 status                    TEXT                   -- CHECK: in_progress, rework, review, approved
 admin_commentary          TEXT
-user_notes                TEXT
 created_by                TEXT
 created_time              TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_by                TEXT
@@ -596,7 +589,6 @@ plant_tags              TEXT[]                    -- General plant tags
 biodiversity_tags       TEXT[]                    -- Biodiversity-specific tags
 source_name             TEXT                      -- Information source name
 source_url              TEXT                      -- Information source URL
-user_notes              TEXT                      -- User-contributed notes
 
 -- Deprecated
 spice_mixes             TEXT[]                    -- Kept for backward compatibility
