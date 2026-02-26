@@ -2626,7 +2626,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.dimensions', 'Dimensions & Support')} />
-      <div className={fieldRowClass}>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {renderField(value, setPath, growthFields.find(f => f.key === 'heightCm')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'wingspanCm')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'separationCm')!, t)}
