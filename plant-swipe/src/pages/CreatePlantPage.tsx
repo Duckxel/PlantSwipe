@@ -17,7 +17,7 @@ import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
-import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
+import { monthNumberToSlug, monthSlugToNumber, monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
   utilityEnum,
