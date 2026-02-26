@@ -1297,23 +1297,15 @@ begin
   exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- substrate
+  -- substrate (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'substrate') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_substrate_check check (substrate <@ array['garden_soil','topsoil','loam','clay_soil','sandy_soil','silty_soil','universal_potting_mix','horticultural_potting_mix','seed_starting_mix','cutting_mix','vegetable_potting_mix','flowering_plant_mix','foliage_plant_mix','citrus_mix','orchid_mix','cactus_succulent_mix','ericaceous_mix','mature_compost','vermicompost','composted_manure','composted_leaves','leaf_mold','forest_humus','ramial_chipped_wood','coconut_coir','blonde_peat','brown_peat','composted_bark','river_sand','horticultural_sand','pozzite','perlite','vermiculite','pumice','gravel','clay_pebbles','zeolite','pumice_stone','schist','crushed_slate','calcareous_soil','acidic_soil','volcanic_soil','pure_mineral_substrate','draining_cactus_substrate']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
-  -- mulch_type
+  -- mulch_type (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'mulch_type') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_mulch_type_check check (mulch_type <@ array['straw','hay','dead_leaves','dried_grass_clippings','pine_needles','dried_fern','crushed_miscanthus','flax_straw','hemp','untreated_wood_shavings','pine_bark','hardwood_bark','ramial_chipped_wood','fresh_grass_clippings','shredded_garden_waste','shredded_pruning_waste','cocoa_shells','buckwheat_hulls','flax_mulch','hemp_mulch','unprinted_brown_cardboard','kraft_paper','newspaper_vegetal_ink','forest_litter','fragmented_deadwood','oak_leaves','hazel_leaves','beech_leaves','gravel','pebbles','pozzolane','crushed_slate','schist','crushed_brick','decorative_sand','volcanic_rock','surface_clay_pebbles','clover','ivy','bugle','creeping_thyme','strawberry','vinca','sedum','natural_lawn','cardboard','kraft','burlap','biodegradable_fabric','crushed_eggshell','walnut_shells','hazelnut_shells','mixed_coffee_grounds']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
   -- cultivation_mode
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'cultivation_mode') loop
@@ -1324,50 +1316,30 @@ begin
   exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- ecological_status
+  -- ecological_status (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_status') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_ecological_status_check check (ecological_status <@ array['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
-  -- biotopes
+  -- biotopes (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biotopes') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_biotopes_check check (biotopes <@ array['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
-  -- urban_biotopes
+  -- urban_biotopes (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'urban_biotopes') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_urban_biotopes_check check (urban_biotopes <@ array['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
-  -- biodiversity_role
+  -- biodiversity_role (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'biodiversity_role') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_biodiversity_role_check check (biodiversity_role <@ array['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
-  -- ecological_management
+  -- ecological_management (tag[] — free-form, drop constraint)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'ecological_management') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_ecological_management_check check (ecological_management <@ array['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
 
   -- season
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'season') loop
