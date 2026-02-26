@@ -2463,17 +2463,6 @@ const formatBooleanDescriptor = (value: boolean | null | undefined, positive: st
   return showNegative ? negative : null
 }
 
-const formatTemperatureRange = (min?: number | null, ideal?: number | null, max?: number | null) => {
-  const parts: string[] = []
-  if (typeof min === 'number') parts.push(`${min}°C`)
-  if (typeof max === 'number') parts.push(`${max}°C`)
-  const range =
-    parts.length === 2 ? `${parts[0]} to ${parts[1]}` : parts.length === 1 ? `From ${parts[0]}` : null
-  if (typeof ideal === 'number') {
-    return range ? `${range} (ideal ${ideal}°C)` : `Ideal ${ideal}°C`
-  }
-  return range
-}
 
 const formatInfusionMixSummary = (mix?: Record<string, string> | null) => {
   if (!mix) return null
