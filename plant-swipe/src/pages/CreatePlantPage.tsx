@@ -65,6 +65,12 @@ type PlantCareData = NonNullable<Plant["plantCare"]>
 type PlantGrowthData = NonNullable<Plant["growth"]>
 type PlantEcologyData = NonNullable<Plant["ecology"]>
 
+/** Convert a human-readable tag to its DB slug: "Ground Cover" → "ground_cover" */
+const toDbSlug = (s: string) => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '')
+/** Convert a tag array to DB slugs, filtering out empty results */
+const toDbSlugs = (arr: unknown): string[] =>
+  (Array.isArray(arr) ? arr : []).map((v: unknown) => typeof v === 'string' ? toDbSlug(v) : '').filter(Boolean)
+
 const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta', 'adminCommentary', 'userNotes'])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
@@ -1431,8 +1437,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             average_lifespan: averageLifespanEnum.toDbArray(p.averageLifespan).length ? averageLifespanEnum.toDbArray(p.averageLifespan) : [],
             foliage_persistence: foliagePersistenceEnum.toDbArray(p.foliagePersistence || (p.identity?.foliagePersistance ? [p.identity.foliagePersistance] : [])),
             living_space: livingSpaceEnum.toDbArray(p.livingSpace || (p.identity?.livingSpace ? [p.identity.livingSpace] : [])),
-            landscaping: p.landscaping || normalizeCompositionForDb(p.identity?.composition) || [],
-            plant_habit: p.plantHabit || [],
+            landscaping: toDbSlugs(p.landscaping).length ? toDbSlugs(p.landscaping) : normalizeCompositionForDb(p.identity?.composition) || [],
+            plant_habit: toDbSlugs(p.plantHabit),
             multicolor: coerceBoolean(p.multicolor ?? p.identity?.multicolor, false),
             bicolor: coerceBoolean(p.bicolor ?? p.identity?.bicolor, false),
             // Section 3: Care
@@ -1447,10 +1453,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             hygrometry: p.hygrometry || p.plantCare?.hygrometry || null,
             misting_frequency: p.mistingFrequency || null,
             special_needs: p.specialNeeds || [],
-            substrate: p.substrate || [],
+            substrate: toDbSlugs(p.substrate),
             substrate_mix: p.substrateMix || [],
             mulching_needed: coerceBoolean(p.mulchingNeeded, false),
-            mulch_type: p.mulchType || [],
+            mulch_type: toDbSlugs(p.mulchType),
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
@@ -1461,7 +1467,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
-            cultivation_mode: p.cultivationMode || [],
+            cultivation_mode: toDbSlugs(p.cultivationMode),
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
@@ -1472,7 +1478,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             biotopes: p.biotopes || [],
             urban_biotopes: p.urbanBiotopes || [],
             ecological_tolerance: ecologicalToleranceEnum.toDbArray(p.ecologicalTolerance),
-            biodiversity_role: p.biodiversityRole || [],
+            biodiversity_role: toDbSlugs(p.biodiversityRole),
             pollinators_attracted: p.pollinatorsAttracted || [],
             birds_attracted: p.birdsAttracted || [],
             mammals_attracted: p.mammalsAttracted || [],
@@ -1535,8 +1541,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             average_lifespan: averageLifespanEnum.toDbArray(p.averageLifespan).length ? averageLifespanEnum.toDbArray(p.averageLifespan) : [],
             foliage_persistence: foliagePersistenceEnum.toDbArray(p.foliagePersistence || (p.identity?.foliagePersistance ? [p.identity.foliagePersistance] : [])),
             living_space: livingSpaceEnum.toDbArray(p.livingSpace || (p.identity?.livingSpace ? [p.identity.livingSpace] : [])),
-            landscaping: p.landscaping || normalizeCompositionForDb(p.identity?.composition) || [],
-            plant_habit: p.plantHabit || [],
+            landscaping: toDbSlugs(p.landscaping).length ? toDbSlugs(p.landscaping) : normalizeCompositionForDb(p.identity?.composition) || [],
+            plant_habit: toDbSlugs(p.plantHabit),
             multicolor: coerceBoolean(p.multicolor ?? p.identity?.multicolor, false),
             bicolor: coerceBoolean(p.bicolor ?? p.identity?.bicolor, false),
             // Section 3: Care
@@ -1551,10 +1557,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             hygrometry: p.hygrometry || p.plantCare?.hygrometry || null,
             misting_frequency: p.mistingFrequency || null,
             special_needs: p.specialNeeds || [],
-            substrate: p.substrate || [],
+            substrate: toDbSlugs(p.substrate),
             substrate_mix: p.substrateMix || [],
             mulching_needed: coerceBoolean(p.mulchingNeeded, false),
-            mulch_type: p.mulchType || [],
+            mulch_type: toDbSlugs(p.mulchType),
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
@@ -1565,7 +1571,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
-            cultivation_mode: p.cultivationMode || [],
+            cultivation_mode: toDbSlugs(p.cultivationMode),
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
@@ -1576,7 +1582,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             biotopes: p.biotopes || [],
             urban_biotopes: p.urbanBiotopes || [],
             ecological_tolerance: ecologicalToleranceEnum.toDbArray(p.ecologicalTolerance),
-            biodiversity_role: p.biodiversityRole || [],
+            biodiversity_role: toDbSlugs(p.biodiversityRole),
             pollinators_attracted: p.pollinatorsAttracted || [],
             birds_attracted: p.birdsAttracted || [],
             mammals_attracted: p.mammalsAttracted || [],
