@@ -304,23 +304,25 @@ async function generateUniquePlantName(baseName: string): Promise<string> {
   return result
 }
 
-const emptyPlant: Plant = {
-  id: generateUUIDv4(),
-  name: "",
-  utility: [],
-  comestiblePart: [],
-  fruitType: [],
-  images: [],
-  identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
-  plantCare: { watering: { schedules: [] } },
-  growth: {},
-  usage: {},
-  ecology: {},
-  danger: {},
-  miscellaneous: { sources: [] },
-  meta: { contributors: [] },
-  seasons: [],
-  colors: [],
+function createEmptyPlant(): Plant {
+  return {
+    id: generateUUIDv4(),
+    name: "",
+    utility: [],
+    comestiblePart: [],
+    fruitType: [],
+    images: [],
+    identity: { givenNames: [], colors: [], multicolor: false, bicolor: false },
+    plantCare: { watering: { schedules: [] } },
+    growth: {},
+    usage: {},
+    ecology: {},
+    danger: {},
+    miscellaneous: { sources: [] },
+    meta: { contributors: [] },
+    seasons: [],
+    colors: [],
+  }
 }
 
 const normalizeSeasonSlug = (value?: string | null): string | null => {
@@ -1137,7 +1139,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const urlLanguage = useLanguage()
   const [language, setLanguage] = React.useState<SupportedLanguage>(urlLanguage)
   const languageRef = React.useRef<SupportedLanguage>(urlLanguage)
-  const [plant, setPlant] = React.useState<Plant>(() => ({ ...emptyPlant, name: effectiveInitialName, id: id || emptyPlant.id }))
+  const [plant, setPlant] = React.useState<Plant>(() => {
+    const empty = createEmptyPlant()
+    return { ...empty, name: effectiveInitialName, id: id || empty.id }
+  })
   // Cache of plant data per language to preserve edits when switching languages
   const [plantByLanguage, setPlantByLanguage] = React.useState<Partial<Record<SupportedLanguage, Plant>>>({})
   // Track which languages have been loaded from DB
