@@ -1,4 +1,4 @@
-import React from "react"
+import type React from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
@@ -61,7 +61,6 @@ const sectionTitleTextClass =
 
 const fieldRowClass = "grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4"
 
-const fieldFullClass = "sm:col-span-2"
 
 const normalizeHex = (hex?: string) => {
   if (!hex) return ""
