@@ -2627,7 +2627,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   const renderGrowth = () => (
     <div className="space-y-5">
       <SectionDivider title={t('plantAdmin.sections.calendar', 'Calendar')} />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="space-y-4">
         {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'floweringMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'fruitingMonth')!, t)}
