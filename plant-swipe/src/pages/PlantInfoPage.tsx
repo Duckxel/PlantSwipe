@@ -61,6 +61,7 @@ import {
   Maximize2,
   Minimize2,
   Flag,
+  Scissors,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -93,6 +94,7 @@ const TIMELINE_COLORS = {
   flowering: '#f97316',
   fruiting: '#22c55e',
   sowing: '#6366f1',
+  pruning: '#ec4899',
 } as const
 
 const MAP_PIN_POSITIONS = [
@@ -110,6 +112,7 @@ const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
   const flowering = plant.floweringMonth || []
   const fruiting = plant.fruitingMonth || []
   const sowing = plant.sowingMonth || []
+  const pruning = plant.pruningMonth || []
   return monthLabels.map((label, idx) => {
     const slug = MONTH_SLUGS_ORDERED[idx]
     return {
@@ -117,6 +120,7 @@ const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
       flowering: flowering.includes(slug as any) ? 1 : 0,
       fruiting: fruiting.includes(slug as any) ? 1 : 0,
       sowing: sowing.includes(slug as any) ? 1 : 0,
+      pruning: pruning.includes(slug as any) ? 1 : 0,
     }
   })
 }
@@ -1800,14 +1804,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
 // Gantt-style seasonal timeline with rows per activity and month columns
 type GanttTimelineProps = {
-  timelineData: Array<{ month: string; flowering: number; fruiting: number; sowing: number }>
+  timelineData: Array<{ month: string; flowering: number; fruiting: number; sowing: number; pruning: number }>
   monthLabels: string[]
   t: (key: string, options?: Record<string, string>) => string
 }
 
 const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
   const rows: Array<{
-    key: 'flowering' | 'fruiting' | 'sowing'
+    key: 'flowering' | 'fruiting' | 'sowing' | 'pruning'
     label: string
     color: string
     bgClass: string
@@ -1834,6 +1838,13 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
       bgClass: 'bg-indigo-500',
       icon: <Sprout className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.sowing }} />,
     },
+    {
+      key: 'pruning',
+      label: t('plantInfo:timeline.legend.pruning'),
+      color: TIMELINE_COLORS.pruning,
+      bgClass: 'bg-pink-500',
+      icon: <Scissors className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.pruning }} />,
+    },
   ]
 
   // Only show rows that have at least one active month
@@ -1844,7 +1855,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   if (activeRows.length === 0) return null
 
   // Build contiguous bar segments for a row (consecutive active months get merged into one bar)
-  const buildSegments = (key: 'flowering' | 'fruiting' | 'sowing') => {
+  const buildSegments = (key: 'flowering' | 'fruiting' | 'sowing' | 'pruning') => {
     const segments: Array<{ start: number; end: number }> = []
     let segStart: number | null = null
     for (let i = 0; i < 12; i++) {
@@ -2094,6 +2105,7 @@ const getToxicityConfig = (level: string | undefined) => {
   const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
   switch (normalized) {
     case 'nontoxic':
+    case 'safe':
       return {
         severity: 'safe' as const,
         color: 'emerald',
@@ -2107,7 +2119,10 @@ const getToxicityConfig = (level: string | undefined) => {
         animate: false,
         iconSize: 'sm' as const,
       }
+    case 'slightlytoxic':
     case 'midlyirritating':
+    case 'mildlyirritating':
+    case 'mild':
       return {
         severity: 'mild' as const,
         color: 'stone',
@@ -2118,11 +2133,13 @@ const getToxicityConfig = (level: string | undefined) => {
         textColor: 'text-stone-600 dark:text-stone-400',
         labelColor: 'text-stone-500 dark:text-stone-500',
         Icon: Info,
-        key: 'midlyirritating',
+        key: 'slightlytoxic',
         animate: false,
         iconSize: 'sm' as const,
       }
+    case 'verytoxic':
     case 'highlytoxic':
+    case 'toxic':
       return {
         severity: 'high' as const,
         color: 'amber',
@@ -2133,11 +2150,14 @@ const getToxicityConfig = (level: string | undefined) => {
         textColor: 'text-amber-800 dark:text-amber-200',
         labelColor: 'text-amber-700 dark:text-amber-300',
         Icon: AlertTriangle,
-        key: 'highlytoxic',
+        key: 'verytoxic',
         animate: false,
         iconSize: 'md' as const,
       }
+    case 'deadly':
     case 'lethallytoxic':
+    case 'lethal':
+    case 'fatal':
       return {
         severity: 'lethal' as const,
         color: 'red',
@@ -2148,10 +2168,14 @@ const getToxicityConfig = (level: string | undefined) => {
         textColor: 'text-red-800 dark:text-red-200',
         labelColor: 'text-red-700 dark:text-red-300',
         Icon: Skull,
-        key: 'lethallytoxic',
+        key: 'deadly',
         animate: true,
         iconSize: 'lg' as const,
       }
+    case 'undetermined':
+    case 'unknown':
+    case 'notdetermined':
+      return null
     default:
       return null
   }

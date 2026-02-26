@@ -32,7 +32,8 @@
     "legend": {
       "flowering": "Flowering",
       "fruiting": "Fruiting",
-      "sowing": "Sowing"
+      "sowing": "Sowing",
+      "pruning": "Pruning"
     }
   },
   "habitatMap": {
