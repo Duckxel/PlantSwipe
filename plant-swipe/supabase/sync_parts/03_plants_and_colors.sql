@@ -1066,6 +1066,12 @@ begin
     alter table public.plants drop column encyclopedia_category;
   end if;
 
+  -- Drop utility check constraints first, before any UPDATEs to the utility column
+  -- (existing data may contain values not in the allowed set)
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+
   -- Drop duplicate boolean columns (infusion, medicinal, aromatherapy, fragrance) — now driven by utility enum
   for _col in select unnest(array['infusion','medicinal','aromatherapy','fragrance']) loop
     if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name=_col) then
