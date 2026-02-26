@@ -482,33 +482,31 @@ const CompanionSelector: React.FC<{
         </div>
       )}
 
-      {/* Current Companions - Enhanced Grid */}
+      {/* Current Companions - Compact thumbnail row */}
       {value.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="flex flex-wrap gap-2">
           {companions.map((c) => (
             <div
               key={c.id}
-              className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
+              className="relative group"
+              title={c.name}
             >
-              <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+              <div className="h-12 w-12 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
                 {c.imageUrl ? (
                   <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-stone-400">
-                    <Leaf className="h-8 w-8" />
+                    <Leaf className="h-5 w-5" />
                   </div>
                 )}
-              </div>
-              <div className="p-2">
-                <p className="text-sm font-medium truncate text-stone-900 dark:text-stone-100">{c.name}</p>
               </div>
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 aria-label={`Remove ${c.name}`}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
