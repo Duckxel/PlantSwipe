@@ -49,7 +49,7 @@
 --   medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history
 --   aromatherapy_benefits, essential_oil_blends
 --   beneficial_roles, harmful_roles, symbiosis, symbiosis_notes
---   plant_tags, biodiversity_tags, source_name, source_url, user_notes
+--   plant_tags, biodiversity_tags, source_name, source_url
 --   spice_mixes (deprecated)
 
 create table if not exists public.plants (
@@ -1089,15 +1089,8 @@ begin
     end if;
   end loop;
 
-  -- Drop user_notes from plants table — it belongs only in plant_translations
+  -- Drop user_notes from plants table — replaced by plant_reports
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='user_notes') then
-    -- Migrate any plants.user_notes to plant_translations before dropping
-    update public.plant_translations pt
-      set user_notes = p.user_notes
-      from public.plants p
-      where pt.plant_id = p.id
-        and p.user_notes is not null and p.user_notes <> ''
-        and (pt.user_notes is null or pt.user_notes = '');
     alter table public.plants drop column user_notes;
   end if;
 

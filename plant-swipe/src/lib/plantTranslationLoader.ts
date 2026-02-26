@@ -240,7 +240,6 @@ function mapDbRowToPlant(
     // Section 9: Meta
     status: (basePlant.status as Plant['status']) || undefined,
     adminCommentary: (basePlant.admin_commentary as string) || undefined,
-    userNotes: (translation.user_notes as string) || undefined,
     createdBy: (basePlant.created_by as string) || undefined,
     createdTime: (basePlant.created_time as string) || undefined,
     updatedBy: (basePlant.updated_by as string) || undefined,

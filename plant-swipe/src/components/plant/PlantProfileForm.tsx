@@ -15,6 +15,14 @@ import { SearchInput } from "@/components/ui/search-input"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant form data handling */
 
+export interface PlantReport {
+  id: string
+  note: string
+  imageUrl: string | null
+  createdAt: string
+  userName: string
+}
+
 export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
@@ -25,6 +33,8 @@ export type PlantProfileFormProps = {
   language?: string
   /** Called when an image is removed. Use to delete from storage if needed. */
   onImageRemove?: (imageUrl: string) => void
+  /** Plant reports submitted by users (displayed read-only in the Meta section) */
+  plantReports?: PlantReport[]
 }
 
 const neuCardClass =
@@ -1165,7 +1175,6 @@ const miscFields: FieldConfig[] = [
 const metaFields: FieldConfig[] = [
   { key: "status", label: "Status", description: "Editorial status", type: "select", options: ["approved","rework","review","in_progress"] },
   { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
-  { key: "userNotes", label: "User Notes", description: "User-contributed notes", type: "textarea" },
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
@@ -2485,7 +2494,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     base: null,
@@ -2694,6 +2703,44 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                           currentPlantId={value.id}
                           language={language}
                         />
+                      </div>
+                    )}
+                    {cat === 'meta' && plantReports && plantReports.length > 0 && (
+                      <div className="md:col-span-2 mt-2">
+                        <Label className="text-base font-semibold">
+                          {t('plantAdmin.userReports', 'User Reports')}
+                          <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
+                            {plantReports.length}
+                          </span>
+                        </Label>
+                        <p className="text-xs text-muted-foreground mb-3">
+                          {t('plantAdmin.userReportsDescription', 'Reports submitted by users about missing or incorrect information.')}
+                        </p>
+                        <div className="space-y-3">
+                          {plantReports.map((report) => (
+                            <div
+                              key={report.id}
+                              className="rounded-xl border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-4"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                                  {report.userName}
+                                </span>
+                                <span className="text-xs text-muted-foreground">
+                                  {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                                </span>
+                              </div>
+                              <p className="text-sm whitespace-pre-wrap">{report.note}</p>
+                              {report.imageUrl && (
+                                <img
+                                  src={report.imageUrl}
+                                  alt="Report attachment"
+                                  className="mt-2 rounded-lg max-h-48 object-contain border border-amber-200/50 dark:border-amber-800/30"
+                                />
+                              )}
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {cat === 'identity' && (

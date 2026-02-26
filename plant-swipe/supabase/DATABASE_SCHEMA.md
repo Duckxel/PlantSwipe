@@ -590,7 +590,6 @@ plant_tags              TEXT[]                    -- General plant tags
 biodiversity_tags       TEXT[]                    -- Biodiversity-specific tags
 source_name             TEXT                      -- Information source name
 source_url              TEXT                      -- Information source URL
-user_notes              TEXT                      -- User-contributed notes
 
 -- Deprecated
 spice_mixes             TEXT[]                    -- Kept for backward compatibility

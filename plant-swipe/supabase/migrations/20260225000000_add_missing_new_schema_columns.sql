@@ -92,7 +92,6 @@ declare
     -- Section 9: Meta
     array['status', 'text'],
     array['admin_commentary', 'text'],
-    array['user_notes', 'text'],
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
     array['updated_by', 'text'],

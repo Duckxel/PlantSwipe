@@ -126,7 +126,6 @@
   "meta": [
     "When meta data is requested for {{plantName}}, return:",
     "- `adminCommentary`: string for internal editor notes",
-    "- `userNotes`: string for user-facing notes",
     "Leave status and timestamps untouched."
   ]
 }

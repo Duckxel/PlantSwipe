@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
+import { PlantProfileForm, type PlantReport } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
@@ -87,7 +87,7 @@ const ALLOWED_BIOTOPES = new Set(['temperate_deciduous_forest','mixed_forest','c
 const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
 const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'])
 
-const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta', 'adminCommentary', 'userNotes'])
+const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta', 'adminCommentary'])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
@@ -1114,7 +1114,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   // Section 9: Meta
   flat.status = formatStatusForUi(data.status)
   flat.adminCommentary = data.admin_commentary || plant.meta?.adminCommentary || undefined
-  flat.userNotes = translation?.user_notes || undefined
   flat.contributors = (contributorRows || [])
     .map((row: any) => row?.contributor_name)
     .filter((name: any) => typeof name === 'string' && name.trim())
@@ -1159,6 +1158,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiFieldProgress, setAiFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
   const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
+  const [plantReports, setPlantReports] = React.useState<PlantReport[]>([])
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
@@ -1327,6 +1327,41 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       fetchPlant()
       return () => { ignore = true }
     }, [id, language, plantByLanguage, loadedLanguages])
+
+    // Load plant reports for the current plant (admin-only via RLS)
+    React.useEffect(() => {
+      if (!id) { setPlantReports([]); return }
+      let ignore = false
+      const fetchReports = async () => {
+        try {
+          const { data } = await supabase
+            .from('plant_reports')
+            .select('id, note, image_url, created_at, user_id')
+            .eq('plant_id', id)
+            .order('created_at', { ascending: false })
+          if (ignore || !data?.length) return
+          // Resolve user display names
+          const userIds = [...new Set(data.map((r: any) => r.user_id))]
+          const { data: profiles } = await supabase
+            .from('profiles')
+            .select('id, display_name')
+            .in('id', userIds)
+          const nameMap = new Map<string, string>()
+          if (profiles) profiles.forEach((p: any) => nameMap.set(p.id, p.display_name || 'User'))
+          if (!ignore) {
+            setPlantReports(data.map((r: any) => ({
+              id: r.id,
+              note: r.note,
+              imageUrl: r.image_url || null,
+              createdAt: r.created_at,
+              userName: nameMap.get(r.user_id) || 'User',
+            })))
+          }
+        } catch { /* reports are optional, fail silently */ }
+      }
+      fetchReports()
+      return () => { ignore = true }
+    }, [id])
 
     // Track if we've already prefilled to avoid re-running on language changes
     const prefillCompleteRef = React.useRef(false)
@@ -1834,7 +1869,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           biodiversity_tags: p2.biodiversityTags || [],
           source_name: primarySource?.name || null,
           source_url: primarySource?.url || null,
-          user_notes: p2.userNotes || null,
           // Deprecated
           spice_mixes: p2.spiceMixes || p2.usage?.spiceMixes || [],
         }
@@ -2338,7 +2372,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           biodiversity_tags: await translateArrSafe(p2.biodiversityTags),
           source_name: translatedSourceName || null,
           source_url: primarySource?.url || null,
-          user_notes: await translateSafe(p2.userNotes),
           spice_mixes: await translateArrSafe(p2.spiceMixes || p2.usage?.spiceMixes),
         })
       }
@@ -2853,6 +2886,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 })
               }
             }}
+            plantReports={plantReports}
           />
         )}
     </div>

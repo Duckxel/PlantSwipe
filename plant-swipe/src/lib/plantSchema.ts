@@ -304,7 +304,6 @@ export const plantSchema = {
 
   // -- Section 9: Meta --------------------------------------------------------
   adminCommentary: { type: 'longtext', description: 'Internal notes for editors' },
-  userNotes: { type: 'text', description: 'User-contributed notes' },
 } as const
 
 export type PlantSchema = typeof plantSchema

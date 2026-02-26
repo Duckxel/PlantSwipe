@@ -887,7 +887,6 @@ export async function processPlantRequest(
       biodiversity_tags: plant.biodiversityTags || [],
       source_name: primarySource?.name || null,
       source_url: primarySource?.url || null,
-      user_notes: plant.userNotes || null,
       // Deprecated
       spice_mixes: plant.spiceMixes || [],
     }

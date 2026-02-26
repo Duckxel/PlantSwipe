@@ -295,7 +295,6 @@ export interface Plant {
   // -- Section 9: Meta --------------------------------------------------------
   status?: PlantStatus
   adminCommentary?: string
-  userNotes?: string
   createdBy?: string
   createdTime?: string
   updatedBy?: string
