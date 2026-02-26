@@ -58,9 +58,9 @@ const normalizeEnumValueInput = (enumTool: EnumTools, value: unknown): EnumValue
 
 const normalizeEnumArrayInput = (enumTool: EnumTools, value: unknown): EnumArrayResult => {
   if (value === undefined) return { shouldUpdate: false }
-  // Try DB array first (new schema uses DB keys directly)
-  const dbArr = enumTool.toDbArray(value)
-  if (dbArr.length > 0) return { shouldUpdate: true, value: dbArr }
+  // Return UI labels — the form chip options use human-readable labels as values
+  // (e.g. "Cactus & Succulent" not "cactus_succulent"), and the save function
+  // converts back to DB format via toDbArray() before persisting.
   const uiArr = enumTool.toUiArray(value)
   if (uiArr.length > 0) return { shouldUpdate: true, value: uiArr }
   if (isExplicitArrayClear(value) || shouldClearValue(value)) return { shouldUpdate: true, value: [] }

@@ -1220,8 +1220,10 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         }
         case "multiselect": {
           const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          // Normalize for comparison: handles "cactus_succulent" vs "Cactus & Succulent"
+          const canon = (v: unknown) => typeof v === 'string' ? v.replace(/[_\s&/–-]+/g, '').toLowerCase() : v
           const includesValue = (candidate: unknown) =>
-            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+            currentValues.some((entry) => Object.is(entry, candidate) || canon(entry) === canon(candidate))
           return (
             <div className="grid gap-2">
               <Label>{label}</Label>
@@ -1234,7 +1236,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
                       type="button"
                       onClick={() => {
                         const nextValues = selected
-                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || canon(entry) === canon(opt.value)))
                           : [...currentValues, opt.value]
                         onChange(field.key, nextValues)
                       }}
