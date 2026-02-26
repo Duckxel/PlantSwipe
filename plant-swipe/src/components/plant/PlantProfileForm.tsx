@@ -215,6 +215,7 @@ const CompanionSelector: React.FC<{
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('common')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
+  const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
 
   // Track disabled IDs (current plant + already selected)
@@ -229,78 +230,102 @@ const CompanionSelector: React.FC<{
   }, [value])
 
   // Fetch plant names (and images) for companion IDs - use translations for non-English
+  // Batches queries to avoid Supabase URL length limits with large ID arrays
   React.useEffect(() => {
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
+    let cancelled = false
+    const BATCH = 20
     const loadMissing = async () => {
-      let plantNames: { id: string; name: string }[] = []
+      setLoadingCompanions(true)
+      try {
+        let plantNames: { id: string; name: string }[] = []
 
-      if (language !== 'en') {
-        const { data: translationData } = await supabase
-          .from('plant_translations')
-          .select('plant_id, name')
-          .in('plant_id', missing)
-          .eq('language', language)
+        // Batch the queries to avoid URL length limits
+        for (let i = 0; i < missing.length; i += BATCH) {
+          if (cancelled) return
+          const batch = missing.slice(i, i + BATCH)
 
-        if (translationData && translationData.length > 0) {
-          plantNames = translationData.map((t) => ({
-            id: t.plant_id as string,
-            name: t.name as string
-          }))
-        }
+          if (language !== 'en') {
+            const { data: translationData } = await supabase
+              .from('plant_translations')
+              .select('plant_id, name')
+              .in('plant_id', batch)
+              .eq('language', language)
 
-        const foundIds = new Set(plantNames.map(p => p.id))
-        const missingTranslations = missing.filter(id => !foundIds.has(id))
-        if (missingTranslations.length > 0) {
-          const { data: fallbackData } = await supabase
-            .from('plants')
-            .select('id,name')
-            .in('id', missingTranslations)
-          if (fallbackData) {
-            plantNames = [...plantNames, ...fallbackData.map((p) => ({
-              id: p.id as string,
-              name: (p as any).name as string
-            }))]
+            if (translationData && translationData.length > 0) {
+              plantNames.push(...translationData.map((t) => ({
+                id: t.plant_id as string,
+                name: t.name as string
+              })))
+            }
+
+            const foundIds = new Set(translationData?.map(t => t.plant_id) || [])
+            const missingTranslations = batch.filter(id => !foundIds.has(id))
+            if (missingTranslations.length > 0) {
+              const { data: fallbackData } = await supabase
+                .from('plants')
+                .select('id,name')
+                .in('id', missingTranslations)
+              if (fallbackData) {
+                plantNames.push(...fallbackData.map((p) => ({
+                  id: p.id as string,
+                  name: (p as any).name as string
+                })))
+              }
+            }
+          } else {
+            const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', batch)
+            if (plantsData) {
+              plantNames.push(...plantsData.map((p) => ({
+                id: p.id as string,
+                name: (p as any).name as string
+              })))
+            }
           }
         }
-      } else {
-        const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
-        if (plantsData) {
-          plantNames = plantsData.map((p) => ({
-            id: p.id as string,
-            name: (p as any).name as string
-          }))
-        }
-      }
 
-      if (plantNames.length > 0) {
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', plantNames.map(p => p.id))
-          .eq('use', 'primary')
+        if (cancelled) return
 
-        const imageMap = new Map<string, string>()
-        if (imagesData) {
-          imagesData.forEach((img) => {
-            if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+        if (plantNames.length > 0) {
+          // Batch image queries too
+          const imageMap = new Map<string, string>()
+          const imgIds = plantNames.map(p => p.id)
+          for (let i = 0; i < imgIds.length; i += BATCH) {
+            if (cancelled) return
+            const batch = imgIds.slice(i, i + BATCH)
+            const { data: imagesData } = await supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', batch)
+              .eq('use', 'primary')
+            if (imagesData) {
+              imagesData.forEach((img) => {
+                if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+              })
+            }
+          }
+
+          if (cancelled) return
+
+          setCompanions((prev) => {
+            const existingIds = new Set(prev.map(c => c.id))
+            const newCompanions = plantNames
+              .filter(p => !existingIds.has(p.id))
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                imageUrl: imageMap.get(p.id)
+              }))
+            return [...prev, ...newCompanions]
           })
         }
-
-        setCompanions((prev) => {
-          const existingIds = new Set(prev.map(c => c.id))
-          const newCompanions = plantNames
-            .filter(p => !existingIds.has(p.id))
-            .map((p) => ({
-              id: p.id,
-              name: p.name,
-              imageUrl: imageMap.get(p.id)
-            }))
-          return [...prev, ...newCompanions]
-        })
+      } finally {
+        if (!cancelled) setLoadingCompanions(false)
       }
     }
     loadMissing()
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, language])
 
@@ -354,7 +379,7 @@ const CompanionSelector: React.FC<{
       const existingIds = new Set(prev.map(c => c.id))
       const added = selected
         .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
-        .map(o => ({ id: o.id, name: o.label, imageUrl: undefined as string | undefined }))
+        .map(o => ({ id: o.id, name: o.label, imageUrl: (o.description || undefined) as string | undefined }))
       return [...prev, ...added]
     })
   }
@@ -484,7 +509,7 @@ const CompanionSelector: React.FC<{
 
       {/* Current Companions - Compact thumbnail row */}
       {value.length > 0 ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {companions.map((c) => (
             <div
               key={c.id}
@@ -510,6 +535,14 @@ const CompanionSelector: React.FC<{
               </button>
             </div>
           ))}
+          {/* Loading skeleton placeholders for plants not yet fetched */}
+          {loadingCompanions && value.filter(id => !companions.find(c => c.id === id)).length > 0 && (
+            Array.from({ length: Math.min(value.length - companions.length, 10) }).map((_, i) => (
+              <div key={`skel-${i}`} className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-stone-700 animate-pulse" />
+            ))
+          )}
+          {/* Badge showing total count */}
+          <span className="text-xs font-medium text-muted-foreground ml-1">{value.length}</span>
         </div>
       ) : (
         <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
