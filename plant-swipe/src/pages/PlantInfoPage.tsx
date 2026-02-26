@@ -62,6 +62,7 @@ import {
   Minimize2,
   Flag,
   Scissors,
+  ExternalLink,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -1752,6 +1753,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
 
+          {sourcesValue && (
+            <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 px-1">
+              <FileText className="h-3 w-3 shrink-0" />
+              <span className="uppercase tracking-wide font-medium">{t('plantInfo:meta.sources')}:</span>
+              {sourcesValue}
+            </div>
+          )}
+
           {contributorsList.length > 0 && (
             <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
               <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
@@ -1770,7 +1779,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </details>
           )}
 
-          {(createdTimestamp || updatedTimestamp || sourcesValue) && (
+          {(createdTimestamp || updatedTimestamp) && (
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3">
               {(createdTimestamp || createdByLabel) && (
                 <span className="flex items-center gap-1.5">
@@ -1786,13 +1795,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <span>{t('plantInfo:meta.updated')}</span>
                   <span className="text-stone-500 dark:text-stone-400">{updatedTimestamp || '—'}</span>
                   {updatedByLabel && <span>· {updatedByLabel}</span>}
-                </span>
-              )}
-              {sourcesValue && (
-                <span className="flex items-center gap-1.5 basis-full justify-center mt-1">
-                  <FileText className="h-3 w-3" />
-                  <span>{t('plantInfo:meta.sources')}:</span>
-                  <span className="text-stone-500 dark:text-stone-400">{sourcesValue}</span>
                 </span>
               )}
             </div>
@@ -2482,24 +2484,26 @@ const formatSourcesList = (sources?: PlantSource[] | null) => {
   const list = (sources ?? []).filter((source): source is PlantSource => Boolean(source?.name))
   if (!list.length) return null
   return (
-    <ul className="space-y-1">
+    <span className="inline-flex flex-wrap items-center gap-x-1">
       {list.map((source, idx) => (
-        <li key={source.id ?? `${source.name}-${idx}`}>
+        <React.Fragment key={source.id ?? `${source.name}-${idx}`}>
+          {idx > 0 && <span className="text-stone-300 dark:text-stone-600">·</span>}
           {source.url ? (
             <a
               href={source.url}
               target="_blank"
               rel="noreferrer"
-              className="text-emerald-600 hover:underline dark:text-emerald-300"
+              className="inline-flex items-center gap-0.5 text-stone-500 dark:text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
             >
               {source.name}
+              <ExternalLink className="h-2.5 w-2.5" />
             </a>
           ) : (
-            <span>{source.name}</span>
+            <span className="text-stone-500 dark:text-stone-400">{source.name}</span>
           )}
-        </li>
+        </React.Fragment>
       ))}
-    </ul>
+    </span>
   )
 }
 
