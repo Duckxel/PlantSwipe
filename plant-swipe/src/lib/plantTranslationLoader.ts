@@ -230,7 +230,6 @@ function mapDbRowToPlant(
     biotopePlants: (basePlant.biotope_plants as string[]) || [],
     beneficialPlants: (basePlant.beneficial_plants as string[]) || [],
     harmfulPlants: (basePlant.harmful_plants as string[]) || [],
-    varieties: (basePlant.varieties as string[]) || [],
     plantTags: (translation.plant_tags as string[]) || [],
     biodiversityTags: (translation.biodiversity_tags as string[]) || [],
     sources,

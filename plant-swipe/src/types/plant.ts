@@ -286,7 +286,6 @@ export interface Plant {
   biotopePlants?: string[]
   beneficialPlants?: string[]
   harmfulPlants?: string[]
-  varieties?: string[]
   sponsoredShopIds?: string[]
   // Translatable
   plantTags?: string[]

@@ -3,7 +3,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf } from "lucide-react"
 import { supabase } from "@/lib/supabaseClient"
-import { PlantProfileForm, type PlantReport } from "@/components/plant/PlantProfileForm"
+import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
@@ -1106,7 +1106,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.biotopePlants = data.biotope_plants || []
   flat.beneficialPlants = data.beneficial_plants || []
   flat.harmfulPlants = data.harmful_plants || []
-  flat.varieties = data.varieties || []
   flat.plantTags = translation?.plant_tags || plant.miscellaneous?.tags || []
   flat.biodiversityTags = translation?.biodiversity_tags || []
   flat.sources = sourceList
@@ -1159,6 +1158,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [plantReports, setPlantReports] = React.useState<PlantReport[]>([])
+  const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
@@ -1362,6 +1362,44 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       fetchReports()
       return () => { ignore = true }
     }, [id])
+
+    // Auto-detect varieties: other plants sharing the same scientific_name_species
+    const scientificNameSpecies = plant.scientificNameSpecies
+    React.useEffect(() => {
+      if (!id || !scientificNameSpecies?.trim()) { setPlantVarieties([]); return }
+      let ignore = false
+      const fetchVarieties = async () => {
+        try {
+          const { data: siblings } = await supabase
+            .from('plants')
+            .select('id, name, scientific_name_variety')
+            .eq('scientific_name_species', scientificNameSpecies.trim())
+            .neq('id', id)
+            .order('name')
+            .limit(50)
+          if (ignore || !siblings?.length) { if (!ignore) setPlantVarieties([]); return }
+          // Fetch primary images
+          const siblingIds = siblings.map((s: any) => s.id)
+          const { data: images } = await supabase
+            .from('plant_images')
+            .select('plant_id, url')
+            .in('plant_id', siblingIds)
+            .eq('is_primary', true)
+          const imageMap = new Map<string, string>()
+          if (images) images.forEach((img: any) => imageMap.set(img.plant_id, img.url))
+          if (!ignore) {
+            setPlantVarieties(siblings.map((s: any) => ({
+              id: s.id,
+              name: s.name,
+              variety: s.scientific_name_variety || null,
+              imageUrl: imageMap.get(s.id) || null,
+            })))
+          }
+        } catch { if (!ignore) setPlantVarieties([]) }
+      }
+      fetchVarieties()
+      return () => { ignore = true }
+    }, [id, scientificNameSpecies])
 
     // Track if we've already prefilled to avoid re-running on language changes
     const prefillCompleteRef = React.useRef(false)
@@ -1687,7 +1725,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             biotope_plants: p.biotopePlants || [],
             beneficial_plants: p.beneficialPlants || [],
             harmful_plants: p.harmfulPlants || [],
-            varieties: p.varieties || [],
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
@@ -1783,7 +1820,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             biotope_plants: p.biotopePlants || [],
             beneficial_plants: p.beneficialPlants || [],
             harmful_plants: p.harmfulPlants || [],
-            varieties: p.varieties || [],
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
@@ -2887,6 +2923,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               }
             }}
             plantReports={plantReports}
+            plantVarieties={plantVarieties}
           />
         )}
     </div>

@@ -140,7 +140,6 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   biotopePlants: 'misc',
   beneficialPlants: 'misc',
   harmfulPlants: 'misc',
-  varieties: 'misc',
   plantTags: 'misc',
   biodiversityTags: 'misc',
   sources: 'misc',

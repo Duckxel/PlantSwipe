@@ -204,7 +204,7 @@ const TAG_FIELDS = new Set([
   'beneficialRoles', 'harmfulRoles', 'symbiosis',
   'ecologicalManagement',
   'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
-  'varieties', 'plantTags', 'biodiversityTags', 'spiceMixes',
+  'plantTags', 'biodiversityTags', 'spiceMixes',
 ])
 
 /**

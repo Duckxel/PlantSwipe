@@ -802,7 +802,6 @@ export async function processPlantRequest(
       biotope_plants: plant.biotopePlants || [],
       beneficial_plants: plant.beneficialPlants || [],
       harmful_plants: plant.harmfulPlants || [],
-      varieties: plant.varieties || [],
       // Section 9: Meta
       status: normalizedStatus,
       admin_commentary: plant.adminCommentary || null,

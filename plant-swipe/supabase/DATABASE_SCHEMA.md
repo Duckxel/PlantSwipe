@@ -519,7 +519,6 @@ companion_plants          TEXT[]                 -- Plant IDs for garden pairing
 biotope_plants            TEXT[]                 -- Plant IDs typical of same biotope
 beneficial_plants         TEXT[]                 -- Plant IDs
 harmful_plants            TEXT[]                 -- Plant IDs
-varieties                 TEXT[]                 -- Related variety IDs
 sponsored_shop_ids        TEXT[]                 -- Merchant IDs (future sponsor feature)
 
 -- Section 9: Meta

@@ -16,7 +16,7 @@
 --   5) Danger: Pests & diseases (in translations)
 --   6) Ecology: Conservation, biotopes, tolerance, biodiversity, fauna
 --   7) Consumption: Nutrition, infusion, medicinal, fragrance
---   8) Misc: Tags, companions, varieties
+--   8) Misc: Tags, companions
 --   9) Meta: Status, notes, contributors, sources
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
@@ -36,7 +36,7 @@
 --              birds_attracted, mammals_attracted, ecological_management, ecological_impact
 --   Section 7: infusion_parts, edible_oil
 --   Section 8: companion_plants, biotope_plants, beneficial_plants, harmful_plants,
---              varieties, sponsored_shop_ids
+--              sponsored_shop_ids
 --   Section 9: status, admin_commentary, created_by, created_time,
 --              updated_by, updated_time
 --
@@ -274,7 +274,6 @@ create table if not exists public.plants (
   biotope_plants text[] not null default '{}'::text[],
   beneficial_plants text[] not null default '{}'::text[],
   harmful_plants text[] not null default '{}'::text[],
-  varieties text[] not null default '{}'::text[],
   sponsored_shop_ids text[] not null default '{}'::text[],
 
   -- Section 9: Meta
@@ -570,7 +569,6 @@ declare
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],
     array['beneficial_plants', 'text[] not null default ''{}''::text[]'],
     array['harmful_plants', 'text[] not null default ''{}''::text[]'],
-    array['varieties', 'text[] not null default ''{}''::text[]'],
     array['sponsored_shop_ids', 'text[] not null default ''{}''::text[]'],
     -- Section 9: Meta
     array['status', 'text'],
@@ -1094,6 +1092,11 @@ begin
     alter table public.plants drop column user_notes;
   end if;
 
+  -- Drop varieties from plants table — auto-detected from scientific_name_species
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='varieties') then
+    alter table public.plants drop column varieties;
+  end if;
+
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
@@ -1459,7 +1462,6 @@ do $$ declare
     'biotope_plants',
     'beneficial_plants',
     'harmful_plants',
-    'varieties',
     'sponsored_shop_ids',
     -- Section 9: Meta
     'status',

@@ -396,7 +396,6 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     biotopePlants: data.biotope_plants || [],
     beneficialPlants: data.beneficial_plants || [],
     harmfulPlants: data.harmful_plants || [],
-    varieties: data.varieties || [],
     plantTags: translation?.plant_tags || [],
     biodiversityTags: translation?.biodiversity_tags || [],
     sources: sourceList,
@@ -1470,7 +1469,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.biotopePlants'), value: joinRaw(plant.biotopePlants) },
         { label: tp('labels.beneficialPlants'), value: joinRaw(plant.beneficialPlants) },
         { label: tp('labels.harmfulPlants'), value: joinRaw(plant.harmfulPlants) },
-        { label: tp('labels.varieties'), value: joinRaw(plant.varieties) },
         { label: tp('labels.tags'), value: joinRaw(plant.plantTags) },
         { label: tp('labels.biodiversityTags'), value: joinRaw(plant.biodiversityTags) },
       ])

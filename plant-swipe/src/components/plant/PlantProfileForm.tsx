@@ -23,6 +23,13 @@ export interface PlantReport {
   userName: string
 }
 
+export interface PlantVariety {
+  id: string
+  name: string
+  variety: string | null
+  imageUrl: string | null
+}
+
 export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
@@ -35,6 +42,8 @@ export type PlantProfileFormProps = {
   onImageRemove?: (imageUrl: string) => void
   /** Plant reports submitted by users (displayed read-only in the Meta section) */
   plantReports?: PlantReport[]
+  /** Auto-detected varieties (same species, different variety) */
+  plantVarieties?: PlantVariety[]
 }
 
 const neuCardClass =
@@ -1158,10 +1167,9 @@ const consumptionFields: FieldConfig[] = [
 // ============================================================================
 const miscFields: FieldConfig[] = [
   { key: "companionPlants", label: "Companion Plants", description: "Good garden companions", type: "companions" },
-  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "tags" },
-  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "tags" },
-  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "tags" },
-  { key: "varieties", label: "Varieties", description: "Related varieties and cultivars", type: "tags" },
+  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "companions" },
+  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "companions" },
+  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "companions" },
   { key: "plantTags", label: "Plant Tags", description: "Searchable tags and keywords", type: "tags" },
   { key: "biodiversityTags", label: "Biodiversity Tags", description: "Biodiversity-specific tags", type: "tags" },
   { key: "sources", label: "Sources", description: "Reference links and citations", type: "sources" },
@@ -2492,7 +2500,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
   const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
     base: null,
@@ -2665,7 +2673,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   </CardHeader>
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
-                        if (cat === 'misc' && f.key === 'companionPlants') return null
+                        if (cat === 'misc' && ['companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants'].includes(f.key)) return null
                         // Hide dependent fields when their gate condition is not met
                         if (f.gatedBy) {
                           if (f.gatedBy.startsWith('utility:')) {
@@ -2689,19 +2697,85 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                       </div>
                     )}
                     {cat === 'misc' && (
-                      <div className="md:col-span-2">
-                        <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
-                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
-                        <CompanionSelector
-                          value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
-                          onChange={(v) => setPath('companionPlants', v)}
-                          suggestions={companionSuggestions}
-                          showSuggestions={showCompanionRecommendations}
-                          onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
-                          currentPlantId={value.id}
-                          language={language}
-                        />
-                      </div>
+                      <>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
+                            onChange={(v) => setPath('companionPlants', v)}
+                            suggestions={companionSuggestions}
+                            showSuggestions={showCompanionRecommendations}
+                            onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.biotopePlants.label', 'Biotope Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.biotopePlants.description', 'Plants from the same biotope')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
+                            onChange={(v) => setPath('biotopePlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.beneficialPlants.label', 'Beneficial Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.beneficialPlants.description', 'Plants that benefit this one')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
+                            onChange={(v) => setPath('beneficialPlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        <div className="md:col-span-2">
+                          <Label>{t('plantAdmin.fields.harmfulPlants.label', 'Harmful Plants')}</Label>
+                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.harmfulPlants.description', 'Plants to avoid nearby')}</p>
+                          <CompanionSelector
+                            value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
+                            onChange={(v) => setPath('harmfulPlants', v)}
+                            currentPlantId={value.id}
+                            language={language}
+                          />
+                        </div>
+                        {plantVarieties && plantVarieties.length > 0 && (
+                          <div className="md:col-span-2">
+                            <Label className="text-base font-semibold">
+                              {t('plantAdmin.varieties', 'Varieties')}
+                              <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                {plantVarieties.length}
+                              </span>
+                            </Label>
+                            <p className="text-xs text-muted-foreground mb-3">
+                              {t('plantAdmin.varietiesDescription', 'Other plants with the same scientific name but a different variety.')}
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                              {plantVarieties.map((v) => (
+                                <a
+                                  key={v.id}
+                                  href={`/create-plant?id=${v.id}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 rounded-xl border border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-2 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-colors"
+                                >
+                                  {v.imageUrl ? (
+                                    <img src={v.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                                  ) : (
+                                    <div className="h-10 w-10 rounded-lg bg-emerald-200/50 dark:bg-emerald-800/30 flex-shrink-0" />
+                                  )}
+                                  <div className="min-w-0">
+                                    <p className="text-sm font-medium truncate">{v.name}</p>
+                                    {v.variety && <p className="text-xs text-muted-foreground truncate italic">{v.variety}</p>}
+                                  </div>
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
                     )}
                     {cat === 'meta' && plantReports && plantReports.length > 0 && (
                       <div className="md:col-span-2 mt-2">

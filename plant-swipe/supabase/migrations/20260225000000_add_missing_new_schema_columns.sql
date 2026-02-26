@@ -88,7 +88,6 @@ declare
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],
     array['beneficial_plants', 'text[] not null default ''{}''::text[]'],
     array['harmful_plants', 'text[] not null default ''{}''::text[]'],
-    array['varieties', 'text[] not null default ''{}''::text[]'],
     -- Section 9: Meta
     array['status', 'text'],
     array['admin_commentary', 'text'],
