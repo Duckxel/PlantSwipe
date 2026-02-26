@@ -4,14 +4,6 @@
 
 // -- Section 1: Base ----------------------------------------------------------
 
-export type EncyclopediaCategory =
-  | "tree" | "shrub" | "small_shrub" | "fruit_tree" | "bamboo"
-  | "cactus_succulent" | "herbaceous" | "palm" | "fruit_plant"
-  | "aromatic_plant" | "medicinal_plant" | "climbing_plant"
-  | "vegetable_plant" | "perennial_plant" | "bulb_plant"
-  | "rhizome_plant" | "indoor_plant" | "fern" | "moss_lichen"
-  | "aquatic_semi_aquatic"
-
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
   | "july" | "august" | "september" | "october" | "november" | "december"
@@ -174,7 +166,6 @@ export interface Plant {
   scientificNameSpecies?: string
   scientificNameVariety?: string
   family?: string
-  encyclopediaCategory?: EncyclopediaCategory[]
   featuredMonth?: MonthSlug[]
 
   // -- Section 2: Identity ----------------------------------------------------
@@ -423,7 +414,7 @@ export type ColorOption = {
 // Legacy type aliases — kept so existing imports don't break
 // ============================================================================
 
-/** @deprecated Use EncyclopediaCategory */
+/** @deprecated */
 export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree" | "cactus" | "succulent"
 /** @deprecated Use EdiblePart */
 export type PlantComestiblePart = EdiblePart

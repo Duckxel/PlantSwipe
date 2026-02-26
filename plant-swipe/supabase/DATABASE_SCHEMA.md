@@ -422,7 +422,6 @@ name                      TEXT NOT NULL UNIQUE   -- Canonical English name
 scientific_name_species   TEXT                   -- Latin species name
 scientific_name_variety   TEXT                   -- Latin variety name
 family                    TEXT                   -- Botanical family (Latin)
-encyclopedia_category     TEXT[]                 -- CHECK: tree, shrub, small_shrub, fruit_tree, bamboo, cactus_succulent, herbaceous, palm, fruit_plant, aromatic_plant, medicinal_plant, climbing_plant, vegetable_plant, perennial_plant, bulb_plant, rhizome_plant, indoor_plant, fern, moss_lichen, aquatic_semi_aquatic
 featured_month            TEXT[]                 -- Multi-select months for promotion
 
 -- Section 2: Identity — Origin & environment

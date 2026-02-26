@@ -9,7 +9,7 @@
 --   When saving in English, BOTH plants.name AND plant_translations.name are updated
 --
 -- SCHEMA SECTIONS:
---   1) Base: Identity & naming, encyclopedia categories, featured months, images
+--   1) Base: Identity & naming, featured months, images
 --   2) Identity: Origin, climate, utility, safety, life cycle, habitat, plant form
 --   3) Care: Difficulty, watering, substrate, mulch, nutrition
 --   4) Growth: Calendar, dimensions, propagation, pruning
@@ -21,7 +21,7 @@
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
 --   Section 1: id, name, scientific_name_species, scientific_name_variety, family,
---              encyclopedia_category, featured_month
+--              featured_month
 --   Section 2: climate, season, utility, edible_part, thorny, toxicity_human, toxicity_pets,
 --              poisoning_method, life_cycle, average_lifespan, foliage_persistence,
 --              living_space, landscaping, plant_habit, multicolor, bicolor
@@ -60,12 +60,6 @@ create table if not exists public.plants (
   scientific_name_species text,
   scientific_name_variety text,
   family text,
-  encyclopedia_category text[] not null default '{}'::text[] check (encyclopedia_category <@ array[
-    'tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent',
-    'herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant',
-    'climbing_plant','vegetable_plant','perennial_plant','bulb_plant',
-    'rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic'
-  ]),
   featured_month text[] not null default '{}'::text[],
 
   -- Section 2: Identity — Origin & environment
@@ -421,36 +415,12 @@ begin
 end $rename_cols$;
 
 -- For text→text[] type-change renames, rename first then alter type in Phase 2.
--- plant_type→encyclopedia_category, promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
+-- promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
 do $rename_and_retype$ declare
   r record;
 begin
   if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
     return;
-  end if;
-
-  -- plant_type (text) → encyclopedia_category (text[])
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type')
-     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='encyclopedia_category')
-  then
-    update public.plants set plant_type = case
-      when plant_type = 'tree' then 'tree'
-      when plant_type = 'shrub' then 'shrub'
-      when plant_type = 'bamboo' then 'bamboo'
-      when plant_type = 'cactus' then 'cactus_succulent'
-      when plant_type = 'succulent' then 'cactus_succulent'
-      when plant_type = 'flower' then 'perennial_plant'
-      when plant_type = 'plant' then 'herbaceous'
-      else plant_type
-    end where plant_type is not null;
-    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_type') loop
-      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
-    end loop;
-    alter table public.plants rename column plant_type to encyclopedia_category;
-    alter table public.plants alter column encyclopedia_category type text[]
-      using case when encyclopedia_category is not null and trim(encyclopedia_category::text) <> '' then array[encyclopedia_category::text] else '{}'::text[] end;
-    alter table public.plants alter column encyclopedia_category set default '{}'::text[];
-    begin alter table public.plants alter column encyclopedia_category set not null; exception when others then null; end;
   end if;
 
   -- promotion_month (text) → featured_month (text[])
@@ -535,7 +505,6 @@ declare
     array['scientific_name_species', 'text'],
     array['scientific_name_variety', 'text'],
     array['family', 'text'],
-    array['encyclopedia_category', 'text[] not null default ''{}''::text[]'],
     array['featured_month', 'text[] not null default ''{}''::text[]'],
     -- Section 2: Identity
     array['climate', 'text[] not null default ''{}''::text[]'],
@@ -654,25 +623,6 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name') then
     update public.plants set scientific_name_species = scientific_name
       where scientific_name is not null and (scientific_name_species is null or trim(scientific_name_species) = '');
-  end if;
-
-  -- plant_type (text) → encyclopedia_category (text[])
-  -- Old values: plant, flower, bamboo, shrub, tree, cactus, succulent
-  -- New values: tree, shrub, small_shrub, fruit_tree, bamboo, cactus_succulent,
-  --   herbaceous, palm, fruit_plant, aromatic_plant, medicinal_plant,
-  --   climbing_plant, vegetable_plant, perennial_plant, bulb_plant,
-  --   rhizome_plant, indoor_plant, fern, moss_lichen, aquatic_semi_aquatic
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='plant_type') then
-    update public.plants set encyclopedia_category = case
-      when plant_type = 'tree' then array['tree']
-      when plant_type = 'shrub' then array['shrub']
-      when plant_type = 'bamboo' then array['bamboo']
-      when plant_type = 'cactus' then array['cactus_succulent']
-      when plant_type = 'succulent' then array['cactus_succulent']
-      when plant_type = 'flower' then array['perennial_plant']
-      when plant_type = 'plant' then array['herbaceous']
-      else '{}'::text[]
-    end where plant_type is not null and (encyclopedia_category is null or array_length(encyclopedia_category, 1) is null);
   end if;
 
   -- promotion_month (text) → featured_month (text[])
@@ -1119,14 +1069,13 @@ begin
   exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- encyclopedia_category
-  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop
-    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
-  end loop;
-  begin
-    alter table public.plants add constraint plants_encyclopedia_category_check check (encyclopedia_category <@ array['tree','shrub','small_shrub','fruit_tree','bamboo','cactus_succulent','herbaceous','palm','fruit_plant','aromatic_plant','medicinal_plant','climbing_plant','vegetable_plant','perennial_plant','bulb_plant','rhizome_plant','indoor_plant','fern','moss_lichen','aquatic_semi_aquatic']) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
+  -- Drop encyclopedia_category column if it still exists (removed from schema)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='encyclopedia_category') then
+    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'encyclopedia_category') loop
+      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+    end loop;
+    alter table public.plants drop column encyclopedia_category;
+  end if;
 
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
@@ -1423,7 +1372,6 @@ do $$ declare
     'scientific_name_species',
     'scientific_name_variety',
     'family',
-    'encyclopedia_category',
     'featured_month',
     -- Section 2: Identity
     'climate',

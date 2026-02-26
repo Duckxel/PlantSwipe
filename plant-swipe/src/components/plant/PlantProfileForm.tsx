@@ -1008,7 +1008,6 @@ const baseFields: FieldConfig[] = [
   { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
   { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
-  { key: "encyclopediaCategory", label: "Encyclopedia Category", description: "Plant type for encyclopedia sorting", type: "multiselect", options: ["Tree","Shrub","Small Shrub","Fruit Tree","Bamboo","Cactus & Succulent","Herbaceous","Palm","Fruit Plant","Aromatic Plant","Medicinal Plant","Climbing Plant","Vegetable Plant","Perennial Plant","Bulb Plant","Rhizome Plant","Indoor Plant","Fern","Moss & Lichen","Aquatic / Semi-Aquatic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
 ]

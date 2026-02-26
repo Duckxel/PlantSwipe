@@ -20,7 +20,6 @@ import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
 import {
   normalizeCompositionForDb,
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -43,7 +42,6 @@ import {
   recipeCategoryEnum,
   recipeTimeEnum,
   // Legacy aliases
-  plantTypeEnum,
   comestiblePartEnum,
   fruitTypeEnum,
   maintenanceLevelEnum,
@@ -826,7 +824,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       id: data.id,
       name: plantName,
       // Non-translatable fields from plants table
-      plantType: (plantTypeEnum.toUi(data.plant_type) as Plant["plantType"]) || undefined,
+      plantType: (data.plant_type as Plant["plantType"]) || undefined,
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
       fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
@@ -1004,7 +1002,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.scientificNameSpecies = data.scientific_name_species || data.scientific_name || plant.identity?.scientificName || undefined
   flat.scientificNameVariety = data.scientific_name_variety || undefined
   flat.family = data.family || plant.identity?.family || undefined
-  flat.encyclopediaCategory = encyclopediaCategoryEnum.toUiArray(data.encyclopedia_category) as string[]
   flat.presentation = translation?.presentation || plant.identity?.overview || plant.description || undefined
   flat.featuredMonth = data.featured_month || (plant.identity?.promotionMonth ? [plant.identity.promotionMonth] : [])
 
@@ -1596,7 +1593,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             scientific_name_variety: p.scientificNameVariety || null,
             family: p.family || p.identity?.family || null,
-            encyclopedia_category: encyclopediaCategoryEnum.toDbArray(p.encyclopediaCategory).length ? encyclopediaCategoryEnum.toDbArray(p.encyclopediaCategory) : (p.plantType ? [p.plantType] : []),
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
@@ -1698,7 +1694,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             scientific_name_variety: p.scientificNameVariety || null,
             family: p.family || p.identity?.family || null,
-            encyclopedia_category: encyclopediaCategoryEnum.toDbArray(p.encyclopediaCategory).length ? encyclopediaCategoryEnum.toDbArray(p.encyclopediaCategory) : (p.plantType ? [p.plantType] : []),
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],

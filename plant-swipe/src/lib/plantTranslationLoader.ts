@@ -7,7 +7,6 @@ import { supabase } from './supabaseClient'
 import type { SupportedLanguage } from './i18n'
 import type { Plant, PlantImage, PlantWateringSchedule, MonthSlug } from '@/types/plant'
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -100,7 +99,6 @@ function mapDbRowToPlant(
     scientificNameSpecies: (basePlant.scientific_name_species as string) || undefined,
     scientificNameVariety: (basePlant.scientific_name_variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toDbArray(basePlant.encyclopedia_category) as Plant['encyclopediaCategory'],
     featuredMonth: (basePlant.featured_month as MonthSlug[]) || [],
 
     // Section 2: Identity (non-translatable from plants table)
@@ -397,7 +395,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const plantColumns = [
       'id', 'name',
       'scientific_name_species', 'family',
-      'encyclopedia_category', 'featured_month',
+      'featured_month',
       'climate', 'season', 'utility', 'edible_part',
       'thorny', 'toxicity_human', 'toxicity_pets',
       'life_cycle', 'foliage_persistence',

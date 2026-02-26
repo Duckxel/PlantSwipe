@@ -27,7 +27,6 @@ export const plantFormCategoryOrder: PlantFormCategory[] = [
 
 const fieldCategoryMap: Record<string, PlantFormCategory> = {
   // Section 1: Base
-  encyclopediaCategory: 'base',
   scientificNameSpecies: 'base',
   scientificNameVariety: 'base',
   family: 'base',

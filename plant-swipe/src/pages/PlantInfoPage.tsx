@@ -64,7 +64,6 @@ import {
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -140,7 +139,6 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
   name?: string
   scientificName?: string
   family?: string
-  encyclopediaCategory?: string[]
   sunlight?: string[]
   livingSpace?: string[]
   lifeCycle?: string[]
@@ -154,7 +152,7 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
   const [plantResult, translationResult, imageResult] = await Promise.all([
     supabase
       .from('plants')
-      .select('id, name, scientific_name_species, status, family, encyclopedia_category, sunlight, living_space, life_cycle, season, care_level')
+      .select('id, name, scientific_name_species, status, family, sunlight, living_space, life_cycle, season, care_level')
       .eq('id', id)
       .maybeSingle(),
     supabase
@@ -181,7 +179,6 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
     name: translationResult.data?.name || data.name,
     scientificName: data.scientific_name_species || undefined,
     family: data.family || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toUiArray(data.encyclopedia_category),
     sunlight: sunlightEnum.toUiArray(data.sunlight),
     livingSpace: livingSpaceEnum.toUiArray(data.living_space),
     lifeCycle: lifeCycleEnum.toUiArray(data.life_cycle),
@@ -279,7 +276,6 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     scientificNameSpecies: data.scientific_name_species || undefined,
     scientificNameVariety: data.scientific_name_variety || undefined,
     family: data.family || undefined,
-    encyclopediaCategory: encyclopediaCategoryEnum.toUiArray(data.encyclopedia_category) as Plant['encyclopediaCategory'],
     featuredMonth: data.featured_month || [],
 
     // Section 2: Identity (non-translatable)
@@ -596,7 +592,7 @@ const PlantInfoPage: React.FC = () => {
             scientificName: basicInfo.scientificName,
             status: basicInfo.status || 'in progress',
             family: basicInfo.family,
-            plantType: basicInfo.encyclopediaCategory?.[0],
+            plantType: undefined,
             levelSun: basicInfo.sunlight?.[0],
             livingSpace: basicInfo.livingSpace?.[0],
             lifeCycle: basicInfo.lifeCycle?.[0],
@@ -1269,7 +1265,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'edibleOil',
-      'status', 'month', 'encyclopediaCategory',
+      'status', 'month',
     ]
     
     for (const group of enumGroups) {

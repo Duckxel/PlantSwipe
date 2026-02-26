@@ -8,7 +8,6 @@ import type { Plant } from "@/types/plant"
 import { mapFieldToCategory, isFieldGatedOff, BOOLEAN_GATE_DEPS, type PlantFormCategory } from "./plantFormCategories"
 import type { EnumTools } from "@/lib/composition"
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -138,7 +137,6 @@ const IGNORED_FIELDS = new Set([
 
 // Enum field → EnumTools mapping
 const ENUM_FIELDS: Record<string, EnumTools> = {
-  encyclopediaCategory: encyclopediaCategoryEnum as EnumTools,
   utility: utilityEnum as EnumTools,
   ediblePart: ediblePartEnum as EnumTools,
   poisoningMethod: poisoningMethodEnum as EnumTools,
@@ -232,7 +230,6 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
 
   // Legacy section names → map to new names
   const legacyMap: Record<string, string> = {
-    plantType: 'encyclopediaCategory',
     plantCare: 'care',
     usage: 'consumption',
     miscellaneous: 'misc',

@@ -14,7 +14,6 @@ import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
 import type { Plant, PlantColor, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
-  encyclopediaCategoryEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -733,7 +732,6 @@ export async function processPlantRequest(
       scientific_name_species: plant.scientificNameSpecies || null,
       scientific_name_variety: plant.scientificNameVariety || null,
       family: plant.family || null,
-      encyclopedia_category: encyclopediaCategoryEnum.toDbArray(plant.encyclopediaCategory),
       featured_month: plant.featuredMonth || [],
       // Section 2: Identity
       climate: climateEnum.toDbArray(plant.climate),
