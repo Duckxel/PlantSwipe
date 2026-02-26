@@ -938,6 +938,7 @@ const growthFields: FieldConfig[] = [
   { key: "fruitingMonth", label: "Fruiting Month(s)", description: "Months when plant fruits", type: "multiselect", options: monthOptions },
   { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
   { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
+  { key: "separationCm", label: "Spacing (cm)", description: "Recommended distance between two plants", type: "number" },
   { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
   { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea", gatedBy: "staking" },
   { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
@@ -2347,9 +2348,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   const categoryLabels: Record<string, string> = {
     base: t('plantAdmin.categories.base', 'Base'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
-    safety: t('plantAdmin.categories.safety', 'Safety'),
     care: t('plantAdmin.categories.care', 'Care'),
-    careDetails: t('plantAdmin.categories.careDetails', 'Substrate'),
     growth: t('plantAdmin.categories.growth', 'Growth'),
     danger: t('plantAdmin.categories.danger', 'Danger'),
     ecology: t('plantAdmin.categories.ecology', 'Ecology'),
@@ -2358,7 +2357,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     meta: t('plantAdmin.categories.meta', 'Meta'),
   }
 
-  const formTabOrder = ['base','identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as const
+  const formTabOrder = ['base','identity','care','growth','danger','ecology','consumption','misc','meta'] as const
 
   const pillTabs: PillTab<string>[] = React.useMemo(() =>
     formTabOrder.map((key) => {
@@ -2560,11 +2559,8 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
           {t('plantAdmin.colors.bicolor', 'Bicolor')}
         </label>
       </div>
-    </div>
-  )
 
-  const renderSafety = () => (
-    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.safety', 'Safety & Toxicity')} />
       <div className={fieldRowClass}>
         {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityHuman')!, t)}
         {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityPets')!, t)}
@@ -2598,11 +2594,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         {renderField(value, setPath, careFields.find(f => f.key === 'mistingFrequency')!, t)}
       </div>
       {renderField(value, setPath, careFields.find(f => f.key === 'specialNeeds')!, t)}
-    </div>
-  )
 
-  const renderCareDetails = () => (
-    <div className="space-y-5">
       <SectionDivider title={t('plantAdmin.sections.substrate', 'Substrate & Soil')} />
       <div className={fieldRowClass}>
         {renderField(value, setPath, careDetailsFields.find(f => f.key === 'substrate')!, t)}
@@ -2637,6 +2629,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       <div className={fieldRowClass}>
         {renderField(value, setPath, growthFields.find(f => f.key === 'heightCm')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'wingspanCm')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'separationCm')!, t)}
       </div>
       {renderField(value, setPath, growthFields.find(f => f.key === 'staking')!, t)}
       {shouldShowField(growthFields.find(f => f.key === 'stakingAdvice')!) && renderField(value, setPath, growthFields.find(f => f.key === 'stakingAdvice')!, t)}
@@ -2826,9 +2819,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   const sectionRenderers: Record<string, () => React.ReactNode> = {
     base: renderBase,
     identity: renderIdentity,
-    safety: renderSafety,
     care: renderCare,
-    careDetails: renderCareDetails,
     growth: renderGrowth,
     danger: renderDanger,
     ecology: renderEcology,

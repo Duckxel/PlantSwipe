@@ -1055,6 +1055,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.fruitingMonth = data.fruiting_month || []
   flat.heightCm = data.height_cm ?? undefined
   flat.wingspanCm = data.wingspan_cm ?? undefined
+  flat.separationCm = data.separation_cm ?? undefined
   flat.staking = data.staking || false
   flat.stakingAdvice = translation?.staking_advice || plant.growth?.adviceTutoring || undefined
   flat.division = divisionEnum.toUiArray(data.division) as string[]
@@ -1705,6 +1706,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
+            separation_cm: p.separationCm || p.growth?.separation || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
             cultivation_mode: toCheckedSlugs(p.cultivationMode, ALLOWED_CULTIVATION_MODE),
@@ -1801,6 +1803,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
+            separation_cm: p.separationCm || p.growth?.separation || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
             cultivation_mode: toCheckedSlugs(p.cultivationMode, ALLOWED_CULTIVATION_MODE),

@@ -1310,7 +1310,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const timelineData = React.useMemo(() => buildTimelineData(plant, monthLabels), [plant, monthLabels])
   const height = plant.heightCm ?? null
   const wingspan = plant.wingspanCm ?? null
-  const spacing: number | null = null
+  const spacing = plant.separationCm ?? null
   const [cubeExpanded, setCubeExpanded] = React.useState(false)
   const toggleCubeExpanded = React.useCallback(() => {
     setCubeExpanded(prev => !prev)

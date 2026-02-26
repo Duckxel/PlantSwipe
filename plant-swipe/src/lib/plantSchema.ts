@@ -183,6 +183,7 @@ export const plantSchema = {
   },
   heightCm: { type: 'int', description: 'Mature height in centimeters' },
   wingspanCm: { type: 'int', description: 'Mature spread/width in centimeters' },
+  separationCm: { type: 'int', description: 'Recommended spacing between two plants of this species in centimeters' },
   staking: { type: 'boolean', description: 'Whether staking/support is needed' },
   stakingAdvice: { type: 'text', description: 'What type of support and how to stake' },
   division: {
