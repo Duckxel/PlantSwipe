@@ -181,6 +181,7 @@ create table if not exists public.plants (
   -- Section 4: Growth — Dimensions & support
   height_cm integer,
   wingspan_cm integer,
+  separation_cm integer,
   staking boolean default false,
 
   -- Section 4: Growth — Propagation & cultivation
@@ -544,6 +545,7 @@ declare
     array['fruiting_month', 'text[] not null default ''{}''::text[]'],
     array['height_cm', 'integer'],
     array['wingspan_cm', 'integer'],
+    array['separation_cm', 'integer'],
     array['staking', 'boolean default false'],
     array['division', 'text[] not null default ''{}''::text[]'],
     array['cultivation_mode', 'text[] not null default ''{}''::text[]'],
@@ -1453,6 +1455,7 @@ do $$ declare
     'fruiting_month',
     'height_cm',
     'wingspan_cm',
+    'separation_cm',
     'staking',
     'division',
     'cultivation_mode',

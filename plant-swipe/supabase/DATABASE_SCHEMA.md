@@ -482,6 +482,7 @@ fruiting_month            TEXT[]                 -- Multi-select months
 -- Section 4: Growth — Dimensions & support
 height_cm                 INTEGER
 wingspan_cm               INTEGER
+separation_cm             INTEGER                -- Recommended spacing between two plants (cm)
 staking                   BOOLEAN DEFAULT false  -- Whether staking/support is needed
 
 -- Section 4: Growth — Propagation & cultivation
