@@ -526,8 +526,8 @@ const CompanionSelector: React.FC<{
         emptyMessage={t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
         confirmLabel={t('plantAdmin.addSelectedBtn', 'Add Selected')}
         renderItem={(option) => (
-          <div className="flex flex-col w-full">
-            <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+          <div className="flex flex-col w-full h-full">
+            <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
               {option.description ? (
                 <img src={option.description} alt="" className="w-full h-full object-cover" />
               ) : (
@@ -536,7 +536,7 @@ const CompanionSelector: React.FC<{
                 </div>
               )}
             </div>
-            <div className="px-3 py-2">
+            <div className="flex-1 flex items-center px-3 py-2">
               <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
             </div>
           </div>
