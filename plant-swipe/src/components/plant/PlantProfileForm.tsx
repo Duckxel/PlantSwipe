@@ -332,9 +332,7 @@ const CompanionSelector: React.FC<{
     return plantResults.map((p) => ({
       id: p.id,
       label: p.name,
-      icon: imageMap.get(p.id)
-        ? <img src={imageMap.get(p.id)} alt="" className="w-11 h-11 rounded-xl object-cover" />
-        : <div className="w-11 h-11 rounded-xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center"><Leaf className="h-5 w-5 text-stone-400" /></div>,
+      description: imageMap.get(p.id) || null,
     }))
   }, [language])
 
@@ -527,6 +525,22 @@ const CompanionSelector: React.FC<{
         searchPlaceholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')}
         emptyMessage={t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
         confirmLabel={t('plantAdmin.addSelectedBtn', 'Add Selected')}
+        renderItem={(option) => (
+          <div className="flex flex-col w-full -m-4">
+            <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800 rounded-t-xl sm:rounded-t-2xl overflow-hidden">
+              {option.description ? (
+                <img src={option.description} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
+                  <Leaf className="h-8 w-8" />
+                </div>
+              )}
+            </div>
+            <div className="px-3 py-2">
+              <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+            </div>
+          </div>
+        )}
       />
     </div>
   )

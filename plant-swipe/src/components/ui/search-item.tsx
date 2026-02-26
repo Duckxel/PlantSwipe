@@ -424,7 +424,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                             }
                           }}
                           className={cn(
-                            "group relative w-full h-full rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left",
+                            "group relative w-full h-full rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left overflow-hidden",
                             (isItemDisabled || isAlreadySelected)
                               ? "opacity-50 cursor-not-allowed border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
                               : isActive
