@@ -17,7 +17,7 @@ import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
-import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
+import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
   utilityEnum,
@@ -1698,9 +1698,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
-            sowing_month: p.sowingMonth || monthNumbersToSlugs(p.growth?.sowingMonth) || [],
-            flowering_month: p.floweringMonth || monthNumbersToSlugs(p.growth?.floweringMonth) || [],
-            fruiting_month: p.fruitingMonth || monthNumbersToSlugs(p.growth?.fruitingMonth) || [],
+            sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
+            flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
+            fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
@@ -1709,7 +1709,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
-            pruning_month: p.pruningMonth || [],
+            pruning_month: normalizeMonthsToSlugs(p.pruningMonth),
             // Section 6: Ecology
             conservation_status: conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : [])),
             ecological_status: toCheckedSlugs(p.ecologicalStatus, ALLOWED_ECOLOGICAL_STATUS),
@@ -1793,9 +1793,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
-            sowing_month: p.sowingMonth || monthNumbersToSlugs(p.growth?.sowingMonth) || [],
-            flowering_month: p.floweringMonth || monthNumbersToSlugs(p.growth?.floweringMonth) || [],
-            fruiting_month: p.fruitingMonth || monthNumbersToSlugs(p.growth?.fruitingMonth) || [],
+            sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
+            flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
+            fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
@@ -1804,7 +1804,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
-            pruning_month: p.pruningMonth || [],
+            pruning_month: normalizeMonthsToSlugs(p.pruningMonth),
             // Section 6: Ecology
             conservation_status: conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : [])),
             ecological_status: toCheckedSlugs(p.ecologicalStatus, ALLOWED_ECOLOGICAL_STATUS),

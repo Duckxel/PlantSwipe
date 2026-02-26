@@ -1014,7 +1014,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   const selectStatusPlaceholder = t('plantAdmin.selectStatus', 'Select status')
   const optionalLabel = t('plantAdmin.optionalLabel', 'optional')
   const isAdvice = field.key.toLowerCase().includes("advice")
-    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
+    const isMonthMultiField = field.type === "multiselect" && field.options === monthOptions
     const isPromotionMonthField = field.key === "identity.promotionMonth"
   const translateOption = (optionKey: string, fallback: string) => {
     const fieldScoped = t(`${translationBase}.options.${optionKey}`, { defaultValue: '' })
