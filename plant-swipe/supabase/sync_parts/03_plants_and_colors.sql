@@ -57,6 +57,7 @@ create table if not exists public.plants (
   name text not null,
 
   -- Section 1: Base — Identity & naming
+  plant_type text check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
   scientific_name_species text,
   scientific_name_variety text,
   family text,
@@ -496,6 +497,7 @@ do $add_plants_cols$
 declare
   col_defs text[][] := array[
     -- Section 1: Base
+    array['plant_type', 'text'],
     array['scientific_name_species', 'text'],
     array['scientific_name_variety', 'text'],
     array['family', 'text'],
@@ -1066,6 +1068,15 @@ begin
     alter table public.plants drop column encyclopedia_category;
   end if;
 
+  -- plant_type
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_type') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_plant_type_check check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
+  end;
+
   -- Drop utility check constraints first, before any UPDATEs to the utility column
   -- (existing data may contain values not in the allowed set)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
@@ -1395,6 +1406,7 @@ do $$ declare
     'id',
     'name',
     -- Section 1: Base
+    'plant_type',
     'scientific_name_species',
     'scientific_name_variety',
     'family',
