@@ -259,6 +259,7 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   // Enum array fields
   if (ENUM_FIELDS[fieldKey]) {
     const result = normalizeEnumArrayInput(ENUM_FIELDS[fieldKey], data)
+    console.log(`[applyAiField] enum "${fieldKey}": input=`, data, `→ shouldUpdate=${result.shouldUpdate}, value=`, result.value)
     if (result.shouldUpdate) next[fieldKey] = result.value
     return next
   }

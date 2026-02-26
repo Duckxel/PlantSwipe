@@ -2000,6 +2000,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             },
             onFieldComplete: ({ field, data }) => {
               if (field === 'complete') return
+              console.log(`[AI onFieldComplete] field="${field}" data=`, data, `type=${typeof data} isArray=${Array.isArray(data)}`)
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
               if (field === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
