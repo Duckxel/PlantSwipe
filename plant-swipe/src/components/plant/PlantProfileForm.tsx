@@ -757,25 +757,31 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
     setV("")
   }
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Name"} />
-        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Details"} />
-        <Button type="button" onClick={commit}>Add</Button>
+    <div className="grid gap-3">
+      <div className="grid gap-2 rounded-lg border border-dashed p-3 bg-white/60 dark:bg-black/10">
+        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Mix name"} />
+        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Benefits / description"} />
+        <div className="flex justify-end">
+          <Button type="button" onClick={commit} disabled={!k.trim() || !v.trim()}>Add</Button>
+        </div>
       </div>
-      <div className="space-y-1">
-        {Object.entries(value).map(([key, val]) => (
-          <div key={key} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-            <div className="font-medium">{key}</div>
-            <div className="text-muted-foreground">{val}</div>
-            <button type="button" className="text-red-600" onClick={() => {
-              const copy = { ...value }
-              delete copy[key]
-              onChange(copy)
-            }}>Remove</button>
-          </div>
-        ))}
-      </div>
+      {Object.keys(value).length > 0 && (
+        <div className="space-y-2">
+          {Object.entries(value).map(([key, val]) => (
+            <div key={key} className="flex items-start gap-3 rounded-lg border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#111611] px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">{key}</div>
+                <div className="text-sm text-muted-foreground mt-0.5">{val}</div>
+              </div>
+              <button type="button" className="shrink-0 text-xs text-red-500 hover:text-red-700 font-medium mt-0.5" onClick={() => {
+                const copy = { ...value }
+                delete copy[key]
+                onChange(copy)
+              }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -2711,7 +2717,41 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
 
   const renderConsumption = () => (
     <div className="space-y-5">
-      {renderFieldGroup(consumptionFields)}
+      <SectionDivider title={t('plantAdmin.sections.nutrition', 'Nutrition')} />
+      {renderField(value, setPath, consumptionFields.find(f => f.key === 'nutritionalValue')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'edibleOil')!, t)}
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'spiceMixes')!, t)}
+      </div>
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'infusionParts')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.infusion', 'Infusion')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionParts')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionRecipeIdeas')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionMixes')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'medicinalBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.medicinal', 'Medicinal')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalUsage')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalWarning')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalHistory')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'aromatherapyBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.aromatherapy', 'Aromatherapy')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'aromatherapyBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'essentialOilBlends')!, t)}
+        </>
+      )}
+
       <SectionDivider title={t('plantAdmin.sections.recipes', 'Recipes')} />
       <RecipeEditor recipes={Array.isArray(value.recipes) ? value.recipes : []} onChange={(v) => setPath('recipes', v)} />
     </div>
