@@ -5,6 +5,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -2302,10 +2303,11 @@ export const GardenListPage: React.FC = () => {
               </DialogHeader>
               <div className="space-y-3">
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">
+                  <Label htmlFor="garden-name">
                     {t("garden.name")}
-                  </label>
+                  </Label>
                   <Input
+                    id="garden-name"
                     value={name}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setName(e.target.value)
@@ -2314,10 +2316,11 @@ export const GardenListPage: React.FC = () => {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <label className="text-sm font-medium">
+                  <Label htmlFor="garden-image">
                     {t("garden.coverImageUrl")}
-                  </label>
+                  </Label>
                   <Input
+                    id="garden-image"
                     value={imageUrl}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
                       setImageUrl(e.target.value)
