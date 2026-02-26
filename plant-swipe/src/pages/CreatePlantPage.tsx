@@ -14,7 +14,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
-import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
@@ -159,6 +159,8 @@ const requiresFieldCompletion = (fieldKey: string) => !OPTIONAL_FIELD_EXCEPTIONS
 
 const isFieldMissingForPlant = (plant: Plant, fieldKey: string): boolean => {
   if (!requiresFieldCompletion(fieldKey)) return false
+  // Skip fields whose boolean gate is false (e.g. mulchType when mulchingNeeded=false)
+  if (isFieldGatedOff(plant as unknown as Record<string, unknown>, fieldKey)) return false
   return !hasMeaningfulContent(getFieldValueForKey(plant, fieldKey))
 }
 

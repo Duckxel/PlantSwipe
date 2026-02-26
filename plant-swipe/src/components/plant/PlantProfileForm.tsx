@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
@@ -67,6 +67,8 @@ interface FieldConfig {
     caseInsensitive?: boolean
     placeholder?: string
   }
+  /** If set, this field is only shown when the gate field is true */
+  gatedBy?: string
 }
 
 const sanitizeOptionKey = (value: unknown) => {
@@ -1066,8 +1068,8 @@ const careDetailsFields: FieldConfig[] = [
   { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
   { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
-  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags" },
-  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", gatedBy: "mulchingNeeded" },
+  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
   { key: "fertilizerAdvice", label: "Fertilizer Advice", description: "Fertilizing schedule and advice", type: "textarea" },
@@ -1083,17 +1085,17 @@ const growthFields: FieldConfig[] = [
   { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
   { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
   { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
-  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea" },
+  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea", gatedBy: "staking" },
   { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
   { key: "cultivationMode", label: "Cultivation Mode", description: "Type of growing setup", type: "multiselect", options: ["Open Ground","Flowerbed","Vegetable Garden","Raised Bed","Orchard","Rockery","Slope","Mound","Pot","Planter","Hanging","Greenhouse","Indoor","Pond","Waterlogged Soil","Hydroponic","Aquaponic","Mineral Substrate","Permaculture","Agroforestry"] },
   { key: "sowingMethod", label: "Sowing Method", description: "How to sow seeds", type: "multiselect", options: ["Open Ground","Pot","Tray","Greenhouse","Mini Greenhouse","Broadcast","Row"] },
   { key: "transplanting", label: "Transplanting?", description: "Does the plant need transplanting?", type: "boolean" },
-  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text" },
-  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text" },
+  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text", gatedBy: "transplanting" },
+  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text", gatedBy: "transplanting" },
   { key: "sowingAdvice", label: "Sowing Advice", description: "Sowing and planting instructions", type: "textarea" },
   { key: "pruning", label: "Pruning Needed?", description: "Does the plant need pruning?", type: "boolean" },
-  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions },
-  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea" },
+  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions, gatedBy: "pruning" },
+  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea", gatedBy: "pruning" },
 ]
 
 // ============================================================================
@@ -1131,21 +1133,21 @@ const ecologyFields: FieldConfig[] = [
 const consumptionFields: FieldConfig[] = [
   { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
   { key: "infusion", label: "Usable for Infusion?", description: "Can be used for tea/infusion", type: "boolean" },
-  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags" },
-  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea" },
-  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "infusion" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "infusion" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "infusion" },
   { key: "medicinal", label: "Medicinal Plant?", description: "Does the plant have medicinal uses?", type: "boolean" },
-  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea" },
-  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea" },
-  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea" },
-  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "medicinal" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "medicinal" },
   { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
   { key: "aromatherapy", label: "Aromatherapy?", description: "Used in aromatherapy?", type: "boolean" },
-  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea" },
-  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "aromatherapy" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "aromatherapy" },
   { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
   { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
-  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "infusion" },
 ]
 
 // ============================================================================
@@ -2554,7 +2556,16 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     [onChange, t, value],
   )
   const formTabOrder = ['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as const
-  const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
+  const setPath = (path: string, val: any) => {
+    let next = setValue(value, path, val)
+    // When a boolean gate is toggled OFF, clear its dependent fields
+    if (val === false && BOOLEAN_GATE_DEPS[path]) {
+      for (const dep of BOOLEAN_GATE_DEPS[path]) {
+        next = setValue(next, dep, undefined)
+      }
+    }
+    onChange(next)
+  }
   return (
     <div className="space-y-6">
       <div ref={(node) => { sectionRefs.current.base = node }} className="flex-1">
@@ -2653,6 +2664,8 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
                         if (cat === 'misc' && f.key === 'companionPlants') return null
+                        // Hide dependent fields when their boolean gate is false
+                        if (f.gatedBy && getValue(value, f.gatedBy) !== true) return null
                         return renderField(value, setPath, f, t)
                       })}
                     {cat === 'consumption' && (

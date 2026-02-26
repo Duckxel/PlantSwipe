@@ -5,7 +5,7 @@
 // ============================================================================
 
 import type { Plant } from "@/types/plant"
-import { mapFieldToCategory, type PlantFormCategory } from "./plantFormCategories"
+import { mapFieldToCategory, isFieldGatedOff, BOOLEAN_GATE_DEPS, type PlantFormCategory } from "./plantFormCategories"
 import type { EnumTools } from "@/lib/composition"
 import {
   encyclopediaCategoryEnum,
@@ -254,6 +254,9 @@ export function applyAiFieldToPlant(prev: Plant, fieldKey: string, data: unknown
 function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant {
   if (IGNORED_FIELDS.has(fieldKey) || data === undefined) return plant
 
+  // Skip fields whose boolean gate is false
+  if (isFieldGatedOff(plant as unknown as Record<string, unknown>, fieldKey)) return plant
+
   const next = { ...plant } as Plant & Record<string, unknown>
 
   // Enum array fields
@@ -298,7 +301,15 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   // Boolean fields
   if (BOOLEAN_FIELDS.has(fieldKey)) {
     const val = normalizeBoolean(data)
-    if (val !== undefined) next[fieldKey] = val
+    if (val !== undefined) {
+      next[fieldKey] = val
+      // When a gate field is set to false, clear its dependent fields
+      if (val === false && BOOLEAN_GATE_DEPS[fieldKey]) {
+        for (const dep of BOOLEAN_GATE_DEPS[fieldKey]) {
+          next[dep] = undefined
+        }
+      }
+    }
     return next
   }
 

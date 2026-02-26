@@ -174,6 +174,42 @@ export function mapFieldToCategory(fieldKey: string): PlantFormCategory {
   return fieldCategoryMap[fieldKey] || 'base'
 }
 
+/**
+ * Map of boolean gate fields → their dependent fields.
+ * When a gate is `false`, dependent fields should be hidden in the form
+ * and skipped during AI fill.
+ */
+export const BOOLEAN_GATE_DEPS: Record<string, string[]> = {
+  // Care section
+  mulchingNeeded: ['mulchType', 'mulchAdvice'],
+  // Growth section
+  staking: ['stakingAdvice'],
+  transplanting: ['transplantingTime', 'outdoorPlantingTime'],
+  pruning: ['pruningMonth', 'pruningAdvice'],
+  // Consumption section
+  infusion: ['infusionParts', 'infusionBenefits', 'infusionRecipeIdeas', 'infusionMixes'],
+  medicinal: ['medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory'],
+  aromatherapy: ['aromatherapyBenefits', 'essentialOilBlends'],
+}
+
+/** Reverse lookup: dependent field → its gate field */
+const _gateForField: Record<string, string> = {}
+for (const [gate, deps] of Object.entries(BOOLEAN_GATE_DEPS)) {
+  for (const dep of deps) _gateForField[dep] = gate
+}
+
+/** Return the gate field key that guards this field, or undefined if ungated */
+export function getGateForField(fieldKey: string): string | undefined {
+  return _gateForField[fieldKey]
+}
+
+/** Check whether a field is gated off (its gate is explicitly false) */
+export function isFieldGatedOff(plant: Record<string, unknown>, fieldKey: string): boolean {
+  const gate = _gateForField[fieldKey]
+  if (!gate) return false
+  return plant[gate] === false
+}
+
 export type CategoryProgress = Record<
   PlantFormCategory,
   { total: number; completed: number; status: 'idle' | 'filling' | 'done' }
