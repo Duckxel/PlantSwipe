@@ -1018,7 +1018,12 @@ const miscFields: FieldConfig[] = [
 // Section 9: Meta
 // ============================================================================
 const metaFields: FieldConfig[] = [
-  { key: "status", label: "Status", description: "Editorial status", type: "select", options: ["approved","rework","review","in_progress"] },
+  { key: "status", label: "Status", description: "Editorial status", type: "select", options: [
+    { label: "Approved", value: "approved" },
+    { label: "Rework", value: "rework" },
+    { label: "Review", value: "review" },
+    { label: "In Progress", value: "in_progress" },
+  ] },
   { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
