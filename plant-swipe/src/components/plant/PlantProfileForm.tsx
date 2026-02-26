@@ -1038,8 +1038,6 @@ const identityFields: FieldConfig[] = [
   { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Both","Terrarium","Greenhouse"] },
   { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
   { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
-  { key: "multicolor", label: "Multicolor?", description: "Plant has 3+ distinct colors", type: "boolean" },
-  { key: "bicolor", label: "Bicolor?", description: "Plant has exactly 2 colors", type: "boolean" },
 ]
 
 // ============================================================================
