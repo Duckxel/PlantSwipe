@@ -1753,6 +1753,8 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
 
+          {sourcesValue && <hr className="border-stone-200/70 dark:border-[#3e3e42]/70" />}
+
           {sourcesValue && (
             <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 px-1">
               <FileText className="h-3 w-3 shrink-0" />
