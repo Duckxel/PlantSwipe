@@ -324,7 +324,7 @@ https://region1.google-analytics.com
 
 ### 9. Sentry
 
-**DSN:** `https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520`
+**DSN:** `https://[REDACTED]@o4510783278350336.ingest.de.sentry.io/4510783285821520`
 
 **Region:** Germany (de.sentry.io)
 

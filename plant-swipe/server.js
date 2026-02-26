@@ -23,7 +23,7 @@ try {
 // @sentry/bun would only work when running with the Bun runtime
 import * as Sentry from '@sentry/node';
 
-const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
+const SENTRY_DSN = process.env.SENTRY_DSN || process.env.VITE_SENTRY_DSN;
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 // Now this will correctly read from .env since dotenv was loaded above
@@ -156,10 +156,11 @@ function shouldSuppressMaintenanceError(event, hint) {
   return false;
 }
 
-Sentry.init({
-  dsn: SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'production',
-  // Server identification
+if (SENTRY_DSN) {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    // Server identification
   serverName: SERVER_NAME,
   // Send structured logs to Sentry
   _experiments: {
@@ -263,8 +264,10 @@ Sentry.init({
     return event;
   },
 });
-
-console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
+  console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
+} else {
+  console.warn(`[Sentry] SENTRY_DSN not configured. Error monitoring disabled.`);
+}
 
 // Global error handlers for uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error) => {

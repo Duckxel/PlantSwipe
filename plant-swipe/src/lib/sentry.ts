@@ -23,7 +23,7 @@
  */
 import * as Sentry from '@sentry/react'
 
-const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
+const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN
 
 // Server identification: Set VITE_SERVER_NAME to 'DEV' or 'MAIN' in your .env file
 const SERVER_NAME = (import.meta.env as Record<string, string>).VITE_SERVER_NAME || 
@@ -270,6 +270,11 @@ export function initSentry(): void {
 
   if (!isEnabled) {
     console.log('[Sentry] Skipping initialization in development mode')
+    return
+  }
+
+  if (!SENTRY_DSN) {
+    console.warn('[Sentry] Skipping initialization: VITE_SENTRY_DSN is missing')
     return
   }
 

@@ -17,7 +17,7 @@ from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 import sentry_sdk
 from sentry_sdk.integrations.flask import FlaskIntegration
 
-SENTRY_DSN = "https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520"
+SENTRY_DSN = os.environ.get("SENTRY_DSN")
 
 # Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 SERVER_NAME = os.environ.get("PLANTSWIPE_SERVER_NAME") or os.environ.get("SERVER_NAME") or "unknown"
@@ -30,6 +30,10 @@ def _init_sentry() -> None:
     - Error scrubbing removes email patterns from error messages
     - Only operational metadata is captured, no personal data
     """
+    if not SENTRY_DSN:
+        print("[Sentry] SENTRY_DSN not configured. Error monitoring disabled.")
+        return
+
     try:
         sentry_sdk.init(
             dsn=SENTRY_DSN,

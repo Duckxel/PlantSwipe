@@ -7,8 +7,15 @@ import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
+const appRoot = path.resolve(__dirname, '..')
+
+// Load env files before accessing Sentry DSN
+loadEnvFiles(appRoot)
+
 // Sentry error monitoring for sitemap generation
-const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
+const SENTRY_DSN = process.env.SENTRY_DSN
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown'
@@ -17,7 +24,7 @@ let Sentry = null
 try {
   // Try to import Sentry (may not be available in all environments)
   const sentryModule = await import('@sentry/node').catch(() => null)
-  if (sentryModule) {
+  if (sentryModule && SENTRY_DSN) {
     Sentry = sentryModule
     Sentry.init({
       dsn: SENTRY_DSN,
@@ -47,13 +54,8 @@ try {
 
 const startedAt = Date.now()
 
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = path.dirname(__filename)
-const appRoot = path.resolve(__dirname, '..')
 const publicDir = path.join(appRoot, 'public')
 const sitemapPath = path.join(publicDir, 'sitemap.xml')
-
-loadEnvFiles(appRoot)
 
 const shouldSkip = parseBoolean(process.env.SKIP_SITEMAP_GENERATION)
 if (shouldSkip) {
