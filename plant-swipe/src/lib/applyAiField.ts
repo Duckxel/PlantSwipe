@@ -197,7 +197,7 @@ const TAG_FIELDS = new Set([
   'commonNames', 'origin', 'allergens',
   'landscaping', 'plantHabit', 'specialNeeds',
   'substrate', 'substrateMix', 'mulchType', 'nutritionNeed', 'fertilizer',
-  'cultivationMode', 'infusionParts',
+  'cultivationMode', 'infusionParts', 'recipesIdeas',
   'pests', 'diseases',
   'ecologicalStatus', 'biotopes', 'urbanBiotopes',
   'biodiversityRole', 'pollinatorsAttracted', 'birdsAttracted', 'mammalsAttracted',
@@ -268,6 +268,16 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   if (SINGLE_ENUM_FIELDS[fieldKey]) {
     const result = normalizeEnumValueInput(SINGLE_ENUM_FIELDS[fieldKey], data)
     if (result.shouldUpdate) next[fieldKey] = result.value
+    return next
+  }
+
+  // plantType special case
+  if (fieldKey === 'plantType') {
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase().trim()
+      const valid = ['plant', 'flower', 'bamboo', 'shrub', 'tree', 'cactus', 'succulent']
+      if (valid.includes(lower)) next.plantType = lower
+    }
     return next
   }
 

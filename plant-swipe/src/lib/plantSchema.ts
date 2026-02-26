@@ -6,6 +6,11 @@
 
 export const plantSchema = {
   // -- Section 1: Base --------------------------------------------------------
+  plantType: {
+    type: 'enum',
+    options: ['plant','flower','bamboo','shrub','tree','cactus','succulent'],
+    description: 'Primary plant type classification',
+  },
   scientificNameSpecies: {
     type: 'text',
     description: 'Scientific (Latin) species name, e.g. "Monstera deliciosa"',
@@ -284,6 +289,7 @@ export const plantSchema = {
       },
     },
   },
+  recipesIdeas: { type: 'tag[]', description: 'Quick recipe or dish ideas using this plant (short names, e.g. ["Pesto", "Salad", "Soup"])' },
   aromatherapyBenefits: { type: 'text', description: 'Aromatherapy benefits' },
   essentialOilBlends: { type: 'text', description: 'Essential oil blend ideas' },
   edibleOil: {
@@ -292,6 +298,10 @@ export const plantSchema = {
     description: 'Whether the plant produces an edible oil',
   },
   spiceMixes: { type: 'tag[]', description: 'Spice blend uses' },
+
+  biotopePlants: { type: 'tag[]', description: 'Plants typically found in the same biotope/habitat (common names)' },
+  beneficialPlants: { type: 'tag[]', description: 'Plants that benefit this plant when grown nearby (common names)' },
+  harmfulPlants: { type: 'tag[]', description: 'Plants that are harmful or antagonistic to this plant (common names)' },
 
   // -- Section 8: Misc --------------------------------------------------------
   companionPlants: { type: 'tag[]', description: 'Companion plants for garden pairing (common names)' },
