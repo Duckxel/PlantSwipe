@@ -10,6 +10,8 @@ import {
     ChevronRight,
     Droplet,
     Wrench,
+    Sun,
+    Snowflake,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
@@ -120,14 +122,17 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     return t('plantDetails.values.scheduled')
   }
 
-  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
-    if (!schedules?.length) return t('plantDetails.values.flexible')
+  const buildWateringValue = (schedules?: PlantWateringSchedule[]) => {
+    if (!schedules?.length) return { text: t('plantDetails.values.flexible'), seasonal: null }
     const hot = schedules.find((s) => s.season === 'hot')
     const cold = schedules.find((s) => s.season === 'cold')
     if (hot && cold) {
-      return `${formatScheduleEntry(hot)} / ${formatScheduleEntry(cold)}`
+      return {
+        text: null,
+        seasonal: { hot: formatScheduleEntry(hot), cold: formatScheduleEntry(cold) },
+      }
     }
-    return formatScheduleEntry(schedules[0])
+    return { text: formatScheduleEntry(schedules[0]), seasonal: null }
   }
 
     const careLevelArr = Array.isArray(plant.careLevel) ? plant.careLevel : []
@@ -155,6 +160,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   const tempIdeal = plant.temperatureIdeal ?? (plant.plantCare?.temperatureIdeal as number | undefined)
   const schedules = plant.wateringSchedules ?? (plant.plantCare?.watering as { schedules?: PlantWateringSchedule[] } | undefined)?.schedules
 
+  const wateringData = buildWateringValue(schedules)
+
   const stats = [
     {
       label: t('plantDetails.stats.sunLevel'),
@@ -171,7 +178,19 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     },
     {
       label: t('plantDetails.stats.wateringNeed'),
-      value: formatWateringNeed(schedules),
+      value: wateringData.text ?? '',
+      customValue: wateringData.seasonal ? (
+        <div className="flex flex-col gap-1 mt-0.5">
+          <div className="flex items-center gap-1.5">
+            <Sun className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-amber-500 dark:text-amber-400 shrink-0" />
+            <span className="text-sm lg:text-base font-semibold leading-tight text-foreground">{wateringData.seasonal.hot}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Snowflake className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-sky-500 dark:text-sky-400 shrink-0" />
+            <span className="text-sm lg:text-base font-semibold leading-tight text-foreground">{wateringData.seasonal.cold}</span>
+          </div>
+        </div>
+      ) : undefined,
       iconColor: "text-blue-500 dark:text-blue-400",
       iconBg: "bg-gradient-to-br from-blue-500 to-cyan-500",
       iconShadow: "shadow-blue-500/30",
@@ -326,7 +345,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               </span>
               <div className="relative min-w-0">
                 <p className={`text-[10px] lg:text-xs leading-none font-medium ${stat.labelColor}`}>{stat.label}</p>
-                <p className="mt-0.5 text-sm lg:text-base font-semibold leading-tight text-foreground">{stat.value}</p>
+                {stat.customValue ? stat.customValue : (
+                  <p className="mt-0.5 text-sm lg:text-base font-semibold leading-tight text-foreground">{stat.value}</p>
+                )}
               </div>
             </div>
           ))}
