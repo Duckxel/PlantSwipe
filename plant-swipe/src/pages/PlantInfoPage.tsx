@@ -406,7 +406,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     // Section 9: Meta
     status: data.status || undefined,
     adminCommentary: data.admin_commentary || undefined,
-    userNotes: data.user_notes || translation?.user_notes || undefined,
+    userNotes: translation?.user_notes || undefined,
     createdBy: data.created_by || undefined,
     createdTime: data.created_time || undefined,
     updatedBy: data.updated_by || undefined,

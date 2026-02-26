@@ -806,7 +806,6 @@ export async function processPlantRequest(
       // Section 9: Meta
       status: normalizedStatus,
       admin_commentary: plant.adminCommentary || null,
-      user_notes: plant.userNotes || null,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,

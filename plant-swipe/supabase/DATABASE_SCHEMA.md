@@ -525,7 +525,6 @@ sponsored_shop_ids        TEXT[]                 -- Merchant IDs (future sponsor
 -- Section 9: Meta
 status                    TEXT                   -- CHECK: in_progress, rework, review, approved
 admin_commentary          TEXT
-user_notes                TEXT
 created_by                TEXT
 created_time              TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_by                TEXT

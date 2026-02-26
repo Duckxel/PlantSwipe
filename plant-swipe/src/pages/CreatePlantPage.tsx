@@ -1656,7 +1656,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
-            user_notes: p.userNotes || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
             updated_by: updatedByValue,
@@ -1753,7 +1752,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
-            user_notes: p.userNotes || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }

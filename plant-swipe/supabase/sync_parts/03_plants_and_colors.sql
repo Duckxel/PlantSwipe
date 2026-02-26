@@ -37,7 +37,7 @@
 --   Section 7: infusion_parts, edible_oil
 --   Section 8: companion_plants, biotope_plants, beneficial_plants, harmful_plants,
 --              varieties, sponsored_shop_ids
---   Section 9: status, admin_commentary, user_notes, created_by, created_time,
+--   Section 9: status, admin_commentary, created_by, created_time,
 --              updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
@@ -280,7 +280,6 @@ create table if not exists public.plants (
   -- Section 9: Meta
   status text check (status in ('in_progress','rework','review','approved')),
   admin_commentary text,
-  user_notes text,
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -576,7 +575,6 @@ declare
     -- Section 9: Meta
     array['status', 'text'],
     array['admin_commentary', 'text'],
-    array['user_notes', 'text'],
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
     array['updated_by', 'text'],
@@ -1091,6 +1089,18 @@ begin
     end if;
   end loop;
 
+  -- Drop user_notes from plants table — it belongs only in plant_translations
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='user_notes') then
+    -- Migrate any plants.user_notes to plant_translations before dropping
+    update public.plant_translations pt
+      set user_notes = p.user_notes
+      from public.plants p
+      where pt.plant_id = p.id
+        and p.user_notes is not null and p.user_notes <> ''
+        and (pt.user_notes is null or pt.user_notes = '');
+    alter table public.plants drop column user_notes;
+  end if;
+
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
@@ -1461,7 +1471,6 @@ do $$ declare
     -- Section 9: Meta
     'status',
     'admin_commentary',
-    'user_notes',
     'created_by',
     'created_time',
     'updated_by',
