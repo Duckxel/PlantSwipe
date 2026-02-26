@@ -6,7 +6,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
+import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug, WateringMode } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -354,6 +354,35 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
 }
 
+/** Derive wateringFrequencyWarm from schedule data for backward compat */
+function deriveWateringFrequencyWarm(p: any): number | null {
+  // If the admin explicitly set a wateringFrequencyWarm (and there are no schedules), use it
+  const schedules = normalizeSchedules(p.wateringSchedules || p.plantCare?.watering?.schedules)
+  if (!schedules.length) return p.wateringFrequencyWarm || null
+  // From schedules: use 'hot' entry or 'always' entry, convert to per-week
+  const hot = schedules.find((s: PlantWateringSchedule) => s.season === 'hot')
+  const always = schedules.find((s: PlantWateringSchedule) => !s.season)
+  const entry = hot || always
+  if (!entry?.quantity || !entry?.timePeriod) return p.wateringFrequencyWarm || null
+  if (entry.timePeriod === 'week') return entry.quantity
+  if (entry.timePeriod === 'month') return Math.round((entry.quantity / 4) * 10) / 10 || 1
+  return p.wateringFrequencyWarm || null
+}
+
+/** Derive wateringFrequencyCold from schedule data for backward compat */
+function deriveWateringFrequencyCold(p: any): number | null {
+  const schedules = normalizeSchedules(p.wateringSchedules || p.plantCare?.watering?.schedules)
+  if (!schedules.length) return p.wateringFrequencyCold || null
+  // From schedules: use 'cold' entry, or 'always' entry
+  const cold = schedules.find((s: PlantWateringSchedule) => s.season === 'cold')
+  const always = schedules.find((s: PlantWateringSchedule) => !s.season)
+  const entry = cold || always
+  if (!entry?.quantity || !entry?.timePeriod) return p.wateringFrequencyCold || null
+  if (entry.timePeriod === 'week') return entry.quantity
+  if (entry.timePeriod === 'month') return Math.round((entry.quantity / 4) * 10) / 10 || 1
+  return p.wateringFrequencyCold || null
+}
+
 const mergeContributors = (
   existing: unknown,
   extras: Array<string | null | undefined> = [],
@@ -556,16 +585,22 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
   console.log('[upsertImages] Successfully saved', normalized.length, 'images')
 }
 
-async function upsertWateringSchedules(plantId: string, schedules: Plant["plantCare"] | undefined) {
+async function upsertWateringSchedules(plantId: string, schedules: PlantWateringSchedule[] | undefined) {
   await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId)
-  const entries = normalizeSchedules(schedules?.watering?.schedules)
-  const rows = entries.map((entry) => ({
-    plant_id: plantId,
-    season: normalizeSeasonSlug(entry.season),
-    quantity: entry.quantity ?? null,
-    // Use normalizeTimePeriodSlug to ensure only valid DB values: 'week', 'month', 'year', or null
-    time_period: normalizeTimePeriodSlug(entry.timePeriod) || null,
-  }))
+  const entries = normalizeSchedules(schedules)
+  const rows = entries.map((entry) => {
+    // Preserve 'hot' and 'cold' seasons directly; normalize legacy seasons
+    const season = entry.season === 'hot' || entry.season === 'cold'
+      ? entry.season
+      : normalizeSeasonSlug(entry.season)
+    return {
+      plant_id: plantId,
+      season,
+      quantity: entry.quantity ?? null,
+      // Use normalizeTimePeriodSlug to ensure only valid DB values: 'week', 'month', 'year', or null
+      time_period: normalizeTimePeriodSlug(entry.timePeriod) || null,
+    }
+  })
   if (!rows.length) return
   const { error } = await supabase.from('plant_watering_schedules').insert(rows)
   if (error) throw new Error(error.message)
@@ -972,6 +1007,15 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     seasons: seasonEnum.toUiArray(translation?.season) as Plant["seasons"],
     description: translation?.overview || undefined,
     images: (images as PlantImage[]) || [],
+    // Flat watering fields
+    wateringMode: (data.watering_mode as WateringMode) || 'always',
+    wateringSchedules: normalizeSchedules(
+      (schedules || []).map((row: any) => ({
+        season: row.season || undefined,
+        quantity: row.quantity ?? undefined,
+        timePeriod: row.time_period || undefined,
+      })),
+    ),
   }
   if (colors.length || data.multicolor || data.bicolor) plant.identity = { ...(plant.identity || {}), colors, multicolor: data.multicolor, bicolor: data.bicolor }
   return plant
@@ -1465,8 +1509,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             temperature_max: p.temperatureMax || p.plantCare?.temperatureMax || null,
             temperature_min: p.temperatureMin || p.plantCare?.temperatureMin || null,
             temperature_ideal: p.temperatureIdeal || p.plantCare?.temperatureIdeal || null,
-            watering_frequency_warm: p.wateringFrequencyWarm || null,
-            watering_frequency_cold: p.wateringFrequencyCold || null,
+            watering_mode: p.wateringMode || 'always',
+            watering_frequency_warm: deriveWateringFrequencyWarm(p) || null,
+            watering_frequency_cold: deriveWateringFrequencyCold(p) || null,
             watering_type: wateringTypeEnum.toDbArray(p.wateringType || p.plantCare?.wateringType),
             hygrometry: p.hygrometry || p.plantCare?.hygrometry || null,
             misting_frequency: p.mistingFrequency || null,
@@ -1569,8 +1614,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             temperature_max: p.temperatureMax || p.plantCare?.temperatureMax || null,
             temperature_min: p.temperatureMin || p.plantCare?.temperatureMin || null,
             temperature_ideal: p.temperatureIdeal || p.plantCare?.temperatureIdeal || null,
-            watering_frequency_warm: p.wateringFrequencyWarm || null,
-            watering_frequency_cold: p.wateringFrequencyCold || null,
+            watering_mode: p.wateringMode || 'always',
+            watering_frequency_warm: deriveWateringFrequencyWarm(p) || null,
+            watering_frequency_cold: deriveWateringFrequencyCold(p) || null,
             watering_type: wateringTypeEnum.toDbArray(p.wateringType || p.plantCare?.wateringType),
             hygrometry: p.hygrometry || p.plantCare?.hygrometry || null,
             misting_frequency: p.mistingFrequency || null,
@@ -1643,9 +1689,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const colorIds = await upsertColors(colorsNormalized)
         await linkColors(savedId, colorIds)
         await upsertImages(savedId, plantToSave.images || [])
-        await upsertWateringSchedules(savedId, {
-          watering: { schedules: normalizedSchedules },
-        })
+        await upsertWateringSchedules(savedId, normalizedSchedules)
         await upsertSources(savedId, sources)
         await upsertContributors(savedId, contributorList)
         await upsertInfusionMixes(savedId, plantToSave.infusionMixes || plantToSave.usage?.infusionMix)

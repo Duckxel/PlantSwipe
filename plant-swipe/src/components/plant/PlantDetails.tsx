@@ -111,16 +111,23 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     return translated || period.replace(/[_-]/g, " ").toLowerCase()
   }
 
-  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
-    if (!schedules?.length) return t('plantDetails.values.flexible')
-    const schedule = schedules[0]
+  const formatScheduleEntry = (schedule: PlantWateringSchedule) => {
     const quantity = schedule.quantity ?? undefined
     const timePeriod = schedule.timePeriod ? translateTimePeriod(schedule.timePeriod) : undefined
-
     if (quantity && timePeriod) return `${quantity} / ${timePeriod}`
     if (quantity) return `${quantity}x`
     if (timePeriod) return `${t('plantDetails.values.every')} ${timePeriod}`
     return t('plantDetails.values.scheduled')
+  }
+
+  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
+    if (!schedules?.length) return t('plantDetails.values.flexible')
+    const hot = schedules.find((s) => s.season === 'hot')
+    const cold = schedules.find((s) => s.season === 'cold')
+    if (hot && cold) {
+      return `${formatScheduleEntry(hot)} / ${formatScheduleEntry(cold)}`
+    }
+    return formatScheduleEntry(schedules[0])
   }
 
     const careLevelArr = Array.isArray(plant.careLevel) ? plant.careLevel : []

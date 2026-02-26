@@ -309,13 +309,19 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
 async function upsertWateringSchedules(plantId: string, schedules: PlantWateringSchedule[] | undefined) {
   await supabase.from('plant_watering_schedules').delete().eq('plant_id', plantId)
   const entries = normalizeSchedules(schedules)
-  const rows = entries.map((entry) => ({
-    plant_id: plantId,
-    season: normalizeSeasonSlug(entry.season),
-    quantity: entry.quantity ?? null,
-    // Use normalizeTimePeriodSlug to ensure only valid DB values: 'week', 'month', 'year', or null
-    time_period: normalizeTimePeriodSlug(entry.timePeriod) || null,
-  }))
+  const rows = entries.map((entry) => {
+    // Preserve 'hot' and 'cold' seasons directly; normalize legacy seasons
+    const season = entry.season === 'hot' || entry.season === 'cold'
+      ? entry.season
+      : normalizeSeasonSlug(entry.season)
+    return {
+      plant_id: plantId,
+      season,
+      quantity: entry.quantity ?? null,
+      // Use normalizeTimePeriodSlug to ensure only valid DB values: 'week', 'month', 'year', or null
+      time_period: normalizeTimePeriodSlug(entry.timePeriod) || null,
+    }
+  })
   if (!rows.length) return
   const { error } = await supabase.from('plant_watering_schedules').insert(rows)
   if (error) throw new Error(error.message)
@@ -752,6 +758,7 @@ export async function processPlantRequest(
       temperature_max: plant.temperatureMax || null,
       temperature_min: plant.temperatureMin || null,
       temperature_ideal: plant.temperatureIdeal || null,
+      watering_mode: plant.wateringMode || 'always',
       watering_frequency_warm: plant.wateringFrequencyWarm || null,
       watering_frequency_cold: plant.wateringFrequencyCold || null,
       watering_type: wateringTypeEnum.toDbArray(plant.wateringType),

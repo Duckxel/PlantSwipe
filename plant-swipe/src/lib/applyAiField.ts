@@ -280,6 +280,15 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     return next
   }
 
+  // wateringMode special case
+  if (fieldKey === 'wateringMode') {
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase().trim()
+      if (['always', 'seasonal'].includes(lower)) next.wateringMode = lower as 'always' | 'seasonal'
+    }
+    return next
+  }
+
   // Month array fields
   if (MONTH_FIELDS.has(fieldKey)) {
     next[fieldKey] = normalizeMonthArray(data)

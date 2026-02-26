@@ -64,6 +64,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   temperatureMax: 'care',
   temperatureMin: 'care',
   temperatureIdeal: 'care',
+  wateringMode: 'care',
   wateringFrequencyWarm: 'care',
   wateringFrequencyCold: 'care',
   wateringType: 'care',
