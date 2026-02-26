@@ -1019,7 +1019,7 @@ const identityFields: FieldConfig[] = [
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
-  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice"] },
+  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
   { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"] },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
@@ -1131,22 +1131,18 @@ const ecologyFields: FieldConfig[] = [
 // ============================================================================
 const consumptionFields: FieldConfig[] = [
   { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
-  { key: "infusion", label: "Usable for Infusion?", description: "Can be used for tea/infusion", type: "boolean" },
-  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "infusion" },
-  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "infusion" },
-  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "infusion" },
-  { key: "medicinal", label: "Medicinal Plant?", description: "Does the plant have medicinal uses?", type: "boolean" },
-  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "medicinal" },
-  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "medicinal" },
-  { key: "fragrance", label: "Fragrance?", description: "Does the plant have a notable fragrance?", type: "boolean" },
-  { key: "aromatherapy", label: "Aromatherapy?", description: "Used in aromatherapy?", type: "boolean" },
-  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "aromatherapy" },
-  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "aromatherapy" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "utility:infusion" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "utility:aromatic" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "utility:aromatic" },
   { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
   { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
-  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "infusion" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "utility:infusion" },
 ]
 
 // ============================================================================
@@ -2663,8 +2659,18 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
                   <CardContent className="flex flex-col gap-4">
                       {fieldGroups[cat].map((f) => {
                         if (cat === 'misc' && f.key === 'companionPlants') return null
-                        // Hide dependent fields when their boolean gate is false
-                        if (f.gatedBy && getValue(value, f.gatedBy) !== true) return null
+                        // Hide dependent fields when their gate condition is not met
+                        if (f.gatedBy) {
+                          if (f.gatedBy.startsWith('utility:')) {
+                            const utilVal = f.gatedBy.slice(8)
+                            const utility = getValue(value, 'utility')
+                            const arr = Array.isArray(utility) ? utility as string[] : []
+                            const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+                            if (!arr.some(u => typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle)) return null
+                          } else if (getValue(value, f.gatedBy) !== true) {
+                            return null
+                          }
+                        }
                         return renderField(value, setPath, f, t)
                       })}
                     {cat === 'consumption' && (

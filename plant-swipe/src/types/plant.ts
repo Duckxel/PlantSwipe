@@ -12,7 +12,7 @@ export type MonthSlug =
 
 export type PlantUtility =
   | "edible" | "ornamental" | "aromatic" | "medicinal"
-  | "fragrant" | "cereal" | "spice"
+  | "fragrant" | "cereal" | "spice" | "infusion"
 
 export type EdiblePart =
   | "flower" | "fruit" | "seed" | "leaf" | "stem"
@@ -263,11 +263,7 @@ export interface Plant {
   symbiosisNotes?: string
 
   // -- Section 7: Consumption -------------------------------------------------
-  infusion?: boolean
   infusionParts?: string[]
-  medicinal?: boolean
-  aromatherapy?: boolean
-  fragrance?: boolean
   edibleOil?: "yes" | "no" | "unknown"
   // Translatable
   nutritionalValue?: string

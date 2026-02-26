@@ -99,6 +99,7 @@ export const utilityEnum = createEnumTools([
   { dbValue: 'fragrant', uiValue: 'Fragrant', aliases: ['odorous', 'scented'] },
   { dbValue: 'cereal', uiValue: 'Cereal', aliases: ['grain'] },
   { dbValue: 'spice', uiValue: 'Spice', aliases: ['spices'] },
+  { dbValue: 'infusion', uiValue: 'Infusion', aliases: ['tea', 'tisane', 'herbal tea'] },
 ])
 
 export const ediblePartEnum = createEnumTools([

@@ -2841,19 +2841,8 @@ function getPlantUsageLabels(plant: Plant): string[] {
     }
   }
   
-  if (plant.aromatherapy || plant.usage?.aromatherapy) {
-    const aromaticLabel = formatClassificationLabel('aromatic')
-    if (aromaticLabel && !labels.includes(aromaticLabel)) {
-      labels.push(aromaticLabel)
-    }
-  }
-  
-  if (plant.medicinalBenefits || plant.medicinalUsage || plant.usage?.adviceMedicinal) {
-    const medicinalLabel = formatClassificationLabel('medicinal')
-    if (medicinalLabel && !labels.includes(medicinalLabel)) {
-      labels.push(medicinalLabel)
-    }
-  }
+  // Aromatic and medicinal are now derived from the utility array (handled above)
+  // No additional boolean-based checks needed
   
   return labels
 }

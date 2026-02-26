@@ -429,7 +429,7 @@ climate                   TEXT[]                 -- CHECK: polar, montane, ocean
 season                    TEXT[]                 -- CHECK: spring, summer, autumn, winter
 
 -- Section 2: Identity — Utility & safety
-utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice
+utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
 edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
@@ -511,11 +511,7 @@ ecological_management     TEXT[]                 -- CHECK (9 values): let_seed, 
 ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, potentially_invasive, locally_invasive
 
 -- Section 7: Consumption
-infusion                  BOOLEAN DEFAULT false
 infusion_parts            TEXT[]                 -- Which plant parts can be used for infusion
-medicinal                 BOOLEAN DEFAULT false
-aromatherapy              BOOLEAN DEFAULT false
-fragrance                 BOOLEAN DEFAULT false
 edible_oil                TEXT                   -- CHECK: yes, no, unknown
 
 -- Section 8: Misc

@@ -34,7 +34,7 @@
 --   Section 6: conservation_status, ecological_status, biotopes, urban_biotopes,
 --              ecological_tolerance, biodiversity_role, pollinators_attracted,
 --              birds_attracted, mammals_attracted, ecological_management, ecological_impact
---   Section 7: infusion, infusion_parts, medicinal, aromatherapy, fragrance, edible_oil
+--   Section 7: infusion_parts, edible_oil
 --   Section 8: companion_plants, biotope_plants, beneficial_plants, harmful_plants,
 --              varieties, sponsored_shop_ids
 --   Section 9: status, admin_commentary, user_notes, created_by, created_time,
@@ -72,7 +72,7 @@ create table if not exists public.plants (
   season text[] not null default '{}'::text[] check (season <@ array['spring','summer','autumn','winter']),
 
   -- Section 2: Identity — Utility & safety
-  utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']),
+  utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']),
   edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
   thorny boolean default false,
   toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
@@ -266,11 +266,7 @@ create table if not exists public.plants (
   ecological_impact text[] not null default '{}'::text[] check (ecological_impact <@ array['neutral','favorable','potentially_invasive','locally_invasive']),
 
   -- Section 7: Consumption
-  infusion boolean default false,
   infusion_parts text[] not null default '{}'::text[],
-  medicinal boolean default false,
-  aromatherapy boolean default false,
-  fragrance boolean default false,
   edible_oil text check (edible_oil in ('yes','no','unknown')),
 
   -- Section 8: Misc
@@ -568,11 +564,7 @@ declare
     array['ecological_management', 'text[] not null default ''{}''::text[]'],
     array['ecological_impact', 'text[] not null default ''{}''::text[]'],
     -- Section 7: Consumption
-    array['infusion', 'boolean default false'],
     array['infusion_parts', 'text[] not null default ''{}''::text[]'],
-    array['medicinal', 'boolean default false'],
-    array['aromatherapy', 'boolean default false'],
-    array['fragrance', 'boolean default false'],
     array['edible_oil', 'text'],
     -- Section 8: Misc
     array['companion_plants', 'text[] not null default ''{}''::text[]'],
@@ -1052,6 +1044,7 @@ end $migrate_plants$;
 do $update_constraints$
 declare
   r record;
+  _col text;
 begin
   if not exists (select 1 from information_schema.tables where table_schema = 'public' and table_name = 'plants') then
     return;
@@ -1077,12 +1070,33 @@ begin
     alter table public.plants drop column encyclopedia_category;
   end if;
 
+  -- Drop duplicate boolean columns (infusion, medicinal, aromatherapy, fragrance) — now driven by utility enum
+  for _col in select unnest(array['infusion','medicinal','aromatherapy','fragrance']) loop
+    if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name=_col) then
+      -- Migrate boolean true → add equivalent to utility array before dropping
+      if _col = 'infusion' then
+        update public.plants set utility = array_append(utility, 'infusion')
+          where infusion = true and not ('infusion' = any(utility));
+      elsif _col = 'aromatherapy' then
+        update public.plants set utility = array_append(utility, 'aromatic')
+          where aromatherapy = true and not ('aromatic' = any(utility));
+      elsif _col = 'fragrance' then
+        update public.plants set utility = array_append(utility, 'fragrant')
+          where fragrance = true and not ('fragrant' = any(utility));
+      elsif _col = 'medicinal' then
+        update public.plants set utility = array_append(utility, 'medicinal')
+          where medicinal = true and not ('medicinal' = any(utility));
+      end if;
+      execute 'alter table public.plants drop column ' || quote_ident(_col);
+    end if;
+  end loop;
+
   -- utility
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'utility') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice']) not valid;
+    alter table public.plants add constraint plants_utility_check check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1435,11 +1449,7 @@ do $$ declare
     'ecological_management',
     'ecological_impact',
     -- Section 7: Consumption
-    'infusion',
     'infusion_parts',
-    'medicinal',
-    'aromatherapy',
-    'fragrance',
     'edible_oil',
     -- Section 8: Misc
     'companion_plants',

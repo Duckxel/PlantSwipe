@@ -196,11 +196,7 @@ function mapDbRowToPlant(
     symbiosisNotes: (translation.symbiosis_notes as string) || undefined,
 
     // Section 7: Consumption (non-translatable)
-    infusion: (basePlant.infusion as boolean) ?? false,
     infusionParts: (basePlant.infusion_parts as string[]) || [],
-    medicinal: (basePlant.medicinal as boolean) ?? false,
-    aromatherapy: (basePlant.aromatherapy as boolean) ?? false,
-    fragrance: (basePlant.fragrance as boolean) ?? false,
     edibleOil: (basePlant.edible_oil as Plant['edibleOil']) || undefined,
     // Translatable
     nutritionalValue: (translation.nutritional_value as string) || undefined,
@@ -402,7 +398,6 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'living_space', 'landscaping', 'plant_habit',
       'multicolor', 'bicolor',
       'care_level', 'sunlight',
-      'infusion', 'medicinal', 'aromatherapy', 'fragrance',
       'conservation_status',
       'biodiversity_role', 'ecological_tolerance',
       'companion_plants',

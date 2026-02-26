@@ -915,8 +915,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Translatable fields from plant_translations only
       adviceMedicinal: translation?.advice_medicinal || undefined,
       nutritionalIntake: translation?.nutritional_intake || [],
-      // Non-translatable fields from plants table
-      infusion: data.infusion || false,
       // Translatable fields from plant_translations only
       adviceInfusion: translation?.advice_infusion || undefined,
       infusionMix,
@@ -935,8 +933,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
           link: r.link || undefined,
         }
       }) as PlantRecipe[],
-      // Non-translatable fields from plants table
-      aromatherapy: data.aromatherapy || false,
       // Translatable field from plant_translations only
       spiceMixes: translation?.spice_mixes || [],
     },
@@ -1092,17 +1088,13 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 
   // Section 7: Consumption
   flat.nutritionalValue = translation?.nutritional_value || undefined
-  flat.infusion = data.infusion || false
   flat.infusionParts = data.infusion_parts || []
   flat.infusionBenefits = translation?.infusion_benefits || plant.usage?.adviceInfusion || undefined
   flat.infusionRecipeIdeas = translation?.infusion_recipe_ideas || undefined
-  flat.medicinal = data.medicinal || false
   flat.medicinalBenefits = translation?.medicinal_benefits || undefined
   flat.medicinalUsage = translation?.medicinal_usage || plant.usage?.adviceMedicinal || undefined
   flat.medicinalWarning = translation?.medicinal_warning || undefined
   flat.medicinalHistory = translation?.medicinal_history || undefined
-  flat.fragrance = data.fragrance || data.scent || false
-  flat.aromatherapy = data.aromatherapy || false
   flat.aromatherapyBenefits = translation?.aromatherapy_benefits || undefined
   flat.essentialOilBlends = translation?.essential_oil_blends || undefined
   flat.edibleOil = data.edible_oil || undefined
@@ -1653,11 +1645,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion: coerceBoolean(p.infusion ?? p.usage?.infusion, false),
             infusion_parts: p.infusionParts || [],
-            medicinal: coerceBoolean(p.medicinal, false),
-            aromatherapy: coerceBoolean(p.aromatherapy ?? p.usage?.aromatherapy, false),
-            fragrance: coerceBoolean(p.fragrance ?? p.identity?.scent, false),
             edible_oil: p.edibleOil || null,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
@@ -1754,11 +1742,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion: coerceBoolean(p.infusion ?? p.usage?.infusion, false),
             infusion_parts: p.infusionParts || [],
-            medicinal: coerceBoolean(p.medicinal, false),
-            aromatherapy: coerceBoolean(p.aromatherapy ?? p.usage?.aromatherapy, false),
-            fragrance: coerceBoolean(p.fragrance ?? p.identity?.scent, false),
             edible_oil: p.edibleOil || null,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],

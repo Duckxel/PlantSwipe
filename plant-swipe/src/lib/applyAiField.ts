@@ -169,7 +169,7 @@ const MONTH_FIELDS = new Set([
 // Boolean fields
 const BOOLEAN_FIELDS = new Set([
   'thorny', 'multicolor', 'bicolor', 'mulchingNeeded', 'staking',
-  'transplanting', 'pruning', 'infusion', 'medicinal', 'aromatherapy', 'fragrance',
+  'transplanting', 'pruning',
 ])
 
 // Integer fields

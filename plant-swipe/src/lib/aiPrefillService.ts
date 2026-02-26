@@ -795,11 +795,7 @@ export async function processPlantRequest(
       ecological_management: plant.ecologicalManagement || [],
       ecological_impact: ecologicalImpactEnum.toDbArray(plant.ecologicalImpact),
       // Section 7: Consumption
-      infusion: coerceBoolean(plant.infusion, false),
       infusion_parts: plant.infusionParts || [],
-      medicinal: coerceBoolean(plant.medicinal, false),
-      aromatherapy: coerceBoolean(plant.aromatherapy, false),
-      fragrance: coerceBoolean(plant.fragrance, false),
       edible_oil: plant.edibleOil || null,
       // Section 8: Misc
       companion_plants: plant.companionPlants || [],

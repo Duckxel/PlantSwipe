@@ -370,11 +370,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     symbiosisNotes: translation?.symbiosis_notes || undefined,
 
     // Section 7: Consumption (non-translatable)
-    infusion: data.infusion ?? false,
     infusionParts: data.infusion_parts || [],
-    medicinal: data.medicinal ?? false,
-    aromatherapy: data.aromatherapy ?? false,
-    fragrance: data.fragrance ?? false,
     edibleOil: data.edible_oil || undefined,
     // Section 7: Consumption (translatable)
     nutritionalValue: translation?.nutritional_value || undefined,
@@ -1377,7 +1373,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.landscaping'), value: joinArr(plant.landscaping) },
         { label: tp('labels.plantHabit'), value: joinArr(plant.plantHabit) },
         { label: tp('labels.colorTraits'), value: [plant.multicolor ? tp('values.multicolor') : null, plant.bicolor ? tp('values.bicolor') : null].filter(Boolean).join(' • ') || null },
-        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), tp('values.neutralScent')) },
       ])
 
       // ── Utility & Safety (Info Block Cards) ──
@@ -1456,18 +1451,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       // ── Section 7: Consumption / Usage ──
       const consumptionItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
-        { label: tp('labels.infusionFriendly'), value: formatBooleanDescriptor(plant.infusion, tp('values.infusionReady'), tp('values.notForInfusions')) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
         { label: tp('labels.infusionBenefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
         { label: tp('labels.infusionRecipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
         { label: tp('labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
-        { label: tp('labels.medicinal'), value: formatBooleanDescriptor(plant.medicinal, tp('values.medicinalPlant'), null) },
         { label: tp('labels.medicinalBenefits'), value: formatTextValue(plant.medicinalBenefits), variant: 'note' },
         { label: tp('labels.medicinalUsage'), value: formatTextValue(plant.medicinalUsage), variant: 'note' },
         { label: tp('labels.medicinalWarning'), value: formatTextValue(plant.medicinalWarning), variant: 'note' },
         { label: tp('labels.medicinalHistory'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
-        { label: tp('labels.fragrance'), value: formatBooleanDescriptor(plant.fragrance, tp('values.fragrant'), null) },
-        { label: tp('labels.aromatherapy'), value: formatBooleanDescriptor(plant.aromatherapy, tp('values.essentialOils'), tp('values.notForOils')) },
         { label: tp('labels.aromatherapyBenefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
         { label: tp('labels.essentialOilBlends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
         { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
