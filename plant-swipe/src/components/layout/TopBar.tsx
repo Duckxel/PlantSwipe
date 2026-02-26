@@ -22,7 +22,7 @@ import { usePathWithoutLanguage, useLanguageNavigate } from "@/lib/i18nRouting"
 import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { NotificationBell } from "@/components/layout/NotificationPanel"
 
-export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
+const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, displayName, onProfile, onLogout }) => {
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const { profile } = useAuth()
@@ -232,6 +232,10 @@ export const TopBar: React.FC<TopBarProps> = ({ openLogin, openSignup, user, dis
       </>
   )
 }
+
+// ⚡ Bolt: Memoize TopBar to prevent re-renders when parent state (like swipe index) changes.
+// Props (callbacks) are memoized in parent, so this component only re-renders on route/auth changes.
+export const TopBar = React.memo(TopBarComponent)
 
 function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
   return (

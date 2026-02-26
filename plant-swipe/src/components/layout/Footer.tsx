@@ -15,7 +15,7 @@ const legalLinks = [
   { to: '/privacy', labelKey: 'privacyPolicy', fallback: 'Privacy Policy' },
 ] as const
 
-export const Footer: React.FC = () => {
+const FooterComponent: React.FC = () => {
   const { t } = useTranslation('common')
   const currentYear = new Date().getFullYear()
   const [legalOpen, setLegalOpen] = React.useState(false)
@@ -115,3 +115,7 @@ export const Footer: React.FC = () => {
     </footer>
   )
 }
+
+// ⚡ Bolt: Memoize Footer to prevent re-renders when parent state (like swipe index) changes.
+// Footer is static and doesn't depend on parent state, so re-renders are unnecessary.
+export const Footer = React.memo(FooterComponent)
