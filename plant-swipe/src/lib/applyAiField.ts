@@ -194,6 +194,12 @@ const TEXT_FIELDS = new Set([
   'symbiosisNotes', 'adminCommentary',
 ])
 
+// AI text length limits — presentation (overview) gets more room, everything else is short
+const AI_TEXT_MAX_DEFAULT = 200
+const AI_TEXT_MAX_OVERRIDES: Record<string, number> = {
+  presentation: 700,
+}
+
 // String array (tag) fields
 const TAG_FIELDS = new Set([
   'commonNames', 'origin', 'allergens',
@@ -328,10 +334,14 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     return next
   }
 
-  // Text fields
+  // Text fields — truncate AI output to max length
   if (TEXT_FIELDS.has(fieldKey)) {
-    const val = normalizeString(data)
-    if (val !== undefined) next[fieldKey] = val
+    let val = normalizeString(data)
+    if (val !== undefined) {
+      const max = AI_TEXT_MAX_OVERRIDES[fieldKey] ?? AI_TEXT_MAX_DEFAULT
+      if (val.length > max) val = val.slice(0, max).trimEnd()
+      next[fieldKey] = val
+    }
     return next
   }
 

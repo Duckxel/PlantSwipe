@@ -5,11 +5,12 @@
     "- `scientificNameVariety`: variety/cultivar name if applicable, or null",
     "- `family`: plant family (e.g. \"Araceae\")",
     "- `commonNames`: array of common names (e.g. [\"Swiss Cheese Plant\", \"Fruit Salad Plant\"])",
-    "- `presentation`: 150-300 word encyclopedia-style description. Factual prose, no bullets.",
+    "- `presentation`: encyclopedia-style description. Factual prose, no bullets. MAX 700 characters.",
     "- `featuredMonth`: array of month slugs when plant should be highlighted (e.g. [\"june\",\"july\"])",
     "- `colors`: array of color objects. IMPORTANT: Use the color database provided. Each entry: {\"name\": \"...\", \"hexCode\": \"#......\"}",
     "- `multicolor`: boolean (true if 3+ distinct colors)",
-    "- `bicolor`: boolean (true if exactly 2 colors)"
+    "- `bicolor`: boolean (true if exactly 2 colors)",
+    "IMPORTANT: All text/string fields must be concise. presentation max 700 chars, all other text fields max 200 chars."
   ],
   "identity": [
     "Populate the IDENTITY section for {{plantName}}. Return a JSON object with ALL these fields:",
@@ -22,14 +23,15 @@
     "- `toxicityHuman`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
     "- `toxicityPets`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
     "- `poisoningMethod`: array from [\"touch\",\"ingestion\",\"eye_contact\",\"inhalation\",\"sap_contact\"]. Empty if non-toxic.",
-    "- `poisoningSymptoms`: text describing symptoms for prevention. Empty string if non-toxic.",
+    "- `poisoningSymptoms`: text describing symptoms for prevention (max 200 chars). Empty string if non-toxic.",
     "- `allergens`: array of allergen names (e.g. [\"Pollen\", \"Latex\"]). Empty array if none.",
     "- `lifeCycle`: array from ONLY: [\"annual\",\"biennial\",\"perennial\",\"succulent_perennial\",\"monocarpic\",\"short_cycle\",\"ephemeral\"]",
     "- `averageLifespan`: array from ONLY: [\"less_than_1_year\",\"2_years\",\"3_to_10_years\",\"10_to_50_years\",\"over_50_years\"]",
     "- `foliagePersistence`: array from ONLY: [\"deciduous\",\"evergreen\",\"semi_evergreen\",\"marcescent\",\"winter_dormant\",\"dry_season_deciduous\"]",
     "- `livingSpace`: array from ONLY: [\"indoor\",\"outdoor\",\"both\",\"terrarium\",\"greenhouse\"]",
     "- `landscaping`: array from ONLY: [\"pot\",\"planter\",\"hanging\",\"window_box\",\"green_wall\",\"flowerbed\",\"border\",\"edging\",\"path\",\"tree_base\",\"vegetable_garden\",\"orchard\",\"hedge\",\"free_growing\",\"trimmed_hedge\",\"windbreak\",\"pond_edge\",\"waterside\",\"ground_cover\",\"grove\",\"background\",\"foreground\"]",
-    "- `plantHabit`: array from ONLY: [\"upright\",\"arborescent\",\"shrubby\",\"bushy\",\"clumping\",\"erect\",\"creeping\",\"carpeting\",\"ground_cover\",\"prostrate\",\"spreading\",\"climbing\",\"twining\",\"scrambling\",\"liana\",\"trailing\",\"columnar\",\"conical\",\"fastigiate\",\"globular\",\"spreading_flat\",\"rosette\",\"cushion\",\"ball_shaped\",\"succulent\",\"palmate\",\"rhizomatous\",\"suckering\"]"
+    "- `plantHabit`: array from ONLY: [\"upright\",\"arborescent\",\"shrubby\",\"bushy\",\"clumping\",\"erect\",\"creeping\",\"carpeting\",\"ground_cover\",\"prostrate\",\"spreading\",\"climbing\",\"twining\",\"scrambling\",\"liana\",\"trailing\",\"columnar\",\"conical\",\"fastigiate\",\"globular\",\"spreading_flat\",\"rosette\",\"cushion\",\"ball_shaped\",\"succulent\",\"palmate\",\"rhizomatous\",\"suckering\"]",
+    "IMPORTANT: All text/string fields must be max 200 characters. Be concise."
   ],
   "care": [
     "Populate the CARE section for {{plantName}}. Return a JSON object with ALL these fields:",
@@ -46,13 +48,14 @@
     "- `specialNeeds`: array of special requirements (e.g. [\"winter_veil\"]). Empty array if none.",
     "- `substrate`: array of substrate keys (e.g. [\"universal_potting_mix\",\"perlite\",\"coconut_coir\"])",
     "- `substrateMix`: array of special mix names if applicable (e.g. [\"orchid_mix\"]). Empty array if standard.",
-    "- `soilAdvice`: text with substrate guidance",
+    "- `soilAdvice`: text with substrate guidance (max 200 chars)",
     "- `mulchingNeeded`: boolean",
     "- `mulchType`: array of mulch types if needed (e.g. [\"pine_bark\",\"straw\"]). Empty array if not.",
-    "- `mulchAdvice`: text with mulching advice",
+    "- `mulchAdvice`: text with mulching advice (max 200 chars)",
     "- `nutritionNeed`: array of nutrients (e.g. [\"nitrogen\",\"potassium\"])",
     "- `fertilizer`: array of fertilizer types",
-    "- `fertilizerAdvice`: text with fertilizing schedule and advice"
+    "- `fertilizerAdvice`: text with fertilizing schedule and advice (max 200 chars)",
+    "IMPORTANT: All text/string fields must be max 200 characters. Be concise."
   ],
   "growth": [
     "Populate the GROWTH section for {{plantName}}. Return a JSON object with ALL these fields:",
@@ -62,17 +65,18 @@
     "- `heightCm`: integer, mature height in cm",
     "- `wingspanCm`: integer, mature spread in cm",
     "- `staking`: boolean (true if support needed)",
-    "- `stakingAdvice`: text with support advice",
+    "- `stakingAdvice`: text with support advice (max 200 chars)",
     "- `division`: array from ONLY: [\"seed\",\"clump_division\",\"bulb_division\",\"rhizome_division\",\"cutting\",\"layering\",\"stolon\",\"sucker\",\"grafting\",\"spore\"]",
     "- `cultivationMode`: array from ONLY: [\"open_ground\",\"flowerbed\",\"vegetable_garden\",\"raised_bed\",\"orchard\",\"rockery\",\"slope\",\"mound\",\"pot\",\"planter\",\"hanging\",\"greenhouse\",\"indoor\",\"pond\",\"waterlogged_soil\",\"hydroponic\",\"aquaponic\",\"mineral_substrate\",\"permaculture\",\"agroforestry\"]",
     "- `sowingMethod`: array from ONLY: [\"open_ground\",\"pot\",\"tray\",\"greenhouse\",\"mini_greenhouse\",\"broadcast\",\"row\"]",
     "- `transplanting`: boolean",
-    "- `transplantingTime`: text (e.g. \"After 4 true leaves\")",
-    "- `outdoorPlantingTime`: text (e.g. \"After last frost, 6+ leaves\")",
-    "- `sowingAdvice`: text with sowing/planting instructions",
+    "- `transplantingTime`: text (max 200 chars, e.g. \"After 4 true leaves\")",
+    "- `outdoorPlantingTime`: text (max 200 chars, e.g. \"After last frost, 6+ leaves\")",
+    "- `sowingAdvice`: text with sowing/planting instructions (max 200 chars)",
     "- `pruning`: boolean",
     "- `pruningMonth`: array of month slugs for best pruning time",
-    "- `pruningAdvice`: text with pruning technique"
+    "- `pruningAdvice`: text with pruning technique (max 200 chars)",
+    "IMPORTANT: All text/string fields must be max 200 characters. Be concise."
   ],
   "danger": [
     "List the main pests and diseases that threaten {{plantName}}.",
@@ -91,29 +95,31 @@
     "- `pollinatorsAttracted`: short array (e.g. [\"Bees\",\"Butterflies\"])",
     "- `birdsAttracted`: short array if applicable",
     "- `mammalsAttracted`: short array if applicable",
-    "- `beneficialRoles`: array of beneficial roles in free text",
-    "- `harmfulRoles`: array of harmful roles in free text (empty if none)",
+    "- `beneficialRoles`: array of beneficial roles in free text (each max 200 chars)",
+    "- `harmfulRoles`: array of harmful roles in free text (each max 200 chars, empty if none)",
     "- `symbiosis`: array of symbiotic partners (e.g. [\"Mycorrhizal fungi\", \"Nitrogen-fixing bacteria\"])",
-    "- `symbiosisNotes`: text describing symbiotic relationships",
+    "- `symbiosisNotes`: text describing symbiotic relationships (max 200 chars)",
     "- `ecologicalManagement`: array from [\"let_seed\",\"no_winter_pruning\",\"keep_dry_foliage\",\"natural_foliage_mulch\",\"branch_chipping_mulch\",\"improves_microbial_life\",\"promotes_mycorrhizal_fungi\",\"enriches_soil\",\"structures_soil\"]",
-    "- `ecologicalImpact`: array from [\"neutral\",\"favorable\",\"potentially_invasive\",\"locally_invasive\"]"
+    "- `ecologicalImpact`: array from [\"neutral\",\"favorable\",\"potentially_invasive\",\"locally_invasive\"]",
+    "IMPORTANT: All text/string fields must be max 200 characters. Be concise."
   ],
   "consumption": [
     "Populate the CONSUMPTION section for {{plantName}}. Return a JSON object with ALL applicable fields:",
-    "- `nutritionalValue`: text describing nutritional content if edible",
+    "- `nutritionalValue`: text describing nutritional content if edible (max 200 chars)",
     "- `recipes`: array of recipe objects [{\"name\":\"...\",\"category\":\"...\",\"time\":\"...\"}]. Categories: \"Breakfast & Brunch\",\"Starters & Appetizers\",\"Soups & Salads\",\"Main Courses\",\"Side Dishes\",\"Desserts\",\"Drinks\",\"Other\". Time: \"Quick and Effortless\",\"30+ minutes Meals\",\"Slow Cooking\",\"Undefined\".",
     "- `infusionParts`: array of parts (e.g. [\"leaf\",\"flower\"]) if utility includes \"infusion\"",
-    "- `infusionBenefits`: text describing infusion benefits",
-    "- `infusionRecipeIdeas`: text with recipe ideas",
-    "- `medicinalBenefits`: text (if utility includes \"medicinal\")",
-    "- `medicinalUsage`: text describing how to use medicinally",
-    "- `medicinalWarning`: text (safety: historical vs recommended today)",
-    "- `medicinalHistory`: text (historical use, e.g. \"Used in China since X century\")",
-    "- `aromatherapyBenefits`: text (if utility includes \"aromatic\")",
-    "- `essentialOilBlends`: text with blend ideas",
+    "- `infusionBenefits`: text describing infusion benefits (max 200 chars)",
+    "- `infusionRecipeIdeas`: text with recipe ideas (max 200 chars)",
+    "- `medicinalBenefits`: text (max 200 chars, if utility includes \"medicinal\")",
+    "- `medicinalUsage`: text describing how to use medicinally (max 200 chars)",
+    "- `medicinalWarning`: text (max 200 chars, safety: historical vs recommended today)",
+    "- `medicinalHistory`: text (max 200 chars, historical use, e.g. \"Used in China since X century\")",
+    "- `aromatherapyBenefits`: text (max 200 chars, if utility includes \"aromatic\")",
+    "- `essentialOilBlends`: text with blend ideas (max 200 chars)",
     "- `edibleOil`: \"yes\", \"no\", or \"unknown\"",
     "- `spiceMixes`: array of spice blend uses",
-    "Note: infusion/medicinal/aromatic/fragrant are set in the utility field (identity section), not here."
+    "Note: infusion/medicinal/aromatic/fragrant are set in the utility field (identity section), not here.",
+    "IMPORTANT: All text/string fields must be max 200 characters. Be concise."
   ],
   "misc": [
     "Populate the MISC section for {{plantName}}. Return a JSON object:",
@@ -128,7 +134,7 @@
   ],
   "meta": [
     "When meta data is requested for {{plantName}}, return:",
-    "- `adminCommentary`: string for internal editor notes",
+    "- `adminCommentary`: string for internal editor notes (max 200 chars)",
     "Leave status and timestamps untouched."
   ]
 }
