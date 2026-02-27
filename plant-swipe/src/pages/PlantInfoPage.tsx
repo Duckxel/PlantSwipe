@@ -1684,6 +1684,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         <ToxicityWarningBanner
           toxicityHuman={plant.toxicityHuman}
           toxicityPets={plant.toxicityPets}
+          poisoningMethod={plant.poisoningMethod}
+          poisoningSymptoms={plant.poisoningSymptoms}
+          allergens={plant.allergens}
           t={t}
         />
 
@@ -2189,8 +2192,11 @@ const getToxicityConfig = (level: string | undefined) => {
 const ToxicityWarningBanner: React.FC<{
   toxicityHuman?: string
   toxicityPets?: string
+  poisoningMethod?: string[]
+  poisoningSymptoms?: string
+  allergens?: string[]
   t: (key: string) => string
-}> = ({ toxicityHuman, toxicityPets, t }) => {
+}> = ({ toxicityHuman, toxicityPets, poisoningMethod, poisoningSymptoms, allergens, t }) => {
   const humanConfig = getToxicityConfig(toxicityHuman)
   const petsConfig = getToxicityConfig(toxicityPets)
   
@@ -2359,6 +2365,57 @@ const ToxicityWarningBanner: React.FC<{
     )
   }
   
+  // Shared detail block: poisoning methods, symptoms, allergens
+  const hasMethods = poisoningMethod && poisoningMethod.length > 0
+  const hasSymptoms = poisoningSymptoms && poisoningSymptoms.trim().length > 0
+  const hasAllergens = allergens && allergens.length > 0
+  const hasDetails = hasMethods || hasSymptoms || hasAllergens
+
+  const toxicityDetails = hasDetails && !bothSafe ? (
+    <div className="mt-3 space-y-2 pt-3 border-t border-stone-200/50 dark:border-stone-700/30">
+      {hasMethods && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mr-1">
+            {t('plantInfo:toxicityBanner.methodLabel')}
+          </span>
+          {poisoningMethod!.map((method) => (
+            <span
+              key={method}
+              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/40"
+            >
+              {t(`plantInfo:toxicityBanner.methods.${method}`)}
+            </span>
+          ))}
+        </div>
+      )}
+      {hasSymptoms && (
+        <div>
+          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
+            {t('plantInfo:toxicityBanner.symptomsLabel')}
+          </span>
+          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-0.5">
+            {poisoningSymptoms}
+          </p>
+        </div>
+      )}
+      {hasAllergens && (
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mr-1">
+            {t('plantInfo:toxicityBanner.allergensLabel')}
+          </span>
+          {allergens!.map((a) => (
+            <span
+              key={a}
+              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-700/40"
+            >
+              {a}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  ) : null
+
   // For mild toxicity, show a simpler inline layout without the dramatic header
   if (maxSeverity === 'mild') {
     return (
@@ -2367,6 +2424,7 @@ const ToxicityWarningBanner: React.FC<{
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
           {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
+        {toxicityDetails}
       </div>
     )
   }
@@ -2411,6 +2469,7 @@ const ToxicityWarningBanner: React.FC<{
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
           {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
+        {toxicityDetails}
       </div>
     </div>
   )
