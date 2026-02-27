@@ -17,11 +17,15 @@ import {
   PROFILE_ACTIONS,
   type ActionCheckData,
   type ProfileActionDef,
-  getSkippedActionIds,
+  type ActionStatusMap,
+  fetchActionStatuses,
+  syncCompletionsToDb,
   skipAction,
-  getRemainingCount,
   dismissAllDone,
+  isActionDone,
+  getSkippedSet,
   isDismissedAllDone,
+  getRemainingCount,
 } from '@/lib/profileActions'
 import { supabase } from '@/lib/supabaseClient'
 
@@ -86,10 +90,14 @@ export function useProfileActionsCount(userId: string | null | undefined) {
     let cancelled = false
 
     async function check() {
-      const data = await fetchAllActionData(userId!)
+      const [data, dbStatuses] = await Promise.all([
+        fetchAllActionData(userId!),
+        fetchActionStatuses(userId!),
+      ])
+      if (cancelled || !data) return
+      const synced = await syncCompletionsToDb(userId!, data, dbStatuses)
       if (cancelled) return
-      const skipped = getSkippedActionIds()
-      setRemaining(getRemainingCount(data, skipped))
+      setRemaining(getRemainingCount(data, synced))
     }
 
     check()
@@ -101,13 +109,15 @@ export function useProfileActionsCount(userId: string | null | undefined) {
     const onVisibility = () => {
       if (document.visibilityState === 'visible') check()
     }
+    const onFocus = () => check()
     document.addEventListener('visibilitychange', onVisibility)
-    window.addEventListener('focus', () => check())
+    window.addEventListener('focus', onFocus)
 
     return () => {
       cancelled = true
       clearInterval(timer)
       document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('focus', onFocus)
     }
   }, [userId])
 
@@ -137,14 +147,27 @@ type Props = { userId: string }
 export function ProfileActions({ userId }: Props) {
   const { t } = useTranslation('common')
   const [data, setData] = React.useState<ActionCheckData | null>(null)
-  const [dismissed, setDismissed] = React.useState(isDismissedAllDone)
-  const [skipped, setSkipped] = React.useState<Set<string>>(getSkippedActionIds)
+  const [dbStatuses, setDbStatuses] = React.useState<ActionStatusMap>(new Map())
   const prevCompletedRef = React.useRef<Set<string>>(new Set())
   const [justCompleted, setJustCompleted] = React.useState<string | null>(null)
 
+  // Derived state
+  const skipped = React.useMemo(() => getSkippedSet(dbStatuses), [dbStatuses])
+  const dismissed = React.useMemo(
+    () => (data ? isDismissedAllDone(dbStatuses, data) : false),
+    [dbStatuses, data],
+  )
+
   const refresh = React.useCallback(async () => {
-    const result = await fetchAllActionData(userId)
-    if (result) setData(result)
+    const [result, statuses] = await Promise.all([
+      fetchAllActionData(userId),
+      fetchActionStatuses(userId),
+    ])
+    if (result) {
+      setData(result)
+      const synced = await syncCompletionsToDb(userId, result, statuses)
+      setDbStatuses(synced)
+    }
   }, [userId])
 
   React.useEffect(() => { refresh() }, [refresh])
@@ -163,7 +186,7 @@ export function ProfileActions({ userId }: Props) {
 
   React.useEffect(() => {
     if (!data) return
-    const nowDone = new Set(PROFILE_ACTIONS.filter((a) => a.isCompleted(data)).map((a) => a.id))
+    const nowDone = new Set(PROFILE_ACTIONS.filter((a) => isActionDone(a, data, dbStatuses)).map((a) => a.id))
     for (const id of nowDone) {
       if (!prevCompletedRef.current.has(id)) {
         setJustCompleted(id)
@@ -173,16 +196,16 @@ export function ProfileActions({ userId }: Props) {
       }
     }
     prevCompletedRef.current = nowDone
-  }, [data])
+  }, [data, dbStatuses])
 
   const handleSkip = (actionId: string) => {
-    setSkipped(skipAction(actionId))
+    setDbStatuses(skipAction(userId, actionId, dbStatuses))
   }
 
   if (!data || dismissed) return null
 
   const activeActions = PROFILE_ACTIONS.filter((a) => !skipped.has(a.id))
-  const doneCount = activeActions.filter((a) => a.isCompleted(data)).length
+  const doneCount = activeActions.filter((a) => isActionDone(a, data, dbStatuses)).length
   const totalActive = activeActions.length
   const allDone = totalActive > 0 && doneCount === totalActive
   const percentage = totalActive > 0 ? Math.round((doneCount / totalActive) * 100) : 100
@@ -234,7 +257,7 @@ export function ProfileActions({ userId }: Props) {
                 {t('profileActions.congratulations', 'Congratulations!')}
               </div>
               <button
-                onClick={() => { dismissAllDone(); setDismissed(true) }}
+                onClick={() => setDbStatuses(dismissAllDone(userId, dbStatuses))}
                 className="px-6 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
               >
                 {t('profileActions.hooray', 'Hooray!')}
@@ -246,7 +269,7 @@ export function ProfileActions({ userId }: Props) {
                 <ActionRow
                   key={action.id}
                   action={action}
-                  done={action.isCompleted(data)}
+                  done={isActionDone(action, data, dbStatuses)}
                   justCompleted={justCompleted === action.id}
                   onSkip={() => handleSkip(action.id)}
                   index={i}

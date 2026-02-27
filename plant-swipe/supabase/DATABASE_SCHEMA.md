@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Feb 27, 2026:** Added `user_action_status` table to sync profile action completion/skip state across devices. Actions marked completed are never reverted (sticky). RPCs: `mark_action_completed`, `bulk_mark_actions_completed`, `skip_action`, `unskip_action`.
 - **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
@@ -147,6 +148,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `garden_invites` | Garden invitation tokens |
 | `bookmarks` | Bookmark collections |
 | `bookmark_items` | Individual bookmarks |
+| `user_action_status` | Profile action completion & skip state (synced across devices) |
 
 ### Messaging
 
@@ -753,6 +755,15 @@ CREATE POLICY "Admins can manage all" ON table_name
 |----------|---------|
 | `apply_shadow_ban(uuid)` | Apply shadow ban: saves current settings to `shadow_ban_backup`, then makes profile/gardens/bookmarks private, disables friend requests, removes all email/push consent, cancels pending requests/invites |
 | `revert_shadow_ban(uuid)` | Revert shadow ban: restores pre-ban settings from `shadow_ban_backup` column, re-enables original privacy/notification preferences |
+
+### Profile Action Functions
+
+| Function | Purpose |
+|----------|---------|
+| `mark_action_completed(uuid, text)` | Mark a single action as completed (sticky — never overwrites existing `completed_at`) |
+| `bulk_mark_actions_completed(uuid, text[])` | Batch-mark multiple actions as completed in one query |
+| `skip_action(uuid, text)` | Skip an action (preserves completion state) |
+| `unskip_action(uuid, text)` | Un-skip an action (preserves completion state) |
 
 ### Utility Functions
 
