@@ -84,7 +84,8 @@
       "sap_contact": "Contact avec la sève"
     },
     "symptomsLabel": "Symptômes",
-    "allergensLabel": "Allergènes"
+    "allergensLabel": "Allergènes",
+    "detailsToggle": "Détails"
   },
   "meta": {
     "recordHistory": "Historique",

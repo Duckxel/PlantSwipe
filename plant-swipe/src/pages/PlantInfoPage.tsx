@@ -2197,6 +2197,7 @@ const ToxicityWarningBanner: React.FC<{
   allergens?: string[]
   t: (key: string) => string
 }> = ({ toxicityHuman, toxicityPets, poisoningMethod, poisoningSymptoms, allergens, t }) => {
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const humanConfig = getToxicityConfig(toxicityHuman)
   const petsConfig = getToxicityConfig(toxicityPets)
   
@@ -2372,45 +2373,57 @@ const ToxicityWarningBanner: React.FC<{
   const hasDetails = hasMethods || hasSymptoms || hasAllergens
 
   const toxicityDetails = hasDetails && !bothSafe ? (
-    <div className="mt-3 space-y-2 pt-3 border-t border-stone-200/50 dark:border-stone-700/30">
-      {hasMethods && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mr-1">
-            {t('plantInfo:toxicityBanner.methodLabel')}
-          </span>
-          {poisoningMethod!.map((method) => (
-            <span
-              key={method}
-              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/40"
-            >
-              {t(`plantInfo:toxicityBanner.methods.${method}`)}
-            </span>
-          ))}
-        </div>
-      )}
-      {hasSymptoms && (
-        <div>
-          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider">
-            {t('plantInfo:toxicityBanner.symptomsLabel')}
-          </span>
-          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-0.5">
-            {poisoningSymptoms}
-          </p>
-        </div>
-      )}
-      {hasAllergens && (
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider mr-1">
-            {t('plantInfo:toxicityBanner.allergensLabel')}
-          </span>
-          {allergens!.map((a) => (
-            <span
-              key={a}
-              className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-700/40"
-            >
-              {a}
-            </span>
-          ))}
+    <div className="mt-3 border-t border-stone-200/50 dark:border-stone-700/30">
+      <button
+        type="button"
+        onClick={() => setDetailsOpen(!detailsOpen)}
+        className="w-full flex items-center justify-between pt-2.5 pb-1 text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider cursor-pointer"
+      >
+        <span>{t('plantInfo:toxicityBanner.detailsToggle')}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {detailsOpen && (
+        <div className="space-y-2.5 pb-1">
+          {hasMethods && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 mr-1">
+                {t('plantInfo:toxicityBanner.methodLabel')}:
+              </span>
+              {poisoningMethod!.map((method) => (
+                <span
+                  key={method}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/40"
+                >
+                  {t(`plantInfo:toxicityBanner.methods.${method}`)}
+                </span>
+              ))}
+            </div>
+          )}
+          {hasSymptoms && (
+            <div>
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                {t('plantInfo:toxicityBanner.symptomsLabel')}:
+              </span>
+              <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-0.5">
+                {poisoningSymptoms}
+              </p>
+            </div>
+          )}
+          {hasAllergens && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 mr-1">
+                {t('plantInfo:toxicityBanner.allergensLabel')}:
+              </span>
+              {allergens!.map((a) => (
+                <span
+                  key={a}
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-700/40"
+                >
+                  {a}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2428,12 +2441,12 @@ const ToxicityWarningBanner: React.FC<{
       </div>
     )
   }
-  
+
   // Scale header icon and styling based on severity
   const headerIconSize = maxSeverity === 'lethal' ? 'h-11 w-11 sm:h-13 sm:w-13' : 'h-9 w-9 sm:h-10 sm:w-10'
   const headerIconInner = maxSeverity === 'lethal' ? 'h-6 w-6 sm:h-7 sm:w-7' : 'h-4 w-4 sm:h-5 sm:w-5'
   const titleSize = maxSeverity === 'lethal' ? 'text-lg sm:text-xl font-bold' : 'text-base sm:text-lg font-semibold'
-  
+
   return (
     <div className={`${bannerStyle.rounded} border ${maxSeverity === 'lethal' ? 'border-2' : ''} ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding} ${bannerStyle.shadow}`}>
       <div className={maxSeverity === 'lethal' ? 'space-y-4' : 'space-y-3'}>
@@ -2463,7 +2476,7 @@ const ToxicityWarningBanner: React.FC<{
             )}
           </div>
         </div>
-        
+
         {/* Two-column toxicity cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}

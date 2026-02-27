@@ -84,7 +84,8 @@
       "sap_contact": "Sap Contact"
     },
     "symptomsLabel": "Symptoms",
-    "allergensLabel": "Allergens"
+    "allergensLabel": "Allergens",
+    "detailsToggle": "Details"
   },
   "meta": {
     "recordHistory": "Record History",
