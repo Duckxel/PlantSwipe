@@ -76,13 +76,6 @@
       "undetermined": "Toxicity not yet determined"
     },
     "methodLabel": "Method",
-    "methods": {
-      "touch": "Touch",
-      "ingestion": "Ingestion",
-      "eye_contact": "Eye Contact",
-      "inhalation": "Inhalation",
-      "sap_contact": "Sap Contact"
-    },
     "symptomsLabel": "Symptoms",
     "allergensLabel": "Allergens",
     "detailsToggle": "Details"

@@ -2394,7 +2394,7 @@ const ToxicityWarningBanner: React.FC<{
                   key={method}
                   className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/40"
                 >
-                  {t(`plantInfo:toxicityBanner.methods.${method}`)}
+                  {method}
                 </span>
               ))}
             </div>

@@ -76,13 +76,6 @@
       "undetermined": "Toxicité non encore déterminée"
     },
     "methodLabel": "Mode",
-    "methods": {
-      "touch": "Toucher",
-      "ingestion": "Ingestion",
-      "eye_contact": "Contact oculaire",
-      "inhalation": "Inhalation",
-      "sap_contact": "Contact avec la sève"
-    },
     "symptomsLabel": "Symptômes",
     "allergensLabel": "Allergènes",
     "detailsToggle": "Détails"
