@@ -70,6 +70,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `13_messaging.sql` | Conversations, messages, reactions |
 | `14_scanning_and_bugs.sql` | Plant scanning, bug catcher system |
 | `15_gdpr_and_preferences.sql` | GDPR compliance, email verification, preferences |
+| `16_user_action_status.sql` | Profile action completion & skip sync across devices |
 
 ---
 
@@ -411,6 +412,30 @@ last_viewed_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE (entity_type, entity_id)
 ```
+
+### `user_action_status` (Profile Action Sync)
+
+Tracks profile onboarding action completion and skip state across devices. Once `completed_at` is set it is **never cleared** — even if the user later deletes the underlying resource (e.g. removes their garden). The `action_id` is a free-form text key matching the client-side `PROFILE_ACTIONS` definitions; a special `__all_done_dismissed` key tracks whether the user dismissed the celebration card.
+
+```sql
+user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+action_id    TEXT NOT NULL
+completed_at TIMESTAMPTZ          -- Sticky: once set, never overwritten
+skipped_at   TIMESTAMPTZ          -- Can be set/cleared freely
+created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+PRIMARY KEY (user_id, action_id)
+```
+
+**RLS:** Users can SELECT / INSERT / UPDATE their own rows only.
+
+**RPCs:**
+| Function | Purpose |
+|----------|---------|
+| `mark_action_completed(uuid, text)` | Set `completed_at` (sticky via `COALESCE`). Preserves `skipped_at`. |
+| `bulk_mark_actions_completed(uuid, text[])` | Batch version of the above. |
+| `skip_action(uuid, text)` | Set `skipped_at`. Preserves `completed_at`. |
+| `unskip_action(uuid, text)` | Clear `skipped_at`. Preserves `completed_at`. |
 
 ### `plants` (Master Plant Catalog)
 
