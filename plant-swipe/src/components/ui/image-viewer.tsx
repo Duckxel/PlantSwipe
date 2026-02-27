@@ -331,8 +331,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+                className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                 aria-label="Close"
+                title="Close"
               >
                 <X className="h-5 w-5" />
               </button>
@@ -348,8 +349,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   <button
                     type="button"
                     onClick={handleDownload}
-                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm"
+                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     aria-label="Download"
+                    title="Download"
                   >
                     <Download className="h-5 w-5" />
                   </button>
@@ -390,8 +392,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   type="button"
                   onClick={() => adjustZoom(-ZOOM_STEP)}
                   disabled={zoom <= MIN_ZOOM}
-                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
+                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                   aria-label="Zoom out"
+                  title="Zoom out"
                 >
                   <ZoomOut className="h-5 w-5" />
                 </button>
@@ -404,8 +407,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   type="button"
                   onClick={() => adjustZoom(ZOOM_STEP)}
                   disabled={zoom >= MAX_ZOOM}
-                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm"
+                  className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                   aria-label="Zoom in"
+                  title="Zoom in"
                 >
                   <ZoomIn className="h-5 w-5" />
                 </button>
@@ -414,8 +418,9 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   <button
                     type="button"
                     onClick={resetView}
-                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm ml-1"
+                    className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
                     aria-label="Reset zoom"
+                    title="Reset zoom"
                   >
                     <RotateCcw className="h-4 w-4" />
                   </button>
@@ -428,9 +433,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           {hasMultiple && activeIndex > 0 && (
             <button
               type="button"
-              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
+              className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               onClick={goToPrev}
               aria-label="Previous image"
+              title="Previous image"
             >
               <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
                 <ChevronLeft className="h-6 w-6" />
@@ -440,9 +446,10 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
           {hasMultiple && activeIndex < images.length - 1 && (
             <button
               type="button"
-              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95"
+              className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               onClick={goToNext}
               aria-label="Next image"
+              title="Next image"
             >
               <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
                 <ChevronRight className="h-6 w-6" />
@@ -468,12 +475,13 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                     setOffset({ x: 0, y: 0 })
                   }}
                   className={cn(
-                    "h-2 w-2 rounded-full transition-all",
+                    "h-2 w-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
                     idx === activeIndex
                       ? "bg-white scale-110"
                       : "bg-white/40 hover:bg-white/60",
                   )}
                   aria-label={`Go to image ${idx + 1}`}
+                  title={`Go to image ${idx + 1}`}
                 />
               ))}
             </div>
