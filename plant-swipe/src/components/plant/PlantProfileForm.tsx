@@ -1,5 +1,4 @@
 import React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -14,6 +13,7 @@ import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from
 import { SearchInput } from "@/components/ui/search-input"
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
+import { PillTabs, type PillTab } from "@/components/ui/pill-tabs"
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant form data handling */
 
 export interface PlantReport {
@@ -36,6 +36,9 @@ export type PlantProfileFormProps = {
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
   companionSuggestions?: string[]
+  biotopeSuggestions?: string[]
+  beneficialSuggestions?: string[]
+  harmfulSuggestions?: string[]
   categoryProgress?: CategoryProgress
   /** Current language for companion search (e.g., 'en', 'fr'). Defaults to 'en'. */
   language?: string
@@ -47,10 +50,19 @@ export type PlantProfileFormProps = {
   plantVarieties?: PlantVariety[]
 }
 
-const neuCardClass =
-  "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
-  "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
-  "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
+const glassCardClass =
+  "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 " +
+  "bg-white/90 dark:bg-[#17171a]/90 backdrop-blur " +
+  "shadow-[0_25px_70px_-45px_rgba(15,23,42,0.12)] dark:shadow-[0_25px_70px_-45px_rgba(0,0,0,0.65)]"
+
+const sectionTitleClass =
+  "flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400 mb-4"
+
+const sectionTitleTextClass =
+  "text-xs uppercase tracking-wider font-semibold"
+
+const fieldRowClass = "grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4"
+
 
 const normalizeHex = (hex?: string) => {
   if (!hex) return ""
@@ -206,6 +218,7 @@ const CompanionSelector: React.FC<{
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('common')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
+  const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
 
   // Track disabled IDs (current plant + already selected)
@@ -220,78 +233,102 @@ const CompanionSelector: React.FC<{
   }, [value])
 
   // Fetch plant names (and images) for companion IDs - use translations for non-English
+  // Batches queries to avoid Supabase URL length limits with large ID arrays
   React.useEffect(() => {
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
+    let cancelled = false
+    const BATCH = 20
     const loadMissing = async () => {
-      let plantNames: { id: string; name: string }[] = []
+      setLoadingCompanions(true)
+      try {
+        let plantNames: { id: string; name: string }[] = []
 
-      if (language !== 'en') {
-        const { data: translationData } = await supabase
-          .from('plant_translations')
-          .select('plant_id, name')
-          .in('plant_id', missing)
-          .eq('language', language)
+        // Batch the queries to avoid URL length limits
+        for (let i = 0; i < missing.length; i += BATCH) {
+          if (cancelled) return
+          const batch = missing.slice(i, i + BATCH)
 
-        if (translationData && translationData.length > 0) {
-          plantNames = translationData.map((t) => ({
-            id: t.plant_id as string,
-            name: t.name as string
-          }))
-        }
+          if (language !== 'en') {
+            const { data: translationData } = await supabase
+              .from('plant_translations')
+              .select('plant_id, name')
+              .in('plant_id', batch)
+              .eq('language', language)
 
-        const foundIds = new Set(plantNames.map(p => p.id))
-        const missingTranslations = missing.filter(id => !foundIds.has(id))
-        if (missingTranslations.length > 0) {
-          const { data: fallbackData } = await supabase
-            .from('plants')
-            .select('id,name')
-            .in('id', missingTranslations)
-          if (fallbackData) {
-            plantNames = [...plantNames, ...fallbackData.map((p) => ({
-              id: p.id as string,
-              name: (p as any).name as string
-            }))]
+            if (translationData && translationData.length > 0) {
+              plantNames.push(...translationData.map((t) => ({
+                id: t.plant_id as string,
+                name: t.name as string
+              })))
+            }
+
+            const foundIds = new Set(translationData?.map(t => t.plant_id) || [])
+            const missingTranslations = batch.filter(id => !foundIds.has(id))
+            if (missingTranslations.length > 0) {
+              const { data: fallbackData } = await supabase
+                .from('plants')
+                .select('id,name')
+                .in('id', missingTranslations)
+              if (fallbackData) {
+                plantNames.push(...fallbackData.map((p) => ({
+                  id: p.id as string,
+                  name: (p as any).name as string
+                })))
+              }
+            }
+          } else {
+            const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', batch)
+            if (plantsData) {
+              plantNames.push(...plantsData.map((p) => ({
+                id: p.id as string,
+                name: (p as any).name as string
+              })))
+            }
           }
         }
-      } else {
-        const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
-        if (plantsData) {
-          plantNames = plantsData.map((p) => ({
-            id: p.id as string,
-            name: (p as any).name as string
-          }))
-        }
-      }
 
-      if (plantNames.length > 0) {
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', plantNames.map(p => p.id))
-          .eq('use', 'primary')
+        if (cancelled) return
 
-        const imageMap = new Map<string, string>()
-        if (imagesData) {
-          imagesData.forEach((img) => {
-            if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+        if (plantNames.length > 0) {
+          // Batch image queries too
+          const imageMap = new Map<string, string>()
+          const imgIds = plantNames.map(p => p.id)
+          for (let i = 0; i < imgIds.length; i += BATCH) {
+            if (cancelled) return
+            const batch = imgIds.slice(i, i + BATCH)
+            const { data: imagesData } = await supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', batch)
+              .eq('use', 'primary')
+            if (imagesData) {
+              imagesData.forEach((img) => {
+                if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+              })
+            }
+          }
+
+          if (cancelled) return
+
+          setCompanions((prev) => {
+            const existingIds = new Set(prev.map(c => c.id))
+            const newCompanions = plantNames
+              .filter(p => !existingIds.has(p.id))
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                imageUrl: imageMap.get(p.id)
+              }))
+            return [...prev, ...newCompanions]
           })
         }
-
-        setCompanions((prev) => {
-          const existingIds = new Set(prev.map(c => c.id))
-          const newCompanions = plantNames
-            .filter(p => !existingIds.has(p.id))
-            .map((p) => ({
-              id: p.id,
-              name: p.name,
-              imageUrl: imageMap.get(p.id)
-            }))
-          return [...prev, ...newCompanions]
-        })
+      } finally {
+        if (!cancelled) setLoadingCompanions(false)
       }
     }
     loadMissing()
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, language])
 
@@ -345,7 +382,7 @@ const CompanionSelector: React.FC<{
       const existingIds = new Set(prev.map(c => c.id))
       const added = selected
         .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
-        .map(o => ({ id: o.id, name: o.label, imageUrl: undefined as string | undefined }))
+        .map(o => ({ id: o.id, name: o.label, imageUrl: (o.description || undefined) as string | undefined }))
       return [...prev, ...added]
     })
   }
@@ -473,36 +510,42 @@ const CompanionSelector: React.FC<{
         </div>
       )}
 
-      {/* Current Companions - Enhanced Grid */}
+      {/* Current Companions - Compact thumbnail row */}
       {value.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {companions.map((c) => (
             <div
               key={c.id}
-              className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
+              className="relative group"
+              title={c.name}
             >
-              <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+              <div className="h-12 w-12 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
                 {c.imageUrl ? (
                   <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-stone-400">
-                    <Leaf className="h-8 w-8" />
+                    <Leaf className="h-5 w-5" />
                   </div>
                 )}
-              </div>
-              <div className="p-2">
-                <p className="text-sm font-medium truncate text-stone-900 dark:text-stone-100">{c.name}</p>
               </div>
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 aria-label={`Remove ${c.name}`}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
+          {/* Loading skeleton placeholders for plants not yet fetched */}
+          {loadingCompanions && value.filter(id => !companions.find(c => c.id === id)).length > 0 && (
+            Array.from({ length: Math.min(value.length - companions.length, 10) }).map((_, i) => (
+              <div key={`skel-${i}`} className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-stone-700 animate-pulse" />
+            ))
+          )}
+          {/* Badge showing total count */}
+          <span className="text-xs font-medium text-muted-foreground ml-1">{value.length}</span>
         </div>
       ) : (
         <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
@@ -748,25 +791,31 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
     setV("")
   }
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Name"} />
-        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Details"} />
-        <Button type="button" onClick={commit}>Add</Button>
+    <div className="grid gap-3">
+      <div className="grid gap-2 rounded-lg border border-dashed p-3 bg-white/60 dark:bg-black/10">
+        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Mix name"} />
+        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Benefits / description"} />
+        <div className="flex justify-end">
+          <Button type="button" onClick={commit} disabled={!k.trim() || !v.trim()}>Add</Button>
+        </div>
       </div>
-      <div className="space-y-1">
-        {Object.entries(value).map(([key, val]) => (
-          <div key={key} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-            <div className="font-medium">{key}</div>
-            <div className="text-muted-foreground">{val}</div>
-            <button type="button" className="text-red-600" onClick={() => {
-              const copy = { ...value }
-              delete copy[key]
-              onChange(copy)
-            }}>Remove</button>
-          </div>
-        ))}
-      </div>
+      {Object.keys(value).length > 0 && (
+        <div className="space-y-2">
+          {Object.entries(value).map(([key, val]) => (
+            <div key={key} className="flex items-start gap-3 rounded-lg border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#111611] px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">{key}</div>
+                <div className="text-sm text-muted-foreground mt-0.5">{val}</div>
+              </div>
+              <button type="button" className="shrink-0 text-xs text-red-500 hover:text-red-700 font-medium mt-0.5" onClick={() => {
+                const copy = { ...value }
+                delete copy[key]
+                onChange(copy)
+              }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -847,6 +896,15 @@ const baseFields: FieldConfig[] = [
   { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
   { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
+  { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: [
+    { label: "Plant", value: "plant" },
+    { label: "Flower", value: "flower" },
+    { label: "Bamboo", value: "bamboo" },
+    { label: "Shrub", value: "shrub" },
+    { label: "Tree", value: "tree" },
+    { label: "Cactus", value: "cactus" },
+    { label: "Succulent", value: "succulent" },
+  ] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
 ]
@@ -859,12 +917,12 @@ const identityFields: FieldConfig[] = [
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
   { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
-  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"] },
+  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"], gatedBy: "utility:edible" },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
   { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
   { key: "foliagePersistence", label: "Foliage Persistence", description: "How leaves behave across seasons", type: "multiselect", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent","Winter Dormant","Dry Season Deciduous"] },
-  { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Both","Terrarium","Greenhouse"] },
+  { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Terrarium","Greenhouse"] },
   { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
   { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
 ]
@@ -884,7 +942,7 @@ const safetyFields: FieldConfig[] = [
 // Section 3: Care (10 items)
 // ============================================================================
 const careFields: FieldConfig[] = [
-  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "multiselect", options: ["Easy","Moderate","Complex"] },
+  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "select", options: ["Easy","Moderate","Complex"] },
   { key: "sunlight", label: "Sunlight / Exposure", description: "Light requirements", type: "multiselect", options: ["Full Sun","Partial Sun","Partial Shade","Light Shade","Deep Shade","Direct Light","Bright Indirect Light","Medium Light","Low Light"] },
   { key: "temperatureMax", label: "Temperature Max (°C)", description: "Maximum tolerable temperature", type: "number" },
   { key: "temperatureMin", label: "Temperature Min (°C)", description: "Minimum tolerable temperature", type: "number" },
@@ -920,6 +978,7 @@ const growthFields: FieldConfig[] = [
   { key: "fruitingMonth", label: "Fruiting Month(s)", description: "Months when plant fruits", type: "multiselect", options: monthOptions },
   { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
   { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
+  { key: "separationCm", label: "Spacing (cm)", description: "Recommended distance between two plants", type: "number" },
   { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
   { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea", gatedBy: "staking" },
   { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
@@ -999,7 +1058,12 @@ const miscFields: FieldConfig[] = [
 // Section 9: Meta
 // ============================================================================
 const metaFields: FieldConfig[] = [
-  { key: "status", label: "Status", description: "Editorial status", type: "select", options: ["approved","rework","review","in_progress"] },
+  { key: "status", label: "Status", description: "Editorial status", type: "select", options: [
+    { label: "Approved", value: "approved" },
+    { label: "Rework", value: "rework" },
+    { label: "Review", value: "review" },
+    { label: "In Progress", value: "in_progress" },
+  ] },
   { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
@@ -1014,7 +1078,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   const selectStatusPlaceholder = t('plantAdmin.selectStatus', 'Select status')
   const optionalLabel = t('plantAdmin.optionalLabel', 'optional')
   const isAdvice = field.key.toLowerCase().includes("advice")
-    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
+    const isMonthMultiField = field.type === "multiselect" && field.options === monthOptions
     const isPromotionMonthField = field.key === "identity.promotionMonth"
   const translateOption = (optionKey: string, fallback: string) => {
     const fieldScoped = t(`${translationBase}.options.${optionKey}`, { defaultValue: '' })
@@ -2320,52 +2384,68 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
-  const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
-    base: null,
-    identity: null,
-    care: null,
-    growth: null,
-    danger: null,
-    ecology: null,
-    consumption: null,
-    misc: null,
-    meta: null,
-  })
-  const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
+  const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
+  const [showBiotopeRecommendations, setShowBiotopeRecommendations] = React.useState(false)
+  const [showBeneficialRecommendations, setShowBeneficialRecommendations] = React.useState(false)
+  const [showHarmfulRecommendations, setShowHarmfulRecommendations] = React.useState(false)
+
   const categoryLabels: Record<string, string> = {
     base: t('plantAdmin.categories.base', 'Base'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
-    safety: t('plantAdmin.categories.safety', 'Safety & Toxicity'),
     care: t('plantAdmin.categories.care', 'Care'),
-    careDetails: t('plantAdmin.categories.careDetails', 'Care Details'),
     growth: t('plantAdmin.categories.growth', 'Growth'),
     danger: t('plantAdmin.categories.danger', 'Danger'),
     ecology: t('plantAdmin.categories.ecology', 'Ecology'),
-    consumption: t('plantAdmin.categories.consumption', 'Consumption'),
+    consumption: t('plantAdmin.categories.consumption', 'Usage'),
     misc: t('plantAdmin.categories.misc', 'Misc'),
     meta: t('plantAdmin.categories.meta', 'Meta'),
   }
-  const scrollToCategory = (category: PlantFormCategory) => {
-    setSelectedCategory(category)
-  }
+
+  const formTabOrder = ['base','identity','care','growth','danger','ecology','consumption','misc','meta'] as const
+
+  const pillTabs: PillTab<string>[] = React.useMemo(() =>
+    formTabOrder.map((key) => {
+      const info = categoryProgress?.[key as PlantFormCategory]
+      const badge = info?.total
+        ? info.status === 'done'
+          ? ' \u2713'
+          : ` ${info.completed}/${info.total}`
+        : ''
+      return { key, label: `${categoryLabels[key]}${badge}` }
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categoryProgress, t],
+  )
+
   React.useEffect(() => {
-    if (colorSuggestions?.length) {
-      setShowColorRecommendations(true)
-    } else {
-      setShowColorRecommendations(false)
-    }
+    if (colorSuggestions?.length) setShowColorRecommendations(true)
+    else setShowColorRecommendations(false)
   }, [colorSuggestions?.length])
+
   React.useEffect(() => {
-    if (companionSuggestions?.length) {
-      setShowCompanionRecommendations(true)
-    } else {
-      setShowCompanionRecommendations(false)
-    }
+    if (companionSuggestions?.length) setShowCompanionRecommendations(true)
+    else setShowCompanionRecommendations(false)
   }, [companionSuggestions?.length])
+
+  React.useEffect(() => {
+    if (biotopeSuggestions?.length) setShowBiotopeRecommendations(true)
+    else setShowBiotopeRecommendations(false)
+  }, [biotopeSuggestions?.length])
+
+  React.useEffect(() => {
+    if (beneficialSuggestions?.length) setShowBeneficialRecommendations(true)
+    else setShowBeneficialRecommendations(false)
+  }, [beneficialSuggestions?.length])
+
+  React.useEffect(() => {
+    if (harmfulSuggestions?.length) setShowHarmfulRecommendations(true)
+    else setShowHarmfulRecommendations(false)
+  }, [harmfulSuggestions?.length])
+
   const addSuggestedColor = React.useCallback(
     (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
       const current = value.identity?.colors || []
@@ -2381,14 +2461,13 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       })
       if (alreadyAdded) return
       const next: PlantColor = hex ? { name, hexCode: hex } : { name }
-      onChange(setValue(value, 'colors', [...current, next]))
+      onChange(setValue(value, 'identity.colors', [...current, next]))
     },
     [onChange, t, value],
   )
-  const formTabOrder = ['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as const
+
   const setPath = (path: string, val: any) => {
     let next = setValue(value, path, val)
-    // When a boolean gate is toggled OFF, clear its dependent fields
     if (val === false && BOOLEAN_GATE_DEPS[path]) {
       for (const dep of BOOLEAN_GATE_DEPS[path]) {
         next = setValue(next, dep, undefined)
@@ -2396,339 +2475,498 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     }
     onChange(next)
   }
-  return (
-    <div className="space-y-6">
-      <div ref={(node) => { sectionRefs.current.base = node }} className="flex-1">
-        <Card className={neuCardClass}>
-          <CardHeader>
-            <CardTitle>{categoryLabels.base}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.name.label', 'Name')}</Label>
-                <Input
-                  value={value.name}
-                  required
-                  onChange={(e) => onChange({ ...value, name: e.target.value })}
-                  placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name (English)')}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.name.description', 'Canonical English name of the plant (unique, mandatory).')}
-                </p>
-              </div>
-              {baseFields.map((f) => renderField(value, setPath, f, t))}
-            <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
-          </CardContent>
-        </Card>
+
+  /** Check if a gated field should be shown */
+  const shouldShowField = (f: FieldConfig) => {
+    if (!f.gatedBy) return true
+    if (f.gatedBy.startsWith('utility:')) {
+      const utilVal = f.gatedBy.slice(8)
+      const utility = getValue(value, 'utility')
+      const arr = Array.isArray(utility) ? utility as string[] : []
+      const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+      return arr.some(u => typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle)
+    }
+    return getValue(value, f.gatedBy) === true
+  }
+
+  /** Render a group of fields inside a subsection */
+  const renderFieldGroup = (fields: FieldConfig[], opts?: { skipKeys?: Set<string> }) => (
+    fields.filter(f => !(opts?.skipKeys?.has(f.key)) && shouldShowField(f)).map(f => renderField(value, setPath, f, t))
+  )
+
+  /** Render a titled divider */
+  const SectionDivider = ({ title, icon }: { title: string; icon?: React.ReactNode }) => (
+    <div className={sectionTitleClass}>
+      {icon || <div className="h-1 w-1 rounded-full bg-emerald-500" />}
+      <span className={sectionTitleTextClass}>{title}</span>
+      <div className="flex-1 h-px bg-stone-200/70 dark:bg-[#3e3e42]/70" />
+    </div>
+  )
+
+  // ── Section renderers ────────────────────────────────────────────────
+
+  const renderBase = () => (
+    <div className="space-y-5">
+      <div className={fieldRowClass}>
+        <div className="grid gap-2">
+          <Label>{t('plantAdmin.basics.name.label', 'Name')}</Label>
+          <Input
+            value={value.name}
+            required
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+            placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name (English)')}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('plantAdmin.basics.name.description', 'Canonical English name (unique, mandatory).')}
+          </p>
+        </div>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
       </div>
 
-        <div className={`${neuCardClass} rounded-2xl p-4`}>
-          <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-          <div className="flex flex-wrap gap-3">
-            {formTabOrder.map((key) => {
-              const info = categoryProgress?.[key as PlantFormCategory]
-              return (
-                <div key={key} className="relative">
-                  <Button
-                    size="lg"
-                    className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
-                    variant={selectedCategory === key ? 'default' : 'outline'}
-                    onClick={() => scrollToCategory(key as PlantFormCategory)}
-                  >
-                    {categoryLabels[key]}
-                  </Button>
-                  {info?.total ? (
-                    <span
-                      className={`absolute -top-2 -right-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white ${
-                        info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'
-                      }`}
-                    >
-                      {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
-                    </span>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameSpecies')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameVariety')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'family')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'commonNames')!, t)}
+      </div>
 
-        <div className="space-y-6">
-          {(['identity','safety','care','careDetails','growth','danger','ecology','consumption','misc','meta'] as string[]).map((cat) => {
-            if (selectedCategory !== cat) return null
-            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat as PlantFormCategory] = node }
-            const fieldGroups: Record<string, FieldConfig[]> = {
-              base: baseFields,
-              identity: identityFields,
-              safety: safetyFields,
-              care: careFields,
-              careDetails: careDetailsFields,
-              growth: growthFields,
-              danger: dangerFields,
-              ecology: ecologyFields,
-              consumption: consumptionFields,
-              misc: miscFields,
-              meta: metaFields,
-            }
-            const progressInfo = categoryProgress?.[cat]
-            return (
-              <div key={cat} ref={refSetter}>
-                <Card className={neuCardClass}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between gap-4">
-                      <span>{categoryLabels[cat]}</span>
-                      {progressInfo?.total ? (
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            progressInfo.status === 'done'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
-                          }`}
-                        >
-                          {progressInfo.status === 'done'
-                            ? t('plantAdmin.sectionFilled', 'Filled')
-                            : `${progressInfo.completed}/${progressInfo.total}`}
-                        </span>
-                      ) : null}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4">
-                      {fieldGroups[cat].map((f) => {
-                        if (cat === 'misc' && ['companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants'].includes(f.key)) return null
-                        // Hide dependent fields when their gate condition is not met
-                        if (f.gatedBy) {
-                          if (f.gatedBy.startsWith('utility:')) {
-                            const utilVal = f.gatedBy.slice(8)
-                            const utility = getValue(value, 'utility')
-                            const arr = Array.isArray(utility) ? utility as string[] : []
-                            const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
-                            if (!arr.some(u => typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle)) return null
-                          } else if (getValue(value, f.gatedBy) !== true) {
-                            return null
-                          }
-                        }
-                        return renderField(value, setPath, f, t)
-                      })}
-                    {cat === 'consumption' && (
-                      <div className="md:col-span-2">
-                        <RecipeEditor
-                          recipes={Array.isArray(value.recipes) ? value.recipes : []}
-                          onChange={(v) => setPath('recipes', v)}
-                        />
+      <SectionDivider title={t('plantAdmin.sections.presentation', 'Presentation')} />
+      {renderField(value, setPath, baseFields.find(f => f.key === 'presentation')!, t)}
+      {renderField(value, setPath, baseFields.find(f => f.key === 'featuredMonth')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.images', 'Images')} />
+      <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
+    </div>
+  )
+
+  const renderIdentity = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.originClimate', 'Origin & Climate')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'origin')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'climate')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'season')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'livingSpace')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.utilityUse', 'Utility & Use')} />
+      {renderField(value, setPath, identityFields.find(f => f.key === 'utility')!, t)}
+      {shouldShowField(identityFields.find(f => f.key === 'ediblePart')!) && renderField(value, setPath, identityFields.find(f => f.key === 'ediblePart')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.lifecycle', 'Life Cycle & Foliage')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'lifeCycle')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'averageLifespan')!, t)}
+      </div>
+      {renderField(value, setPath, identityFields.find(f => f.key === 'foliagePersistence')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.habitForm', 'Habit & Form')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'thorny')!, t)}
+      </div>
+      {renderField(value, setPath, identityFields.find(f => f.key === 'landscaping')!, t)}
+      {renderField(value, setPath, identityFields.find(f => f.key === 'plantHabit')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.colors', 'Colors')} />
+      {colorSuggestions?.length ? (
+        <div className="mb-3">
+          <button type="button" className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300" onClick={() => setShowColorRecommendations(prev => !prev)}>
+            <Sparkles className="h-4 w-4" />
+            {showColorRecommendations ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions') : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
+          </button>
+          {showColorRecommendations && (
+            <div className="mt-2 rounded-xl border border-emerald-200/50 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 px-4 py-3 space-y-3">
+              <div className="text-xs text-muted-foreground">{t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}</div>
+              <div className="flex flex-wrap gap-3">
+                {colorSuggestions.map((c, idx) => {
+                  const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+                  const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
+                  const alreadyAdded = (value.identity?.colors || []).some((color) => {
+                    const colorName = color.name?.toLowerCase()
+                    const colorHex = normalizeHex(color.hexCode || '')
+                    return (name && colorName === name.toLowerCase()) || (hex && colorHex && colorHex === hex)
+                  })
+                  return (
+                    <div key={`${name}-${hex || idx}`} className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-stone-200/60 dark:border-[#3e3e42]/60">
+                      <span className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700" style={{ backgroundColor: hex || undefined }} />
+                      <div className="flex flex-col leading-tight min-w-[90px]">
+                        <span className="text-sm font-medium">{name}</span>
+                        {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
                       </div>
-                    )}
-                    {cat === 'misc' && (
-                      <>
-                        <div className="md:col-span-2">
-                          <Label>{t('plantAdmin.fields.companionPlants.label', 'Companion & Related Plants')}</Label>
-                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.companionPlants.description', 'Plants that grow well together or are related varieties')}</p>
-                          <CompanionSelector
-                            value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
-                            onChange={(v) => setPath('companionPlants', v)}
-                            suggestions={companionSuggestions}
-                            showSuggestions={showCompanionRecommendations}
-                            onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
-                            currentPlantId={value.id}
-                            language={language}
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label>{t('plantAdmin.fields.biotopePlants.label', 'Biotope Plants')}</Label>
-                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.biotopePlants.description', 'Plants from the same biotope')}</p>
-                          <CompanionSelector
-                            value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
-                            onChange={(v) => setPath('biotopePlants', v)}
-                            currentPlantId={value.id}
-                            language={language}
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label>{t('plantAdmin.fields.beneficialPlants.label', 'Beneficial Plants')}</Label>
-                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.beneficialPlants.description', 'Plants that benefit this one')}</p>
-                          <CompanionSelector
-                            value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
-                            onChange={(v) => setPath('beneficialPlants', v)}
-                            currentPlantId={value.id}
-                            language={language}
-                          />
-                        </div>
-                        <div className="md:col-span-2">
-                          <Label>{t('plantAdmin.fields.harmfulPlants.label', 'Harmful Plants')}</Label>
-                          <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.harmfulPlants.description', 'Plants to avoid nearby')}</p>
-                          <CompanionSelector
-                            value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
-                            onChange={(v) => setPath('harmfulPlants', v)}
-                            currentPlantId={value.id}
-                            language={language}
-                          />
-                        </div>
-                        {plantVarieties && plantVarieties.length > 0 && (
-                          <div className="md:col-span-2">
-                            <Label className="text-base font-semibold">
-                              {t('plantAdmin.varieties', 'Varieties')}
-                              <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200">
-                                {plantVarieties.length}
-                              </span>
-                            </Label>
-                            <p className="text-xs text-muted-foreground mb-3">
-                              {t('plantAdmin.varietiesDescription', 'Other plants with the same scientific name but a different variety.')}
-                            </p>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                              {plantVarieties.map((v) => (
-                                <a
-                                  key={v.id}
-                                  href={`/create-plant?id=${v.id}`}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="flex items-center gap-2 rounded-xl border border-emerald-200/70 dark:border-emerald-800/40 bg-emerald-50/50 dark:bg-emerald-950/20 p-2 hover:bg-emerald-100/60 dark:hover:bg-emerald-900/30 transition-colors"
-                                >
-                                  {v.imageUrl ? (
-                                    <img src={v.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
-                                  ) : (
-                                    <div className="h-10 w-10 rounded-lg bg-emerald-200/50 dark:bg-emerald-800/30 flex-shrink-0" />
-                                  )}
-                                  <div className="min-w-0">
-                                    <p className="text-sm font-medium truncate">{v.name}</p>
-                                    {v.variety && <p className="text-xs text-muted-foreground truncate italic">{v.variety}</p>}
-                                  </div>
-                                </a>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-                      </>
-                    )}
-                    {cat === 'meta' && plantReports && plantReports.length > 0 && (
-                      <div className="md:col-span-2 mt-2">
-                        <Label className="text-base font-semibold">
-                          {t('plantAdmin.userReports', 'User Reports')}
-                          <span className="ml-2 text-xs font-medium px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-200">
-                            {plantReports.length}
-                          </span>
-                        </Label>
-                        <p className="text-xs text-muted-foreground mb-3">
-                          {t('plantAdmin.userReportsDescription', 'Reports submitted by users about missing or incorrect information.')}
-                        </p>
-                        <div className="space-y-3">
-                          {plantReports.map((report) => (
-                            <div
-                              key={report.id}
-                              className="rounded-xl border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-4"
-                            >
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-amber-800 dark:text-amber-300">
-                                  {report.userName}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                  {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                                </span>
-                              </div>
-                              <p className="text-sm whitespace-pre-wrap">{report.note}</p>
-                              {report.imageUrl && (
-                                <img
-                                  src={report.imageUrl}
-                                  alt="Report attachment"
-                                  className="mt-2 rounded-lg max-h-48 object-contain border border-amber-200/50 dark:border-amber-800/30"
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {cat === 'identity' && (
-                      <div className="md:col-span-2">
-                        {colorSuggestions?.length ? (
-                          <div className="mb-3">
-                            <button
-                              type="button"
-                              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
-                              onClick={() => setShowColorRecommendations((prev) => !prev)}
-                            >
-                              <Sparkles className="h-4 w-4" />
-                              {showColorRecommendations
-                                ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions')
-                                : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
-                            </button>
-                            {showColorRecommendations && (
-                              <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
-                                <div className="text-xs text-muted-foreground">
-                                  {t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                  {colorSuggestions.map((c, idx) => {
-                                    const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
-                                    const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
-                                    const alreadyAdded = (value.identity?.colors || []).some((color) => {
-                                      const colorName = color.name?.toLowerCase()
-                                      const colorHex = normalizeHex(color.hexCode || '')
-                                      return (
-                                        (name && colorName === name.toLowerCase()) ||
-                                        (hex && colorHex && colorHex === hex)
-                                      )
-                                    })
-                                    return (
-                                      <div
-                                        key={`${name}-${hex || idx}`}
-                                        className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
-                                      >
-                                        <span
-                                          className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700"
-                                          style={{ backgroundColor: hex || undefined }}
-                                        />
-                                        <div className="flex flex-col leading-tight min-w-[90px]">
-                                          <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{name}</span>
-                                          {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
-                                        </div>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant={alreadyAdded ? 'secondary' : 'default'}
-                                          disabled={alreadyAdded}
-                                          onClick={() => addSuggestedColor(c)}
-                                        >
-                                          {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
-                                        </Button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                          <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
-                        {!colorSuggestions?.length && (
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
-                          </p>
-                        )}
-                        <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-                        <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!value.identity?.multicolor}
-                              onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                            />
-                              {t('plantAdmin.colors.multicolor', 'Multicolor')}
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!value.identity?.bicolor}
-                              onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                            />
-                              {t('plantAdmin.colors.bicolor', 'Bicolor')}
-                          </label>
-                        </div>
-                          <p className="text-xs text-muted-foreground">{t('plantAdmin.colors.paletteHelp', 'Link existing palette colors or insert new ones for this plant.')}</p>
-                      </div>
-                    )}
-                </CardContent>
-              </Card>
+                      <Button type="button" size="sm" variant={alreadyAdded ? 'secondary' : 'default'} disabled={alreadyAdded} onClick={() => addSuggestedColor(c)}>
+                        {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
+                      </Button>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          )
-        })}
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}</p>
+      )}
+      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!value.identity?.multicolor} onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))} className="h-4 w-4 rounded border-stone-300 accent-emerald-600" />
+          {t('plantAdmin.colors.multicolor', 'Multicolor')}
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!value.identity?.bicolor} onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))} className="h-4 w-4 rounded border-stone-300 accent-emerald-600" />
+          {t('plantAdmin.colors.bicolor', 'Bicolor')}
+        </label>
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.safety', 'Safety & Toxicity')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityHuman')!, t)}
+        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityPets')!, t)}
+      </div>
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningMethod')!, t)}
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningSymptoms')!, t)}
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'allergens')!, t)}
+    </div>
+  )
+
+  const renderCare = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.conditions', 'Conditions')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careFields.find(f => f.key === 'careLevel')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'sunlight')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.temperature', 'Temperature')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMin')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureIdeal')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMax')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.watering', 'Watering & Humidity')} />
+      {renderField(value, setPath, careFields.find(f => f.key === 'wateringSchedules')!, t)}
+      {renderField(value, setPath, careFields.find(f => f.key === 'wateringType')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careFields.find(f => f.key === 'hygrometry')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'mistingFrequency')!, t)}
+      </div>
+      {renderField(value, setPath, careFields.find(f => f.key === 'specialNeeds')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.substrate', 'Substrate & Soil')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'substrate')!, t)}
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'substrateMix')!, t)}
+      </div>
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'soilAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.mulch', 'Mulch')} />
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchingNeeded')!, t)}
+      {shouldShowField(careDetailsFields.find(f => f.key === 'mulchType')!) && renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchType')!, t)}
+      {shouldShowField(careDetailsFields.find(f => f.key === 'mulchAdvice')!) && renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.nutrition', 'Nutrition')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'nutritionNeed')!, t)}
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'fertilizer')!, t)}
+      </div>
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'fertilizerAdvice')!, t)}
+    </div>
+  )
+
+  const renderGrowth = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.calendar', 'Calendar')} />
+      <div className="space-y-4">
+        {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'floweringMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'fruitingMonth')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.dimensions', 'Dimensions & Support')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, growthFields.find(f => f.key === 'heightCm')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'wingspanCm')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'separationCm')!, t)}
+      </div>
+      {renderField(value, setPath, growthFields.find(f => f.key === 'staking')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'stakingAdvice')!) && renderField(value, setPath, growthFields.find(f => f.key === 'stakingAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.propagation', 'Propagation & Cultivation')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, growthFields.find(f => f.key === 'division')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'cultivationMode')!, t)}
+      </div>
+      {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMethod')!, t)}
+      {renderField(value, setPath, growthFields.find(f => f.key === 'sowingAdvice')!, t)}
+      {renderField(value, setPath, growthFields.find(f => f.key === 'transplanting')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'transplantingTime')!) && (
+        <div className={fieldRowClass}>
+          {renderField(value, setPath, growthFields.find(f => f.key === 'transplantingTime')!, t)}
+          {renderField(value, setPath, growthFields.find(f => f.key === 'outdoorPlantingTime')!, t)}
+        </div>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.pruning', 'Pruning')} />
+      {renderField(value, setPath, growthFields.find(f => f.key === 'pruning')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'pruningMonth')!) && renderField(value, setPath, growthFields.find(f => f.key === 'pruningMonth')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'pruningAdvice')!) && renderField(value, setPath, growthFields.find(f => f.key === 'pruningAdvice')!, t)}
+    </div>
+  )
+
+  const renderDanger = () => (
+    <div className="space-y-5">
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, dangerFields.find(f => f.key === 'pests')!, t)}
+        {renderField(value, setPath, dangerFields.find(f => f.key === 'diseases')!, t)}
+      </div>
+    </div>
+  )
+
+  const renderEcology = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.conservation', 'Conservation')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'conservationStatus')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalStatus')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.habitats', 'Habitats')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'biotopes')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'urbanBiotopes')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.toleranceRoles', 'Tolerance & Roles')} />
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalTolerance')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'biodiversityRole')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalImpact')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'beneficialRoles')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'harmfulRoles')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.wildlife', 'Wildlife')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'pollinatorsAttracted')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'birdsAttracted')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'mammalsAttracted')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.symbiosis', 'Symbiosis & Management')} />
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'symbiosis')!, t)}
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'symbiosisNotes')!, t)}
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalManagement')!, t)}
+    </div>
+  )
+
+  const renderConsumption = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.nutrition', 'Nutrition')} />
+      {renderField(value, setPath, consumptionFields.find(f => f.key === 'nutritionalValue')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'edibleOil')!, t)}
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'spiceMixes')!, t)}
+      </div>
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'infusionParts')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.infusion', 'Infusion')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionParts')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionRecipeIdeas')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionMixes')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'medicinalBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.medicinal', 'Medicinal')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalUsage')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalWarning')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalHistory')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'aromatherapyBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.aromatherapy', 'Aromatherapy')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'aromatherapyBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'essentialOilBlends')!, t)}
+        </>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.recipes', 'Recipes')} />
+      <RecipeEditor recipes={Array.isArray(value.recipes) ? value.recipes : []} onChange={(v) => setPath('recipes', v)} />
+    </div>
+  )
+
+  const renderMisc = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.companionPlants', 'Companion & Related Plants')} />
+      <CompanionSelector
+        value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
+        onChange={(v) => setPath('companionPlants', v)}
+        suggestions={companionSuggestions}
+        showSuggestions={showCompanionRecommendations}
+        onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+        currentPlantId={value.id}
+        language={language}
+      />
+
+      <SectionDivider title={t('plantAdmin.sections.biotopePlants', 'Biotope Plants')} />
+      <CompanionSelector
+        value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
+        onChange={(v) => setPath('biotopePlants', v)}
+        suggestions={biotopeSuggestions}
+        showSuggestions={showBiotopeRecommendations}
+        onToggleSuggestions={() => setShowBiotopeRecommendations(prev => !prev)}
+        currentPlantId={value.id}
+        language={language}
+      />
+
+      <div className={fieldRowClass}>
+        <div>
+          <SectionDivider title={t('plantAdmin.sections.beneficialPlants', 'Beneficial Plants')} />
+          <CompanionSelector
+            value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
+            onChange={(v) => setPath('beneficialPlants', v)}
+            suggestions={beneficialSuggestions}
+            showSuggestions={showBeneficialRecommendations}
+            onToggleSuggestions={() => setShowBeneficialRecommendations(prev => !prev)}
+            currentPlantId={value.id}
+            language={language}
+          />
+        </div>
+        <div>
+          <SectionDivider title={t('plantAdmin.sections.harmfulPlants', 'Harmful Plants')} />
+          <CompanionSelector
+            value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
+            onChange={(v) => setPath('harmfulPlants', v)}
+            suggestions={harmfulSuggestions}
+            showSuggestions={showHarmfulRecommendations}
+            onToggleSuggestions={() => setShowHarmfulRecommendations(prev => !prev)}
+            currentPlantId={value.id}
+            language={language}
+          />
+        </div>
+      </div>
+
+      {plantVarieties && plantVarieties.length > 0 && (
+        <>
+          <SectionDivider title={`${t('plantAdmin.varieties', 'Varieties')} (${plantVarieties.length})`} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {plantVarieties.map((v) => (
+              <a
+                key={v.id}
+                href={`/create-plant?id=${v.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/60 bg-white/60 dark:bg-[#1f1f1f]/60 p-2 hover:bg-stone-50 dark:hover:bg-[#252526] transition-colors"
+              >
+                {v.imageUrl ? (
+                  <img src={v.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 rounded-lg bg-stone-100 dark:bg-stone-800 flex-shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{v.name}</p>
+                  {v.variety && <p className="text-xs text-muted-foreground truncate italic">{v.variety}</p>}
+                </div>
+              </a>
+            ))}
+          </div>
+        </>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.tags', 'Tags')} />
+      {renderFieldGroup(miscFields, { skipKeys: new Set(['companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants']) })}
+    </div>
+  )
+
+  const renderMeta = () => (
+    <div className="space-y-5">
+      {renderFieldGroup(metaFields)}
+      {plantReports && plantReports.length > 0 && (
+        <>
+          <SectionDivider title={`${t('plantAdmin.userReports', 'User Reports')} (${plantReports.length})`} />
+          <div className="space-y-3">
+            {plantReports.map((report) => (
+              <div
+                key={report.id}
+                className="rounded-xl border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{report.userName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{report.note}</p>
+                {report.imageUrl && (
+                  <img src={report.imageUrl} alt="Report attachment" className="mt-2 rounded-lg max-h-48 object-contain border border-amber-200/50 dark:border-amber-800/30" />
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
+  const sectionRenderers: Record<string, () => React.ReactNode> = {
+    base: renderBase,
+    identity: renderIdentity,
+    care: renderCare,
+    growth: renderGrowth,
+    danger: renderDanger,
+    ecology: renderEcology,
+    consumption: renderConsumption,
+    misc: renderMisc,
+    meta: renderMeta,
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ── Pill Tab Navigation ── */}
+      <div className="sticky top-0 z-20 py-3 -mx-1 px-1">
+        <PillTabs
+          tabs={pillTabs}
+          activeKey={selectedCategory}
+          onTabChange={setSelectedCategory}
+          className="overflow-x-auto"
+        />
+      </div>
+
+      {/* ── Active section card ── */}
+      <div className={glassCardClass}>
+        <div className="p-5 sm:p-7">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-bold text-foreground">{categoryLabels[selectedCategory]}</h2>
+            {(() => {
+              const info = categoryProgress?.[selectedCategory as PlantFormCategory]
+              if (!info?.total) return null
+              return (
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                  info.status === 'done'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                }`}>
+                  {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
+                </span>
+              )
+            })()}
+          </div>
+          {sectionRenderers[selectedCategory]?.()}
+        </div>
       </div>
     </div>
   )

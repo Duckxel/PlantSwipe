@@ -133,6 +133,8 @@ const normalizeMonthArray = (value: unknown): string[] => {
 const IGNORED_FIELDS = new Set([
   'id', 'name', 'images', 'image', 'status',
   'createdBy', 'createdTime', 'updatedBy', 'updatedTime',
+  // Plant relation fields are suggestion-only — AI must not write IDs directly
+  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
 ])
 
 // Enum field → EnumTools mapping
@@ -197,13 +199,12 @@ const TAG_FIELDS = new Set([
   'commonNames', 'origin', 'allergens',
   'landscaping', 'plantHabit', 'specialNeeds',
   'substrate', 'substrateMix', 'mulchType', 'nutritionNeed', 'fertilizer',
-  'cultivationMode', 'infusionParts',
+  'cultivationMode', 'infusionParts', 'recipesIdeas',
   'pests', 'diseases',
   'ecologicalStatus', 'biotopes', 'urbanBiotopes',
   'biodiversityRole', 'pollinatorsAttracted', 'birdsAttracted', 'mammalsAttracted',
   'beneficialRoles', 'harmfulRoles', 'symbiosis',
   'ecologicalManagement',
-  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
   'plantTags', 'biodiversityTags', 'spiceMixes',
 ])
 
@@ -268,6 +269,16 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   if (SINGLE_ENUM_FIELDS[fieldKey]) {
     const result = normalizeEnumValueInput(SINGLE_ENUM_FIELDS[fieldKey], data)
     if (result.shouldUpdate) next[fieldKey] = result.value
+    return next
+  }
+
+  // plantType special case
+  if (fieldKey === 'plantType') {
+    if (typeof data === 'string') {
+      const lower = data.toLowerCase().trim()
+      const valid = ['plant', 'flower', 'bamboo', 'shrub', 'tree', 'cactus', 'succulent']
+      if (valid.includes(lower)) next.plantType = lower
+    }
     return next
   }
 

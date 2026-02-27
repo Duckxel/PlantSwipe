@@ -17,7 +17,7 @@ import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
-import { monthNumberToSlug, monthNumbersToSlugs, monthSlugToNumber, monthSlugsToNumbers } from "@/lib/months"
+import { monthNumberToSlug, monthSlugToNumber, monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
   utilityEnum,
@@ -1004,6 +1004,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.featuredMonth = data.featured_month || (plant.identity?.promotionMonth ? [plant.identity.promotionMonth] : [])
 
   // Section 2: Identity (non-translatable enums from plants table)
+  flat.plantType = data.plant_type || plant.plantType || undefined
   flat.origin = translation?.origin || plant.plantCare?.origin || []
   flat.climate = climateEnum.toUiArray(data.climate) as string[]
   flat.season = seasonEnum.toUiArray(data.season) as string[]
@@ -1027,7 +1028,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.allergens = translation?.allergens || plant.identity?.allergens || []
 
   // Section 3: Care
-  flat.careLevel = careLevelEnum.toUiArray(data.care_level) as string[]
+  flat.careLevel = (careLevelEnum.toUiArray(data.care_level) as string[])[0] || undefined
   flat.sunlight = sunlightEnum.toUiArray(data.sunlight) as string[]
   flat.temperatureMax = data.temperature_max ?? undefined
   flat.temperatureMin = data.temperature_min ?? undefined
@@ -1054,6 +1055,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.fruitingMonth = data.fruiting_month || []
   flat.heightCm = data.height_cm ?? undefined
   flat.wingspanCm = data.wingspan_cm ?? undefined
+  flat.separationCm = data.separation_cm ?? undefined
   flat.staking = data.staking || false
   flat.stakingAdvice = translation?.staking_advice || plant.growth?.adviceTutoring || undefined
   flat.division = divisionEnum.toUiArray(data.division) as string[]
@@ -1166,6 +1168,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
   const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
+  const [biotopeSuggestions, setBiotopeSuggestions] = React.useState<string[]>([])
+  const [beneficialSuggestions, setBeneficialSuggestions] = React.useState<string[]>([])
+  const [harmfulSuggestions, setHarmfulSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
   const [externalImageSources, setExternalImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
     const initial: Record<string, SourceResult> = {}
@@ -1514,8 +1519,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     if (parsed.length) setColorSuggestions(parsed)
   }
 
-  const captureCompanionSuggestions = (data: unknown) => {
-    if (!data) return
+  const parsePlantNames = (data: unknown): string[] => {
+    if (!data) return []
     const parsed: string[] = []
     if (Array.isArray(data)) {
       data.forEach((entry) => {
@@ -1524,7 +1529,24 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         }
       })
     }
+    return parsed
+  }
+
+  const captureCompanionSuggestions = (data: unknown) => {
+    const parsed = parsePlantNames(data)
     if (parsed.length) setCompanionSuggestions(parsed)
+  }
+
+  const capturePlantRelationSuggestions = (aiData: unknown) => {
+    if (!aiData || typeof aiData !== 'object') return
+    const d = aiData as Record<string, unknown>
+    if (d.companionPlants) captureCompanionSuggestions(d.companionPlants)
+    const biotope = parsePlantNames(d.biotopePlants)
+    if (biotope.length) setBiotopeSuggestions(biotope)
+    const beneficial = parsePlantNames(d.beneficialPlants)
+    if (beneficial.length) setBeneficialSuggestions(beneficial)
+    const harmful = parsePlantNames(d.harmfulPlants)
+    if (harmful.length) setHarmfulSuggestions(harmful)
   }
   const normalizePlantWatering = (candidate: Plant): Plant => ({
     ...candidate,
@@ -1665,6 +1687,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
+            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -1698,18 +1721,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
-            sowing_month: p.sowingMonth || monthNumbersToSlugs(p.growth?.sowingMonth) || [],
-            flowering_month: p.floweringMonth || monthNumbersToSlugs(p.growth?.floweringMonth) || [],
-            fruiting_month: p.fruitingMonth || monthNumbersToSlugs(p.growth?.fruitingMonth) || [],
+            sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
+            flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
+            fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
+            separation_cm: p.separationCm || p.growth?.separation || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
             cultivation_mode: toCheckedSlugs(p.cultivationMode, ALLOWED_CULTIVATION_MODE),
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
-            pruning_month: p.pruningMonth || [],
+            pruning_month: normalizeMonthsToSlugs(p.pruningMonth),
             // Section 6: Ecology
             conservation_status: conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : [])),
             ecological_status: toCheckedSlugs(p.ecologicalStatus, ALLOWED_ECOLOGICAL_STATUS),
@@ -1760,6 +1784,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
+            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -1793,18 +1818,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             nutrition_need: p.nutritionNeed || [],
             fertilizer: p.fertilizer || [],
             // Section 4: Growth
-            sowing_month: p.sowingMonth || monthNumbersToSlugs(p.growth?.sowingMonth) || [],
-            flowering_month: p.floweringMonth || monthNumbersToSlugs(p.growth?.floweringMonth) || [],
-            fruiting_month: p.fruitingMonth || monthNumbersToSlugs(p.growth?.fruitingMonth) || [],
+            sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
+            flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
+            fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
+            separation_cm: p.separationCm || p.growth?.separation || null,
             staking: coerceBoolean(p.staking ?? p.growth?.tutoring, false),
             division: divisionEnum.toDbArray(p.division || p.plantCare?.division),
             cultivation_mode: toCheckedSlugs(p.cultivationMode, ALLOWED_CULTIVATION_MODE),
             sowing_method: sowingMethodEnum.toDbArray(p.sowingMethod || p.growth?.sowType),
             transplanting: coerceBoolean(p.transplanting ?? p.growth?.transplanting, null),
             pruning: coerceBoolean(p.pruning, false),
-            pruning_month: p.pruningMonth || [],
+            pruning_month: normalizeMonthsToSlugs(p.pruningMonth),
             // Section 6: Ecology
             conservation_status: conservationStatusEnum.toDbArray(p.conservationStatus || (p.ecology?.conservationStatus ? [p.ecology.conservationStatus] : [])),
             ecological_status: toCheckedSlugs(p.ecologicalStatus, ALLOWED_ECOLOGICAL_STATUS),
@@ -2234,7 +2260,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
               if (field === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-              if (field === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
+              if (field === 'misc' || field === 'miscellaneous') capturePlantRelationSuggestions(data)
               if (field === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
               setPlant((prev) => {
                 const applied = applyAiFieldToPlant(prev, field, data)
@@ -2270,7 +2296,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
             if (fieldKey === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-            if (fieldKey === 'misc' && (data as any)?.companionPlants) captureCompanionSuggestions((data as any).companionPlants)
+            if (fieldKey === 'misc' || fieldKey === 'miscellaneous') capturePlantRelationSuggestions(data)
             if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
           }
@@ -2914,6 +2940,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             onChange={setPlant}
             colorSuggestions={colorSuggestions}
             companionSuggestions={companionSuggestions}
+            biotopeSuggestions={biotopeSuggestions}
+            beneficialSuggestions={beneficialSuggestions}
+            harmfulSuggestions={harmfulSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
             language={language}
             onImageRemove={(imageUrl) => {

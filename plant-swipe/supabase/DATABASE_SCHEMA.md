@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 24, 2026  
+> **Last Updated:** February 26, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Feb 26, 2026:** Added `plant_type` column (single-select: plant, flower, bamboo, shrub, tree, cactus, succulent) and `watering_mode` column (always | seasonal) to `plants` table. Updated sync_parts to include both columns in CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
 - **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
@@ -419,6 +420,7 @@ id                        TEXT PRIMARY KEY
 name                      TEXT NOT NULL UNIQUE   -- Canonical English name
 
 -- Section 1: Base — Identity & naming
+plant_type                TEXT                   -- CHECK: plant, flower, bamboo, shrub, tree, cactus, succulent
 scientific_name_species   TEXT                   -- Latin species name
 scientific_name_variety   TEXT                   -- Latin variety name
 family                    TEXT                   -- Botanical family (Latin)
@@ -456,6 +458,7 @@ temperature_min           INTEGER
 temperature_ideal         INTEGER
 
 -- Section 3: Care — Water & humidity
+watering_mode             TEXT DEFAULT 'always'  -- 'always' (year-round) or 'seasonal' (hot/cold)
 watering_frequency_warm   INTEGER                -- Times per week (warm season)
 watering_frequency_cold   INTEGER                -- Times per week (cold season)
 watering_type             TEXT[]                 -- CHECK: hose, surface, drip, soaking, wick
@@ -479,6 +482,7 @@ fruiting_month            TEXT[]                 -- Multi-select months
 -- Section 4: Growth — Dimensions & support
 height_cm                 INTEGER
 wingspan_cm               INTEGER
+separation_cm             INTEGER                -- Recommended spacing between two plants (cm)
 staking                   BOOLEAN DEFAULT false  -- Whether staking/support is needed
 
 -- Section 4: Growth — Propagation & cultivation
