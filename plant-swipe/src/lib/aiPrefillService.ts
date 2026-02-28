@@ -661,6 +661,7 @@ export async function processPlantRequest(
       id: plantId,
       name: trimmedName,
       // Section 1: Base
+      plant_type: plant.plantType || null,
       scientific_name_species: plant.scientificNameSpecies || null,
       scientific_name_variety: plant.scientificNameVariety || null,
       family: plant.family || null,
@@ -707,6 +708,7 @@ export async function processPlantRequest(
       fruiting_month: plant.fruitingMonth || [],
       height_cm: plant.heightCm || null,
       wingspan_cm: plant.wingspanCm || null,
+      separation_cm: plant.separationCm || null,
       staking: coerceBoolean(plant.staking, false),
       division: divisionEnum.toDbArray(plant.division),
       cultivation_mode: plant.cultivationMode || [],
