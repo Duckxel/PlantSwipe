@@ -2149,16 +2149,16 @@ export const AdminPage: React.FC = () => {
     return `${seconds}s`;
   };
 
-  // Category labels for display
+  // Category labels for display — keys must match PlantFormCategory values
   const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
-    basics: 'Basics',
+    base: 'Base',
     identity: 'Identity',
-    plantCare: 'Plant Care',
+    care: 'Care',
     growth: 'Growth',
-    usage: 'Usage',
-    ecology: 'Ecology',
     danger: 'Danger',
-    miscellaneous: 'Miscellaneous',
+    ecology: 'Ecology',
+    consumption: 'Consumption',
+    misc: 'Misc',
     meta: 'Meta',
   };
 
@@ -9387,12 +9387,12 @@ export const AdminPage: React.FC = () => {
                                               ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                                               : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
                                   }`}>
-                                    {(aiPrefillStatus === 'filling' || aiPrefillStatus === 'fetching_images' || aiPrefillStatus === 'uploading_images') && <Loader2 className="h-3 w-3 animate-spin" />}
-                                    {aiPrefillStatus === 'translating_name' ? 'Getting Name' : 
-                                     aiPrefillStatus === 'filling' ? 'AI Filling' : 
+                                    {aiPrefillStatus !== 'idle' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {aiPrefillStatus === 'translating_name' ? 'Checking Name' :
+                                     aiPrefillStatus === 'filling' ? 'AI Filling' :
                                      aiPrefillStatus === 'fetching_images' ? 'Searching Images' :
                                      aiPrefillStatus === 'uploading_images' ? 'Uploading Images' :
-                                     aiPrefillStatus === 'saving' ? 'Saving' : 
+                                     aiPrefillStatus === 'saving' ? 'Saving' :
                                      aiPrefillStatus === 'translating' ? 'Translating' : 'Processing'}
                                   </div>
                                 </div>
@@ -9505,51 +9505,53 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Category progress grid - visible at all stages so user can track what was filled */}
-                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                  {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
-                                    const info = aiPrefillCategoryProgress[cat];
-                                    if (!info?.total) return null;
-                                    const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
-                                    const isDone = info.status === 'done';
-                                    const isFilling = info.status === 'filling';
-                                    return (
-                                      <div
-                                        key={cat}
-                                        className={`rounded-lg p-2 transition-all ${
-                                          isDone
-                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
-                                            : isFilling
-                                              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
-                                              : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
-                                        }`}
-                                      >
-                                        <div className="flex items-center justify-between mb-1">
-                                          <span className={`text-[10px] font-medium truncate ${
-                                            isDone ? 'text-emerald-700 dark:text-emerald-300' :
-                                            isFilling ? 'text-blue-700 dark:text-blue-300' :
-                                            'text-stone-500 dark:text-stone-400'
-                                          }`}>
-                                            {aiPrefillCategoryLabels[cat]}
-                                          </span>
-                                          {isDone && <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />}
-                                          {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
+                                {/* Category progress grid - only visible during AI filling stage */}
+                                {aiPrefillStatus === 'filling' && (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                    {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                                      const info = aiPrefillCategoryProgress[cat];
+                                      if (!info?.total) return null;
+                                      const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
+                                      const isDone = info.status === 'done';
+                                      const isFilling = info.status === 'filling';
+                                      return (
+                                        <div
+                                          key={cat}
+                                          className={`rounded-lg p-2 transition-all ${
+                                            isDone
+                                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
+                                              : isFilling
+                                                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
+                                                : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
+                                          }`}
+                                        >
+                                          <div className="flex items-center justify-between mb-1">
+                                            <span className={`text-[10px] font-medium truncate ${
+                                              isDone ? 'text-emerald-700 dark:text-emerald-300' :
+                                              isFilling ? 'text-blue-700 dark:text-blue-300' :
+                                              'text-stone-500 dark:text-stone-400'
+                                            }`}>
+                                              {aiPrefillCategoryLabels[cat]}
+                                            </span>
+                                            {isDone && <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />}
+                                            {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
+                                          </div>
+                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
+                                            <div
+                                              className={`h-full transition-all duration-300 rounded-full ${
+                                                isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
+                                              }`}
+                                              style={{ width: `${percent}%` }}
+                                            />
+                                          </div>
+                                          <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
+                                            {info.completed}/{info.total}
+                                          </div>
                                         </div>
-                                        <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
-                                          <div
-                                            className={`h-full transition-all duration-300 rounded-full ${
-                                              isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
-                                            }`}
-                                            style={{ width: `${percent}%` }}
-                                          />
-                                        </div>
-                                        <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
-                                          {info.completed}/{info.total}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
+                                      );
+                                    })}
+                                  </div>
+                                )}
                               </div>
                             )}
 
