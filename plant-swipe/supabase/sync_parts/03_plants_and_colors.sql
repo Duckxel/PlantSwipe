@@ -492,9 +492,8 @@ begin
   end if;
 end $rename_and_retype$;
 
--- Drop variety from plants table — now lives exclusively in plant_translations
-alter table if exists public.plants drop column if exists scientific_name_variety;
-alter table if exists public.plants drop column if exists variety;
+-- NOTE: variety column is dropped from plants table in 04_translations_and_requests.sql
+-- AFTER the data has been migrated to plant_translations.variety
 
 -- ========== Phase 1: Add new columns for upgrades from older schema ==========
 do $add_plants_cols$

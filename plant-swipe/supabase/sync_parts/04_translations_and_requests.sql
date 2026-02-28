@@ -275,7 +275,28 @@ begin
       and (p.family is null or trim(p.family) = '');
   end if;
 
+  -- Migrate variety from plants table → plant_translations (before dropping the column)
+  -- scientific_name_variety or variety in plants → variety in plant_translations
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plants' and column_name = 'scientific_name_variety') then
+    update public.plant_translations pt set variety = p.scientific_name_variety
+    from public.plants p
+    where pt.plant_id = p.id and p.scientific_name_variety is not null
+      and trim(p.scientific_name_variety) <> ''
+      and (pt.variety is null or trim(pt.variety) = '');
+  end if;
+  if exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'plants' and column_name = 'variety') then
+    update public.plant_translations pt set variety = p.variety
+    from public.plants p
+    where pt.plant_id = p.id and p.variety is not null
+      and trim(p.variety) <> ''
+      and (pt.variety is null or trim(pt.variety) = '');
+  end if;
+
 end $migrate_translations$;
+
+-- Drop variety from plants table — now lives exclusively in plant_translations
+alter table if exists public.plants drop column if exists scientific_name_variety;
+alter table if exists public.plants drop column if exists variety;
 
 -- ========== Phase 3: Drop old/renamed columns from plant_translations ==========
 -- These have been migrated to new column names above
