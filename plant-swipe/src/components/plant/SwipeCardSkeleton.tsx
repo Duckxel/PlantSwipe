@@ -1,7 +1,8 @@
+import React from "react"
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 
-export const SwipeCardSkeleton = () => {
+const SwipeCardSkeletonComponent = () => {
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
 
   return (
@@ -67,3 +68,7 @@ export const SwipeCardSkeleton = () => {
     </>
   )
 }
+
+// ⚡ Bolt: Memoize SwipeCardSkeleton to prevent re-renders on every swipe.
+// The parent PlantSwipe re-renders frequently (index changes), but the skeleton UI is static.
+export const SwipeCardSkeleton = React.memo(SwipeCardSkeletonComponent)
