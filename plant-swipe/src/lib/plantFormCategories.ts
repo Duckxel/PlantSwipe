@@ -131,6 +131,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   medicinalHistory: 'consumption',
   nutritionalValue: 'consumption',
   recipes: 'consumption',
+  recipesIdeas: 'consumption',
   aromatherapyBenefits: 'consumption',
   essentialOilBlends: 'consumption',
   edibleOil: 'consumption',
