@@ -151,6 +151,10 @@ export function ProfileActions({ userId }: Props) {
   const prevCompletedRef = React.useRef<Set<string>>(new Set())
   const [justCompleted, setJustCompleted] = React.useState<string | null>(null)
 
+  // Track optimistic skips that haven't been confirmed by the DB yet.
+  // This prevents refresh() from overwriting an in-flight skip with stale data.
+  const pendingSkipsRef = React.useRef<Set<string>>(new Set())
+
   // Derived state
   const skipped = React.useMemo(() => getSkippedSet(dbStatuses), [dbStatuses])
   const dismissed = React.useMemo(
@@ -166,6 +170,25 @@ export function ProfileActions({ userId }: Props) {
     if (result) {
       setData(result)
       const synced = await syncCompletionsToDb(userId, result, statuses)
+
+      // Merge pending optimistic skips: if the DB hasn't confirmed a skip
+      // yet (RPC still in-flight), preserve the optimistic state so the UI
+      // doesn't flash the action back into view.
+      for (const id of pendingSkipsRef.current) {
+        if (synced.get(id)?.skipped_at) {
+          // DB confirmed — no longer pending
+          pendingSkipsRef.current.delete(id)
+        } else {
+          // Still in-flight — keep the optimistic skip
+          const existing = synced.get(id)
+          synced.set(id, {
+            action_id: id,
+            completed_at: existing?.completed_at ?? null,
+            skipped_at: new Date().toISOString(),
+          })
+        }
+      }
+
       setDbStatuses(synced)
     }
   }, [userId])
@@ -199,6 +222,7 @@ export function ProfileActions({ userId }: Props) {
   }, [data, dbStatuses])
 
   const handleSkip = (actionId: string) => {
+    pendingSkipsRef.current.add(actionId)
     setDbStatuses(skipAction(userId, actionId, dbStatuses))
   }
 
