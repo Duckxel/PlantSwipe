@@ -164,7 +164,7 @@ export interface Plant {
 
   // -- Section 1: Base --------------------------------------------------------
   scientificNameSpecies?: string
-  scientificNameVariety?: string
+  variety?: string
   family?: string
   featuredMonth?: MonthSlug[]
 

@@ -663,7 +663,7 @@ export async function processPlantRequest(
       // Section 1: Base
       plant_type: plant.plantType || null,
       scientific_name_species: plant.scientificNameSpecies || null,
-      scientific_name_variety: plant.scientificNameVariety || null,
+      variety: plant.variety || null,
       family: plant.family || null,
       featured_month: plant.featuredMonth || [],
       // Section 2: Identity
@@ -779,6 +779,7 @@ export async function processPlantRequest(
       // Core
       common_names: plant.commonNames || [],
       presentation: plant.presentation || null,
+      variety: plant.variety || null,
       // Identity
       origin: plant.origin || [],
       allergens: plant.allergens || [],
@@ -934,6 +935,7 @@ export async function processPlantRequest(
         }
         
         addStringField('name', String(plant.name || trimmedName || ''))
+        addStringField('variety', plant.variety)
         addStringField('sourceName', primarySource?.name ? String(primarySource.name) : undefined)
         addStringField('presentation', plant.presentation)
         addStringField('poisoning_symptoms', plant.poisoningSymptoms)
@@ -1038,6 +1040,7 @@ export async function processPlantRequest(
           plant_id: plantId,
           language: target,
           name: stringMap.get('name') || trimmedName,
+          variety: stringMap.get('variety') || null,
           common_names: arrayMap.get('common_names') || [],
           presentation: stringMap.get('presentation') || null,
           origin: arrayMap.get('origin') || [],

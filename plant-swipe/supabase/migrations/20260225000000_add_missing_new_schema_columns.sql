@@ -13,7 +13,7 @@ declare
     -- Section 1: Base
     array['plant_type', 'text'],
     array['scientific_name_species', 'text'],
-    array['scientific_name_variety', 'text'],
+    array['variety', 'text'],
     array['family', 'text'],
     array['encyclopedia_category', 'text[] not null default ''{}''::text[]'],
     array['featured_month', 'text[] not null default ''{}''::text[]'],

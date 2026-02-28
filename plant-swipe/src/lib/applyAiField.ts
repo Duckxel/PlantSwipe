@@ -183,7 +183,7 @@ const INTEGER_FIELDS = new Set([
 
 // String (text) fields
 const TEXT_FIELDS = new Set([
-  'scientificNameSpecies', 'scientificNameVariety', 'family',
+  'scientificNameSpecies', 'variety', 'family',
   'presentation', 'poisoningSymptoms',
   'soilAdvice', 'mulchAdvice', 'fertilizerAdvice',
   'stakingAdvice', 'sowingAdvice', 'transplantingTime',

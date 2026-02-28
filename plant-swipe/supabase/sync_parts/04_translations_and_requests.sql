@@ -5,7 +5,7 @@
 -- English is treated as a translation just like French or any other language.
 --
 -- TRANSLATABLE FIELDS (in plant_translations for ALL languages):
---   Core: name, common_names, presentation
+--   Core: name, common_names, presentation, variety
 --   Identity: origin, allergens, poisoning_symptoms
 --   Care: soil_advice, mulch_advice, fertilizer_advice
 --   Growth: staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice
@@ -26,6 +26,7 @@ create table if not exists public.plant_translations (
   name text not null,
   common_names text[] not null default '{}',
   presentation text,
+  variety text,
 
   -- Identity translatable fields
   origin text[] not null default '{}',
@@ -101,6 +102,7 @@ alter table if exists public.plant_translations drop column if exists problems;
 -- Core
 alter table if exists public.plant_translations add column if not exists common_names text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists presentation text;
+alter table if exists public.plant_translations add column if not exists variety text;
 -- Identity
 alter table if exists public.plant_translations add column if not exists origin text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists allergens text[] not null default '{}';

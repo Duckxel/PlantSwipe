@@ -15,9 +15,9 @@ export const plantSchema = {
     type: 'text',
     description: 'Scientific (Latin) species name, e.g. "Monstera deliciosa"',
   },
-  scientificNameVariety: {
+  variety: {
     type: 'text',
-    description: 'Variety or cultivar name if applicable, e.g. "Variegata"',
+    description: 'Variety or cultivar name if applicable, e.g. "Variegata", "Spring Field"',
   },
   family: {
     type: 'text',
