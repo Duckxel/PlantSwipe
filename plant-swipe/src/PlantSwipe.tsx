@@ -2282,6 +2282,9 @@ export default function PlantSwipe() {
                     plants={sortedSearchResults}
                     openInfo={handleOpenInfo}
                     likedIds={likedIds}
+                    toggleLiked={toggleLiked}
+                    userId={user?.id}
+                    ensureLoggedIn={ensureLoggedIn}
                   />
                 </Suspense>
               }
