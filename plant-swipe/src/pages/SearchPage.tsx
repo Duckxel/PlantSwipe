@@ -235,9 +235,13 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   )}
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-0.5">
                     <ScrollingText className="font-semibold text-sm">{p.name}</ScrollingText>
                     <ScrollingText className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
+                    {p.family && <ScrollingText className="text-[10px] opacity-50">{p.family}</ScrollingText>}
+                    {p.scientificNameVariety && (
+                      <ScrollingText className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">{p.scientificNameVariety}</ScrollingText>
+                    )}
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
                     <button
@@ -297,9 +301,13 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 </div>
                 <div className="p-4 flex flex-col h-full min-w-0">
                   <div className="flex items-start gap-2">
-                    <div className="min-w-0 flex-1">
+                    <div className="min-w-0 flex-1 space-y-0.5">
                       <ScrollingText className="font-semibold text-lg">{p.name}</ScrollingText>
                       <ScrollingText className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
+                      {p.family && <ScrollingText className="text-xs opacity-50">{p.family}</ScrollingText>}
+                      {p.scientificNameVariety && (
+                        <ScrollingText className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{p.scientificNameVariety}</ScrollingText>
+                      )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
