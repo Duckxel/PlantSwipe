@@ -13,12 +13,15 @@ interface GardenSwitcherDropdownProps {
   currentGarden: Garden;
   userId: string;
   onSwitch: (gardenId: string) => void;
+  /** Custom trigger element. Receives the garden and renders as DropdownMenuTrigger child. */
+  children?: React.ReactNode;
 }
 
 export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
   currentGarden,
   userId,
   onSwitch,
+  children,
 }) => {
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [loaded, setLoaded] = React.useState(false);
@@ -37,16 +40,20 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
 
   const otherGardens = gardens.filter((g) => g.id !== currentGarden.id);
 
+  const defaultTrigger = (
+    <button
+      className="hidden md:flex items-center gap-1.5 text-xl font-semibold text-left hover:opacity-80 transition-opacity cursor-pointer bg-transparent border-none outline-none p-0"
+      aria-label="Switch garden"
+    >
+      <span className="truncate max-w-[160px]">{currentGarden.name}</span>
+      <ChevronDown className="w-4 h-4 flex-shrink-0 opacity-60" />
+    </button>
+  );
+
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <button
-          className="hidden md:flex items-center gap-1.5 text-xl font-semibold text-left hover:opacity-80 transition-opacity cursor-pointer bg-transparent border-none outline-none p-0"
-          aria-label="Switch garden"
-        >
-          <span className="truncate max-w-[160px]">{currentGarden.name}</span>
-          <ChevronDown className="w-4 h-4 flex-shrink-0 opacity-60" />
-        </button>
+        {children || defaultTrigger}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="w-56 rounded-xl">
         {/* Current garden - shown as active */}
