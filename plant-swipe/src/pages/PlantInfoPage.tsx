@@ -162,7 +162,7 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
       .maybeSingle(),
     supabase
       .from('plant_translations')
-      .select('name, presentation')
+      .select('name, variety, presentation')
       .eq('plant_id', id)
       .eq('language', targetLanguage)
       .maybeSingle(),
@@ -279,7 +279,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 
     // Section 1: Base
     scientificNameSpecies: data.scientific_name_species || undefined,
-    scientificNameVariety: data.scientific_name_variety || undefined,
+    variety: translation?.variety || undefined,
     family: data.family || undefined,
     featuredMonth: data.featured_month || [],
 

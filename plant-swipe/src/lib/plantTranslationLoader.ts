@@ -97,7 +97,7 @@ function mapDbRowToPlant(
 
     // Section 1: Base
     scientificNameSpecies: (basePlant.scientific_name_species as string) || undefined,
-    scientificNameVariety: (basePlant.scientific_name_variety as string) || undefined,
+    variety: (translation.variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
     featuredMonth: (basePlant.featured_month as MonthSlug[]) || [],
 
@@ -252,6 +252,7 @@ function mapDbRowToPlant(
     popularity,
 
     // Legacy aliases for backward compatibility
+    plantType: (basePlant.plant_type as string) || undefined,
     description: (translation.presentation as string) || '',
     scientificName: (basePlant.scientific_name_species as string) || '',
     givenNames: (translation.common_names as string[]) || [],
@@ -388,6 +389,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
 
     const plantColumns = [
       'id', 'name',
+      'plant_type',
       'scientific_name_species', 'family',
       'featured_month',
       'climate', 'season', 'utility', 'edible_part',
@@ -437,7 +439,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     // Supabase URL length limits when there are hundreds of plant IDs.
     const { data: translationsData } = await supabase
       .from('plant_translations')
-      .select('plant_id, name, common_names, presentation, origin, allergens, plant_tags')
+      .select('plant_id, name, variety, common_names, presentation, origin, allergens, plant_tags')
       .eq('language', language)
 
     const translationMap = new Map<string, Record<string, unknown>>()

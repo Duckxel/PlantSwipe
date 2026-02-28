@@ -2,7 +2,7 @@
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
-    "- `scientificNameVariety`: variety/cultivar name if applicable, or null",
+    "- `variety`: variety/cultivar name if applicable, or null",
     "- `family`: plant family (e.g. \"Araceae\")",
     "- `commonNames`: array of common names (e.g. [\"Swiss Cheese Plant\", \"Fruit Salad Plant\"])",
     "- `presentation`: encyclopedia-style description. Factual prose, no bullets. MAX 700 characters.",

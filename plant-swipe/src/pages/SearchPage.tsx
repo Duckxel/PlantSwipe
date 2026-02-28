@@ -1,24 +1,66 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import type { Plant, PlantSeason } from "@/types/plant";
-import { rarityTone, seasonBadge } from "@/constants/badges";
+import type { Plant } from "@/types/plant";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp } from "lucide-react";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp, Heart, Bookmark } from "lucide-react";
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
+import { AddToBookmarkDialog } from "@/components/plant/AddToBookmarkDialog";
+
+/** Text that scrolls horizontally on hover when truncated */
+const ScrollingText: React.FC<{ children: string | undefined; className?: string }> = ({ children, className = "" }) => {
+  const textRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(0);
+  const [hovering, setHovering] = useState(false);
+
+  const onEnter = useCallback(() => {
+    const el = textRef.current;
+    if (el && el.scrollWidth > el.clientWidth) {
+      setOverflow(el.scrollWidth - el.clientWidth);
+      setHovering(true);
+    }
+  }, []);
+
+  const onLeave = useCallback(() => {
+    setHovering(false);
+    setOverflow(0);
+  }, []);
+
+  return (
+    <div className="overflow-hidden" onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      <div
+        ref={textRef}
+        className={`whitespace-nowrap ${hovering ? "" : "overflow-hidden text-ellipsis"} ${className}`}
+        style={hovering && overflow > 0 ? {
+          // Scale duration so text scrolls at ~40px/s — comfortable reading speed
+          animation: `scroll-text-left ${Math.max(2.5, overflow / 40 + 1.5)}s ease-in-out infinite`,
+          ["--scroll-dist" as string]: `-${overflow}px`,
+        } : undefined}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
 
 interface SearchPageProps {
   plants: Plant[];
   openInfo: (p: Plant) => void;
   likedIds?: string[];
+  toggleLiked?: (plantId: string) => void;
+  userId?: string;
+  ensureLoggedIn?: () => boolean;
 }
 
 export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   plants,
   openInfo,
   likedIds = [],
+  toggleLiked,
+  userId,
+  ensureLoggedIn,
 }) => {
   const { t } = useTranslation("common");
   const seoTitle = t("seo.search.title", { defaultValue: "Advanced plant search" });
@@ -31,6 +73,9 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   const [showScrollTop, setShowScrollTop] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Bookmark dialog state
+  const [bookmarkPlantId, setBookmarkPlantId] = useState<string | null>(null);
 
   // Reset visible count when filters change (plants array changes)
   useEffect(() => {
@@ -88,8 +133,23 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
     };
   }, [showMore, visibleCount, plants.length]); // Re-attach when dependencies change
 
+  const handleLike = useCallback((e: React.MouseEvent, plantId: string) => {
+    e.stopPropagation();
+    if (ensureLoggedIn && !ensureLoggedIn()) return;
+    toggleLiked?.(plantId);
+  }, [toggleLiked, ensureLoggedIn]);
+
+  const handleBookmark = useCallback((e: React.MouseEvent, plantId: string) => {
+    e.stopPropagation();
+    if (ensureLoggedIn && !ensureLoggedIn()) return;
+    setBookmarkPlantId(plantId);
+  }, [ensureLoggedIn]);
+
   const cardSurface =
     "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
+
+  const actionBtnBase =
+    "p-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
 
   const visiblePlants = plants.slice(0, visibleCount);
   const hasMore = visibleCount < plants.length;
@@ -102,6 +162,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
           // Check if plant is "in progress"
           const statusStr = (typeof p.status === 'string' ? p.status : typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
           const isInProgress = statusStr === 'in_progress' || statusStr === 'in progres' || statusStr === 'in progress'
+          const isLiked = likedIds.includes(p.id)
 
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
@@ -165,13 +226,6 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                       ))}
                     </div>
                   )}
-                  {likedIds.includes(p.id) && (
-                    <div className="absolute top-2 right-2 z-10">
-                      <Badge className="rounded-full p-1.5 bg-rose-600 dark:bg-rose-500 text-white">
-                        <Flame className="h-3 w-3" />
-                      </Badge>
-                    </div>
-                  )}
                   {isInProgress && (
                     <div className="absolute bottom-2 right-2 z-10">
                       <Badge className="rounded-full p-1.5 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
@@ -180,13 +234,32 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                 </div>
-                <div className="p-3 space-y-1.5 flex flex-col flex-1 min-w-0">
-                  <div className="flex items-center gap-1.5 flex-wrap">
-                    <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-lg text-[9px] px-1.5 py-0.5`}>{p.rarity}</Badge>
+                <div className="p-3 flex flex-col flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 space-y-0.5">
+                    <ScrollingText className="font-semibold text-sm">{p.name}</ScrollingText>
+                    <ScrollingText className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
+                    {p.family && <ScrollingText className="text-[10px] opacity-50">{p.family}</ScrollingText>}
+                    {p.variety && (
+                      <ScrollingText className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingText>
+                    )}
                   </div>
-                  <div className="overflow-hidden">
-                    <div className="font-semibold truncate text-sm">{p.name}</div>
-                    <div className="text-[10px] italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
+                  <div className="flex items-center justify-end gap-1 mt-2">
+                    <button
+                      type="button"
+                      onClick={(e) => handleLike(e, p.id)}
+                      className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
+                      aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
+                    >
+                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleBookmark(e, p.id)}
+                      className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
+                      aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
+                    >
+                      <Bookmark className="h-4 w-4" />
+                    </button>
                   </div>
                 </div>
               </div>
@@ -226,37 +299,36 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                 </div>
-                <div className="p-4 space-y-2 flex flex-col h-full min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl`}>{p.rarity}</Badge>
-                    {(p.seasons ?? []).map((s: PlantSeason) => {
-                      const badgeClass =
-                        seasonBadge[s] ?? "bg-stone-200 dark:bg-stone-700 text-stone-900 dark:text-stone-100"
-                      return (
-                        <span key={s} className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}>
-                          {s}
-                        </span>
-                      )
-                    })}
-                    {likedIds.includes(p.id) && (
-                      <Badge className="rounded-xl bg-rose-600 dark:bg-rose-500 text-white">{t("plant.liked")}</Badge>
-                    )}
+                <div className="p-4 flex flex-col h-full min-w-0">
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1 space-y-0.5">
+                      <ScrollingText className="font-semibold text-lg">{p.name}</ScrollingText>
+                      <ScrollingText className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
+                      {p.family && <ScrollingText className="text-xs opacity-50">{p.family}</ScrollingText>}
+                      {p.variety && (
+                        <ScrollingText className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingText>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleLike(e, p.id)}
+                        className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
+                        aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
+                      >
+                        <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleBookmark(e, p.id)}
+                        className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
+                        aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
+                      >
+                        <Bookmark className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
-                  <div className="overflow-hidden">
-                    <div className="font-semibold truncate text-lg">{p.name}</div>
-                    <div className="text-xs italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
-                  </div>
-                  <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1">{p.description}</p>
-                  <div className="flex flex-wrap gap-1 mt-auto max-h-[48px] overflow-hidden">
-                    {(p.colors ?? []).map((c, idx) => {
-                      const colorName = typeof c === 'string' ? c : c.name
-                      return (
-                        <Badge key={`${colorName}-${idx}`} variant="secondary" className="rounded-xl text-[11px]">
-                          {colorName}
-                        </Badge>
-                      )
-                    })}
-                  </div>
+                  <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1 mt-2">{p.description}</p>
                 </div>
               </div>
             </Card>
@@ -265,12 +337,12 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
       </div>
 
       {hasMore && (
-        <div 
+        <div
           ref={loadMoreRef}
           className="py-8 flex justify-center w-full"
         >
-          <Button 
-            variant="secondary" 
+          <Button
+            variant="secondary"
             onClick={showMore}
             className="w-full max-w-md rounded-2xl h-12 shadow-sm bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42] border border-stone-200 dark:border-[#3e3e42] transition-all"
           >
@@ -299,6 +371,16 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
       >
         <ArrowUp className="h-5 w-5" />
       </Button>
+
+      {/* Bookmark dialog */}
+      {userId && bookmarkPlantId && (
+        <AddToBookmarkDialog
+          open={!!bookmarkPlantId}
+          onOpenChange={(open) => { if (!open) setBookmarkPlantId(null) }}
+          plantId={bookmarkPlantId}
+          userId={userId}
+        />
+      )}
     </div>
   );
 });

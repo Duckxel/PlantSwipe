@@ -29,7 +29,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   // Section 1: Base
   plantType: 'base',
   scientificNameSpecies: 'base',
-  scientificNameVariety: 'base',
+  variety: 'base',
   family: 'base',
   commonNames: 'base',
   presentation: 'base',

@@ -894,7 +894,7 @@ function setValue(obj: any, path: string, val: any): any {
 const baseFields: FieldConfig[] = [
   { key: "commonNames", label: "Common Names", description: "Alternative common names for this plant", type: "tags" },
   { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
-  { key: "scientificNameVariety", label: "Scientific Name (Variety)", description: "Variety or cultivar name", type: "text" },
+  { key: "variety", label: "Variety", description: "Variety or cultivar name (e.g. Spring Field, Variegata)", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
   { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: [
     { label: "Plant", value: "plant" },
@@ -2526,7 +2526,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />
       <div className={fieldRowClass}>
         {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameSpecies')!, t)}
-        {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameVariety')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'variety')!, t)}
       </div>
       <div className={fieldRowClass}>
         {renderField(value, setPath, baseFields.find(f => f.key === 'family')!, t)}

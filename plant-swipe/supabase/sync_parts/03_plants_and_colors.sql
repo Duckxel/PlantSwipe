@@ -20,7 +20,7 @@
 --   9) Meta: Status, notes, contributors, sources
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
---   Section 1: id, name, scientific_name_species, scientific_name_variety, family,
+--   Section 1: id, name, scientific_name_species, family,
 --              featured_month
 --   Section 2: climate, season, utility, edible_part, thorny, toxicity_human, toxicity_pets,
 --              poisoning_method, life_cycle, average_lifespan, foliage_persistence,
@@ -41,7 +41,7 @@
 --              updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
---   name, common_names, presentation, origin, allergens, poisoning_symptoms
+--   name, common_names, presentation, variety, origin, allergens, poisoning_symptoms
 --   soil_advice, mulch_advice, fertilizer_advice
 --   staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice
 --   pests, diseases
@@ -59,7 +59,6 @@ create table if not exists public.plants (
   -- Section 1: Base — Identity & naming
   plant_type text check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
   scientific_name_species text,
-  scientific_name_variety text,
   family text,
   featured_month text[] not null default '{}'::text[],
 
@@ -493,6 +492,9 @@ begin
   end if;
 end $rename_and_retype$;
 
+-- NOTE: variety column is dropped from plants table in 04_translations_and_requests.sql
+-- AFTER the data has been migrated to plant_translations.variety
+
 -- ========== Phase 1: Add new columns for upgrades from older schema ==========
 do $add_plants_cols$
 declare
@@ -500,7 +502,6 @@ declare
     -- Section 1: Base
     array['plant_type', 'text'],
     array['scientific_name_species', 'text'],
-    array['scientific_name_variety', 'text'],
     array['family', 'text'],
     array['featured_month', 'text[] not null default ''{}''::text[]'],
     -- Section 2: Identity
@@ -1410,7 +1411,6 @@ do $$ declare
     -- Section 1: Base
     'plant_type',
     'scientific_name_species',
-    'scientific_name_variety',
     'family',
     'featured_month',
     -- Section 2: Identity
