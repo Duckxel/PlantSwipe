@@ -437,9 +437,9 @@ type PlantDashboardRow = {
 type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views";
 
 const normalizePlantStatus = (
-  status?: string | null,
+  status?: unknown,
 ): NormalizedPlantStatus => {
-  if (!status) return "other";
+  if (!status || typeof status !== 'string') return "other";
   const normalized = status.toLowerCase();
   if (normalized === "in progres" || normalized === "in progress") {
     return "in progres";
@@ -451,9 +451,9 @@ const normalizePlantStatus = (
 };
 
 const toPromotionMonthSlug = (
-  value?: string | null,
+  value?: unknown,
 ): PromotionMonthSlug | null => {
-  if (!value) return null;
+  if (!value || typeof value !== 'string') return null;
   const normalized = value.toLowerCase() as PromotionMonthSlug;
   return (PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)
     ? normalized
