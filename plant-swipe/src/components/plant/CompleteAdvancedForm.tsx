@@ -1218,7 +1218,7 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
                 <Label>Featured Month</Label>
                 <Select
                   className={selectBaseClass}
-                  value={planting?.calendar?.promotionMonth || ''}
+                  value={planting?.calendar?.promotionMonth ?? ''}
                   onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, promotionMonth: e.target.value ? Number(e.target.value) : undefined } })}
                 >
                   <option value="">Select...</option>
