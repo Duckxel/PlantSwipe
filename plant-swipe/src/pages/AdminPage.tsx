@@ -103,7 +103,7 @@ import {
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
-import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { processAllPlantRequests, aiFieldOrder as aiPrefillFieldOrder } from "@/lib/aiPrefillService";
 import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
@@ -432,16 +432,17 @@ type PlantDashboardRow = {
   gardensCount: number;
   likesCount: number;
   viewsCount: number;
+  imagesCount: number;
 };
 
-type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views";
+type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views" | "images";
 
 const normalizePlantStatus = (
-  status?: string | null,
+  status?: unknown,
 ): NormalizedPlantStatus => {
-  if (!status) return "other";
+  if (!status || typeof status !== 'string') return "other";
   const normalized = status.toLowerCase();
-  if (normalized === "in progres" || normalized === "in progress") {
+  if (normalized === "in progres" || normalized === "in progress" || normalized === "in_progress") {
     return "in progres";
   }
   if (normalized === "review") return "review";
@@ -450,10 +451,19 @@ const normalizePlantStatus = (
   return "other";
 };
 
+/** Map normalized UI status back to the DB column value */
+const normalizedStatusToDb: Record<NormalizedPlantStatus, string> = {
+  "in progres": "in_progress",
+  review: "review",
+  rework: "rework",
+  approved: "approved",
+  other: "other",
+};
+
 const toPromotionMonthSlug = (
-  value?: string | null,
+  value?: unknown,
 ): PromotionMonthSlug | null => {
-  if (!value) return null;
+  if (!value || typeof value !== 'string') return null;
   const normalized = value.toLowerCase() as PromotionMonthSlug;
   return (PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)
     ? normalized
@@ -462,7 +472,7 @@ const toPromotionMonthSlug = (
 
 // Constants for persisting admin plants list state in sessionStorage
 const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
-const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views"];
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views", "images"];
 
 // Type for persisted plant list state
 type AdminPlantsListState = {
@@ -1950,6 +1960,20 @@ export const AdminPage: React.FC = () => {
     Array<{ id: string; display_name: string | null; email: string | null }>
   >([]);
 
+  // Filtered plant requests (staff filter + search) — shared by UI and AI Prefill
+  const filteredPlantRequests = React.useMemo(() => {
+    const staffFiltered = hideStaffRequests
+      ? plantRequests.filter((req) => req.requester_is_staff !== true)
+      : plantRequests;
+    return requestSearchQuery.trim()
+      ? staffFiltered.filter((req) =>
+          req.plant_name
+            .toLowerCase()
+            .includes(requestSearchQuery.toLowerCase().trim()),
+        )
+      : staffFiltered;
+  }, [plantRequests, hideStaffRequests, requestSearchQuery]);
+
   // Bulk request state
   const [bulkRequestDialogOpen, setBulkRequestDialogOpen] = React.useState(false);
   const [bulkRequestInput, setBulkRequestInput] = React.useState("");
@@ -2052,6 +2076,12 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
+  // Bulk selection state
+  const [selectedPlantIds, setSelectedPlantIds] = React.useState<Set<string>>(new Set());
+  const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = React.useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
+
   // Track whether we've restored the scroll position (to avoid doing it multiple times)
   const scrollRestoredRef = React.useRef(false);
   
@@ -2133,16 +2163,16 @@ export const AdminPage: React.FC = () => {
     return `${seconds}s`;
   };
 
-  // Category labels for display
+  // Category labels for display — keys must match PlantFormCategory values
   const aiPrefillCategoryLabels: Record<PlantFormCategory, string> = {
-    basics: 'Basics',
+    base: 'Base',
     identity: 'Identity',
-    plantCare: 'Plant Care',
+    care: 'Care',
     growth: 'Growth',
-    usage: 'Usage',
-    ecology: 'Ecology',
     danger: 'Danger',
-    miscellaneous: 'Miscellaneous',
+    ecology: 'Ecology',
+    consumption: 'Consumption',
+    misc: 'Misc',
     meta: 'Meta',
   };
 
@@ -2807,22 +2837,22 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by given_names in translations table
+      // Also search by common_names in translations table
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, given_names, plants!inner(id, name, scientific_name_species, status)")
+        .select("plant_id, common_names, plants!inner(id, name, scientific_name_species, status)")
         .eq("language", "en")
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where given_names contains the search term
+      // Filter translation matches where common_names contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
       const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
-      
+
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
-        const givenNames = Array.isArray(r?.given_names) ? r.given_names : [];
+        const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
         const matchesGivenName = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
         );
@@ -3124,20 +3154,41 @@ export const AdminPage: React.FC = () => {
 
       if (plantsError) throw new Error(plantsError.message);
 
-      // Then, get English translations for all plants
+      // Fetch all English translations at once (no .in() filter) to avoid
+      // Supabase URL length limits. Since we already load every plant above,
+      // we need translations for all of them anyway.
       const plantIds = (plantsData || []).map((p: unknown) => (p as Record<string, unknown>).id);
-      const { data: translationsData } = await supabase
-        .from("plant_translations")
-        .select("plant_id, given_names")
-        .eq("language", "en")
-        .in("plant_id", plantIds.length > 0 ? plantIds : ["00000000-0000-0000-0000-000000000000"]); // Use dummy ID if no plants
+      const plantIdSet = new Set(plantIds.map(String));
+      const allTranslations: unknown[] = [];
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error: trError } = await supabase
+            .from("plant_translations")
+            .select("plant_id, common_names")
+            .eq("language", "en")
+            .range(offset, offset + pageSize - 1);
+          if (trError) break;
+          if (!data || data.length === 0) { hasMore = false; break; }
+          allTranslations.push(...data);
+          offset += data.length;
+          if (data.length < pageSize) hasMore = false;
+        }
+      }
+      // Filter to only the plant IDs we care about
+      const translationsData = allTranslations.filter((t: unknown) => {
+        const tr = t as Record<string, unknown>;
+        return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
+      });
 
-      // Build a map of plant_id -> given_names
+      // Build a map of plant_id -> common_names
       const givenNamesMap = new Map<string, string[]>();
       (translationsData || []).forEach((t: unknown) => {
         const tr = t as Record<string, unknown>;
-        if (tr?.plant_id && Array.isArray(tr.given_names)) {
-          givenNamesMap.set(String(tr.plant_id), (tr.given_names as unknown[]).map((n: unknown) => String(n || "")));
+        if (tr?.plant_id && Array.isArray(tr.common_names)) {
+          givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
         }
       });
 
@@ -3243,6 +3294,7 @@ export const AdminPage: React.FC = () => {
               gardensCount: gardensCountMap.get(plantId) ?? 0,
               likesCount: likesCountMap.get(plantId) ?? 0,
               viewsCount: viewsCountMap.get(plantId) ?? 0,
+              imagesCount: images.length,
             } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
@@ -3305,6 +3357,112 @@ export const AdminPage: React.FC = () => {
       setDeletingPlant(false);
     }
   }, [plantToDelete]);
+
+  // Clear selection when filters change (selected items might no longer be visible)
+  React.useEffect(() => {
+    setSelectedPlantIds(new Set());
+  }, [visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+
+  const togglePlantSelection = React.useCallback((plantId: string) => {
+    setSelectedPlantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(plantId)) {
+        next.delete(plantId);
+      } else {
+        next.add(plantId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllPlants = React.useCallback(
+    (filteredIds: string[]) => {
+      setSelectedPlantIds((prev) => {
+        const allSelected = filteredIds.length > 0 && filteredIds.every((id) => prev.has(id));
+        if (allSelected) {
+          return new Set();
+        }
+        return new Set(filteredIds);
+      });
+    },
+    [],
+  );
+
+  const handleBulkStatusChange = React.useCallback(
+    async (newStatus: NormalizedPlantStatus) => {
+      if (selectedPlantIds.size === 0) return;
+      setBulkActionLoading(true);
+      try {
+        const ids = Array.from(selectedPlantIds);
+        const dbStatus = normalizedStatusToDb[newStatus] ?? newStatus;
+        // Update in batches of 50 to avoid URL length issues
+        const batchSize = 50;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          const { error } = await supabase
+            .from('plants')
+            .update({ status: dbStatus })
+            .in('id', batch);
+          if (error) throw new Error(error.message);
+        }
+        // Update local state
+        setPlantDashboardRows((prev) =>
+          prev.map((p) =>
+            selectedPlantIds.has(p.id) ? { ...p, status: newStatus } : p
+          )
+        );
+        setSelectedPlantIds(new Set());
+        setBulkStatusDialogOpen(false);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to update status';
+        setPlantDashboardError(message);
+        console.error('Bulk status change error:', err);
+      } finally {
+        setBulkActionLoading(false);
+      }
+    },
+    [selectedPlantIds],
+  );
+
+  const handleBulkDelete = React.useCallback(async () => {
+    if (selectedPlantIds.size === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const ids = Array.from(selectedPlantIds);
+      // Delete related data first, then plants - in batches
+      const batchSize = 50;
+      const relatedTables = [
+        'plant_translations',
+        'plant_colors',
+        'plant_images',
+        'plant_watering_schedules',
+        'plant_sources',
+        'plant_infusion_mixes',
+      ];
+      for (const table of relatedTables) {
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          await supabase.from(table).delete().in('plant_id', batch);
+        }
+      }
+      // Delete the plants themselves
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { error } = await supabase.from('plants').delete().in('id', batch);
+        if (error) throw new Error(error.message);
+      }
+      // Update local state
+      setPlantDashboardRows((prev) => prev.filter((p) => !selectedPlantIds.has(p.id)));
+      setSelectedPlantIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete plants';
+      setPlantDashboardError(message);
+      console.error('Bulk delete error:', err);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }, [selectedPlantIds]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -3441,6 +3599,9 @@ export const AdminPage: React.FC = () => {
           case "views":
             if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
             return a.name.localeCompare(b.name);
+          case "images":
+            if (a.imagesCount !== b.imagesCount) return a.imagesCount - b.imagesCount;
+            return a.name.localeCompare(b.name);
           case "status":
           default: {
             const statusDiff =
@@ -3463,16 +3624,12 @@ export const AdminPage: React.FC = () => {
   const noPlantStatusesSelected = visiblePlantStatusesSet.size === 0;
 
 
-  // AI Prefill All functionality
-  const aiFieldOrder = React.useMemo(() => [
-    'plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description',
-    'identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous'
-  ], []);
-
+  // AI Prefill All functionality — use the same field order as aiPrefillService
+  // so that buildCategoryProgress totals match what onFieldComplete reports
   const initAiPrefillCategoryProgress = React.useCallback(() => {
-    const progress = buildCategoryProgress(aiFieldOrder);
+    const progress = buildCategoryProgress(aiPrefillFieldOrder);
     setAiPrefillCategoryProgress(progress);
-  }, [aiFieldOrder]);
+  }, []);
 
   const markAiPrefillFieldComplete = React.useCallback((fieldKey: string) => {
     const category = mapFieldToCategory(fieldKey);
@@ -3489,36 +3646,35 @@ export const AdminPage: React.FC = () => {
   }, []);
 
   const runAiPrefillAll = React.useCallback(async () => {
-    if (aiPrefillRunning || plantRequests.length === 0) return;
-    
+    if (aiPrefillRunning || filteredPlantRequests.length === 0) return;
+
     const abortController = new AbortController();
     const overallStartTime = Date.now();
     let plantStartTime = Date.now();
-    
+
     setAiPrefillAbortController(abortController);
     setAiPrefillRunning(true);
     setAiPrefillError(null);
-    setAiPrefillProgress({ current: 0, total: plantRequests.length });
+    setAiPrefillProgress({ current: 0, total: filteredPlantRequests.length });
     setAiPrefillStatus('idle');
     setAiPrefillCurrentField(null);
     setAiPrefillFieldProgress({ completed: 0, total: 0 });
     setAiPrefillCompletedPlants([]);
     setAiPrefillStartTime(overallStartTime);
     setAiPrefillElapsedTime(0);
-    setAiPrefillPlantStartTime(plantStartTime);
     initAiPrefillCategoryProgress();
-    
+
     try {
       await processAllPlantRequests(
-        plantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
+        filteredPlantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
         profile?.display_name || undefined,
         {
           signal: abortController.signal,
           onProgress: ({ stage, plantName }) => {
             setAiPrefillCurrentPlant(plantName);
             setAiPrefillStatus(stage);
-            // Reset category progress for new plant
-            if (stage === 'filling' || stage === 'translating_name') {
+            // Reset category progress only when starting a new plant
+            if (stage === 'translating_name') {
               initAiPrefillCategoryProgress();
               setAiPrefillCurrentField(null);
               setAiPrefillFieldProgress({ completed: 0, total: 0 });
@@ -3563,7 +3719,6 @@ export const AdminPage: React.FC = () => {
             setAiPrefillCurrentPlant(plantName);
             // Track start time for new plant
             plantStartTime = Date.now();
-            setAiPrefillPlantStartTime(plantStartTime);
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
             const durationMs = Date.now() - plantStartTime;
@@ -3604,13 +3759,20 @@ export const AdminPage: React.FC = () => {
       setAiPrefillCurrentField(null);
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
       setAiPrefillStartTime(null);
-      setAiPrefillPlantStartTime(null);
     }
-  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
+  }, [aiPrefillRunning, filteredPlantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
   const stopAiPrefill = React.useCallback(() => {
     if (aiPrefillAbortController) {
       aiPrefillAbortController.abort();
+      // Immediately update UI so the progress panel disappears
+      setAiPrefillRunning(false);
+      setAiPrefillAbortController(null);
+      setAiPrefillCurrentPlant(null);
+      setAiPrefillStatus('idle');
+      setAiPrefillCurrentField(null);
+      setAiPrefillFieldProgress({ completed: 0, total: 0 });
+      setAiPrefillStartTime(null);
       setAiPrefillError('AI Prefill was cancelled by user');
     }
   }, [aiPrefillAbortController]);
@@ -8745,6 +8907,7 @@ export const AdminPage: React.FC = () => {
                                             <option value="gardens">Most in Gardens</option>
                                             <option value="likes">Most Likes</option>
                                             <option value="views">Most Views</option>
+                                            <option value="images">Image Count</option>
                                           </select>
                                         </div>
                                       </div>
@@ -8782,6 +8945,42 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               </div>
 
+                              {/* Bulk Action Bar */}
+                              {selectedPlantIds.size > 0 && (
+                                <div className="flex items-center gap-3 px-4 sm:px-5 py-3 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-200 dark:border-emerald-800">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                      {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "plant" : "plants"} selected
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedPlantIds(new Set())}
+                                      className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 underline"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setBulkStatusDialogOpen(true)}
+                                      className="flex items-center gap-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-[#1a1a1d] px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Change Status
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBulkDeleteDialogOpen(true)}
+                                      className="flex items-center gap-1.5 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-[#1a1a1d] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Plant List */}
                               {plantTableLoading ? (
                                 <div className="flex items-center justify-center py-16">
@@ -8806,6 +9005,32 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               ) : (
                                 <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                                  {/* Select All Row */}
+                                  <div className="flex items-center gap-3 px-4 sm:px-5 py-2 bg-stone-50/50 dark:bg-[#1a1a1d]">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSelectAllPlants(filteredPlantRows.map((p) => p.id))}
+                                      className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors flex-shrink-0 ${
+                                        filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id))
+                                          ? 'border-emerald-500 bg-emerald-500'
+                                          : selectedPlantIds.size > 0
+                                            ? 'border-emerald-500 bg-emerald-500/30'
+                                            : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'
+                                      }`}
+                                      title={filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? "Deselect all" : "Select all"}
+                                    >
+                                      {filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? (
+                                        <Check className="h-3.5 w-3.5 text-white" />
+                                      ) : selectedPlantIds.size > 0 ? (
+                                        <span className="block w-2 h-0.5 bg-emerald-500 rounded" />
+                                      ) : null}
+                                    </button>
+                                    <span className="text-xs text-stone-500 dark:text-stone-400">
+                                      {selectedPlantIds.size > 0
+                                        ? `${selectedPlantIds.size} of ${filteredPlantRows.length} selected`
+                                        : `${filteredPlantRows.length} ${filteredPlantRows.length === 1 ? "plant" : "plants"}`}
+                                    </span>
+                                  </div>
                                   {filteredPlantRows.map((plant) => (
                                     <div
                                       key={plant.id}
@@ -8818,8 +9043,32 @@ export const AdminPage: React.FC = () => {
                                           handleOpenPlantEditor(plant.id);
                                         }
                                       }}
-                                      className="group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all hover:bg-stone-50 dark:hover:bg-[#252528]"
+                                      className={`group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all ${
+                                        selectedPlantIds.has(plant.id)
+                                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                                          : 'hover:bg-stone-50 dark:hover:bg-[#252528]'
+                                      }`}
                                     >
+                                      {/* Checkbox */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          togglePlantSelection(plant.id);
+                                        }}
+                                        className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors flex-shrink-0 ${
+                                          selectedPlantIds.has(plant.id)
+                                            ? 'border-emerald-500 bg-emerald-500'
+                                            : selectedPlantIds.size > 0
+                                              ? 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'
+                                              : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400 opacity-0 group-hover:opacity-100'
+                                        }`}
+                                        title={selectedPlantIds.has(plant.id) ? "Deselect" : "Select"}
+                                      >
+                                        {selectedPlantIds.has(plant.id) && (
+                                          <Check className="h-3.5 w-3.5 text-white" />
+                                        )}
+                                      </button>
                                       {/* Plant Image */}
                                       <div className="relative h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252528] flex items-center justify-center">
                                         {plant.primaryImage ? (
@@ -8851,7 +9100,7 @@ export const AdminPage: React.FC = () => {
                                               Created {formatTimeAgo(plant.createdAt)}
                                             </span>
                                           )}
-                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plant.updatedAt && (
+                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plantSortOption !== "images" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
                                             </span>
@@ -8869,6 +9118,11 @@ export const AdminPage: React.FC = () => {
                                           {plantSortOption === "views" && (
                                             <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
                                               {plant.viewsCount} {plant.viewsCount === 1 ? "view" : "views"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "images" && (
+                                            <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                              {plant.imagesCount} {plant.imagesCount === 1 ? "image" : "images"}
                                             </span>
                                           )}
                                         </div>
@@ -8973,9 +9227,9 @@ export const AdminPage: React.FC = () => {
                                 className="rounded-xl border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 text-emerald-700 dark:text-emerald-300 hover:from-emerald-100 hover:to-teal-100 dark:hover:from-emerald-900/30 dark:hover:to-teal-900/30 shadow-sm hover:shadow-md transition-all"
                                 onClick={runAiPrefillAll}
                                 disabled={
-                                  plantRequestsLoading || plantRequests.length === 0
+                                  plantRequestsLoading || filteredPlantRequests.length === 0
                                 }
-                                title={`Automatically AI fill, save, and translate the ${plantRequests.length} loaded plant requests`}
+                                title={`Automatically AI fill, save, and translate the ${filteredPlantRequests.length} visible plant requests`}
                               >
                                 <Sparkles className="h-4 w-4 mr-2" />
                                 <span className="hidden sm:inline">AI Prefill All</span>
@@ -9147,12 +9401,12 @@ export const AdminPage: React.FC = () => {
                                               ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300'
                                               : 'bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300'
                                   }`}>
-                                    {(aiPrefillStatus === 'filling' || aiPrefillStatus === 'fetching_images' || aiPrefillStatus === 'uploading_images') && <Loader2 className="h-3 w-3 animate-spin" />}
-                                    {aiPrefillStatus === 'translating_name' ? 'Getting Name' : 
-                                     aiPrefillStatus === 'filling' ? 'AI Filling' : 
+                                    {aiPrefillStatus !== 'idle' && <Loader2 className="h-3 w-3 animate-spin" />}
+                                    {aiPrefillStatus === 'translating_name' ? 'Checking Name' :
+                                     aiPrefillStatus === 'filling' ? 'AI Filling' :
                                      aiPrefillStatus === 'fetching_images' ? 'Searching Images' :
                                      aiPrefillStatus === 'uploading_images' ? 'Uploading Images' :
-                                     aiPrefillStatus === 'saving' ? 'Saving' : 
+                                     aiPrefillStatus === 'saving' ? 'Saving' :
                                      aiPrefillStatus === 'translating' ? 'Translating' : 'Processing'}
                                   </div>
                                 </div>
@@ -9265,28 +9519,7 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Image upload progress */}
-                                {aiPrefillStatus === 'uploading_images' && aiPrefillImageUpload.total > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-[11px]">
-                                      <span className="text-stone-500 dark:text-stone-400 flex items-center gap-1">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Uploading image {aiPrefillImageUpload.current} of {aiPrefillImageUpload.total}
-                                      </span>
-                                      <span className="font-medium text-stone-700 dark:text-stone-200">
-                                        {aiPrefillImageUpload.uploaded} saved{aiPrefillImageUpload.failed > 0 ? `, ${aiPrefillImageUpload.failed} failed` : ''}
-                                      </span>
-                                    </div>
-                                    <div className="h-1.5 w-full rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
-                                      <div
-                                        className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-300 ease-out"
-                                        style={{ width: `${Math.round((aiPrefillImageUpload.current / aiPrefillImageUpload.total) * 100)}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Category progress grid */}
+                                {/* Category progress grid - only visible during AI filling stage */}
                                 {aiPrefillStatus === 'filling' && (
                                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                                     {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
@@ -9296,11 +9529,11 @@ export const AdminPage: React.FC = () => {
                                       const isDone = info.status === 'done';
                                       const isFilling = info.status === 'filling';
                                       return (
-                                        <div 
-                                          key={cat} 
+                                        <div
+                                          key={cat}
                                           className={`rounded-lg p-2 transition-all ${
-                                            isDone 
-                                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50' 
+                                            isDone
+                                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
                                               : isFilling
                                                 ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
                                                 : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
@@ -9308,8 +9541,8 @@ export const AdminPage: React.FC = () => {
                                         >
                                           <div className="flex items-center justify-between mb-1">
                                             <span className={`text-[10px] font-medium truncate ${
-                                              isDone ? 'text-emerald-700 dark:text-emerald-300' : 
-                                              isFilling ? 'text-blue-700 dark:text-blue-300' : 
+                                              isDone ? 'text-emerald-700 dark:text-emerald-300' :
+                                              isFilling ? 'text-blue-700 dark:text-blue-300' :
                                               'text-stone-500 dark:text-stone-400'
                                             }`}>
                                               {aiPrefillCategoryLabels[cat]}
@@ -9324,6 +9557,9 @@ export const AdminPage: React.FC = () => {
                                               }`}
                                               style={{ width: `${percent}%` }}
                                             />
+                                          </div>
+                                          <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
+                                            {info.completed}/{info.total}
                                           </div>
                                         </div>
                                       );
@@ -9494,21 +9730,7 @@ export const AdminPage: React.FC = () => {
                           </div>
                         ) : (
                           (() => {
-                            // Apply staff filter first, then search filter
-                            const staffFiltered = hideStaffRequests
-                              ? plantRequests.filter((req) => req.requester_is_staff !== true)
-                              : plantRequests;
-                            const filteredRequests = requestSearchQuery.trim()
-                              ? staffFiltered.filter((req) =>
-                                  req.plant_name
-                                    .toLowerCase()
-                                    .includes(
-                                      requestSearchQuery.toLowerCase().trim(),
-                                    ),
-                                )
-                              : staffFiltered;
-
-                            return filteredRequests.length === 0 ? (
+                            return filteredPlantRequests.length === 0 ? (
                               <div className="text-sm opacity-60">
                                 {requestSearchQuery.trim()
                                   ? "No requests match your search."
@@ -9516,7 +9738,7 @@ export const AdminPage: React.FC = () => {
                               </div>
                             ) : (
                               <div className="flex flex-col gap-3">
-                                {filteredRequests.map((req) => {
+                                {filteredPlantRequests.map((req) => {
                                   const updatedSource =
                                     req.updated_at ?? req.created_at;
                                   const updatedMs = updatedSource
@@ -9685,7 +9907,7 @@ export const AdminPage: React.FC = () => {
                                         </>
                                       ) : (
                                         <>
-                                          Load More ({hideStaffRequests ? staffFiltered.length : plantRequests.length} / {plantRequestsTotalCount})
+                                          Load More ({filteredPlantRequests.length} / {plantRequestsTotalCount})
                                         </>
                                       )}
                                     </Button>
@@ -12900,6 +13122,127 @@ export const AdminPage: React.FC = () => {
               <>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Plant
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Bulk Status Change Dialog */}
+    <Dialog open={bulkStatusDialogOpen} onOpenChange={(open) => {
+      if (!bulkActionLoading) {
+        setBulkStatusDialogOpen(open);
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            Change Status
+          </DialogTitle>
+          <DialogDescription>
+            Change the status of {selectedPlantIds.size} selected {selectedPlantIds.size === 1 ? "plant" : "plants"}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2 py-2">
+          {PLANT_STATUS_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={bulkActionLoading}
+              onClick={() => handleBulkStatusChange(option.value)}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors disabled:opacity-50"
+            >
+              <span
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: PLANT_STATUS_COLORS[option.value] }}
+              />
+              <span className="text-sm font-medium text-stone-900 dark:text-white">
+                {option.label}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={bulkActionLoading}>
+              Cancel
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+        {bulkActionLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-black/40 rounded-xl">
+            <RefreshCw className="h-5 w-5 animate-spin text-emerald-600" />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
+    {/* Bulk Delete Confirmation Dialog */}
+    <Dialog open={bulkDeleteDialogOpen} onOpenChange={(open) => {
+      if (!bulkActionLoading) {
+        setBulkDeleteDialogOpen(open);
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Delete {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "Plant" : "Plants"}
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete {selectedPlantIds.size} selected {selectedPlantIds.size === 1 ? "plant" : "plants"}? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="max-h-48 overflow-y-auto rounded-xl bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42] divide-y divide-stone-200 dark:divide-[#3e3e42]">
+            {plantDashboardRows
+              .filter((p) => selectedPlantIds.has(p.id))
+              .map((plant) => (
+                <div key={plant.id} className="px-4 py-2">
+                  <div className="font-medium text-sm text-stone-900 dark:text-white">
+                    {plant.name}
+                  </div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 font-mono">
+                    {plant.id.slice(0, 8)}...
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              This will permanently delete all selected plants and their associated data including translations, images, and schedules.
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={bulkActionLoading}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="rounded-xl"
+            onClick={handleBulkDelete}
+            disabled={bulkActionLoading}
+          >
+            {bulkActionLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "Plant" : "Plants"}
               </>
             )}
           </Button>

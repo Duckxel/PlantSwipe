@@ -52,18 +52,11 @@ function isCancellationError(err: unknown): boolean {
   return false
 }
 
-// AI section fill order — matches the 9 sections of the new schema
-const aiFieldOrder = [
-  'base',
-  'identity',
-  'care',
-  'growth',
-  'danger',
-  'ecology',
-  'consumption',
-  'misc',
-  'meta',
-].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase()))
+// AI field order — individual field names from plantSchema (same as CreatePlantPage)
+// This gives granular progress tracking per field instead of per section
+export const aiFieldOrder = Object.keys(plantSchema).filter(
+  (key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())
+)
 
 function generateUUIDv4(): string {
   try {
@@ -643,69 +636,8 @@ export async function processPlantRequest(
     if (signal?.aborted) {
       throw new DOMException('Operation cancelled', 'AbortError')
     }
-    
-    // Stage 1.5: Fetch external images from Google (SerpAPI), GBIF & Smithsonian
-    onProgress?.({ stage: 'fetching_images', plantName: displayName })
-    
-    try {
-      const externalResult = await fetchExternalPlantImages(englishPlantName, {
-        signal,
-        callbacks: {
-          onSourceStart: onImageSourceStart,
-          onSourceDone: onImageSourceDone,
-        },
-      })
-      
-      if (externalResult.images.length > 0) {
-        // Upload each found image to the PLANTS storage bucket
-        onProgress?.({ stage: 'uploading_images', plantName: displayName })
-        const totalToUpload = externalResult.images.length
-        const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
-        let failedCount = 0
-        onImageUploadProgress?.({ current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
 
-        for (let i = 0; i < externalResult.images.length; i++) {
-          if (signal?.aborted) break
-          const img = externalResult.images[i]
-          onImageUploadProgress?.({ current: i + 1, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
-          try {
-            const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
-            uploadedImages.push({
-              link: uploaded.url,
-              use: ((plant.images || []).length === 0 && uploadedImages.length === 0 ? 'primary' : 'other'),
-            })
-          } catch (uploadErr) {
-            if (isCancellationError(uploadErr)) throw uploadErr
-            failedCount++
-            console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
-          }
-        }
-
-        onImageUploadProgress?.({ current: totalToUpload, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
-        
-        if (uploadedImages.length > 0) {
-          plant = {
-            ...plant,
-            images: [...(plant.images || []), ...uploadedImages],
-          }
-          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${failedCount} failed)`)
-        }
-      }
-      
-      if (externalResult.errors?.length) {
-        console.warn(`[aiPrefillService] External image fetch partial errors for "${englishPlantName}":`, externalResult.errors)
-      }
-    } catch (imgErr) {
-      // Don't fail the whole prefill for image fetch errors - just log and continue
-      if (isCancellationError(imgErr)) throw imgErr
-      console.warn(`[aiPrefillService] External image fetch failed for "${englishPlantName}":`, imgErr)
-    }
-    
-    if (signal?.aborted) {
-      throw new DOMException('Operation cancelled', 'AbortError')
-    }
-    
-    // Stage 2: Save Plant
+    // Stage 2: Save Plant (images fetched later after save)
     onProgress?.({ stage: 'saving', plantName: displayName })
     
     const plantId = plant.id
@@ -729,6 +661,7 @@ export async function processPlantRequest(
       id: plantId,
       name: trimmedName,
       // Section 1: Base
+      plant_type: plant.plantType || null,
       scientific_name_species: plant.scientificNameSpecies || null,
       scientific_name_variety: plant.scientificNameVariety || null,
       family: plant.family || null,
@@ -775,6 +708,7 @@ export async function processPlantRequest(
       fruiting_month: plant.fruitingMonth || [],
       height_cm: plant.heightCm || null,
       wingspan_cm: plant.wingspanCm || null,
+      separation_cm: plant.separationCm || null,
       staking: coerceBoolean(plant.staking, false),
       division: divisionEnum.toDbArray(plant.division),
       cultivation_mode: plant.cultivationMode || [],
@@ -831,7 +765,6 @@ export async function processPlantRequest(
     ) as PlantColor[]
     const colorIds = await upsertColors(normalizedColors)
     await linkColors(plantId, colorIds)
-    await upsertImages(plantId, plant.images || [])
     await upsertWateringSchedules(plantId, normalizedSchedules)
     await upsertSources(plantId, sources)
     await upsertContributors(plantId, contributors)
@@ -905,6 +838,77 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
+    // Stage 2.5: Fetch external images from Google (SerpAPI), GBIF & Smithsonian
+    // Done after save so all plant data is persisted first
+    onProgress?.({ stage: 'fetching_images', plantName: displayName })
+
+    try {
+      const externalResult = await fetchExternalPlantImages(englishPlantName, {
+        signal,
+        callbacks: {
+          onSourceStart: onImageSourceStart,
+          onSourceDone: onImageSourceDone,
+        },
+      })
+
+      if (externalResult.images.length > 0) {
+        // Upload each found image to the PLANTS storage bucket
+        onProgress?.({ stage: 'uploading_images', plantName: displayName })
+        const totalToUpload = externalResult.images.length
+        const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
+        let failedCount = 0
+        onImageUploadProgress?.({ current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
+
+        for (let i = 0; i < externalResult.images.length; i++) {
+          if (signal?.aborted) break
+          const img = externalResult.images[i]
+          onImageUploadProgress?.({ current: i + 1, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
+          try {
+            const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
+            uploadedImages.push({
+              link: uploaded.url,
+              use: (uploadedImages.length === 0 ? 'primary' : 'other'),
+            })
+          } catch (uploadErr) {
+            if (isCancellationError(uploadErr)) throw uploadErr
+            failedCount++
+            console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
+          }
+        }
+
+        onImageUploadProgress?.({ current: totalToUpload, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
+
+        if (uploadedImages.length > 0) {
+          await upsertImages(plantId, uploadedImages)
+          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${failedCount} failed)`)
+        }
+      }
+
+      if (externalResult.errors?.length) {
+        console.warn(`[aiPrefillService] External image fetch partial errors for "${englishPlantName}":`, externalResult.errors)
+      }
+    } catch (imgErr) {
+      // Don't fail the whole prefill for image fetch errors - just log and continue
+      if (isCancellationError(imgErr)) throw imgErr
+      console.warn(`[aiPrefillService] External image fetch failed for "${englishPlantName}":`, imgErr)
+    }
+
+    if (signal?.aborted) {
+      throw new DOMException('Operation cancelled', 'AbortError')
+    }
+
+    // Save checkpoint: update the plant record timestamp so the dashboard
+    // reflects that this plant was recently touched, even if translation fails.
+    onProgress?.({ stage: 'saving', plantName: displayName })
+    try {
+      await supabase
+        .from('plants')
+        .update({ updated_time: new Date().toISOString(), updated_by: createdBy || null })
+        .eq('id', plantId)
+    } catch (saveErr) {
+      console.warn(`[aiPrefillService] Post-image save checkpoint failed for "${englishPlantName}":`, saveErr)
+    }
+
     // Stage 3: Translate to other languages (sequentially to avoid rate limiting)
     onProgress?.({ stage: 'translating', plantName: displayName })
     

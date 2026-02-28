@@ -11,6 +11,7 @@ do $add_missing_cols$
 declare
   col_defs text[][] := array[
     -- Section 1: Base
+    array['plant_type', 'text'],
     array['scientific_name_species', 'text'],
     array['scientific_name_variety', 'text'],
     array['family', 'text'],
@@ -39,6 +40,7 @@ declare
     array['temperature_max', 'integer'],
     array['temperature_min', 'integer'],
     array['temperature_ideal', 'integer'],
+    array['watering_mode', 'text default ''always'''],
     array['watering_frequency_warm', 'integer'],
     array['watering_frequency_cold', 'integer'],
     array['watering_type', 'text[] not null default ''{}''::text[]'],
@@ -57,6 +59,7 @@ declare
     array['fruiting_month', 'text[] not null default ''{}''::text[]'],
     array['height_cm', 'integer'],
     array['wingspan_cm', 'integer'],
+    array['separation_cm', 'integer'],
     array['staking', 'boolean default false'],
     array['division', 'text[] not null default ''{}''::text[]'],
     array['cultivation_mode', 'text[] not null default ''{}''::text[]'],

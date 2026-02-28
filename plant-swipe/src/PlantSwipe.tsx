@@ -875,11 +875,11 @@ export default function PlantSwipe() {
       // This replaces lazy calculation since we need it for filter options anyway
       const rawUsageLabels = getPlantUsageLabels(p)
       rawUsageLabels.forEach(label => usageLabelsSet.add(label))
-      const usageLabelsLower = rawUsageLabels.map(l => l.toLowerCase())
+      const usageLabelsLower = rawUsageLabels.map(l => (typeof l === 'string' ? l : String(l || '')).toLowerCase())
 
       // Maintenance — new flat: careLevel (array), legacy: identity/care nested
       const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
-      const maintenance = (careLevelArr[0] || (p.identity?.maintenanceLevel as string) || '').toLowerCase()
+      const maintenance = String(careLevelArr[0] || (p.identity?.maintenanceLevel as string) || '').toLowerCase()
 
       // Toxicity — new flat: toxicityHuman/toxicityPets, legacy: identity nested
       const toxHuman = (typeof p.toxicityHuman === 'string' ? p.toxicityHuman : (p.identity?.toxicityHuman as string) || '').toLowerCase().replace(/[\s_-]/g, '')
@@ -889,7 +889,7 @@ export default function PlantSwipe() {
 
       // Living space — new flat: livingSpace (array), legacy: identity nested
       const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
-      const livingSpace = (livingSpaceArr[0] || (p.identity?.livingSpace as string) || '').toLowerCase()
+      const livingSpace = String(livingSpaceArr[0] || (p.identity?.livingSpace as string) || '').toLowerCase()
 
       // Pre-parse createdAt for faster sorting
       const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
@@ -919,7 +919,7 @@ export default function PlantSwipe() {
         const colorObjects = Array.isArray(p.colors)
           ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name)
           : []
-        _cachedColors = colorNames.length > 0 ? colorNames : colorObjects
+        _cachedColors = (colorNames.length > 0 ? colorNames : colorObjects).filter((c): c is string => typeof c === 'string' && c.length > 0)
         return _cachedColors
       }
 
@@ -934,7 +934,7 @@ export default function PlantSwipe() {
         const climateArr = Array.isArray(p.climate) ? p.climate : []
         const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
         const combined = climateArr.length > 0 ? climateArr : legacyHabitat
-        _cachedHabitats = combined.map((h: string) => h.toLowerCase())
+        _cachedHabitats = combined.filter((h): h is string => typeof h === 'string').map(h => h.toLowerCase())
         return _cachedHabitats
       }
 

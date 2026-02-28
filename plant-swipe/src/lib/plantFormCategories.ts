@@ -27,6 +27,7 @@ export const plantFormCategoryOrder: PlantFormCategory[] = [
 
 const fieldCategoryMap: Record<string, PlantFormCategory> = {
   // Section 1: Base
+  plantType: 'base',
   scientificNameSpecies: 'base',
   scientificNameVariety: 'base',
   family: 'base',
@@ -131,6 +132,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   medicinalHistory: 'consumption',
   nutritionalValue: 'consumption',
   recipes: 'consumption',
+  recipesIdeas: 'consumption',
   aromatherapyBenefits: 'consumption',
   essentialOilBlends: 'consumption',
   edibleOil: 'consumption',
@@ -151,7 +153,6 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   contributors: 'meta',
 
   // Legacy aliases (map old names to new categories)
-  plantType: 'base',
   identity: 'identity',
   plantCare: 'care',
   growth: 'growth',
