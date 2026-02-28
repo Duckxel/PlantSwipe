@@ -643,69 +643,8 @@ export async function processPlantRequest(
     if (signal?.aborted) {
       throw new DOMException('Operation cancelled', 'AbortError')
     }
-    
-    // Stage 1.5: Fetch external images from Google (SerpAPI), GBIF & Smithsonian
-    onProgress?.({ stage: 'fetching_images', plantName: displayName })
-    
-    try {
-      const externalResult = await fetchExternalPlantImages(englishPlantName, {
-        signal,
-        callbacks: {
-          onSourceStart: onImageSourceStart,
-          onSourceDone: onImageSourceDone,
-        },
-      })
-      
-      if (externalResult.images.length > 0) {
-        // Upload each found image to the PLANTS storage bucket
-        onProgress?.({ stage: 'uploading_images', plantName: displayName })
-        const totalToUpload = externalResult.images.length
-        const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
-        let failedCount = 0
-        onImageUploadProgress?.({ current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
 
-        for (let i = 0; i < externalResult.images.length; i++) {
-          if (signal?.aborted) break
-          const img = externalResult.images[i]
-          onImageUploadProgress?.({ current: i + 1, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
-          try {
-            const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
-            uploadedImages.push({
-              link: uploaded.url,
-              use: ((plant.images || []).length === 0 && uploadedImages.length === 0 ? 'primary' : 'other'),
-            })
-          } catch (uploadErr) {
-            if (isCancellationError(uploadErr)) throw uploadErr
-            failedCount++
-            console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
-          }
-        }
-
-        onImageUploadProgress?.({ current: totalToUpload, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
-        
-        if (uploadedImages.length > 0) {
-          plant = {
-            ...plant,
-            images: [...(plant.images || []), ...uploadedImages],
-          }
-          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${failedCount} failed)`)
-        }
-      }
-      
-      if (externalResult.errors?.length) {
-        console.warn(`[aiPrefillService] External image fetch partial errors for "${englishPlantName}":`, externalResult.errors)
-      }
-    } catch (imgErr) {
-      // Don't fail the whole prefill for image fetch errors - just log and continue
-      if (isCancellationError(imgErr)) throw imgErr
-      console.warn(`[aiPrefillService] External image fetch failed for "${englishPlantName}":`, imgErr)
-    }
-    
-    if (signal?.aborted) {
-      throw new DOMException('Operation cancelled', 'AbortError')
-    }
-    
-    // Stage 2: Save Plant
+    // Stage 2: Save Plant (images fetched later after save)
     onProgress?.({ stage: 'saving', plantName: displayName })
     
     const plantId = plant.id
@@ -831,7 +770,6 @@ export async function processPlantRequest(
     ) as PlantColor[]
     const colorIds = await upsertColors(normalizedColors)
     await linkColors(plantId, colorIds)
-    await upsertImages(plantId, plant.images || [])
     await upsertWateringSchedules(plantId, normalizedSchedules)
     await upsertSources(plantId, sources)
     await upsertContributors(plantId, contributors)
@@ -905,6 +843,65 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
+    // Stage 2.5: Fetch external images from Google (SerpAPI), GBIF & Smithsonian
+    // Done after save so all plant data is persisted first
+    onProgress?.({ stage: 'fetching_images', plantName: displayName })
+
+    try {
+      const externalResult = await fetchExternalPlantImages(englishPlantName, {
+        signal,
+        callbacks: {
+          onSourceStart: onImageSourceStart,
+          onSourceDone: onImageSourceDone,
+        },
+      })
+
+      if (externalResult.images.length > 0) {
+        // Upload each found image to the PLANTS storage bucket
+        onProgress?.({ stage: 'uploading_images', plantName: displayName })
+        const totalToUpload = externalResult.images.length
+        const uploadedImages: Array<{ link: string; use: 'primary' | 'discovery' | 'other' }> = []
+        let failedCount = 0
+        onImageUploadProgress?.({ current: 0, total: totalToUpload, uploaded: 0, failed: 0 })
+
+        for (let i = 0; i < externalResult.images.length; i++) {
+          if (signal?.aborted) break
+          const img = externalResult.images[i]
+          onImageUploadProgress?.({ current: i + 1, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
+          try {
+            const uploaded = await uploadPlantImageFromUrl(img.url, englishPlantName, img.source, signal)
+            uploadedImages.push({
+              link: uploaded.url,
+              use: (uploadedImages.length === 0 ? 'primary' : 'other'),
+            })
+          } catch (uploadErr) {
+            if (isCancellationError(uploadErr)) throw uploadErr
+            failedCount++
+            console.warn(`[aiPrefillService] Failed to upload image from ${img.source} for "${englishPlantName}":`, uploadErr)
+          }
+        }
+
+        onImageUploadProgress?.({ current: totalToUpload, total: totalToUpload, uploaded: uploadedImages.length, failed: failedCount })
+
+        if (uploadedImages.length > 0) {
+          await upsertImages(plantId, uploadedImages)
+          console.log(`[aiPrefillService] Uploaded ${uploadedImages.length} images to storage for "${englishPlantName}" (${failedCount} failed)`)
+        }
+      }
+
+      if (externalResult.errors?.length) {
+        console.warn(`[aiPrefillService] External image fetch partial errors for "${englishPlantName}":`, externalResult.errors)
+      }
+    } catch (imgErr) {
+      // Don't fail the whole prefill for image fetch errors - just log and continue
+      if (isCancellationError(imgErr)) throw imgErr
+      console.warn(`[aiPrefillService] External image fetch failed for "${englishPlantName}":`, imgErr)
+    }
+
+    if (signal?.aborted) {
+      throw new DOMException('Operation cancelled', 'AbortError')
+    }
+
     // Stage 3: Translate to other languages (sequentially to avoid rate limiting)
     onProgress?.({ stage: 'translating', plantName: displayName })
     
