@@ -188,7 +188,8 @@
     "harmfulPlants": "Plantes néfastes",
     "varieties": "Variétés",
     "tags": "Étiquettes",
-    "biodiversityTags": "Étiquettes biodiversité"
+    "biodiversityTags": "Étiquettes biodiversité",
+    "habitat": "Habitat"
   },
   "values": {
     "flexible": "Flexible",
