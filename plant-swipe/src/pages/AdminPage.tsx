@@ -2052,6 +2052,12 @@ export const AdminPage: React.FC = () => {
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
   const [addFromDuplicateSuccess, setAddFromDuplicateSuccess] = React.useState<{ id: string; name: string; originalName: string } | null>(null);
 
+  // Bulk selection state
+  const [selectedPlantIds, setSelectedPlantIds] = React.useState<Set<string>>(new Set());
+  const [bulkStatusDialogOpen, setBulkStatusDialogOpen] = React.useState(false);
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = React.useState(false);
+  const [bulkActionLoading, setBulkActionLoading] = React.useState(false);
+
   // Track whether we've restored the scroll position (to avoid doing it multiple times)
   const scrollRestoredRef = React.useRef(false);
   
@@ -3326,6 +3332,112 @@ export const AdminPage: React.FC = () => {
       setDeletingPlant(false);
     }
   }, [plantToDelete]);
+
+  // Clear selection when filters change (selected items might no longer be visible)
+  React.useEffect(() => {
+    setSelectedPlantIds(new Set());
+  }, [visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+
+  const togglePlantSelection = React.useCallback((plantId: string) => {
+    setSelectedPlantIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(plantId)) {
+        next.delete(plantId);
+      } else {
+        next.add(plantId);
+      }
+      return next;
+    });
+  }, []);
+
+  const toggleSelectAllPlants = React.useCallback(
+    (filteredIds: string[]) => {
+      setSelectedPlantIds((prev) => {
+        const allSelected = filteredIds.length > 0 && filteredIds.every((id) => prev.has(id));
+        if (allSelected) {
+          return new Set();
+        }
+        return new Set(filteredIds);
+      });
+    },
+    [],
+  );
+
+  const handleBulkStatusChange = React.useCallback(
+    async (newStatus: string) => {
+      if (selectedPlantIds.size === 0) return;
+      setBulkActionLoading(true);
+      try {
+        const ids = Array.from(selectedPlantIds);
+        // Update in batches of 50 to avoid URL length issues
+        const batchSize = 50;
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          const { error } = await supabase
+            .from('plants')
+            .update({ status: newStatus })
+            .in('id', batch);
+          if (error) throw new Error(error.message);
+        }
+        // Update local state
+        const normalizedNew = normalizePlantStatus(newStatus);
+        setPlantDashboardRows((prev) =>
+          prev.map((p) =>
+            selectedPlantIds.has(p.id) ? { ...p, status: normalizedNew } : p
+          )
+        );
+        setSelectedPlantIds(new Set());
+        setBulkStatusDialogOpen(false);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to update status';
+        setPlantDashboardError(message);
+        console.error('Bulk status change error:', err);
+      } finally {
+        setBulkActionLoading(false);
+      }
+    },
+    [selectedPlantIds],
+  );
+
+  const handleBulkDelete = React.useCallback(async () => {
+    if (selectedPlantIds.size === 0) return;
+    setBulkActionLoading(true);
+    try {
+      const ids = Array.from(selectedPlantIds);
+      // Delete related data first, then plants - in batches
+      const batchSize = 50;
+      const relatedTables = [
+        'plant_translations',
+        'plant_colors',
+        'plant_images',
+        'plant_watering_schedules',
+        'plant_sources',
+        'plant_infusion_mixes',
+      ];
+      for (const table of relatedTables) {
+        for (let i = 0; i < ids.length; i += batchSize) {
+          const batch = ids.slice(i, i + batchSize);
+          await supabase.from(table).delete().in('plant_id', batch);
+        }
+      }
+      // Delete the plants themselves
+      for (let i = 0; i < ids.length; i += batchSize) {
+        const batch = ids.slice(i, i + batchSize);
+        const { error } = await supabase.from('plants').delete().in('id', batch);
+        if (error) throw new Error(error.message);
+      }
+      // Update local state
+      setPlantDashboardRows((prev) => prev.filter((p) => !selectedPlantIds.has(p.id)));
+      setSelectedPlantIds(new Set());
+      setBulkDeleteDialogOpen(false);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to delete plants';
+      setPlantDashboardError(message);
+      console.error('Bulk delete error:', err);
+    } finally {
+      setBulkActionLoading(false);
+    }
+  }, [selectedPlantIds]);
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -8803,6 +8915,42 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               </div>
 
+                              {/* Bulk Action Bar */}
+                              {selectedPlantIds.size > 0 && (
+                                <div className="flex items-center gap-3 px-4 sm:px-5 py-3 bg-emerald-50 dark:bg-emerald-950/30 border-b border-emerald-200 dark:border-emerald-800">
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                      {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "plant" : "plants"} selected
+                                    </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedPlantIds(new Set())}
+                                      className="text-xs text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 underline"
+                                    >
+                                      Clear
+                                    </button>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={() => setBulkStatusDialogOpen(true)}
+                                      className="flex items-center gap-1.5 rounded-lg border border-emerald-300 dark:border-emerald-700 bg-white dark:bg-[#1a1a1d] px-3 py-1.5 text-xs font-medium text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 dark:hover:bg-emerald-900/40 transition-colors"
+                                    >
+                                      <Pencil className="h-3.5 w-3.5" />
+                                      Change Status
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setBulkDeleteDialogOpen(true)}
+                                      className="flex items-center gap-1.5 rounded-lg border border-red-300 dark:border-red-700 bg-white dark:bg-[#1a1a1d] px-3 py-1.5 text-xs font-medium text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors"
+                                    >
+                                      <Trash2 className="h-3.5 w-3.5" />
+                                      Delete
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+
                               {/* Plant List */}
                               {plantTableLoading ? (
                                 <div className="flex items-center justify-center py-16">
@@ -8827,6 +8975,32 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               ) : (
                                 <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
+                                  {/* Select All Row */}
+                                  <div className="flex items-center gap-3 px-4 sm:px-5 py-2 bg-stone-50/50 dark:bg-[#1a1a1d]">
+                                    <button
+                                      type="button"
+                                      onClick={() => toggleSelectAllPlants(filteredPlantRows.map((p) => p.id))}
+                                      className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors flex-shrink-0 ${
+                                        filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id))
+                                          ? 'border-emerald-500 bg-emerald-500'
+                                          : selectedPlantIds.size > 0
+                                            ? 'border-emerald-500 bg-emerald-500/30'
+                                            : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'
+                                      }`}
+                                      title={filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? "Deselect all" : "Select all"}
+                                    >
+                                      {filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? (
+                                        <Check className="h-3.5 w-3.5 text-white" />
+                                      ) : selectedPlantIds.size > 0 ? (
+                                        <span className="block w-2 h-0.5 bg-emerald-500 rounded" />
+                                      ) : null}
+                                    </button>
+                                    <span className="text-xs text-stone-500 dark:text-stone-400">
+                                      {selectedPlantIds.size > 0
+                                        ? `${selectedPlantIds.size} of ${filteredPlantRows.length} selected`
+                                        : `${filteredPlantRows.length} ${filteredPlantRows.length === 1 ? "plant" : "plants"}`}
+                                    </span>
+                                  </div>
                                   {filteredPlantRows.map((plant) => (
                                     <div
                                       key={plant.id}
@@ -8839,8 +9013,32 @@ export const AdminPage: React.FC = () => {
                                           handleOpenPlantEditor(plant.id);
                                         }
                                       }}
-                                      className="group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all hover:bg-stone-50 dark:hover:bg-[#252528]"
+                                      className={`group flex items-center gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4 cursor-pointer transition-all ${
+                                        selectedPlantIds.has(plant.id)
+                                          ? 'bg-emerald-50/50 dark:bg-emerald-950/20 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                                          : 'hover:bg-stone-50 dark:hover:bg-[#252528]'
+                                      }`}
                                     >
+                                      {/* Checkbox */}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          togglePlantSelection(plant.id);
+                                        }}
+                                        className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors flex-shrink-0 ${
+                                          selectedPlantIds.has(plant.id)
+                                            ? 'border-emerald-500 bg-emerald-500'
+                                            : selectedPlantIds.size > 0
+                                              ? 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'
+                                              : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400 opacity-0 group-hover:opacity-100'
+                                        }`}
+                                        title={selectedPlantIds.has(plant.id) ? "Deselect" : "Select"}
+                                      >
+                                        {selectedPlantIds.has(plant.id) && (
+                                          <Check className="h-3.5 w-3.5 text-white" />
+                                        )}
+                                      </button>
                                       {/* Plant Image */}
                                       <div className="relative h-12 w-12 sm:h-14 sm:w-14 flex-shrink-0 overflow-hidden rounded-xl bg-gradient-to-br from-stone-100 to-stone-200 dark:from-[#2d2d30] dark:to-[#252528] flex items-center justify-center">
                                         {plant.primaryImage ? (
@@ -12921,6 +13119,127 @@ export const AdminPage: React.FC = () => {
               <>
                 <Trash2 className="h-4 w-4 mr-2" />
                 Delete Plant
+              </>
+            )}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+
+    {/* Bulk Status Change Dialog */}
+    <Dialog open={bulkStatusDialogOpen} onOpenChange={(open) => {
+      if (!bulkActionLoading) {
+        setBulkStatusDialogOpen(open);
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Pencil className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+            Change Status
+          </DialogTitle>
+          <DialogDescription>
+            Change the status of {selectedPlantIds.size} selected {selectedPlantIds.size === 1 ? "plant" : "plants"}.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-2 py-2">
+          {PLANT_STATUS_FILTER_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              disabled={bulkActionLoading}
+              onClick={() => handleBulkStatusChange(option.value)}
+              className="flex items-center gap-3 w-full px-4 py-3 rounded-xl text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors disabled:opacity-50"
+            >
+              <span
+                className="w-3 h-3 rounded-full flex-shrink-0"
+                style={{ backgroundColor: PLANT_STATUS_COLORS[option.value] }}
+              />
+              <span className="text-sm font-medium text-stone-900 dark:text-white">
+                {option.label}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={bulkActionLoading}>
+              Cancel
+            </Button>
+          </DialogClose>
+        </DialogFooter>
+        {bulkActionLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-white/60 dark:bg-black/40 rounded-xl">
+            <RefreshCw className="h-5 w-5 animate-spin text-emerald-600" />
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+
+    {/* Bulk Delete Confirmation Dialog */}
+    <Dialog open={bulkDeleteDialogOpen} onOpenChange={(open) => {
+      if (!bulkActionLoading) {
+        setBulkDeleteDialogOpen(open);
+      }
+    }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-red-600 dark:text-red-400">
+            <AlertTriangle className="h-5 w-5" />
+            Delete {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "Plant" : "Plants"}
+          </DialogTitle>
+          <DialogDescription>
+            Are you sure you want to delete {selectedPlantIds.size} selected {selectedPlantIds.size === 1 ? "plant" : "plants"}? This action cannot be undone.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="max-h-48 overflow-y-auto rounded-xl bg-stone-100 dark:bg-[#2a2a2d] border border-stone-200 dark:border-[#3e3e42] divide-y divide-stone-200 dark:divide-[#3e3e42]">
+            {plantDashboardRows
+              .filter((p) => selectedPlantIds.has(p.id))
+              .map((plant) => (
+                <div key={plant.id} className="px-4 py-2">
+                  <div className="font-medium text-sm text-stone-900 dark:text-white">
+                    {plant.name}
+                  </div>
+                  <div className="text-xs text-stone-500 dark:text-stone-400 font-mono">
+                    {plant.id.slice(0, 8)}...
+                  </div>
+                </div>
+              ))}
+          </div>
+
+          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800">
+            <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="text-sm text-amber-800 dark:text-amber-200">
+              This will permanently delete all selected plants and their associated data including translations, images, and schedules.
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0">
+          <DialogClose asChild>
+            <Button variant="outline" className="rounded-xl" disabled={bulkActionLoading}>
+              Cancel
+            </Button>
+          </DialogClose>
+          <Button
+            variant="destructive"
+            className="rounded-xl"
+            onClick={handleBulkDelete}
+            disabled={bulkActionLoading}
+          >
+            {bulkActionLoading ? (
+              <>
+                <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+                Deleting...
+              </>
+            ) : (
+              <>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Delete {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "Plant" : "Plants"}
               </>
             )}
           </Button>
