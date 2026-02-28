@@ -390,7 +390,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const plantColumns = [
       'id', 'name',
       'plant_type',
-      'scientific_name_species', 'family',
+      'scientific_name_species', 'scientific_name_variety', 'family',
       'featured_month',
       'climate', 'season', 'utility', 'edible_part',
       'thorny', 'toxicity_human', 'toxicity_pets',
