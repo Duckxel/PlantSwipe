@@ -17,7 +17,7 @@ import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
-import { monthNumberToSlug, monthSlugToNumber, monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
+import { monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
   utilityEnum,
@@ -839,9 +839,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Translatable field from plant_translations
       overview: translation?.overview || undefined,
       // Non-translatable fields from plants table (enums)
-      promotionMonth: Array.isArray(data.featured_month) && data.featured_month.length > 0
-        ? monthSlugToNumber(data.featured_month[0]) ?? undefined
-        : undefined,
       lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
       season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
       foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
@@ -1003,7 +1000,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.variety = translation?.variety || undefined
   flat.family = data.family || plant.identity?.family || undefined
   flat.presentation = translation?.presentation || plant.identity?.overview || plant.description || undefined
-  flat.featuredMonth = data.featured_month || (plant.identity?.promotionMonth ? [plant.identity.promotionMonth] : [])
+  flat.featuredMonth = data.featured_month || []
 
   // Section 2: Identity (non-translatable enums from plants table)
   flat.plantType = data.plant_type || plant.plantType || undefined
@@ -1690,7 +1687,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 1: Base
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
-            featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
+            featured_month: p.featuredMonth || [],
             // Section 2: Identity
             plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
@@ -1786,7 +1783,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 1: Base
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
-            featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
+            featured_month: p.featuredMonth || [],
             // Section 2: Identity
             plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],

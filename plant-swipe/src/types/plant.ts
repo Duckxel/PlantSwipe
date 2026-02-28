@@ -439,7 +439,6 @@ export interface PlantIdentity {
   cultivar?: string
   genus?: string
   overview?: string
-  promotionMonth?: number
   lifeCycle?: string
   season?: PlantSeason[]
   foliagePersistance?: string
@@ -692,12 +691,10 @@ export interface PlantPlanting {
   hemisphere?: string
   sowingMonths?: number[]
   plantingOutMonths?: number[]
-  promotionMonth?: number
   calendar?: {
     hemisphere?: string
     sowingMonths?: number[]
     plantingOutMonths?: number[]
-    promotionMonth?: number
   }
   sitePrep?: string[]
   companionPlants?: string[]
