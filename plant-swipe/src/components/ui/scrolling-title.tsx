@@ -1,4 +1,4 @@
-import React, { useRef, useState, useEffect } from "react"
+import React, { useRef, useState, useEffect, useCallback } from "react"
 import { cn } from "@/lib/utils"
 
 interface ScrollingTitleProps {
@@ -12,8 +12,8 @@ interface ScrollingTitleProps {
 
 /**
  * A title component that scrolls horizontally on hover when the text overflows.
- * Works like a marquee effect — the text slides left to reveal truncated content,
- * then resets when the mouse leaves.
+ * Uses the scroll-text-left keyframe: scrolls left slowly, pauses, returns
+ * quickly, then loops — matching the encyclopedia behavior.
  */
 export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   children,
@@ -46,24 +46,38 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     return () => observer.disconnect()
   }, [children])
 
-  const duration = scrollDistance / speed
+  const onEnter = useCallback(() => {
+    if (isOverflowing) setIsHovered(true)
+  }, [isOverflowing])
+
+  const onLeave = useCallback(() => {
+    setIsHovered(false)
+  }, [])
+
+  // Duration scales with distance: longer text = longer animation
+  const duration = Math.max(2.5, scrollDistance / speed + 1.5)
 
   return (
     <div
       ref={containerRef}
       className={cn("overflow-hidden min-w-0", className)}
-      onMouseEnter={() => isOverflowing && setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onMouseEnter={onEnter}
+      onMouseLeave={onLeave}
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className="inline-block whitespace-nowrap"
-        style={{
-          transform: isHovered ? `translateX(-${scrollDistance}px)` : "translateX(0)",
-          transition: isHovered
-            ? `transform ${duration}s linear`
-            : "transform 0.3s ease-out",
-        }}
+        className={cn(
+          "inline-block whitespace-nowrap",
+          !isHovered && "overflow-hidden text-ellipsis"
+        )}
+        style={
+          isHovered && scrollDistance > 0
+            ? {
+                animation: `scroll-text-left ${duration}s ease-in-out infinite`,
+                ["--scroll-dist" as string]: `-${scrollDistance}px`,
+              }
+            : undefined
+        }
       >
         {children}
       </Tag>
