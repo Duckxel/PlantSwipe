@@ -44,6 +44,8 @@ import {
   PenLine,
   Type,
   AlertTriangle,
+  Shield,
+  Bug,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
@@ -467,20 +469,35 @@ export function AdminNotificationsPanel() {
     try {
       let q = supabase
         .from('profiles')
-        .select('id, display_name, avatar_url')
+        .select('id, display_name, avatar_url, is_admin, roles')
         .limit(20)
       if (query) {
         q = q.ilike('display_name', `%${query}%`)
       }
       const { data } = await q
-      return (data || []).map((u) => ({
-        id: u.id,
-        label: u.display_name || 'Unknown User',
-        description: u.id,
-        icon: u.avatar_url
-          ? <img src={u.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
-          : <User className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
-      }))
+      return (data || []).map((u: { id: string; display_name: string | null; avatar_url: string | null; is_admin: boolean; roles: string[] | null }) => {
+        const roles = u.roles || []
+        const isAdmin = u.is_admin === true
+        const isBugCatcher = roles.includes('bug_catcher')
+
+        let fallbackIcon: React.ReactNode
+        if (isAdmin) {
+          fallbackIcon = <Shield className="h-4 w-4 text-purple-500 dark:text-purple-400" />
+        } else if (isBugCatcher) {
+          fallbackIcon = <Bug className="h-4 w-4 text-orange-500 dark:text-orange-400" />
+        } else {
+          fallbackIcon = <User className="h-4 w-4 text-stone-400 dark:text-stone-500" />
+        }
+
+        return {
+          id: u.id,
+          label: u.display_name || 'Unknown User',
+          description: u.id,
+          icon: u.avatar_url
+            ? <img src={u.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
+            : fallbackIcon,
+        }
+      })
     } catch {
       return []
     }
