@@ -425,7 +425,7 @@ type PlantDashboardRow = {
   name: string;
   givenNames: string[];
   status: NormalizedPlantStatus;
-  promotionMonth: PromotionMonthSlug | null;
+  promotionMonths: PromotionMonthSlug[];
   primaryImage: string | null;
   updatedAt: number | null;
   createdAt: number | null;
@@ -460,14 +460,18 @@ const normalizedStatusToDb: Record<NormalizedPlantStatus, string> = {
   other: "other",
 };
 
-const toPromotionMonthSlug = (
+const toPromotionMonthSlugs = (
   value?: unknown,
-): PromotionMonthSlug | null => {
-  if (!value || typeof value !== 'string') return null;
-  const normalized = value.toLowerCase() as PromotionMonthSlug;
-  return (PROMOTION_MONTH_SLUGS as readonly string[]).includes(normalized)
-    ? normalized
-    : null;
+): PromotionMonthSlug[] => {
+  if (!value) return [];
+  // featured_month is a text[] in the DB – Supabase returns it as a JS array
+  const items: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
+  return items
+    .filter((v): v is string => typeof v === 'string' && v.length > 0)
+    .map((v) => v.toLowerCase())
+    .filter((v): v is PromotionMonthSlug =>
+      (PROMOTION_MONTH_SLUGS as readonly string[]).includes(v),
+    );
 };
 
 // Constants for persisting admin plants list state in sessionStorage
@@ -3267,7 +3271,7 @@ export const AdminPage: React.FC = () => {
               name: r?.name ? String(r.name) : "Unnamed plant",
               givenNames,
               status: normalizePlantStatus(r?.status),
-              promotionMonth: toPromotionMonthSlug(r?.featured_month),
+              promotionMonths: toPromotionMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
                 ? String((primaryImage as Record<string, unknown>).link)
                 : null,
@@ -3502,9 +3506,9 @@ export const AdminPage: React.FC = () => {
       {} as Record<PromotionMonthSlug, number>,
     );
     plantDashboardRows.forEach((plant) => {
-      if (plant.promotionMonth) {
-        counts[plant.promotionMonth] += 1;
-      }
+      plant.promotionMonths.forEach((month) => {
+        counts[month] += 1;
+      });
     });
     return PROMOTION_MONTH_SLUGS.map((slug) => ({
       slug,
@@ -3564,8 +3568,8 @@ export const AdminPage: React.FC = () => {
           selectedPromotionMonth === "all"
             ? true
             : selectedPromotionMonth === "none"
-              ? !plant.promotionMonth
-              : plant.promotionMonth === selectedPromotionMonth;
+              ? plant.promotionMonths.length === 0
+              : plant.promotionMonths.includes(selectedPromotionMonth);
         if (!matchesPromotion) return false;
         // Search by name OR givenNames (common names)
         const matchesSearch = term
@@ -9093,7 +9097,7 @@ export const AdminPage: React.FC = () => {
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                                           <span className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
                                             <Calendar className="h-3 w-3" />
-                                            {plant.promotionMonth ? PROMOTION_MONTH_LABELS[plant.promotionMonth] : "No month"}
+                                            {plant.promotionMonths.length > 0 ? plant.promotionMonths.map((m) => PROMOTION_MONTH_LABELS[m]).join(", ") : "No month"}
                                           </span>
                                           {plantSortOption === "created" && plant.createdAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
