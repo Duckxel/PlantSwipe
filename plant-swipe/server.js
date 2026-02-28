@@ -3008,6 +3008,15 @@ function schemaToBlueprint(node) {
   return result
 }
 
+/**
+ * Safely stringify JSON for embedding in HTML <script> tags.
+ * Prevents XSS attacks by escaping the '<' character to unicode.
+ * This ensures that strings like "</script>" do not break out of the script block.
+ */
+function safeJsonStringify(obj) {
+  return JSON.stringify(obj, null, 2).replace(/</g, '\\u003c')
+}
+
 function pruneEmpty(node) {
   if (Array.isArray(node)) {
     const pruned = node
@@ -32422,7 +32431,7 @@ async function generateCrawlerHtml(req, pagePath) {
   
   <!-- JSON-LD Structured Data -->
   ${jsonLdSchema ? `<script type="application/ld+json">
-${JSON.stringify(jsonLdSchema, null, 2)}
+${safeJsonStringify(jsonLdSchema)}
   </script>` : ''}
   
   <style>
