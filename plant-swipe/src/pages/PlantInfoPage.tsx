@@ -62,6 +62,7 @@ import {
   Minimize2,
   Flag,
   Scissors,
+  ExternalLink,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -282,6 +283,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     family: data.family || undefined,
     featuredMonth: data.featured_month || [],
 
+    plantType: data.plant_type || undefined,
     // Section 2: Identity (non-translatable)
     climate: climateEnum.toUiArray(data.climate) as Plant['climate'],
     season: seasonEnum.toUiArray(data.season) as Plant['season'],
@@ -1308,7 +1310,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
   const timelineData = React.useMemo(() => buildTimelineData(plant, monthLabels), [plant, monthLabels])
   const height = plant.heightCm ?? null
   const wingspan = plant.wingspanCm ?? null
-  const spacing: number | null = null
+  const spacing = plant.separationCm ?? null
   const [cubeExpanded, setCubeExpanded] = React.useState(false)
   const toggleCubeExpanded = React.useCallback(() => {
     setCubeExpanded(prev => !prev)
@@ -1344,7 +1346,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       const joinArr = (arr: string[] | undefined) => arr?.length ? arr.map(v => translateEnum(v)).join(' • ') : null
       const joinRaw = (arr: string[] | undefined) => arr?.length ? arr.join(' • ') : null
 
-      const temperatureWindow = formatTemperatureRange(plant.temperatureMin, plant.temperatureIdeal, plant.temperatureMax)
+      const temperatureWindow = plant.temperatureIdeal != null ? `${plant.temperatureIdeal}°C` : null
       const humidityValue = plant.hygrometry != null ? `${plant.hygrometry}%` : null
       const companionNames = companionPlants.length > 0 ? companionPlants.map(c => c.name) : compactStrings(plant.companionPlants)
       const infusionMixSummary = formatInfusionMixSummary(plant.infusionMixes)
@@ -1682,6 +1684,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         <ToxicityWarningBanner
           toxicityHuman={plant.toxicityHuman}
           toxicityPets={plant.toxicityPets}
+          poisoningMethod={plant.poisoningMethod}
+          poisoningSymptoms={plant.poisoningSymptoms}
+          allergens={plant.allergens}
           t={t}
         />
 
@@ -1751,6 +1756,16 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </section>
           )}
 
+          {sourcesValue && <hr className="border-stone-200/70 dark:border-[#3e3e42]/70" />}
+
+          {sourcesValue && (
+            <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 px-1">
+              <FileText className="h-3 w-3 shrink-0" />
+              <span className="uppercase tracking-wide font-medium">{t('plantInfo:meta.sources')}:</span>
+              {sourcesValue}
+            </div>
+          )}
+
           {contributorsList.length > 0 && (
             <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
               <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
@@ -1769,7 +1784,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             </details>
           )}
 
-          {(createdTimestamp || updatedTimestamp || sourcesValue) && (
+          {(createdTimestamp || updatedTimestamp) && (
             <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3">
               {(createdTimestamp || createdByLabel) && (
                 <span className="flex items-center gap-1.5">
@@ -1785,13 +1800,6 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                   <span>{t('plantInfo:meta.updated')}</span>
                   <span className="text-stone-500 dark:text-stone-400">{updatedTimestamp || '—'}</span>
                   {updatedByLabel && <span>· {updatedByLabel}</span>}
-                </span>
-              )}
-              {sourcesValue && (
-                <span className="flex items-center gap-1.5 basis-full justify-center mt-1">
-                  <FileText className="h-3 w-3" />
-                  <span>{t('plantInfo:meta.sources')}:</span>
-                  <span className="text-stone-500 dark:text-stone-400">{sourcesValue}</span>
                 </span>
               )}
             </div>
@@ -2184,8 +2192,12 @@ const getToxicityConfig = (level: string | undefined) => {
 const ToxicityWarningBanner: React.FC<{
   toxicityHuman?: string
   toxicityPets?: string
+  poisoningMethod?: string[]
+  poisoningSymptoms?: string
+  allergens?: string[]
   t: (key: string) => string
-}> = ({ toxicityHuman, toxicityPets, t }) => {
+}> = ({ toxicityHuman, toxicityPets, poisoningMethod, poisoningSymptoms, allergens, t }) => {
+  const [detailsOpen, setDetailsOpen] = React.useState(false)
   const humanConfig = getToxicityConfig(toxicityHuman)
   const petsConfig = getToxicityConfig(toxicityPets)
   
@@ -2354,6 +2366,69 @@ const ToxicityWarningBanner: React.FC<{
     )
   }
   
+  // Shared detail block: poisoning methods, symptoms, allergens
+  const hasMethods = poisoningMethod && poisoningMethod.length > 0
+  const hasSymptoms = poisoningSymptoms && poisoningSymptoms.trim().length > 0
+  const hasAllergens = allergens && allergens.length > 0
+  const hasDetails = hasMethods || hasSymptoms || hasAllergens
+
+  const toxicityDetails = hasDetails && !bothSafe ? (
+    <div className="mt-3 border-t border-stone-200/50 dark:border-stone-700/30">
+      <button
+        type="button"
+        onClick={() => setDetailsOpen(!detailsOpen)}
+        className="w-full flex items-center justify-between pt-2.5 pb-1 text-xs font-semibold text-stone-500 dark:text-stone-400 uppercase tracking-wider cursor-pointer"
+      >
+        <span>{t('plantInfo:toxicityBanner.detailsToggle')}</span>
+        <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${detailsOpen ? 'rotate-180' : ''}`} />
+      </button>
+      {detailsOpen && (
+        <div className="space-y-2.5 pb-1">
+          {hasMethods && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 mr-1">
+                {t('plantInfo:toxicityBanner.methodLabel')}:
+              </span>
+              {poisoningMethod!.map((method) => (
+                <span
+                  key={method}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-200/60 dark:border-stone-700/40"
+                >
+                  {method}
+                </span>
+              ))}
+            </div>
+          )}
+          {hasSymptoms && (
+            <div>
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400">
+                {t('plantInfo:toxicityBanner.symptomsLabel')}:
+              </span>
+              <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 mt-0.5">
+                {poisoningSymptoms}
+              </p>
+            </div>
+          )}
+          {hasAllergens && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 mr-1">
+                {t('plantInfo:toxicityBanner.allergensLabel')}:
+              </span>
+              {allergens!.map((a) => (
+                <span
+                  key={a}
+                  className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200/60 dark:border-amber-700/40"
+                >
+                  {a}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  ) : null
+
   // For mild toxicity, show a simpler inline layout without the dramatic header
   if (maxSeverity === 'mild') {
     return (
@@ -2362,15 +2437,16 @@ const ToxicityWarningBanner: React.FC<{
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
           {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
+        {toxicityDetails}
       </div>
     )
   }
-  
+
   // Scale header icon and styling based on severity
   const headerIconSize = maxSeverity === 'lethal' ? 'h-11 w-11 sm:h-13 sm:w-13' : 'h-9 w-9 sm:h-10 sm:w-10'
   const headerIconInner = maxSeverity === 'lethal' ? 'h-6 w-6 sm:h-7 sm:w-7' : 'h-4 w-4 sm:h-5 sm:w-5'
   const titleSize = maxSeverity === 'lethal' ? 'text-lg sm:text-xl font-bold' : 'text-base sm:text-lg font-semibold'
-  
+
   return (
     <div className={`${bannerStyle.rounded} border ${maxSeverity === 'lethal' ? 'border-2' : ''} ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding} ${bannerStyle.shadow}`}>
       <div className={maxSeverity === 'lethal' ? 'space-y-4' : 'space-y-3'}>
@@ -2400,12 +2476,13 @@ const ToxicityWarningBanner: React.FC<{
             )}
           </div>
         </div>
-        
+
         {/* Two-column toxicity cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
           {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
         </div>
+        {toxicityDetails}
       </div>
     </div>
   )
@@ -2463,17 +2540,6 @@ const formatBooleanDescriptor = (value: boolean | null | undefined, positive: st
   return showNegative ? negative : null
 }
 
-const formatTemperatureRange = (min?: number | null, ideal?: number | null, max?: number | null) => {
-  const parts: string[] = []
-  if (typeof min === 'number') parts.push(`${min}°C`)
-  if (typeof max === 'number') parts.push(`${max}°C`)
-  const range =
-    parts.length === 2 ? `${parts[0]} to ${parts[1]}` : parts.length === 1 ? `From ${parts[0]}` : null
-  if (typeof ideal === 'number') {
-    return range ? `${range} (ideal ${ideal}°C)` : `Ideal ${ideal}°C`
-  }
-  return range
-}
 
 const formatInfusionMixSummary = (mix?: Record<string, string> | null) => {
   if (!mix) return null
@@ -2492,24 +2558,26 @@ const formatSourcesList = (sources?: PlantSource[] | null) => {
   const list = (sources ?? []).filter((source): source is PlantSource => Boolean(source?.name))
   if (!list.length) return null
   return (
-    <ul className="space-y-1">
+    <span className="inline-flex flex-wrap items-center gap-x-1">
       {list.map((source, idx) => (
-        <li key={source.id ?? `${source.name}-${idx}`}>
+        <React.Fragment key={source.id ?? `${source.name}-${idx}`}>
+          {idx > 0 && <span className="text-stone-300 dark:text-stone-600">·</span>}
           {source.url ? (
             <a
               href={source.url}
               target="_blank"
               rel="noreferrer"
-              className="text-emerald-600 hover:underline dark:text-emerald-300"
+              className="inline-flex items-center gap-0.5 text-stone-500 dark:text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-300 transition-colors"
             >
               {source.name}
+              <ExternalLink className="h-2.5 w-2.5" />
             </a>
           ) : (
-            <span>{source.name}</span>
+            <span className="text-stone-500 dark:text-stone-400">{source.name}</span>
           )}
-        </li>
+        </React.Fragment>
       ))}
-    </ul>
+    </span>
   )
 }
 

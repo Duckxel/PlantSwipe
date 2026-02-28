@@ -74,7 +74,11 @@
       "verytoxic": "Can cause severe harm",
       "deadly": "Can be fatal if ingested",
       "undetermined": "Toxicity not yet determined"
-    }
+    },
+    "methodLabel": "Method",
+    "symptomsLabel": "Symptoms",
+    "allergensLabel": "Allergens",
+    "detailsToggle": "Details"
   },
   "meta": {
     "recordHistory": "Record History",

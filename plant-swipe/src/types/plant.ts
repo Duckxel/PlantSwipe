@@ -226,6 +226,7 @@ export interface Plant {
   fruitingMonth?: MonthSlug[]
   heightCm?: number
   wingspanCm?: number
+  separationCm?: number
   staking?: boolean
   division?: DivisionType[]
   cultivationMode?: string[]

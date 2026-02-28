@@ -146,11 +146,12 @@ registerRoute(
 )
 
 registerRoute(
-  ({ url }) => /\/locales\/.*\.json$/i.test(url.pathname),
-  new StaleWhileRevalidate({
+  ({ url }) => /\/locales\/.*\.json/i.test(url.pathname),
+  new NetworkFirst({
     cacheName: 'i18n-cache',
+    networkTimeoutSeconds: 3,
     plugins: [
-      new ExpirationPlugin({ maxEntries: 40, maxAgeSeconds: 60 * 60 * 24 * 30 }),
+      new ExpirationPlugin({ maxEntries: 40, maxAgeSeconds: DAY_IN_SECONDS * 7 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
     ],
   })
