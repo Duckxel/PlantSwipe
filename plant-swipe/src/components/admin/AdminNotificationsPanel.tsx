@@ -46,6 +46,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
+import { SearchItem } from '@/components/ui/search-item'
 import { Link, useLocation } from 'react-router-dom'
 import { translateNotificationToAllLanguages } from '@/lib/deepl'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '@/lib/i18n'
@@ -1480,27 +1481,28 @@ export function AdminNotificationsPanel() {
                             <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                               Notification Template
                             </Label>
-                            <Select
-                              value={automation.templateId || ""}
-                              onChange={(e) => {
-                                const newTemplateId = e.target.value || null
-                                handleUpdateAutomation(automation, { templateId: newTemplateId })
+                            <SearchItem
+                              value={automation.templateId || null}
+                              onSelect={(opt) => {
+                                handleUpdateAutomation(automation, { templateId: opt.id })
                               }}
+                              onClear={() => {
+                                handleUpdateAutomation(automation, { templateId: null })
+                              }}
+                              options={templates.map((t) => ({
+                                id: t.id,
+                                label: t.title,
+                                description: t.description || undefined,
+                                meta: `${t.messageVariants.length} variant${t.messageVariants.length !== 1 ? "s" : ""}${t.automationCount > 0 ? ` · Used ${t.automationCount}x` : ""}`,
+                                icon: <MessageSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+                              }))}
+                              placeholder="Select a template..."
+                              title="Choose Template"
+                              description="Search and select a notification template for this automation."
+                              searchPlaceholder="Search templates..."
+                              emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
                               disabled={savingAutomation === automation.id}
-                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                            >
-                              <option value="">No template (disabled)</option>
-                              {templates.map((tpl) => (
-                                <option key={tpl.id} value={tpl.id}>
-                                  {tpl.title} ({tpl.messageVariants.length} variants)
-                                </option>
-                              ))}
-                            </Select>
-                            {automation.templateId && automation.templateTitle && (
-                              <p className="text-xs text-stone-500">
-                                Using: <span className="font-medium">{automation.templateTitle}</span>
-                              </p>
-                            )}
+                            />
                             {!automation.templateId && (
                               <p className="text-xs text-amber-600 dark:text-amber-400">
                                 ⚠️ Select a template to enable this automation
@@ -1876,20 +1878,25 @@ export function AdminNotificationsPanel() {
             </div>
 
             <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-template" className="text-xs sm:text-sm font-medium">Message Template</Label>
-              <Select
-                id="campaign-template"
-                value={campaignForm.templateId}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, templateId: e.target.value }))}
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              >
-                <option value="">Select a template...</option>
-                {templates.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.title} ({template.messageVariants.length} variants)
-                  </option>
-                ))}
-              </Select>
+              <Label className="text-xs sm:text-sm font-medium">Message Template</Label>
+              <SearchItem
+                value={campaignForm.templateId || null}
+                onSelect={(opt) => setCampaignForm(prev => ({ ...prev, templateId: opt.id }))}
+                onClear={() => setCampaignForm(prev => ({ ...prev, templateId: "" }))}
+                options={templates.map((t) => ({
+                  id: t.id,
+                  label: t.title,
+                  description: t.description || undefined,
+                  meta: `${t.messageVariants.length} variant${t.messageVariants.length !== 1 ? "s" : ""}${t.campaignCount > 0 ? ` · Used ${t.campaignCount}x` : ""}`,
+                  icon: <MessageSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+                }))}
+                placeholder="Select a template..."
+                title="Choose Template"
+                description="Search and select a notification template for this campaign."
+                searchPlaceholder="Search templates..."
+                emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
+                priorityZIndex={100}
+              />
               {templates.length === 0 && (
                 <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
                   No templates available. Create one first.
