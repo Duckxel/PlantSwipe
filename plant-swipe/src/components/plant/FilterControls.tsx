@@ -387,7 +387,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                   }`}
                   aria-pressed={isSelected}
                 >
-                  {t(`plantInfo:enums.habitat.${habitatKey}`, { defaultValue: habitat })}
+                  {t(`plantInfo:enums.climate.${habitatKey}`, { defaultValue: habitat })}
                 </button>
               )
             })}
@@ -419,7 +419,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                   }`}
                   aria-pressed={isSelected}
                 >
-                  {t(`plantDetails.maintenanceLevels.${levelKey}`, { defaultValue: level })}
+                  {t(`plantInfo:enums.careLevel.${levelKey}`, { defaultValue: level })}
                 </button>
               )
             })}
@@ -530,9 +530,9 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
             <Badge key={usage} variant="secondary" className="rounded-xl">{t(`plant.utility.${usage.toLowerCase()}`, { defaultValue: usage })}</Badge>
           ))}
           {habitatFilters.map((habitat) => (
-            <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.habitat.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
+            <Badge key={habitat} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.climate.${habitat.toLowerCase().replace(/[\s-]/g, '')}`, { defaultValue: habitat })}</Badge>
           ))}
-          {maintenanceFilter && <Badge variant="secondary" className="rounded-xl">{t(`plantDetails.maintenanceLevels.${maintenanceFilter.toLowerCase()}`, { defaultValue: maintenanceFilter })}</Badge>}
+          {maintenanceFilter && <Badge variant="secondary" className="rounded-xl">{t(`plantInfo:enums.careLevel.${maintenanceFilter.toLowerCase()}`, { defaultValue: maintenanceFilter })}</Badge>}
           {petSafe && <Badge variant="secondary" className="rounded-xl">🐾 {t("plant.petSafe", { defaultValue: "Pet-Safe" })}</Badge>}
           {humanSafe && <Badge variant="secondary" className="rounded-xl">👤 {t("plant.humanSafe", { defaultValue: "Human-Safe" })}</Badge>}
           {livingSpaceFilters.map((space) => (
