@@ -173,7 +173,8 @@ export function skipAction(
   actionId: string,
   dbStatuses: ActionStatusMap,
 ): ActionStatusMap {
-  supabase.rpc('skip_action', { _user_id: userId, _action_id: actionId })
+  // .then() is required to trigger the lazy PostgrestBuilder HTTP request
+  supabase.rpc('skip_action', { _user_id: userId, _action_id: actionId }).then(null, () => {})
 
   const next = new Map(dbStatuses)
   const existing = dbStatuses.get(actionId)
@@ -193,10 +194,11 @@ export function dismissAllDone(
   userId: string,
   dbStatuses: ActionStatusMap,
 ): ActionStatusMap {
+  // .then() is required to trigger the lazy PostgrestBuilder HTTP request
   supabase.rpc('mark_action_completed', {
     _user_id: userId,
     _action_id: DISMISSED_ACTION_ID,
-  })
+  }).then(null, () => {})
 
   const next = new Map(dbStatuses)
   next.set(DISMISSED_ACTION_ID, {
