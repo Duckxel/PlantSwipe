@@ -24,7 +24,7 @@ import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant } from "@/types/plant";
+import type { Plant, PlantColor } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -865,9 +865,8 @@ export default function PlantSwipe() {
       let _cachedSeasonsSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
-      // Type
-      // Eagerly compute type label for both prepared plant and options
-      const rawTypeLabel = getPlantTypeLabel(p.classification)
+      // Type — use plantType or classification fallback
+      const rawTypeLabel = getPlantTypeLabel(p)
       if (rawTypeLabel) typeLabelsSet.add(rawTypeLabel)
       const typeLabel = rawTypeLabel?.toLowerCase() ?? null
 
@@ -876,20 +875,32 @@ export default function PlantSwipe() {
       // This replaces lazy calculation since we need it for filter options anyway
       const rawUsageLabels = getPlantUsageLabels(p)
       rawUsageLabels.forEach(label => usageLabelsSet.add(label))
-      const usageLabelsLower = rawUsageLabels.map(l => l.toLowerCase())
+      const usageLabelsLower = rawUsageLabels.map(l => (typeof l === 'string' ? l : String(l || '')).toLowerCase())
 
-      // Maintenance
-      const maintenance = (p.identity?.maintenanceLevel || p.plantCare?.maintenanceLevel || p.care?.maintenanceLevel || '').toLowerCase()
+      // Maintenance — new flat: careLevel (array), legacy: identity/care nested
+      const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
+      const maintenance = String(careLevelArr[0] || (p.identity?.maintenanceLevel as string) || '').toLowerCase()
 
-      // Toxicity
-      const petSafe = (p.identity?.toxicityPets || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
-      const humanSafe = (p.identity?.toxicityHuman || '').toLowerCase().replace(/[\s-]/g, '') === 'nontoxic'
+      // Toxicity — new flat: toxicityHuman/toxicityPets, legacy: identity nested
+      const toxHuman = (typeof p.toxicityHuman === 'string' ? p.toxicityHuman : (p.identity?.toxicityHuman as string) || '').toLowerCase().replace(/[\s_-]/g, '')
+      const toxPets = (typeof p.toxicityPets === 'string' ? p.toxicityPets : (p.identity?.toxicityPets as string) || '').toLowerCase().replace(/[\s_-]/g, '')
+      const petSafe = toxPets === 'nontoxic' || toxPets === 'non_toxic'
+      const humanSafe = toxHuman === 'nontoxic' || toxHuman === 'non_toxic'
 
-      // Living space
-      const livingSpace = (p.identity?.livingSpace || '').toLowerCase()
+      // Living space — new flat: livingSpace (array), legacy: identity nested
+      const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
+      const livingSpaceLower = livingSpaceArr.length > 0
+        ? livingSpaceArr.map(s => String(s).toLowerCase())
+        : [(p.identity?.livingSpace as string || '').toLowerCase()].filter(Boolean)
+      // Derive a single label: 'both' if plant has both indoor + outdoor (or explicit 'both')
+      const hasIndoor = livingSpaceLower.includes('indoor')
+      const hasOutdoor = livingSpaceLower.includes('outdoor')
+      const livingSpace = livingSpaceLower.includes('both') || (hasIndoor && hasOutdoor)
+        ? 'both'
+        : livingSpaceLower[0] || ''
 
-      // Pre-parse createdAt for faster sorting (avoid Date.parse on each sort comparison)
-      const createdAtValue = p.meta?.createdAt
+      // Pre-parse createdAt for faster sorting
+      const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
       const createdAtTs = createdAtValue ? Date.parse(createdAtValue) : 0
       const createdAtTsFinal = Number.isNaN(createdAtTs) ? 0 : createdAtTs
 
@@ -904,17 +915,19 @@ export default function PlantSwipe() {
       // Pre-compute promotion status
       const isPromoted = isPlantOfTheMonth(p, now)
 
-      // Pre-compute in-progress status
-      const status = p.meta?.status?.toLowerCase()
-      const isInProgress = status === 'in progres' || status === 'in progress'
+      // Pre-compute in-progress status (new flat: p.status, legacy: p.meta?.status)
+      const flatStatus = (typeof p.status === 'string' ? p.status : '').toLowerCase()
+      const legacyStatus = (typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
+      const isInProgress = flatStatus === 'in_progress' || flatStatus === 'in progres' || flatStatus === 'in progress'
+        || legacyStatus === 'in progres' || legacyStatus === 'in progress'
 
       const getColors = () => {
         if (_cachedColors) return _cachedColors
-        const legacyColors = Array.isArray(p.colors) ? p.colors.map((c: string) => String(c)) : []
-        const identityColors = Array.isArray(p.identity?.colors)
-          ? p.identity.colors.map((c) => (typeof c === 'object' && c?.name ? c.name : String(c)))
+        const colorNames = Array.isArray(p.colorNames) ? p.colorNames : []
+        const colorObjects = Array.isArray(p.colors)
+          ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name)
           : []
-        _cachedColors = [...legacyColors, ...identityColors]
+        _cachedColors = (colorNames.length > 0 ? colorNames : colorObjects).filter((c): c is string => typeof c === 'string' && c.length > 0)
         return _cachedColors
       }
 
@@ -926,7 +939,10 @@ export default function PlantSwipe() {
 
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
-        _cachedHabitats = (p.plantCare?.habitat || p.care?.habitat || []).map((h) => h.toLowerCase())
+        const climateArr = Array.isArray(p.climate) ? p.climate : []
+        const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
+        const combined = climateArr.length > 0 ? climateArr : legacyHabitat
+        _cachedHabitats = combined.filter((h): h is string => typeof h === 'string').map(h => h.toLowerCase())
         return _cachedHabitats
       }
 
@@ -935,14 +951,12 @@ export default function PlantSwipe() {
         get _searchString() {
           if (_cachedSearchString !== undefined) return _cachedSearchString
 
-          // Search string - includes name, scientific name, meaning, colors, common names and synonyms
-          // This allows users to search by any name they might know the plant by
-          const commonNames = (p.identity?.commonNames || []).join(' ')
-          const synonyms = (p.identity?.synonyms || []).join(' ')
-          const givenNames = (p.identity?.givenNames || []).join(' ')
+          const commonNames = (p.commonNames || p.identity?.commonNames as string[] || []).join(' ')
+          const givenNames = (p.givenNames || p.identity?.givenNames as string[] || []).join(' ')
+          const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -983,8 +997,11 @@ export default function PlantSwipe() {
         _livingSpace: livingSpace,
         get _seasonsSet() {
            if (_cachedSeasonsSet) return _cachedSeasonsSet
-           const seasons = Array.isArray(p.seasons) ? p.seasons : []
-           _cachedSeasonsSet = new Set(seasons.map(s => String(s)))
+           const seasonArr = Array.isArray(p.season) ? p.season
+             : Array.isArray(p.seasons) ? p.seasons
+             : Array.isArray(p.identity?.season) ? p.identity.season
+             : []
+           _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
            return _cachedSeasonsSet
         },
         _createdAtTs: createdAtTsFinal,
@@ -1214,7 +1231,7 @@ export default function PlantSwipe() {
       }
       
       // Discovery Algorithm:
-      // 1. Plants with promotion_month matching current month appear FIRST (shuffled among themselves)
+      // 1. Plants with featured_month matching current month appear FIRST (shuffled among themselves)
       // 2. All other plants follow (shuffled among themselves)
       // This ensures "Plant of the Month" plants get priority visibility in Discovery
       const now = new Date()
@@ -1254,13 +1271,13 @@ export default function PlantSwipe() {
 
   const sortedSearchResults = useMemo(() => {
     // For default sort:
-    // 1. Promotion Month plants first (featured for current month)
+    // 1. Featured Month plants first (featured for current month)
     // 2. Regular plants in the middle
     // 3. In-progress plants last
     if (searchSort === "default") {
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        // Priority: Promotion Month > Regular > In Progress
+        // Priority: Featured Month > Regular > In Progress
         // Use pre-computed boolean flags for O(1) checks during sort
         const aPromoted = a._isPromoted ? -1 : 0
         const bPromoted = b._isPromoted ? -1 : 0
@@ -2265,6 +2282,9 @@ export default function PlantSwipe() {
                     plants={sortedSearchResults}
                     openInfo={handleOpenInfo}
                     likedIds={likedIds}
+                    toggleLiked={toggleLiked}
+                    userId={user?.id}
+                    ensureLoggedIn={ensureLoggedIn}
                   />
                 </Suspense>
               }
@@ -2794,10 +2814,16 @@ export default function PlantSwipe() {
   )
 }
 
-function getPlantTypeLabel(classification?: Plant["classification"]): string | null {
-  if (!classification?.type) return null
-  const label = formatClassificationLabel(classification.type)
-  return label || null
+function getPlantTypeLabel(plant: Plant): string | null {
+  if (plant.plantType) {
+    const label = formatClassificationLabel(plant.plantType)
+    return label || null
+  }
+  if (plant.classification?.type) {
+    const label = formatClassificationLabel(plant.classification.type as string)
+    return label || null
+  }
+  return null
 }
 
 function getPlantUsageLabels(plant: Plant): string[] {
@@ -2815,9 +2841,14 @@ function getPlantUsageLabels(plant: Plant): string[] {
     })
   }
   
-  // Also check comestiblePart for edible-related labels
-  if (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0) {
-    const hasEdible = plant.comestiblePart.some(part => part && part.trim().length > 0)
+  // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
+  const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
+    ? plant.ediblePart
+    : (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0)
+      ? plant.comestiblePart
+      : null
+  if (edibleParts) {
+    const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
       const edibleLabel = formatClassificationLabel('comestible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
@@ -2826,20 +2857,8 @@ function getPlantUsageLabels(plant: Plant): string[] {
     }
   }
   
-  // Check usage fields for additional indicators
-  if (plant.usage?.aromatherapy) {
-    const aromaticLabel = formatClassificationLabel('aromatic')
-    if (aromaticLabel && !labels.includes(aromaticLabel)) {
-      labels.push(aromaticLabel)
-    }
-  }
-  
-  if (plant.usage?.adviceMedicinal) {
-    const medicinalLabel = formatClassificationLabel('medicinal')
-    if (medicinalLabel && !labels.includes(medicinalLabel)) {
-      labels.push(medicinalLabel)
-    }
-  }
+  // Aromatic and medicinal are now derived from the utility array (handled above)
+  // No additional boolean-based checks needed
   
   return labels
 }

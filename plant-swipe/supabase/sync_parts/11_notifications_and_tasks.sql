@@ -244,16 +244,16 @@ begin
         where automation_id is not null;
     end if;
     -- UNIQUE index for deduplicating automation notifications per user per day.
-    -- This is required by the ON CONFLICT clause in processDueAutomations() (server.js).
-    -- Without this index, every INSERT fails with "no unique or exclusion constraint
-    -- matching the ON CONFLICT specification" and NO automation notifications are ever delivered.
+    -- Excludes manual_test notifications so that admin "Test Now" never blocks
+    -- the scheduled automatic send for the same day.
     -- NOTE: We use an IMMUTABLE helper because timestamptz::date is timezone-dependent (STABLE),
     -- but PostgreSQL requires IMMUTABLE expressions in index definitions.
-    -- Drop old index that used non-immutable scheduled_for::date (may or may not exist)
+    -- Drop old index that didn't exclude manual tests
     drop index if exists public.user_notifications_automation_unique_daily;
     create unique index user_notifications_automation_unique_daily
       on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for)))
-      where automation_id is not null;
+      where automation_id is not null
+        and (payload->>'source' is distinct from 'manual_test');
   end if;
 end $$;
 

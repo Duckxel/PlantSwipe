@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
-import type { Plant, PlantWateringSchedule } from "@/types/plant"
+import type { Plant, PlantSeason, PlantWateringSchedule } from "@/types/plant"
 import { useTranslation } from "react-i18next"
 import {
     SunMedium,
@@ -10,6 +10,8 @@ import {
     ChevronRight,
     Droplet,
     Wrench,
+    Flame,
+    Snowflake,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
@@ -44,13 +46,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   }, [images.length, activeImageIndex])
 
     const commonNames = useMemo(() => {
-      const prioritized =
-        plant.identity?.givenNames && plant.identity.givenNames.length > 0
-          ? plant.identity.givenNames
-          : plant.identity?.commonNames
+      const flat = plant.commonNames || plant.givenNames
+      const legacy = plant.identity?.givenNames || plant.identity?.commonNames
+      const prioritized = (flat && flat.length > 0) ? flat : legacy
       if (!prioritized) return []
       return prioritized.filter((name): name is string => typeof name === "string" && name.trim().length > 0)
-    }, [plant.identity?.givenNames, plant.identity?.commonNames])
+    }, [plant.commonNames, plant.givenNames, plant.identity?.givenNames, plant.identity?.commonNames])
 
   const goToNextImage = useCallback(() => {
     if (!images.length) return
@@ -85,7 +86,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   }, [images, activeImageIndex, plant.name, imageViewer])
 
   const utilityBadges = plant.utility?.length ? plant.utility : []
-  const seasons = plant.identity?.season || plant.seasons || []
+  const seasons = plant.season || plant.identity?.season || (plant.seasons as PlantSeason[] | undefined) || []
 
   const translateUtility = (utility: string) => {
     const key = `plantDetails.utility.${utility.toLowerCase().replace(/[_\s-]/g, '')}`
@@ -112,20 +113,31 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     return translated || period.replace(/[_-]/g, " ").toLowerCase()
   }
 
-  const formatWateringNeed = (schedules?: PlantWateringSchedule[]) => {
-    if (!schedules?.length) return t('plantDetails.values.flexible')
-    const schedule = schedules[0]
+  const formatScheduleEntry = (schedule: PlantWateringSchedule) => {
     const quantity = schedule.quantity ?? undefined
     const timePeriod = schedule.timePeriod ? translateTimePeriod(schedule.timePeriod) : undefined
-
     if (quantity && timePeriod) return `${quantity} / ${timePeriod}`
     if (quantity) return `${quantity}x`
     if (timePeriod) return `${t('plantDetails.values.every')} ${timePeriod}`
     return t('plantDetails.values.scheduled')
   }
 
+  const buildWateringValue = (schedules?: PlantWateringSchedule[]) => {
+    if (!schedules?.length) return { text: t('plantDetails.values.flexible'), seasonal: null }
+    const hot = schedules.find((s) => s.season === 'hot')
+    const cold = schedules.find((s) => s.season === 'cold')
+    if (hot && cold) {
+      return {
+        text: null,
+        seasonal: { hot: formatScheduleEntry(hot), cold: formatScheduleEntry(cold) },
+      }
+    }
+    return { text: formatScheduleEntry(schedules[0]), seasonal: null }
+  }
+
+    const careLevelArr = Array.isArray(plant.careLevel) ? plant.careLevel : []
     const maintenanceLevel =
-      plant.identity?.maintenanceLevel || plant.plantCare?.maintenanceLevel || plant.care?.maintenanceLevel || undefined
+      careLevelArr[0] || (plant.identity?.maintenanceLevel as string) || undefined
 
   const translateLevelSun = (levelSun?: string) => {
     if (!levelSun) return t('plantDetails.values.adaptive')
@@ -141,10 +153,19 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     return translated || level
   }
 
+  const sunlightVal = Array.isArray(plant.sunlight) ? plant.sunlight[0] : (plant.plantCare?.levelSun as string | undefined)
+  const hygro = plant.hygrometry ?? (plant.plantCare?.hygrometry as number | undefined)
+  const tempMin = plant.temperatureMin ?? (plant.plantCare?.temperatureMin as number | undefined)
+  const tempMax = plant.temperatureMax ?? (plant.plantCare?.temperatureMax as number | undefined)
+  const tempIdeal = plant.temperatureIdeal ?? (plant.plantCare?.temperatureIdeal as number | undefined)
+  const schedules = plant.wateringSchedules ?? (plant.plantCare?.watering as { schedules?: PlantWateringSchedule[] } | undefined)?.schedules
+
+  const wateringData = buildWateringValue(schedules)
+
   const stats = [
     {
       label: t('plantDetails.stats.sunLevel'),
-      value: translateLevelSun(plant.plantCare?.levelSun),
+      value: translateLevelSun(sunlightVal),
       iconColor: "text-amber-500 dark:text-amber-400",
       iconBg: "bg-gradient-to-br from-amber-500 to-orange-500",
       iconShadow: "shadow-amber-500/30",
@@ -153,11 +174,23 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       labelColor: "text-amber-800/70 dark:text-amber-300/60",
       glowColor: "from-amber-300/30 to-orange-300/30 dark:from-amber-700/15 dark:to-orange-700/15",
       icon: <SunMedium className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
-      visible: Boolean(plant.plantCare?.levelSun),
+      visible: Boolean(sunlightVal),
     },
     {
       label: t('plantDetails.stats.wateringNeed'),
-      value: formatWateringNeed(plant.plantCare?.watering?.schedules),
+      value: wateringData.text ?? '',
+      customValue: wateringData.seasonal ? (
+        <div className="flex flex-col gap-1 mt-0.5">
+          <div className="flex items-center gap-1.5">
+            <Flame className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-orange-500 dark:text-orange-400 shrink-0" />
+            <span className="text-sm lg:text-base font-semibold leading-tight text-foreground">{wateringData.seasonal.hot}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Snowflake className="h-3.5 w-3.5 lg:h-4 lg:w-4 text-sky-500 dark:text-sky-400 shrink-0" />
+            <span className="text-sm lg:text-base font-semibold leading-tight text-foreground">{wateringData.seasonal.cold}</span>
+          </div>
+        </div>
+      ) : undefined,
       iconColor: "text-blue-500 dark:text-blue-400",
       iconBg: "bg-gradient-to-br from-blue-500 to-cyan-500",
       iconShadow: "shadow-blue-500/30",
@@ -166,11 +199,11 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       labelColor: "text-blue-800/70 dark:text-blue-300/60",
       glowColor: "from-blue-300/30 to-cyan-300/30 dark:from-blue-700/15 dark:to-cyan-700/15",
       icon: <Droplet className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
-      visible: Boolean(plant.plantCare?.watering?.schedules?.length),
+      visible: Boolean(schedules?.length),
     },
     {
       label: t('plantDetails.stats.humidity'),
-      value: plant.plantCare?.hygrometry !== undefined ? `${plant.plantCare.hygrometry}%` : t('plantDetails.values.ambient'),
+      value: hygro !== undefined ? `${hygro}%` : t('plantDetails.values.ambient'),
       iconColor: "text-cyan-500 dark:text-cyan-400",
       iconBg: "bg-gradient-to-br from-cyan-500 to-teal-500",
       iconShadow: "shadow-cyan-500/30",
@@ -179,7 +212,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       labelColor: "text-cyan-800/70 dark:text-cyan-300/60",
       glowColor: "from-cyan-300/30 to-teal-300/30 dark:from-cyan-700/15 dark:to-teal-700/15",
       icon: <Droplets className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
-      visible: plant.plantCare?.hygrometry !== undefined,
+      visible: hygro !== undefined,
     },
     {
       label: t('plantDetails.stats.maintenance'),
@@ -197,10 +230,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
     {
       label: t('plantDetails.stats.temperature'),
       value:
-        plant.plantCare?.temperatureMin !== undefined && plant.plantCare?.temperatureMax !== undefined
-          ? `${plant.plantCare.temperatureMin}°C to ${plant.plantCare.temperatureMax}°C`
-          : plant.plantCare?.temperatureIdeal !== undefined
-          ? `${plant.plantCare.temperatureIdeal}°C`
+        tempIdeal !== undefined
+          ? `${tempIdeal}°C`
           : t('plantDetails.values.stable'),
       iconColor: "text-rose-500 dark:text-rose-400",
       iconBg: "bg-gradient-to-br from-rose-500 to-pink-500",
@@ -210,10 +241,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       labelColor: "text-rose-800/70 dark:text-rose-300/60",
       glowColor: "from-rose-300/30 to-pink-300/30 dark:from-rose-700/15 dark:to-pink-700/15",
       icon: <Thermometer className="h-3.5 w-3.5 lg:h-4.5 lg:w-4.5 text-white" />,
-      visible:
-        plant.plantCare?.temperatureMin !== undefined ||
-        plant.plantCare?.temperatureMax !== undefined ||
-        plant.plantCare?.temperatureIdeal !== undefined,
+      visible: tempMin !== undefined || tempMax !== undefined || tempIdeal !== undefined,
     },
   ]
 
@@ -248,8 +276,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
-              {plant.identity?.scientificName && (
-                <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.identity.scientificName}</p>
+              {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
+                <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
               )}
                 {commonNames.length > 0 && (
                   <div className="mt-2 flex flex-wrap gap-1.5">
@@ -264,8 +292,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                   </div>
                 )}
             </div>
-            {plant.identity?.overview && (
-              <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.identity.overview}</p>
+            {(plant.presentation || plant.description || plant.identity?.overview) && (
+              <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.presentation || plant.description || plant.identity?.overview}</p>
             )}
           </div>
           <div className="flex w-full justify-center lg:w-auto">
@@ -317,7 +345,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               </span>
               <div className="relative min-w-0">
                 <p className={`text-[10px] lg:text-xs leading-none font-medium ${stat.labelColor}`}>{stat.label}</p>
-                <p className="mt-0.5 text-sm lg:text-base font-semibold leading-tight text-foreground">{stat.value}</p>
+                {stat.customValue ? stat.customValue : (
+                  <p className="mt-0.5 text-sm lg:text-base font-semibold leading-tight text-foreground">{stat.value}</p>
+                )}
               </div>
             </div>
           ))}

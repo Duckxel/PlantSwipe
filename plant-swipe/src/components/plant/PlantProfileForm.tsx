@@ -1,5 +1,4 @@
 import React from "react"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -7,30 +6,63 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
-import { plantFormCategoryOrder, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
-import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantType, PlantWateringSchedule, RecipeCategory, RecipeTime } from "@/types/plant"
+import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
+import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
 import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
+import { PillTabs, type PillTab } from "@/components/ui/pill-tabs"
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant form data handling */
+
+export interface PlantReport {
+  id: string
+  note: string
+  imageUrl: string | null
+  createdAt: string
+  userName: string
+}
+
+export interface PlantVariety {
+  id: string
+  name: string
+  variety: string | null
+  imageUrl: string | null
+}
 
 export type PlantProfileFormProps = {
   value: Plant
   onChange: (plant: Plant) => void
   colorSuggestions?: PlantColor[]
   companionSuggestions?: string[]
+  biotopeSuggestions?: string[]
+  beneficialSuggestions?: string[]
+  harmfulSuggestions?: string[]
   categoryProgress?: CategoryProgress
   /** Current language for companion search (e.g., 'en', 'fr'). Defaults to 'en'. */
   language?: string
   /** Called when an image is removed. Use to delete from storage if needed. */
   onImageRemove?: (imageUrl: string) => void
+  /** Plant reports submitted by users (displayed read-only in the Meta section) */
+  plantReports?: PlantReport[]
+  /** Auto-detected varieties (same species, different variety) */
+  plantVarieties?: PlantVariety[]
 }
 
-const neuCardClass =
-  "rounded-2xl border border-emerald-100/80 dark:border-emerald-900/50 bg-gradient-to-br " +
-  "from-emerald-50/80 via-emerald-100/70 to-white/80 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] " +
-  "shadow-[0_18px_50px_-26px_rgba(16,185,129,0.35)] dark:shadow-[0_22px_65px_-40px_rgba(0,0,0,0.65)]"
+const glassCardClass =
+  "rounded-[24px] border border-stone-200/70 dark:border-[#3e3e42]/70 " +
+  "bg-white/90 dark:bg-[#17171a]/90 backdrop-blur " +
+  "shadow-[0_25px_70px_-45px_rgba(15,23,42,0.12)] dark:shadow-[0_25px_70px_-45px_rgba(0,0,0,0.65)]"
+
+const sectionTitleClass =
+  "flex items-center gap-2.5 text-emerald-700 dark:text-emerald-400 mb-4"
+
+const sectionTitleTextClass =
+  "text-xs uppercase tracking-wider font-semibold"
+
+const fieldRowClass = "grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4"
+
 
 const normalizeHex = (hex?: string) => {
   if (!hex) return ""
@@ -67,6 +99,8 @@ interface FieldConfig {
     caseInsensitive?: boolean
     placeholder?: string
   }
+  /** If set, this field is only shown when the gate field is true */
+  gatedBy?: string
 }
 
 const sanitizeOptionKey = (value: unknown) => {
@@ -87,6 +121,22 @@ const monthOptions = [
   { label: "October", value: 10 },
   { label: "November", value: 11 },
   { label: "December", value: 12 },
+] as const
+
+/** Slug-based month options for fields stored as text[] in the DB (e.g. featured_month) */
+const monthSlugOptions = [
+  { label: "January", value: "january" },
+  { label: "February", value: "february" },
+  { label: "March", value: "march" },
+  { label: "April", value: "april" },
+  { label: "May", value: "may" },
+  { label: "June", value: "june" },
+  { label: "July", value: "july" },
+  { label: "August", value: "august" },
+  { label: "September", value: "september" },
+  { label: "October", value: "october" },
+  { label: "November", value: "november" },
+  { label: "December", value: "december" },
 ] as const
 
 const monthLookup = monthOptions.reduce((acc, option) => {
@@ -172,8 +222,8 @@ const TagInput: React.FC<{
   )
 }
 
-const CompanionSelector: React.FC<{ 
-  value: string[]; 
+const CompanionSelector: React.FC<{
+  value: string[];
   onChange: (ids: string[]) => void;
   suggestions?: string[];
   showSuggestions?: boolean;
@@ -184,202 +234,173 @@ const CompanionSelector: React.FC<{
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('common')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
-  const [open, setOpen] = React.useState(false)
-  const [search, setSearch] = React.useState("")
-  const [results, setResults] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
-  const [loading, setLoading] = React.useState(false)
+  const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set())
+
+  // Track disabled IDs (current plant + already selected)
+  const disabledIds = React.useMemo(() => {
+    const ids = new Set(value)
+    if (currentPlantId) ids.add(currentPlantId)
+    return ids
+  }, [value, currentPlantId])
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
   }, [value])
 
   // Fetch plant names (and images) for companion IDs - use translations for non-English
+  // Batches queries to avoid Supabase URL length limits with large ID arrays
   React.useEffect(() => {
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
+    let cancelled = false
+    const BATCH = 20
     const loadMissing = async () => {
-      let plantNames: { id: string; name: string }[] = []
-      
-      if (language !== 'en') {
-        // For non-English, fetch translated names from plant_translations
-        const { data: translationData } = await supabase
-          .from('plant_translations')
-          .select('plant_id, name')
-          .in('plant_id', missing)
-          .eq('language', language)
-        
-        if (translationData && translationData.length > 0) {
-          plantNames = translationData.map((t) => ({
-            id: t.plant_id as string,
-            name: t.name as string
-          }))
-        }
-        
-        // For any plants without translations, fall back to English
-        const foundIds = new Set(plantNames.map(p => p.id))
-        const missingTranslations = missing.filter(id => !foundIds.has(id))
-        if (missingTranslations.length > 0) {
-          const { data: fallbackData } = await supabase
-            .from('plants')
-            .select('id,name')
-            .in('id', missingTranslations)
-          if (fallbackData) {
-            plantNames = [...plantNames, ...fallbackData.map((p) => ({
-              id: p.id as string,
-              name: (p as any).name as string
-            }))]
+      setLoadingCompanions(true)
+      try {
+        let plantNames: { id: string; name: string }[] = []
+
+        // Batch the queries to avoid URL length limits
+        for (let i = 0; i < missing.length; i += BATCH) {
+          if (cancelled) return
+          const batch = missing.slice(i, i + BATCH)
+
+          if (language !== 'en') {
+            const { data: translationData } = await supabase
+              .from('plant_translations')
+              .select('plant_id, name')
+              .in('plant_id', batch)
+              .eq('language', language)
+
+            if (translationData && translationData.length > 0) {
+              plantNames.push(...translationData.map((t) => ({
+                id: t.plant_id as string,
+                name: t.name as string
+              })))
+            }
+
+            const foundIds = new Set(translationData?.map(t => t.plant_id) || [])
+            const missingTranslations = batch.filter(id => !foundIds.has(id))
+            if (missingTranslations.length > 0) {
+              const { data: fallbackData } = await supabase
+                .from('plants')
+                .select('id,name')
+                .in('id', missingTranslations)
+              if (fallbackData) {
+                plantNames.push(...fallbackData.map((p) => ({
+                  id: p.id as string,
+                  name: (p as any).name as string
+                })))
+              }
+            }
+          } else {
+            const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', batch)
+            if (plantsData) {
+              plantNames.push(...plantsData.map((p) => ({
+                id: p.id as string,
+                name: (p as any).name as string
+              })))
+            }
           }
         }
-      } else {
-        // For English, fetch from plants table
-        const { data: plantsData } = await supabase.from('plants').select('id,name').in('id', missing)
-        if (plantsData) {
-          plantNames = plantsData.map((p) => ({
-            id: p.id as string,
-            name: (p as any).name as string
-          }))
-        }
-      }
-      
-      if (plantNames.length > 0) {
-        // Fetch images
-        const { data: imagesData } = await supabase
-          .from('plant_images')
-          .select('plant_id, link')
-          .in('plant_id', plantNames.map(p => p.id))
-          .eq('use', 'primary')
-        
-        const imageMap = new Map<string, string>()
-        if (imagesData) {
-          imagesData.forEach((img) => {
-            if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+
+        if (cancelled) return
+
+        if (plantNames.length > 0) {
+          // Batch image queries too
+          const imageMap = new Map<string, string>()
+          const imgIds = plantNames.map(p => p.id)
+          for (let i = 0; i < imgIds.length; i += BATCH) {
+            if (cancelled) return
+            const batch = imgIds.slice(i, i + BATCH)
+            const { data: imagesData } = await supabase
+              .from('plant_images')
+              .select('plant_id, link')
+              .in('plant_id', batch)
+              .eq('use', 'primary')
+            if (imagesData) {
+              imagesData.forEach((img) => {
+                if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+              })
+            }
+          }
+
+          if (cancelled) return
+
+          setCompanions((prev) => {
+            const existingIds = new Set(prev.map(c => c.id))
+            const newCompanions = plantNames
+              .filter(p => !existingIds.has(p.id))
+              .map((p) => ({
+                id: p.id,
+                name: p.name,
+                imageUrl: imageMap.get(p.id)
+              }))
+            return [...prev, ...newCompanions]
           })
         }
-        
-        setCompanions((prev) => {
-          // Filter out duplicates - only add companions not already in the list
-          const existingIds = new Set(prev.map(c => c.id))
-          const newCompanions = plantNames
-            .filter(p => !existingIds.has(p.id))
-            .map((p) => ({ 
-              id: p.id, 
-              name: p.name,
-              imageUrl: imageMap.get(p.id)
-            }))
-          return [...prev, ...newCompanions]
-        })
+      } finally {
+        if (!cancelled) setLoadingCompanions(false)
       }
     }
     loadMissing()
-    // Note: companions intentionally excluded from deps to prevent infinite loop
+    return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, language])
 
-  // Search plants - use translations for non-English languages
-  const searchPlants = async (searchTerm?: string) => {
-    setLoading(true)
-    const term = searchTerm ?? search
+  // Async search for SearchItem: returns SearchItemOption[] with plant images as icons
+  const searchPlantsAsync = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
     let plantResults: { id: string; name: string }[] = []
-    
+
     if (language !== 'en') {
-      // For non-English, search in plant_translations table
-      let query = supabase
+      let q = supabase
         .from('plant_translations')
         .select('plant_id, name')
         .eq('language', language)
         .order('name')
         .limit(30)
-      
-      if (term.trim()) {
-        query = query.ilike('name', `%${term.trim()}%`)
-      }
-      
-      const { data: translationData } = await query
-      
-      if (translationData) {
-        plantResults = translationData.map((t) => ({
-          id: t.plant_id as string,
-          name: t.name as string
-        }))
-      }
+      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      const { data } = await q
+      if (data) plantResults = data.map((t) => ({ id: t.plant_id as string, name: t.name as string }))
     } else {
-      // For English, search in plants table
-      let query = supabase.from('plants').select('id,name').order('name').limit(30)
-      if (term.trim()) query = query.ilike('name', `%${term.trim()}%`)
-      const { data: plantsData } = await query
-      
-      if (plantsData) {
-        plantResults = plantsData.map((p) => ({
-          id: p.id as string,
-          name: (p as any).name as string
-        }))
-      }
+      let q = supabase.from('plants').select('id,name').order('name').limit(30)
+      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      const { data } = await q
+      if (data) plantResults = data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))
     }
-    
+
+    // Fetch images for results
+    const imageMap = new Map<string, string>()
     if (plantResults.length > 0) {
-      // Fetch images for results
-      const ids = plantResults.map(p => p.id)
       const { data: imagesData } = await supabase
         .from('plant_images')
         .select('plant_id, link')
-        .in('plant_id', ids)
+        .in('plant_id', plantResults.map(p => p.id))
         .eq('use', 'primary')
-      
-      const imageMap = new Map<string, string>()
-      if (imagesData) {
-        imagesData.forEach((img) => {
-          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
-        })
-      }
-      
-      setResults(plantResults.map((p) => ({ 
-        id: p.id, 
-        name: p.name,
-        imageUrl: imageMap.get(p.id)
-      })))
-    } else {
-      setResults([])
+      if (imagesData) imagesData.forEach((img) => {
+        if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
+      })
     }
-    setLoading(false)
-  }
 
-  React.useEffect(() => {
-    if (open) {
-      searchPlants()
-      setSelectedIds(new Set())
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open])
+    return plantResults.map((p) => ({
+      id: p.id,
+      label: p.name,
+      description: imageMap.get(p.id) || null,
+    }))
+  }, [language])
 
-  const toggleSelect = (id: string) => {
-    // Prevent selecting current plant as its own companion
-    if (id === currentPlantId) return
-    
-    setSelectedIds(prev => {
-      const next = new Set(prev)
-      if (next.has(id)) {
-        next.delete(id)
-      } else {
-        next.add(id)
-      }
-      return next
-    })
-  }
-
-  const addSelectedCompanions = () => {
-    const newIds = Array.from(selectedIds).filter(id => !value.includes(id) && id !== currentPlantId)
-    if (newIds.length === 0) {
-      setOpen(false)
-      return
-    }
-    
-    const newCompanions = results.filter(r => newIds.includes(r.id))
+  const handleMultiSelect = (selected: SearchItemOption[]) => {
+    const newIds = selected.map(o => o.id).filter(id => !value.includes(id) && id !== currentPlantId)
+    if (!newIds.length) return
     onChange([...value, ...newIds])
-    setCompanions(prev => [...prev, ...newCompanions])
-    setSelectedIds(new Set())
-    setOpen(false)
+    // Add to companions cache for immediate display
+    setCompanions(prev => {
+      const existingIds = new Set(prev.map(c => c.id))
+      const added = selected
+        .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
+        .map(o => ({ id: o.id, name: o.label, imageUrl: (o.description || undefined) as string | undefined }))
+      return [...prev, ...added]
+    })
   }
 
   const removeCompanion = (id: string) => {
@@ -388,23 +409,20 @@ const CompanionSelector: React.FC<{
   }
 
   // Search for a suggested companion by name and add it
-  // Uses current language for non-English search
   const addSuggestedCompanion = async (suggestedName: string) => {
     setSuggestionSearching(suggestedName)
     try {
       let foundPlant: { id: string; name: string } | null = null
-      
+
       if (language !== 'en') {
-        // For non-English, search in plant_translations first
         let { data: translationData } = await supabase
           .from('plant_translations')
           .select('plant_id, name')
           .eq('language', language)
           .ilike('name', suggestedName)
           .limit(1)
-        
+
         if (!translationData?.length) {
-          // Try partial match
           const { data } = await supabase
             .from('plant_translations')
             .select('plant_id, name')
@@ -413,74 +431,35 @@ const CompanionSelector: React.FC<{
             .limit(1)
           translationData = data
         }
-        
+
         if (translationData?.length) {
-          foundPlant = {
-            id: translationData[0].plant_id as string,
-            name: translationData[0].name as string
-          }
+          foundPlant = { id: translationData[0].plant_id as string, name: translationData[0].name as string }
         }
       }
-      
-      // Fall back to English search if not found or if language is English
+
       if (!foundPlant) {
-        let { data } = await supabase
-          .from('plants')
-          .select('id,name')
-          .ilike('name', suggestedName)
-          .limit(1)
-        
+        let { data } = await supabase.from('plants').select('id,name').ilike('name', suggestedName).limit(1)
         if (!data?.length) {
-          const result = await supabase
-            .from('plants')
-            .select('id,name')
-            .ilike('name', `%${suggestedName}%`)
-            .limit(1)
+          const result = await supabase.from('plants').select('id,name').ilike('name', `%${suggestedName}%`).limit(1)
           data = result.data
         }
-        
         if (data?.length) {
-          // If language is not English, try to fetch the translated name
           if (language !== 'en') {
             const { data: translatedName } = await supabase
-              .from('plant_translations')
-              .select('name')
-              .eq('plant_id', data[0].id)
-              .eq('language', language)
-              .limit(1)
-            
-            foundPlant = {
-              id: data[0].id as string,
-              name: translatedName?.[0]?.name || (data[0] as any).name as string
-            }
+              .from('plant_translations').select('name').eq('plant_id', data[0].id).eq('language', language).limit(1)
+            foundPlant = { id: data[0].id as string, name: translatedName?.[0]?.name || (data[0] as any).name as string }
           } else {
-            foundPlant = {
-              id: data[0].id as string,
-              name: (data[0] as any).name as string
-            }
+            foundPlant = { id: data[0].id as string, name: (data[0] as any).name as string }
           }
         }
       }
-      
+
       if (foundPlant) {
-        const plantId = foundPlant.id
-        // Prevent adding current plant as its own companion
-        if (plantId === currentPlantId) return
-        
-        if (!value.includes(plantId)) {
-          // Fetch image
+        if (foundPlant.id === currentPlantId) return
+        if (!value.includes(foundPlant.id)) {
           const { data: imgData } = await supabase
-            .from('plant_images')
-            .select('link')
-            .eq('plant_id', plantId)
-            .eq('use', 'primary')
-            .limit(1)
-          
-          const plant = { 
-            id: plantId, 
-            name: foundPlant.name,
-            imageUrl: imgData?.[0]?.link
-          }
+            .from('plant_images').select('link').eq('plant_id', foundPlant.id).eq('use', 'primary').limit(1)
+          const plant = { id: foundPlant.id, name: foundPlant.name, imageUrl: imgData?.[0]?.link }
           onChange([...value, plant.id])
           setCompanions((prev) => [...prev, plant])
         }
@@ -492,13 +471,6 @@ const CompanionSelector: React.FC<{
 
   const isSuggestionAdded = (suggestedName: string) => {
     return companions.some(c => c.name.toLowerCase() === suggestedName.toLowerCase())
-  }
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      searchPlants()
-    }
   }
 
   return (
@@ -532,7 +504,7 @@ const CompanionSelector: React.FC<{
                       disabled={alreadyAdded || isSearching}
                       onClick={() => addSuggestedCompanion(suggestedName)}
                       className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-all ${
-                        alreadyAdded 
+                        alreadyAdded
                           ? 'bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 cursor-default'
                           : 'bg-white dark:bg-[#1a1a1a] border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-emerald-800 dark:text-emerald-200'
                       }`}
@@ -553,257 +525,276 @@ const CompanionSelector: React.FC<{
           )}
         </div>
       )}
-      
-      {/* Current Companions - Enhanced Grid */}
+
+      {/* Current Companions - Compact thumbnail row */}
       {value.length > 0 ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+        <div className="flex flex-wrap gap-2 items-center">
           {companions.map((c) => (
-            <div 
-              key={c.id} 
-              className="relative group rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1a] overflow-hidden"
+            <div
+              key={c.id}
+              className="relative group"
+              title={c.name}
             >
-              <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
+              <div className="h-12 w-12 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
                 {c.imageUrl ? (
                   <img src={c.imageUrl} alt={c.name} className="w-full h-full object-cover" />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center text-stone-400">
-                    <Leaf className="h-8 w-8" />
+                    <Leaf className="h-5 w-5" />
                   </div>
                 )}
-              </div>
-              <div className="p-2">
-                <p className="text-sm font-medium truncate text-stone-900 dark:text-stone-100">{c.name}</p>
               </div>
               <button
                 type="button"
                 onClick={() => removeCompanion(c.id)}
-                className="absolute top-1 right-1 h-6 w-6 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
                 aria-label={`Remove ${c.name}`}
               >
-                <X className="h-4 w-4" />
+                <X className="h-3 w-3" />
               </button>
             </div>
           ))}
+          {/* Loading skeleton placeholders for plants not yet fetched */}
+          {loadingCompanions && value.filter(id => !companions.find(c => c.id === id)).length > 0 && (
+            Array.from({ length: Math.min(value.length - companions.length, 10) }).map((_, i) => (
+              <div key={`skel-${i}`} className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-stone-700 animate-pulse" />
+            ))
+          )}
+          {/* Badge showing total count */}
+          <span className="text-xs font-medium text-muted-foreground ml-1">{value.length}</span>
         </div>
       ) : (
         <div className="text-sm text-muted-foreground py-4 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl">
           {t('plantAdmin.noCompanions', 'No companion or related plants added yet.')}
         </div>
       )}
-      
-      {/* Add Button */}
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button type="button" variant="outline" className="w-full">
-            <span className="mr-2">+</span>
-            {t('plantAdmin.addCompanionBtn', 'Add Companion / Related Plants')}
-          </Button>
-        </DialogTrigger>
-        <DialogContent className="max-w-3xl max-h-[85vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>{t('plantAdmin.selectCompanionTitle', 'Select Companion & Related Plants')}</DialogTitle>
-            <p className="text-sm text-muted-foreground">
-              {t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add as companions or related varieties.')}
-            </p>
-          </DialogHeader>
-          
-          <div className="flex gap-2 items-center py-2">
-            <SearchInput 
-              value={search} 
-              onChange={(e) => setSearch(e.target.value)} 
-              onKeyDown={handleSearchKeyDown}
-              placeholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')} 
-              loading={loading} 
-              className="flex-1" 
-            />
-            <Button type="button" onClick={() => searchPlants()} disabled={loading}>
-              {loading ? t('plantAdmin.searchingBtn', 'Searching...') : t('plantAdmin.searchBtn', 'Search')}
-            </Button>
-          </div>
-          
-          {/* Selection summary */}
-          {selectedIds.size > 0 && (
-            <div className="flex items-center justify-between py-2 px-3 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">
-              <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                {selectedIds.size} plant{selectedIds.size > 1 ? 's' : ''} selected
-              </span>
-              <Button type="button" size="sm" onClick={addSelectedCompanions}>
-                Add Selected
-              </Button>
+
+      {/* Add Button — uses SearchItem in multi-select mode */}
+      <SearchItem
+        multiSelect
+        value={null}
+        values={value}
+        onSelect={() => {}}
+        onMultiSelect={handleMultiSelect}
+        onSearch={searchPlantsAsync}
+        disabledIds={disabledIds}
+        placeholder={t('plantAdmin.addCompanionBtn', 'Add Plants')}
+        title={t('plantAdmin.selectCompanionTitle', 'Select Plants')}
+        description={t('plantAdmin.selectCompanionDesc', 'Select multiple plants to add.')}
+        searchPlaceholder={t('plantAdmin.searchPlantsPlaceholder', 'Search plants by name...')}
+        emptyMessage={t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
+        confirmLabel={t('plantAdmin.addSelectedBtn', 'Add Selected')}
+        renderItem={(option) => (
+          <div className="flex flex-col w-full h-full">
+            <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+              {option.description ? (
+                <img src={option.description} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
+                  <Leaf className="h-8 w-8" />
+                </div>
+              )}
             </div>
-          )}
-          
-          {/* Results Grid */}
-          <div className="flex-1 overflow-y-auto min-h-0">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2 py-2">
-              {results.map((plant) => {
-                const isSelected = selectedIds.has(plant.id)
-                const isAlreadyAdded = value.includes(plant.id)
-                const isCurrentPlant = plant.id === currentPlantId
-                const isDisabled = isAlreadyAdded || isCurrentPlant
-                
-                return (
-                  <button
-                    key={plant.id}
-                    type="button"
-                    disabled={isDisabled}
-                    onClick={() => toggleSelect(plant.id)}
-                    className={`relative text-left rounded-xl border overflow-hidden transition-all ${
-                      isDisabled
-                        ? 'opacity-50 cursor-not-allowed border-stone-200 dark:border-stone-700'
-                        : isSelected
-                        ? 'border-emerald-500 ring-2 ring-emerald-500/50 bg-emerald-50 dark:bg-emerald-900/30'
-                        : 'border-stone-200 dark:border-stone-700 hover:border-emerald-300 dark:hover:border-emerald-600'
-                    }`}
-                  >
-                    <div className="aspect-[4/3] bg-stone-100 dark:bg-stone-800">
-                      {plant.imageUrl ? (
-                        <img src={plant.imageUrl} alt={plant.name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-stone-400">
-                          <Leaf className="h-6 w-6" />
-                        </div>
-                      )}
-                    </div>
-                    <div className="p-2">
-                      <p className="text-sm font-medium truncate">{plant.name}</p>
-                      {isCurrentPlant && (
-                        <p className="text-xs text-amber-600 dark:text-amber-400">Current plant</p>
-                      )}
-                      {isAlreadyAdded && !isCurrentPlant && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400">Already added</p>
-                      )}
-                    </div>
-                    {isSelected && (
-                      <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center">
-                        ✓
-                      </div>
-                    )}
-                  </button>
-                )
-              })}
+            <div className="flex-1 flex items-center px-3 py-2">
+              <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
             </div>
-            {!results.length && !loading && (
-              <div className="text-sm text-muted-foreground text-center py-8">
-                {t('plantAdmin.noPlantsFound', 'No plants found. Try a different search term.')}
-              </div>
-            )}
           </div>
-          
-          {/* Footer */}
-          <div className="flex justify-end gap-2 pt-3 border-t">
-            <Button type="button" variant="outline" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button type="button" onClick={addSelectedCompanions} disabled={selectedIds.size === 0}>
-              Add {selectedIds.size > 0 ? `(${selectedIds.size})` : ''} Selected
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+        )}
+      />
     </div>
   )
 }
 
+/** Derive watering mode from existing schedule data */
+function deriveWateringMode(schedules?: PlantWateringSchedule[], explicitMode?: WateringMode): WateringMode {
+  if (explicitMode) return explicitMode
+  if (!schedules?.length) return 'always'
+  const hasHotCold = schedules.some((s) => s.season === 'hot' || s.season === 'cold')
+  return hasHotCold ? 'seasonal' : 'always'
+}
+
+/** Build schedules array from the structured form state */
+function buildSchedulesFromMode(
+  mode: WateringMode,
+  always: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+  hot: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+  cold: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] },
+): PlantWateringSchedule[] {
+  if (mode === 'seasonal') {
+    return [
+      { season: 'hot', quantity: hot.quantity, timePeriod: hot.timePeriod },
+      { season: 'cold', quantity: cold.quantity, timePeriod: cold.timePeriod },
+    ]
+  }
+  return [{ quantity: always.quantity, timePeriod: always.timePeriod }]
+}
+
+const TimePeriodSelect: React.FC<{
+  value: PlantWateringSchedule['timePeriod'] | undefined
+  onChange: (v: PlantWateringSchedule['timePeriod'] | undefined) => void
+  t: TFunction
+}> = ({ value, onChange, t }) => (
+  <select
+    className="h-9 rounded-md border px-2 text-sm"
+    value={value || ""}
+    onChange={(e) => onChange(e.target.value ? (e.target.value as PlantWateringSchedule['timePeriod']) : undefined)}
+  >
+    <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
+    {(['week', 'month', 'year'] as const).map((opt) => (
+      <option key={opt} value={opt}>
+        {t(`plantAdmin.optionLabels.${opt}`, opt)}
+      </option>
+    ))}
+  </select>
+)
+
 const WateringScheduleEditor: React.FC<{
   value: PlantWateringSchedule[] | undefined
   onChange: (schedules: PlantWateringSchedule[]) => void
-}> = ({ value, onChange }) => {
+  wateringMode?: WateringMode
+  onWateringModeChange?: (mode: WateringMode) => void
+}> = ({ value, onChange, wateringMode, onWateringModeChange }) => {
   const { t } = useTranslation('common')
   const schedules = Array.isArray(value) ? value : []
-  const [draft, setDraft] = React.useState<PlantWateringSchedule>({ season: "", quantity: undefined, timePeriod: undefined })
-  const addDraft = () => {
-    if (!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)) return
-    onChange([...schedules, { season: draft.season?.trim(), quantity: draft.quantity, timePeriod: draft.timePeriod }])
-    setDraft({ season: "", quantity: undefined, timePeriod: draft.timePeriod })
+  const mode = deriveWateringMode(schedules, wateringMode)
+
+  // Extract current values from schedules
+  const alwaysEntry = schedules.find((s) => !s.season) || schedules[0] || {}
+  const hotEntry = schedules.find((s) => s.season === 'hot') || {}
+  const coldEntry = schedules.find((s) => s.season === 'cold') || {}
+
+  const setMode = (newMode: WateringMode) => {
+    onWateringModeChange?.(newMode)
+    if (newMode === 'always') {
+      // Convert to single schedule — take hot entry as default or keep existing
+      const src = hotEntry.quantity != null ? hotEntry : alwaysEntry
+      onChange(buildSchedulesFromMode('always', src, hotEntry, coldEntry))
+    } else {
+      // Convert to seasonal — use current always values as hot default
+      const src = alwaysEntry.quantity != null ? alwaysEntry : hotEntry
+      onChange(buildSchedulesFromMode('seasonal', alwaysEntry,
+        { quantity: src.quantity, timePeriod: src.timePeriod },
+        { quantity: coldEntry.quantity ?? src.quantity, timePeriod: coldEntry.timePeriod ?? src.timePeriod }
+      ))
+    }
   }
-  const update = (idx: number, patch: Partial<PlantWateringSchedule>) => {
-    onChange(
-      schedules.map((s, i) => (i === idx ? { ...s, ...patch } : s))
-    )
+
+  const updateAlways = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...alwaysEntry, ...patch }
+    onChange(buildSchedulesFromMode('always', updated, hotEntry, coldEntry))
   }
-  const remove = (idx: number) => onChange(schedules.filter((_, i) => i !== idx))
-    return (
-      <div className="grid gap-3">
-          {schedules.map((schedule, idx) => (
-          <div key={`${schedule.season}-${idx}`} className="grid gap-2 rounded border p-3">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-              <Input
-                  placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
-                value={schedule.season || ""}
-                onChange={(e) => update(idx, { season: e.target.value })}
-              />
-              <Input
-                  placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
-                type="number"
-                value={schedule.quantity ?? ""}
-                onChange={(e) => {
-                  const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-                  update(idx, { quantity: Number.isFinite(nextVal as number) ? nextVal : undefined })
-                }}
-              />
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
-                value={schedule.timePeriod || ""}
-                onChange={(e) => update(idx, { timePeriod: e.target.value ? (e.target.value as any) : undefined })}
-              >
-                  <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
-                  {(['week', 'month', 'year'] as const).map((opt) => (
-                    <option key={opt} value={opt}>
-                      {t(`plantAdmin.optionLabels.${opt}`, opt)}
-                    </option>
-                  ))}
-              </select>
-            </div>
-            <div className="flex justify-end">
-              <Button variant="ghost" type="button" onClick={() => remove(idx)} className="text-red-600">
-                  {t('plantAdmin.actions.remove', 'Remove')}
-              </Button>
-            </div>
-          </div>
-        ))}
-        <div className="grid gap-2 rounded border border-dashed p-3">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            <Input
-                placeholder={t('plantAdmin.watering.seasonPlaceholder', 'Season (optional)')}
-              value={draft.season}
-              onChange={(e) => setDraft((d) => ({ ...d, season: e.target.value }))}
-            />
-            <Input
-                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
-              type="number"
-              value={draft.quantity ?? ""}
-              onChange={(e) => {
-                const nextVal = e.target.value === "" ? undefined : parseInt(e.target.value, 10)
-                setDraft((d) => ({ ...d, quantity: Number.isFinite(nextVal as number) ? nextVal : undefined }))
-                }}
-              />
-            <select
-              className="h-9 rounded-md border px-2 text-sm"
-              value={draft.timePeriod || ""}
-              onChange={(e) => setDraft((d) => ({ ...d, timePeriod: e.target.value ? (e.target.value as any) : undefined }))}
-            >
-                <option value="">{t('plantAdmin.watering.timePeriodPlaceholder', 'Time period')}</option>
-                {(['week', 'month', 'year'] as const).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {t(`plantAdmin.optionLabels.${opt}`, opt)}
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="flex justify-between text-sm text-muted-foreground">
-              <span>{t('plantAdmin.watering.helper', 'Season is optional. Add as many watering schedules as needed.')}</span>
-            <Button
-              type="button"
-              onClick={addDraft}
-              disabled={!(draft.season?.trim() || draft.quantity !== undefined || draft.timePeriod)}
-            >
-                {t('plantAdmin.watering.addSchedule', 'Add schedule')}
-            </Button>
-          </div>
-        </div>
+
+  const updateHot = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...hotEntry, ...patch }
+    onChange(buildSchedulesFromMode('seasonal', alwaysEntry, updated, coldEntry))
+  }
+
+  const updateCold = (patch: { quantity?: number; timePeriod?: PlantWateringSchedule['timePeriod'] }) => {
+    const updated = { ...coldEntry, ...patch }
+    onChange(buildSchedulesFromMode('seasonal', alwaysEntry, hotEntry, updated))
+  }
+
+  const parseNumber = (val: string): number | undefined => {
+    if (val === '') return undefined
+    const n = parseInt(val, 10)
+    return Number.isFinite(n) ? n : undefined
+  }
+
+  return (
+    <div className="grid gap-3">
+      {/* Mode toggle */}
+      <div className="flex gap-2">
+        <Button
+          type="button"
+          variant={mode === 'always' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode('always')}
+        >
+          {t('plantAdmin.watering.modeAlways', 'Always (same year-round)')}
+        </Button>
+        <Button
+          type="button"
+          variant={mode === 'seasonal' ? 'default' : 'outline'}
+          size="sm"
+          onClick={() => setMode('seasonal')}
+        >
+          {t('plantAdmin.watering.modeSeasonal', 'Seasonal (Hot / Cold)')}
+        </Button>
       </div>
-    )
+
+      {mode === 'always' ? (
+        /* Always mode — single quantity + time period */
+        <div className="rounded border p-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            <Input
+              placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+              type="number"
+              min={0}
+              value={alwaysEntry.quantity ?? ""}
+              onChange={(e) => updateAlways({ quantity: parseNumber(e.target.value) })}
+            />
+            <TimePeriodSelect
+              value={alwaysEntry.timePeriod}
+              onChange={(tp) => updateAlways({ timePeriod: tp })}
+              t={t}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            {t('plantAdmin.watering.alwaysHelper', 'Same watering schedule all year round.')}
+          </p>
+        </div>
+      ) : (
+        /* Seasonal mode — hot and cold */
+        <div className="grid gap-3">
+          {/* Hot environment */}
+          <div className="rounded border p-3">
+            <Label className="mb-2 font-medium text-orange-600">
+              {t('plantAdmin.watering.hotLabel', 'Hot environment')}
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              <Input
+                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+                type="number"
+                min={0}
+                value={hotEntry.quantity ?? ""}
+                onChange={(e) => updateHot({ quantity: parseNumber(e.target.value) })}
+              />
+              <TimePeriodSelect
+                value={hotEntry.timePeriod}
+                onChange={(tp) => updateHot({ timePeriod: tp })}
+                t={t}
+              />
+            </div>
+          </div>
+
+          {/* Cold environment */}
+          <div className="rounded border p-3">
+            <Label className="mb-2 font-medium text-blue-600">
+              {t('plantAdmin.watering.coldLabel', 'Cold environment')}
+            </Label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mt-1">
+              <Input
+                placeholder={t('plantAdmin.watering.quantityPlaceholder', 'Quantity')}
+                type="number"
+                min={0}
+                value={coldEntry.quantity ?? ""}
+                onChange={(e) => updateCold({ quantity: parseNumber(e.target.value) })}
+              />
+              <TimePeriodSelect
+                value={coldEntry.timePeriod}
+                onChange={(tp) => updateCold({ timePeriod: tp })}
+                t={t}
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {t('plantAdmin.watering.seasonalHelper', 'Set different watering needs for hot and cold environments so users can adjust based on temperature.')}
+          </p>
+        </div>
+      )}
+    </div>
+  )
 }
 
 const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Record<string, string>) => void; keyLabel?: string; valueLabel?: string }> = ({ value, onChange, keyLabel, valueLabel }) => {
@@ -816,25 +807,31 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
     setV("")
   }
   return (
-    <div className="grid gap-2">
-      <div className="flex flex-col md:flex-row gap-2">
-        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Name"} />
-        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Details"} />
-        <Button type="button" onClick={commit}>Add</Button>
+    <div className="grid gap-3">
+      <div className="grid gap-2 rounded-lg border border-dashed p-3 bg-white/60 dark:bg-black/10">
+        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Mix name"} />
+        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Benefits / description"} />
+        <div className="flex justify-end">
+          <Button type="button" onClick={commit} disabled={!k.trim() || !v.trim()}>Add</Button>
+        </div>
       </div>
-      <div className="space-y-1">
-        {Object.entries(value).map(([key, val]) => (
-          <div key={key} className="flex items-center justify-between rounded border px-3 py-2 text-sm">
-            <div className="font-medium">{key}</div>
-            <div className="text-muted-foreground">{val}</div>
-            <button type="button" className="text-red-600" onClick={() => {
-              const copy = { ...value }
-              delete copy[key]
-              onChange(copy)
-            }}>Remove</button>
-          </div>
-        ))}
-      </div>
+      {Object.keys(value).length > 0 && (
+        <div className="space-y-2">
+          {Object.entries(value).map(([key, val]) => (
+            <div key={key} className="flex items-start gap-3 rounded-lg border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#111611] px-4 py-3">
+              <div className="flex-1 min-w-0">
+                <div className="font-medium text-sm">{key}</div>
+                <div className="text-sm text-muted-foreground mt-0.5">{val}</div>
+              </div>
+              <button type="button" className="shrink-0 text-xs text-red-500 hover:text-red-700 font-medium mt-0.5" onClick={() => {
+                const copy = { ...value }
+                delete copy[key]
+                onChange(copy)
+              }}>Remove</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -907,98 +904,185 @@ function setValue(obj: any, path: string, val: any): any {
   return next
 }
 
+// ============================================================================
+// Section 1: Base
+// ============================================================================
+const baseFields: FieldConfig[] = [
+  { key: "commonNames", label: "Common Names", description: "Alternative common names for this plant", type: "tags" },
+  { key: "scientificNameSpecies", label: "Scientific Name (Species)", description: "Latin binomial (e.g. Monstera deliciosa)", type: "text" },
+  { key: "variety", label: "Variety", description: "Variety or cultivar name (e.g. Spring Field, Variegata)", type: "text" },
+  { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
+  { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: [
+    { label: "Plant", value: "plant" },
+    { label: "Flower", value: "flower" },
+    { label: "Bamboo", value: "bamboo" },
+    { label: "Shrub", value: "shrub" },
+    { label: "Tree", value: "tree" },
+    { label: "Cactus", value: "cactus" },
+    { label: "Succulent", value: "succulent" },
+  ] },
+  { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
+  { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
+]
+
+// ============================================================================
+// Section 2: Identity (15 items)
+// ============================================================================
 const identityFields: FieldConfig[] = [
-  { key: "identity.givenNames", label: "Given Names", description: "Common names given to the plant", type: "tags" },
-  { key: "identity.scientificName", label: "Scientific Name", description: "Scientific name", type: "text" },
-  { key: "identity.family", label: "Family", description: "Botanical family", type: "text" },
-  { key: "identity.overview", label: "Overview", description: "Long presentation of the plant", type: "textarea" },
-  { key: "identity.promotionMonth", label: "Promotion Month", description: "Month the plant should be promoted", type: "select", options: monthOptions },
-  { key: "identity.lifeCycle", label: "Life Cycle", description: "Lifecycle classification", type: "select", options: ["Annual","Biennials","Perenials","Ephemerals","Monocarpic","Polycarpic"] },
-  { key: "identity.season", label: "Season", description: "Seasons where the plant is active", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
-  { key: "identity.foliagePersistance", label: "Foliage Persistance", description: "Leaf persistence type", type: "select", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent"] },
-  { key: "identity.spiked", label: "Spiked", description: "Does the plant have spikes?", type: "boolean" },
-  { key: "identity.toxicityHuman", label: "Toxicity (Human)", description: "Human toxicity level", type: "select", options: ["Non-Toxic","Midly Irritating","Highly Toxic","Lethally Toxic"] },
-  { key: "identity.toxicityPets", label: "Toxicity (Pets)", description: "Pet toxicity level", type: "select", options: ["Non-Toxic","Midly Irritating","Highly Toxic","Lethally Toxic"] },
-  { key: "identity.allergens", label: "Allergens", description: "List of possible allergens", type: "tags" },
-  { key: "identity.scent", label: "Scent", description: "Does the plant have a scent", type: "boolean" },
-  { key: "identity.symbolism", label: "Symbolism", description: "Symbolism and cultural meaning", type: "tags" },
-  { key: "identity.livingSpace", label: "Living Space", description: "Indoor/Outdoor/Both", type: "select", options: ["Indoor","Outdoor","Both"] },
-  { key: "identity.composition", label: "Composition", description: "Where to plant (flowerbed, pot, etc.)", type: "multiselect", options: ["Flowerbed","Path","Hedge","Ground Cover","Pot"] },
-  { key: "identity.maintenanceLevel", label: "Maintenance Level", description: "Care effort", type: "select", options: ["None","Low","Moderate","Heavy"] },
+  { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
+  { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
+  { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
+  { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
+  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"], gatedBy: "utility:edible" },
+  { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
+  { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
+  { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
+  { key: "foliagePersistence", label: "Foliage Persistence", description: "How leaves behave across seasons", type: "multiselect", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent","Winter Dormant","Dry Season Deciduous"] },
+  { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Terrarium","Greenhouse"] },
+  { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
+  { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
 ]
 
+// ============================================================================
+// Section 2b: Safety & Toxicity (5 items)
+// ============================================================================
+const safetyFields: FieldConfig[] = [
+  { key: "toxicityHuman", label: "Toxicity (Human)", description: "Toxicity level for humans", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "toxicityPets", label: "Toxicity (Pets)", description: "Toxicity level for pets/animals", type: "select", options: ["Non-Toxic","Slightly Toxic","Very Toxic","Deadly","Undetermined"] },
+  { key: "poisoningMethod", label: "Poisoning Method(s)", description: "How poisoning can occur", type: "multiselect", options: ["Touch","Ingestion","Eye Contact","Inhalation","Sap Contact"] },
+  { key: "poisoningSymptoms", label: "Poisoning Symptoms", description: "Symptoms description for prevention", type: "textarea" },
+  { key: "allergens", label: "Allergens", description: "Known allergens", type: "tags" },
+]
+
+// ============================================================================
+// Section 3: Care (10 items)
+// ============================================================================
 const careFields: FieldConfig[] = [
-  { key: "plantCare.origin", label: "Origin", description: "Where the plant originates from", type: "tags" },
-  { key: "plantCare.habitat", label: "Habitat", description: "Habitat types", type: "multiselect", options: ["Aquatic","Semi-Aquatic","Wetland","Tropical","Temperate","Arid","Mediterranean","Mountain","Grassland","Forest","Coastal","Urban"] },
-  { key: "plantCare.temperature", label: "Temperature", description: "Temperature range (°C)", type: "temperature" },
-  { key: "plantCare.levelSun", label: "Level Sun", description: "Sun exposure level", type: "select", options: ["Low Light","Shade","Partial Sun","Full Sun"] },
-  { key: "plantCare.hygrometry", label: "Hygrometry", description: "Ideal humidity percentage", type: "number" },
-  { key: "plantCare.watering.schedules", label: "Watering Schedule", description: "Seasonal watering (season + quantity + period)", type: "watering" },
-  { key: "plantCare.wateringType", label: "Watering Type", description: "Watering methods", type: "multiselect", options: ["surface","buried","hose","drop","drench"] },
-  { key: "plantCare.division", label: "Division", description: "Propagation techniques", type: "multiselect", options: ["Seed","Cutting","Division","Layering","Grafting","Tissue Separation","Bulb separation"] },
-  { key: "plantCare.soil", label: "Soil", description: "Soil options", type: "multiselect", options: ["Vermiculite","Perlite","Sphagnum moss","rock wool","Sand","Gravel","Potting Soil","Peat","Clay pebbles","coconut fiber","Bark","Wood Chips"] },
-  { key: "plantCare.adviceSoil", label: "Advice Soil", description: "Advice about soil", type: "textarea" },
-  { key: "plantCare.mulching", label: "Mulching", description: "Mulching materials", type: "multiselect", options: ["Wood Chips","Bark","Green Manure","Cocoa Bean Hulls","Buckwheat Hulls","Cereal Straw","Hemp Straw","Woven Fabric","Pozzolana","Crushed Slate","Clay Pellets"] },
-  { key: "plantCare.adviceMulching", label: "Advice Mulching", description: "Mulching notes", type: "textarea" },
-  { key: "plantCare.nutritionNeed", label: "Nutrition Need", description: "Nutrient needs", type: "multiselect", options: ["Nitrogen","Phosphorus","Potassium","Calcium","Magnesium","Sulfur","Iron","Boron","Manganese","Molybene","Chlorine","Copper","Zinc","Nitrate","Phosphate"] },
-  { key: "plantCare.fertilizer", label: "Fertilizer", description: "Fertilizer choices", type: "multiselect", options: ["Granular fertilizer","Liquid Fertilizer","Meat Flour","Fish flour","Crushed bones","Crushed Horns","Slurry","Manure","Animal excrement","Sea Fertilizer","Yurals","Wine","guano","Coffee Grounds","Banana peel","Eggshell","Vegetable cooking water","Urine","Grass Clippings","Vegetable Waste","Natural Mulch"] },
-  { key: "plantCare.adviceFertilizer", label: "Advice Fertilizer", description: "Fertilizer advice", type: "textarea" },
+  { key: "careLevel", label: "Care Level", description: "How difficult to care for", type: "select", options: ["Easy","Moderate","Complex"] },
+  { key: "sunlight", label: "Sunlight / Exposure", description: "Light requirements", type: "multiselect", options: ["Full Sun","Partial Sun","Partial Shade","Light Shade","Deep Shade","Direct Light","Bright Indirect Light","Medium Light","Low Light"] },
+  { key: "temperatureMax", label: "Temperature Max (°C)", description: "Maximum tolerable temperature", type: "number" },
+  { key: "temperatureMin", label: "Temperature Min (°C)", description: "Minimum tolerable temperature", type: "number" },
+  { key: "temperatureIdeal", label: "Temperature Ideal (°C)", description: "Ideal growing temperature", type: "number" },
+  { key: "wateringSchedules", label: "Watering Schedule", description: "Set a global or seasonal (hot/cold) watering schedule", type: "watering" },
+  { key: "wateringType", label: "Watering Type", description: "Preferred watering methods", type: "multiselect", options: ["Hose","Surface","Drip","Soaking","Wick"] },
+  { key: "hygrometry", label: "Humidity (%)", description: "Preferred humidity level (0-100)", type: "number" },
+  { key: "mistingFrequency", label: "Misting (per week)", description: "Times per week for misting", type: "number" },
+  { key: "specialNeeds", label: "Special Needs", description: "Special care requirements", type: "tags" },
 ]
 
+// ============================================================================
+// Section 3b: Care Details — Substrate, Mulch, Nutrition (8 items)
+// ============================================================================
+const careDetailsFields: FieldConfig[] = [
+  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags" },
+  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
+  { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
+  { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", gatedBy: "mulchingNeeded" },
+  { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
+  { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
+  { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
+  { key: "fertilizerAdvice", label: "Fertilizer Advice", description: "Fertilizing schedule and advice", type: "textarea" },
+]
+
+// ============================================================================
+// Section 4: Growth
+// ============================================================================
 const growthFields: FieldConfig[] = [
-  { key: "growth.sowingMonth", label: "Sowing Month", description: "Months to sow", type: "multiselect", options: monthOptions },
-  { key: "growth.floweringMonth", label: "Flowering Month", description: "Months of flowering", type: "multiselect", options: monthOptions },
-  { key: "growth.fruitingMonth", label: "Fruiting Month", description: "Months of fruiting", type: "multiselect", options: monthOptions },
-  { key: "growth.height", label: "Height (cm)", description: "Average height", type: "number" },
-  { key: "growth.wingspan", label: "Wingspan (cm)", description: "Average wingspan", type: "number" },
-  { key: "growth.tutoring", label: "Tutoring", description: "Needs support", type: "boolean" },
-  { key: "growth.adviceTutoring", label: "Advice Tutoring", description: "Support details", type: "textarea" },
-  { key: "growth.sowType", label: "Sow Type", description: "Planting method", type: "multiselect", options: ["Direct","Indoor","Row","Hill","Broadcast","Seed Tray","Cell","Pot"] },
-  { key: "growth.separation", label: "Separation (cm)", description: "Spacing of sowing", type: "number" },
-  { key: "growth.transplanting", label: "Transplanting", description: "Needs transplanting", type: "boolean" },
-  { key: "growth.adviceSowing", label: "Advice Sowing", description: "Sowing notes", type: "textarea" },
-  { key: "growth.cut", label: "Cut", description: "Type of cut", type: "text" },
+  { key: "sowingMonth", label: "Sowing Month(s)", description: "Best months for sowing", type: "multiselect", options: monthOptions },
+  { key: "floweringMonth", label: "Flowering Month(s)", description: "Months when plant flowers", type: "multiselect", options: monthOptions },
+  { key: "fruitingMonth", label: "Fruiting Month(s)", description: "Months when plant fruits", type: "multiselect", options: monthOptions },
+  { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
+  { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
+  { key: "separationCm", label: "Spacing (cm)", description: "Recommended distance between two plants", type: "number" },
+  { key: "staking", label: "Staking Needed?", description: "Does the plant need staking/support?", type: "boolean" },
+  { key: "stakingAdvice", label: "Staking Advice", description: "What type of support and how to stake", type: "textarea", gatedBy: "staking" },
+  { key: "division", label: "Division / Propagation", description: "How to propagate", type: "multiselect", options: ["Seed","Clump Division","Bulb Division","Rhizome Division","Cutting","Layering","Stolon","Sucker","Grafting","Spore"] },
+  { key: "cultivationMode", label: "Cultivation Mode", description: "Type of growing setup", type: "multiselect", options: ["Open Ground","Flowerbed","Vegetable Garden","Raised Bed","Orchard","Rockery","Slope","Mound","Pot","Planter","Hanging","Greenhouse","Indoor","Pond","Waterlogged Soil","Hydroponic","Aquaponic","Mineral Substrate","Permaculture","Agroforestry"] },
+  { key: "sowingMethod", label: "Sowing Method", description: "How to sow seeds", type: "multiselect", options: ["Open Ground","Pot","Tray","Greenhouse","Mini Greenhouse","Broadcast","Row"] },
+  { key: "transplanting", label: "Transplanting?", description: "Does the plant need transplanting?", type: "boolean" },
+  { key: "transplantingTime", label: "Transplanting Time", description: "When to transplant (e.g. after 4 true leaves)", type: "text", gatedBy: "transplanting" },
+  { key: "outdoorPlantingTime", label: "Outdoor Planting Time", description: "When to plant outdoors", type: "text", gatedBy: "transplanting" },
+  { key: "sowingAdvice", label: "Sowing Advice", description: "Sowing and planting instructions", type: "textarea" },
+  { key: "pruning", label: "Pruning Needed?", description: "Does the plant need pruning?", type: "boolean" },
+  { key: "pruningMonth", label: "Pruning Month(s)", description: "Best months for pruning", type: "multiselect", options: monthOptions, gatedBy: "pruning" },
+  { key: "pruningAdvice", label: "Pruning Advice", description: "Pruning technique and tips", type: "textarea", gatedBy: "pruning" },
 ]
 
-const usageFields: FieldConfig[] = [
-  { key: "usage.adviceMedicinal", label: "Advice Medicinal", description: "Medicinal usage details", type: "textarea" },
-  { key: "usage.nutritionalIntake", label: "Nutritional Intake", description: "Nutritional tags", type: "tags" },
-  { key: "usage.infusion", label: "Infusion", description: "Can be used for infusion", type: "boolean" },
-  { key: "usage.adviceInfusion", label: "Advice Infusion", description: "Infusion notes", type: "textarea" },
-  { key: "usage.infusionMix", label: "Infusion Mix", description: "Mix name to benefit", type: "dict" },
-  { key: "usage.aromatherapy", label: "Aromatherapy", description: "Usable for essential oils", type: "boolean" },
-  { key: "usage.spiceMixes", label: "Spice Mixes", description: "Spice mix names", type: "tags" },
-]
-
-const ecologyFields: FieldConfig[] = [
-  { key: "ecology.melliferous", label: "Melliferous", description: "Good for pollinators", type: "boolean" },
-  { key: "ecology.polenizer", label: "Polenizer", description: "Pollinator species", type: "multiselect", options: ["Bee","Wasp","Ant","Butterfly","Bird","Mosquito","Fly","Beetle","ladybug","Stagbeetle","Cockchafer","dungbeetle","weevil"] },
-  { key: "ecology.beFertilizer", label: "Be Fertilizer", description: "Acts as fertilizer for others", type: "boolean" },
-  { key: "ecology.groundEffect", label: "Ground Effect", description: "Effect on soil", type: "textarea" },
-  { key: "ecology.conservationStatus", label: "Conservation Status", description: "Status in the wild", type: "select", options: ["Safe","At Risk","Vulnerable","Endangered","Critically Endangered","Extinct"] },
-]
-
+// ============================================================================
+// Section 5: Danger
+// ============================================================================
 const dangerFields: FieldConfig[] = [
-  { key: "danger.pests", label: "Pests", description: "Pest list", type: "tags" },
-  { key: "danger.diseases", label: "Diseases", description: "Disease list", type: "tags" },
+  { key: "pests", label: "Pests", description: "Common pest threats", type: "tags" },
+  { key: "diseases", label: "Diseases", description: "Common diseases", type: "tags" },
 ]
 
+// ============================================================================
+// Section 6: Ecology & Biodiversity
+// ============================================================================
+const ecologyFields: FieldConfig[] = [
+  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated"] },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
+  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
+  { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
+  { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags" },
+  { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
+  { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
+  { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
+  { key: "birdsAttracted", label: "Birds Attracted", description: "Birds drawn to this plant", type: "tags" },
+  { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
+  { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
+  { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags" },
+  { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
+]
+
+// ============================================================================
+// Section 7: Consumption / Usage
+// ============================================================================
+const consumptionFields: FieldConfig[] = [
+  { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "utility:infusion" },
+  { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "utility:infusion" },
+  { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalUsage", label: "Medical Usage", description: "How to use medicinally", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalWarning", label: "Warning / Safety Note", description: "Safety: recommended today or historical only?", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "utility:medicinal" },
+  { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "utility:aromatic" },
+  { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "utility:aromatic" },
+  { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
+  { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
+  { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "utility:infusion" },
+]
+
+// ============================================================================
+// Section 8: Misc
+// ============================================================================
 const miscFields: FieldConfig[] = [
-  { key: "miscellaneous.companions", label: "Companions", description: "Companion plants", type: "companions" },
-  { key: "miscellaneous.tags", label: "Tags", description: "Search tags", type: "tags" },
-  { key: "miscellaneous.sources", label: "Sources", description: "Reference links", type: "sources" },
+  { key: "companionPlants", label: "Companion Plants", description: "Good garden companions", type: "companions" },
+  { key: "biotopePlants", label: "Biotope Plants", description: "Plants from the same biotope", type: "companions" },
+  { key: "beneficialPlants", label: "Beneficial Plants", description: "Plants that benefit this one", type: "companions" },
+  { key: "harmfulPlants", label: "Harmful Plants", description: "Plants to avoid nearby", type: "companions" },
+  { key: "plantTags", label: "Plant Tags", description: "Searchable tags and keywords", type: "tags" },
+  { key: "biodiversityTags", label: "Biodiversity Tags", description: "Biodiversity-specific tags", type: "tags" },
+  { key: "sources", label: "Sources", description: "Reference links and citations", type: "sources" },
 ]
 
+// ============================================================================
+// Section 9: Meta
+// ============================================================================
 const metaFields: FieldConfig[] = [
-  { key: "meta.status", label: "Status", description: "Editorial status", type: "select", options: ["Approved","Rework","Review","In Progres"] },
-  { key: "meta.adminCommentary", label: "Admin Commentary", description: "Moderator feedback", type: "textarea" },
-  { key: "meta.contributors", label: "Contributors", description: "People who requested or edited this plant", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
+  { key: "status", label: "Status", description: "Editorial status", type: "select", options: [
+    { label: "Approved", value: "approved" },
+    { label: "Rework", value: "rework" },
+    { label: "Review", value: "review" },
+    { label: "In Progress", value: "in_progress" },
+  ] },
+  { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
+  { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
-
-const utilityOptions = ["comestible","ornemental","produce_fruit","aromatic","medicinal","odorous","climbing","cereal","spice"] as const
-const comestibleOptions = ["flower","fruit","seed","leaf","stem","root","bulb","bark","wood"] as const
-const fruitOptions = ["nut","seed","stone"] as const
-const plantTypeOptions = ["plant","flower","bamboo","shrub","tree","cactus","succulent"] as const
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
     const value = getValue(plant, field.key)
@@ -1010,8 +1094,8 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   const selectStatusPlaceholder = t('plantAdmin.selectStatus', 'Select status')
   const optionalLabel = t('plantAdmin.optionalLabel', 'optional')
   const isAdvice = field.key.toLowerCase().includes("advice")
-    const isMonthMultiField = field.key.startsWith("growth.") && field.key.toLowerCase().includes("month")
-    const isPromotionMonthField = field.key === "identity.promotionMonth"
+    const isMonthMultiField = field.type === "multiselect" && field.options === monthOptions
+    const isFeaturedMonthField = field.key === "featuredMonth"
   const translateOption = (optionKey: string, fallback: string) => {
     const fieldScoped = t(`${translationBase}.options.${optionKey}`, { defaultValue: '' })
     if (fieldScoped) return fieldScoped
@@ -1107,7 +1191,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             </div>
           )
         case "select": {
-          const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
+          const selectValue = isFeaturedMonthField ? normalizeMonthValue(value) ?? value : value
           const valueKey =
             normalizedOptions.find((opt) => Object.is(opt.value, selectValue))?.key ??
             (selectValue === null || selectValue === undefined ? "" : String(selectValue))
@@ -1137,8 +1221,10 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         }
         case "multiselect": {
           const currentValues = isMonthMultiField ? normalizeMonthArray(value) : (Array.isArray(value) ? [...value] : [])
+          // Normalize for comparison: handles "cactus_succulent" vs "Cactus & Succulent"
+          const canon = (v: unknown) => typeof v === 'string' ? v.replace(/[_\s&/–-]+/g, '').toLowerCase() : v
           const includesValue = (candidate: unknown) =>
-            currentValues.some((entry) => Object.is(entry, candidate) || (typeof entry === "string" && typeof candidate === "string" && entry === candidate))
+            currentValues.some((entry) => Object.is(entry, candidate) || canon(entry) === canon(candidate))
           return (
             <div className="grid gap-2">
               <Label>{label}</Label>
@@ -1151,7 +1237,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
                       type="button"
                       onClick={() => {
                         const nextValues = selected
-                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || (typeof entry === "string" && typeof opt.value === "string" && entry === opt.value)))
+                          ? currentValues.filter((entry) => !(Object.is(entry, opt.value) || canon(entry) === canon(opt.value)))
                           : [...currentValues, opt.value]
                         onChange(field.key, nextValues)
                       }}
@@ -1199,7 +1285,12 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
         return (
           <div className="grid gap-2">
               <Label>{label}</Label>
-            <WateringScheduleEditor value={value as any} onChange={(v) => onChange(field.key, v)} />
+            <WateringScheduleEditor
+              value={value as any}
+              onChange={(v) => onChange(field.key, v)}
+              wateringMode={plant.wateringMode}
+              onWateringModeChange={(m) => onChange('wateringMode', m)}
+            />
               <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
@@ -2309,50 +2400,68 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, categoryProgress, language = 'en', onImageRemove }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('common')
-  const sectionRefs = React.useRef<Record<PlantFormCategory, HTMLDivElement | null>>({
-    basics: null,
-    identity: null,
-    plantCare: null,
-    growth: null,
-    usage: null,
-    ecology: null,
-    danger: null,
-    miscellaneous: null,
-    meta: null,
-  })
-  const [selectedCategory, setSelectedCategory] = React.useState<PlantFormCategory>('identity')
+  const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
-  const categoryLabels: Record<PlantFormCategory, string> = {
-    basics: t('plantAdmin.categories.basics', 'Basics'),
+  const [showBiotopeRecommendations, setShowBiotopeRecommendations] = React.useState(false)
+  const [showBeneficialRecommendations, setShowBeneficialRecommendations] = React.useState(false)
+  const [showHarmfulRecommendations, setShowHarmfulRecommendations] = React.useState(false)
+
+  const categoryLabels: Record<string, string> = {
+    base: t('plantAdmin.categories.base', 'Base'),
     identity: t('plantAdmin.categories.identity', 'Identity'),
-    plantCare: t('plantAdmin.categories.plantCare', 'Plant Care'),
+    care: t('plantAdmin.categories.care', 'Care'),
     growth: t('plantAdmin.categories.growth', 'Growth'),
-    usage: t('plantAdmin.categories.usage', 'Usage'),
-    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
     danger: t('plantAdmin.categories.danger', 'Danger'),
-    miscellaneous: t('plantAdmin.categories.miscellaneous', 'Miscellaneous'),
+    ecology: t('plantAdmin.categories.ecology', 'Ecology'),
+    consumption: t('plantAdmin.categories.consumption', 'Usage'),
+    misc: t('plantAdmin.categories.misc', 'Misc'),
     meta: t('plantAdmin.categories.meta', 'Meta'),
   }
-  const scrollToCategory = (category: PlantFormCategory) => {
-    setSelectedCategory(category)
-  }
+
+  const formTabOrder = ['base','identity','care','growth','danger','ecology','consumption','misc','meta'] as const
+
+  const pillTabs: PillTab<string>[] = React.useMemo(() =>
+    formTabOrder.map((key) => {
+      const info = categoryProgress?.[key as PlantFormCategory]
+      const badge = info?.total
+        ? info.status === 'done'
+          ? ' \u2713'
+          : ` ${info.completed}/${info.total}`
+        : ''
+      return { key, label: `${categoryLabels[key]}${badge}` }
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [categoryProgress, t],
+  )
+
   React.useEffect(() => {
-    if (colorSuggestions?.length) {
-      setShowColorRecommendations(true)
-    } else {
-      setShowColorRecommendations(false)
-    }
+    if (colorSuggestions?.length) setShowColorRecommendations(true)
+    else setShowColorRecommendations(false)
   }, [colorSuggestions?.length])
+
   React.useEffect(() => {
-    if (companionSuggestions?.length) {
-      setShowCompanionRecommendations(true)
-    } else {
-      setShowCompanionRecommendations(false)
-    }
+    if (companionSuggestions?.length) setShowCompanionRecommendations(true)
+    else setShowCompanionRecommendations(false)
   }, [companionSuggestions?.length])
+
+  React.useEffect(() => {
+    if (biotopeSuggestions?.length) setShowBiotopeRecommendations(true)
+    else setShowBiotopeRecommendations(false)
+  }, [biotopeSuggestions?.length])
+
+  React.useEffect(() => {
+    if (beneficialSuggestions?.length) setShowBeneficialRecommendations(true)
+    else setShowBeneficialRecommendations(false)
+  }, [beneficialSuggestions?.length])
+
+  React.useEffect(() => {
+    if (harmfulSuggestions?.length) setShowHarmfulRecommendations(true)
+    else setShowHarmfulRecommendations(false)
+  }, [harmfulSuggestions?.length])
+
   const addSuggestedColor = React.useCallback(
     (suggestion: PlantColor | { name?: string; hexCode?: string; hex?: string; label?: string }) => {
       const current = value.identity?.colors || []
@@ -2372,318 +2481,508 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     },
     [onChange, t, value],
   )
-  const categoriesWithoutBasics = plantFormCategoryOrder.filter((cat) => cat !== 'basics')
-  const setPath = (path: string, val: any) => onChange(setValue(value, path, val))
-  return (
-    <div className="space-y-6">
-      <div ref={(node) => { sectionRefs.current.basics = node }} className="flex-1">
-        <Card className={neuCardClass}>
-          <CardHeader>
-            <CardTitle>{categoryLabels.basics}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-              <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.name.label', 'Name')}</Label>
-                <Input
-                  value={value.name}
-                  required
-                  onChange={(e) => onChange({ ...value, name: e.target.value })}
-                  placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name')}
-                />
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.name.description', 'Name of the plant (unique and mandatory).')}
-                </p>
-              </div>
-              <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.plantType.label', 'Plant Type')}</Label>
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
-                value={value.plantType || ""}
-                onChange={(e) => onChange({ ...value, plantType: (e.target.value || undefined) as PlantType | undefined })}
-              >
-                  <option value="">{t('plantAdmin.basics.plantType.placeholder', 'Select type')}</option>
-                {plantTypeOptions.map((opt) => (
-                    <option key={opt} value={opt}>{t(`plantAdmin.options.plantType.${opt}`, opt)}</option>
-                ))}
-              </select>
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.plantType.description', 'Primary plant type')}
-                </p>
-            </div>
-            <div className="grid gap-2">
-                <Label>{t('plantAdmin.basics.utility.label', 'Utility')}</Label>
-              <div className="flex flex-wrap gap-2">
-                {utilityOptions.map((opt) => {
-                  const selected = value.utility?.includes(opt)
+
+  const setPath = (path: string, val: any) => {
+    let next = setValue(value, path, val)
+    if (val === false && BOOLEAN_GATE_DEPS[path]) {
+      for (const dep of BOOLEAN_GATE_DEPS[path]) {
+        next = setValue(next, dep, undefined)
+      }
+    }
+    onChange(next)
+  }
+
+  /** Check if a gated field should be shown */
+  const shouldShowField = (f: FieldConfig) => {
+    if (!f.gatedBy) return true
+    if (f.gatedBy.startsWith('utility:')) {
+      const utilVal = f.gatedBy.slice(8)
+      const utility = getValue(value, 'utility')
+      const arr = Array.isArray(utility) ? utility as string[] : []
+      const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+      return arr.some(u => typeof u === 'string' && u.toLowerCase().replace(/[_\s-]/g, '') === needle)
+    }
+    return getValue(value, f.gatedBy) === true
+  }
+
+  /** Render a group of fields inside a subsection */
+  const renderFieldGroup = (fields: FieldConfig[], opts?: { skipKeys?: Set<string> }) => (
+    fields.filter(f => !(opts?.skipKeys?.has(f.key)) && shouldShowField(f)).map(f => renderField(value, setPath, f, t))
+  )
+
+  /** Render a titled divider */
+  const SectionDivider = ({ title, icon }: { title: string; icon?: React.ReactNode }) => (
+    <div className={sectionTitleClass}>
+      {icon || <div className="h-1 w-1 rounded-full bg-emerald-500" />}
+      <span className={sectionTitleTextClass}>{title}</span>
+      <div className="flex-1 h-px bg-stone-200/70 dark:bg-[#3e3e42]/70" />
+    </div>
+  )
+
+  // ── Section renderers ────────────────────────────────────────────────
+
+  const renderBase = () => (
+    <div className="space-y-5">
+      <div className={fieldRowClass}>
+        <div className="grid gap-2">
+          <Label>{t('plantAdmin.basics.name.label', 'Name')}</Label>
+          <Input
+            value={value.name}
+            required
+            onChange={(e) => onChange({ ...value, name: e.target.value })}
+            placeholder={t('plantAdmin.basics.name.placeholder', 'Unique plant name (English)')}
+          />
+          <p className="text-xs text-muted-foreground">
+            {t('plantAdmin.basics.name.description', 'Canonical English name (unique, mandatory).')}
+          </p>
+        </div>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameSpecies')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'variety')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'family')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'commonNames')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.presentation', 'Presentation')} />
+      {renderField(value, setPath, baseFields.find(f => f.key === 'presentation')!, t)}
+      {renderField(value, setPath, baseFields.find(f => f.key === 'featuredMonth')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.images', 'Images')} />
+      <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
+    </div>
+  )
+
+  const renderIdentity = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.originClimate', 'Origin & Climate')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'origin')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'climate')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'season')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'livingSpace')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.utilityUse', 'Utility & Use')} />
+      {renderField(value, setPath, identityFields.find(f => f.key === 'utility')!, t)}
+      {shouldShowField(identityFields.find(f => f.key === 'ediblePart')!) && renderField(value, setPath, identityFields.find(f => f.key === 'ediblePart')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.lifecycle', 'Life Cycle & Foliage')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'lifeCycle')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'averageLifespan')!, t)}
+      </div>
+      {renderField(value, setPath, identityFields.find(f => f.key === 'foliagePersistence')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.habitForm', 'Habit & Form')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'thorny')!, t)}
+      </div>
+      {renderField(value, setPath, identityFields.find(f => f.key === 'landscaping')!, t)}
+      {renderField(value, setPath, identityFields.find(f => f.key === 'plantHabit')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.colors', 'Colors')} />
+      {colorSuggestions?.length ? (
+        <div className="mb-3">
+          <button type="button" className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300" onClick={() => setShowColorRecommendations(prev => !prev)}>
+            <Sparkles className="h-4 w-4" />
+            {showColorRecommendations ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions') : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
+          </button>
+          {showColorRecommendations && (
+            <div className="mt-2 rounded-xl border border-emerald-200/50 dark:border-emerald-800/40 bg-emerald-50/40 dark:bg-emerald-950/20 px-4 py-3 space-y-3">
+              <div className="text-xs text-muted-foreground">{t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}</div>
+              <div className="flex flex-wrap gap-3">
+                {colorSuggestions.map((c, idx) => {
+                  const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
+                  const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
+                  const alreadyAdded = (value.identity?.colors || []).some((color) => {
+                    const colorName = color.name?.toLowerCase()
+                    const colorHex = normalizeHex(color.hexCode || '')
+                    return (name && colorName === name.toLowerCase()) || (hex && colorHex && colorHex === hex)
+                  })
                   return (
-                    <button
-                      key={opt}
-                      type="button"
-                      onClick={() => {
-                        const current = value.utility || []
-                        const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                        onChange({ ...value, utility: next })
-                      }}
-                      className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                    >
-                        {t(`plantAdmin.options.utility.${opt}`, opt)}
-                    </button>
+                    <div key={`${name}-${hex || idx}`} className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-stone-200/60 dark:border-[#3e3e42]/60">
+                      <span className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700" style={{ backgroundColor: hex || undefined }} />
+                      <div className="flex flex-col leading-tight min-w-[90px]">
+                        <span className="text-sm font-medium">{name}</span>
+                        {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
+                      </div>
+                      <Button type="button" size="sm" variant={alreadyAdded ? 'secondary' : 'default'} disabled={alreadyAdded} onClick={() => addSuggestedColor(c)}>
+                        {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
+                      </Button>
+                    </div>
                   )
                 })}
               </div>
-                <p className="text-xs text-muted-foreground">
-                  {t('plantAdmin.basics.utility.description', 'Select every utility that applies')}
-                </p>
             </div>
-            {value.utility?.includes("comestible") && (
-              <div className="grid gap-2">
-                  <Label>{t('plantAdmin.basics.comestiblePart.label', 'Comestible Part')}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {comestibleOptions.map((opt) => {
-                    const selected = value.comestiblePart?.includes(opt)
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          const current = value.comestiblePart || []
-                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                          onChange({ ...value, comestiblePart: next })
-                        }}
-                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                      >
-                          {t(`plantAdmin.options.comestible.${opt}`, opt)}
-                      </button>
-                    )
-                  })}
-                </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('plantAdmin.basics.comestiblePart.description', 'Edible parts (only if utility includes edible).')}
-                  </p>
-              </div>
-            )}
-            {value.utility?.includes("produce_fruit") && (
-              <div className="grid gap-2">
-                  <Label>{t('plantAdmin.basics.fruitType.label', 'Fruit Type')}</Label>
-                <div className="flex flex-wrap gap-2">
-                  {fruitOptions.map((opt) => {
-                    const selected = value.fruitType?.includes(opt)
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => {
-                          const current = value.fruitType || []
-                          const next = selected ? current.filter((v) => v !== opt) : [...current, opt]
-                          onChange({ ...value, fruitType: next })
-                        }}
-                        className={`px-3 py-1 rounded-full border text-sm transition ${selected ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                      >
-                          {t(`plantAdmin.options.fruit.${opt}`, opt)}
-                      </button>
-                    )
-                  })}
-                </div>
-                  <p className="text-xs text-muted-foreground">
-                    {t('plantAdmin.basics.fruitType.description', 'Fruit classification (if the plant produces fruit).')}
-                  </p>
-              </div>
-            )}
-            <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
-          </CardContent>
-        </Card>
+          )}
+        </div>
+      ) : (
+        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}</p>
+      )}
+      <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
+      <div className="mt-3 flex flex-wrap gap-4 text-sm">
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!value.identity?.multicolor} onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))} className="h-4 w-4 rounded border-stone-300 accent-emerald-600" />
+          {t('plantAdmin.colors.multicolor', 'Multicolor')}
+        </label>
+        <label className="flex items-center gap-2">
+          <input type="checkbox" checked={!!value.identity?.bicolor} onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))} className="h-4 w-4 rounded border-stone-300 accent-emerald-600" />
+          {t('plantAdmin.colors.bicolor', 'Bicolor')}
+        </label>
       </div>
 
-        <div className={`${neuCardClass} rounded-2xl p-4`}>
-          <div className="text-sm font-medium mb-2">{t('plantAdmin.categoryMenuTitle', 'Quick category menu')}</div>
-          <div className="flex flex-wrap gap-3">
-            {categoriesWithoutBasics.map((key) => {
-              const info = categoryProgress?.[key]
-              return (
-                <div key={key} className="relative">
-                  <Button
-                    size="lg"
-                    className="min-w-[110px] px-4 py-2 text-sm sm:text-base shadow-sm"
-                    variant={selectedCategory === key ? 'default' : 'outline'}
-                    onClick={() => scrollToCategory(key)}
-                  >
-                    {categoryLabels[key]}
-                  </Button>
-                  {info?.total ? (
-                    <span
-                      className={`absolute -top-2 -right-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold text-white ${
-                        info.status === 'done' ? 'bg-emerald-500' : 'bg-blue-500'
-                      }`}
-                    >
-                      {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
-                    </span>
-                  ) : null}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+      <SectionDivider title={t('plantAdmin.sections.safety', 'Safety & Toxicity')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityHuman')!, t)}
+        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityPets')!, t)}
+      </div>
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningMethod')!, t)}
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningSymptoms')!, t)}
+      {renderField(value, setPath, safetyFields.find(f => f.key === 'allergens')!, t)}
+    </div>
+  )
 
-        <div className="space-y-6">
-          {(['identity','plantCare','growth','usage','ecology','danger','miscellaneous','meta'] as PlantFormCategory[]).map((cat) => {
-            if (selectedCategory !== cat) return null
-            const refSetter = (node: HTMLDivElement | null) => { sectionRefs.current[cat] = node }
-            const fieldGroups: Record<PlantFormCategory, FieldConfig[]> = {
-              basics: [],
-              identity: identityFields,
-              plantCare: careFields,
-              growth: growthFields,
-              usage: usageFields,
-              ecology: ecologyFields,
-              danger: dangerFields,
-              miscellaneous: miscFields,
-              meta: metaFields,
-            }
-            const progressInfo = categoryProgress?.[cat]
-            return (
-              <div key={cat} ref={refSetter}>
-                <Card className={neuCardClass}>
-                  <CardHeader>
-                    <CardTitle className="flex items-center justify-between gap-4">
-                      <span>{categoryLabels[cat]}</span>
-                      {progressInfo?.total ? (
-                        <span
-                          className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                            progressInfo.status === 'done'
-                              ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
-                              : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
-                          }`}
-                        >
-                          {progressInfo.status === 'done'
-                            ? t('plantAdmin.sectionFilled', 'Filled')
-                            : `${progressInfo.completed}/${progressInfo.total}`}
-                        </span>
-                      ) : null}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="flex flex-col gap-4">
-                      {fieldGroups[cat].map((f) => {
-                        // Skip companions field in miscellaneous - we handle it specially below
-                        if (cat === 'miscellaneous' && f.key === 'miscellaneous.companions') return null
-                        return renderField(value, setPath, f, t)
-                      })}
-                    {cat === 'usage' && (
-                      <div className="md:col-span-2">
-                        <RecipeEditor
-                          recipes={Array.isArray(value.usage?.recipes) ? value.usage.recipes : []}
-                          onChange={(v) => setPath('usage.recipes', v)}
-                        />
-                      </div>
-                    )}
-                    {cat === 'miscellaneous' && (
-                      <div className="md:col-span-2">
-                        <Label>{t('plantAdmin.fields.miscellaneous.companions.label', 'Companion & Related Plants')}</Label>
-                        <p className="text-xs text-muted-foreground mb-2">{t('plantAdmin.fields.miscellaneous.companions.description', 'Plants that grow well together or are related varieties (e.g., Rose / Rose Iceberg)')}</p>
-                        <CompanionSelector 
-                          value={Array.isArray(value.miscellaneous?.companions) ? value.miscellaneous.companions : []} 
-                          onChange={(v) => setPath('miscellaneous.companions', v)}
-                          suggestions={companionSuggestions}
-                          showSuggestions={showCompanionRecommendations}
-                          onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
-                          currentPlantId={value.id}
-                          language={language}
-                        />
-                      </div>
-                    )}
-                    {cat === 'identity' && (
-                      <div className="md:col-span-2">
-                        {colorSuggestions?.length ? (
-                          <div className="mb-3">
-                            <button
-                              type="button"
-                              className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300"
-                              onClick={() => setShowColorRecommendations((prev) => !prev)}
-                            >
-                              <Sparkles className="h-4 w-4" />
-                              {showColorRecommendations
-                                ? t('plantAdmin.hideColorSuggestions', 'Hide AI color suggestions')
-                                : t('plantAdmin.showColorSuggestions', 'Show AI color suggestions')}
-                            </button>
-                            {showColorRecommendations && (
-                              <div className="mt-2 rounded-xl border border-emerald-100/70 dark:border-emerald-900/50 bg-gradient-to-r from-emerald-50/70 via-white/80 to-emerald-100/70 dark:from-[#0f1a12] dark:via-[#0c140f] dark:to-[#0a120d] px-4 py-3 shadow-inner space-y-3">
-                                <div className="text-xs text-muted-foreground">
-                                  {t('plantAdmin.colorSuggestionsReview', 'Review and add the colors you like to your palette.')}
-                                </div>
-                                <div className="flex flex-wrap gap-3">
-                                  {colorSuggestions.map((c, idx) => {
-                                    const name = c.name || (c as any)?.label || c.hexCode || (c as any)?.hex || t('plantAdmin.colorFallback', 'Color')
-                                    const hex = normalizeHex(c.hexCode || (c as any)?.hex || '')
-                                    const alreadyAdded = (value.identity?.colors || []).some((color) => {
-                                      const colorName = color.name?.toLowerCase()
-                                      const colorHex = normalizeHex(color.hexCode || '')
-                                      return (
-                                        (name && colorName === name.toLowerCase()) ||
-                                        (hex && colorHex && colorHex === hex)
-                                      )
-                                    })
-                                    return (
-                                      <div
-                                        key={`${name}-${hex || idx}`}
-                                        className="flex items-center gap-3 rounded-lg bg-white/80 dark:bg-[#111611] px-3 py-2 shadow-sm border border-emerald-100/60 dark:border-emerald-900/40"
-                                      >
-                                        <span
-                                          className="h-5 w-5 rounded-full border border-stone-200 dark:border-stone-700"
-                                          style={{ backgroundColor: hex || undefined }}
-                                        />
-                                        <div className="flex flex-col leading-tight min-w-[90px]">
-                                          <span className="text-sm font-medium text-emerald-900 dark:text-emerald-200">{name}</span>
-                                          {hex && <span className="text-xs text-muted-foreground">{hex}</span>}
-                                        </div>
-                                        <Button
-                                          type="button"
-                                          size="sm"
-                                          variant={alreadyAdded ? 'secondary' : 'default'}
-                                          disabled={alreadyAdded}
-                                          onClick={() => addSuggestedColor(c)}
-                                        >
-                                          {alreadyAdded ? t('plantAdmin.colorAdded', 'Added') : t('plantAdmin.addColor', 'Add')}
-                                        </Button>
-                                      </div>
-                                    )
-                                  })}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ) : null}
-                          <Label>{t('plantAdmin.colorsLabel', 'Colors')}</Label>
-                        {!colorSuggestions?.length && (
-                          <p className="text-xs text-muted-foreground mb-2">
-                            {t('plantAdmin.colorSuggestionPlaceholder', 'AI recommendations will show up here when available.')}
-                          </p>
-                        )}
-                        <ColorPicker colors={value.identity?.colors || []} onChange={(colors) => onChange(setValue(value, "identity.colors", colors))} />
-                        <div className="mt-3 flex flex-wrap gap-4 text-sm">
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!value.identity?.multicolor}
-                              onChange={(e) => onChange(setValue(value, "identity.multicolor", e.target.checked))}
-                            />
-                              {t('plantAdmin.colors.multicolor', 'Multicolor')}
-                          </label>
-                          <label className="flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={!!value.identity?.bicolor}
-                              onChange={(e) => onChange(setValue(value, "identity.bicolor", e.target.checked))}
-                            />
-                              {t('plantAdmin.colors.bicolor', 'Bicolor')}
-                          </label>
-                        </div>
-                          <p className="text-xs text-muted-foreground">{t('plantAdmin.colors.paletteHelp', 'Link existing palette colors or insert new ones for this plant.')}</p>
-                      </div>
-                    )}
-                </CardContent>
-              </Card>
-            </div>
-          )
-        })}
+  const renderCare = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.conditions', 'Conditions')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careFields.find(f => f.key === 'careLevel')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'sunlight')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.temperature', 'Temperature')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMin')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureIdeal')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMax')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.watering', 'Watering & Humidity')} />
+      {renderField(value, setPath, careFields.find(f => f.key === 'wateringSchedules')!, t)}
+      {renderField(value, setPath, careFields.find(f => f.key === 'wateringType')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careFields.find(f => f.key === 'hygrometry')!, t)}
+        {renderField(value, setPath, careFields.find(f => f.key === 'mistingFrequency')!, t)}
+      </div>
+      {renderField(value, setPath, careFields.find(f => f.key === 'specialNeeds')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.substrate', 'Substrate & Soil')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'substrate')!, t)}
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'substrateMix')!, t)}
+      </div>
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'soilAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.mulch', 'Mulch')} />
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchingNeeded')!, t)}
+      {shouldShowField(careDetailsFields.find(f => f.key === 'mulchType')!) && renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchType')!, t)}
+      {shouldShowField(careDetailsFields.find(f => f.key === 'mulchAdvice')!) && renderField(value, setPath, careDetailsFields.find(f => f.key === 'mulchAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.nutrition', 'Nutrition')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'nutritionNeed')!, t)}
+        {renderField(value, setPath, careDetailsFields.find(f => f.key === 'fertilizer')!, t)}
+      </div>
+      {renderField(value, setPath, careDetailsFields.find(f => f.key === 'fertilizerAdvice')!, t)}
+    </div>
+  )
+
+  const renderGrowth = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.calendar', 'Calendar')} />
+      <div className="space-y-4">
+        {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'floweringMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'fruitingMonth')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.dimensions', 'Dimensions & Support')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, growthFields.find(f => f.key === 'heightCm')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'wingspanCm')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'separationCm')!, t)}
+      </div>
+      {renderField(value, setPath, growthFields.find(f => f.key === 'staking')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'stakingAdvice')!) && renderField(value, setPath, growthFields.find(f => f.key === 'stakingAdvice')!, t)}
+
+      <SectionDivider title={t('plantAdmin.sections.propagation', 'Propagation & Cultivation')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, growthFields.find(f => f.key === 'division')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'cultivationMode')!, t)}
+      </div>
+      {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMethod')!, t)}
+      {renderField(value, setPath, growthFields.find(f => f.key === 'sowingAdvice')!, t)}
+      {renderField(value, setPath, growthFields.find(f => f.key === 'transplanting')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'transplantingTime')!) && (
+        <div className={fieldRowClass}>
+          {renderField(value, setPath, growthFields.find(f => f.key === 'transplantingTime')!, t)}
+          {renderField(value, setPath, growthFields.find(f => f.key === 'outdoorPlantingTime')!, t)}
+        </div>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.pruning', 'Pruning')} />
+      {renderField(value, setPath, growthFields.find(f => f.key === 'pruning')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'pruningMonth')!) && renderField(value, setPath, growthFields.find(f => f.key === 'pruningMonth')!, t)}
+      {shouldShowField(growthFields.find(f => f.key === 'pruningAdvice')!) && renderField(value, setPath, growthFields.find(f => f.key === 'pruningAdvice')!, t)}
+    </div>
+  )
+
+  const renderDanger = () => (
+    <div className="space-y-5">
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, dangerFields.find(f => f.key === 'pests')!, t)}
+        {renderField(value, setPath, dangerFields.find(f => f.key === 'diseases')!, t)}
+      </div>
+    </div>
+  )
+
+  const renderEcology = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.conservation', 'Conservation')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'conservationStatus')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalStatus')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.habitats', 'Habitats')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'biotopes')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'urbanBiotopes')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.toleranceRoles', 'Tolerance & Roles')} />
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalTolerance')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'biodiversityRole')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalImpact')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'beneficialRoles')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'harmfulRoles')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.wildlife', 'Wildlife')} />
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'pollinatorsAttracted')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'birdsAttracted')!, t)}
+        {renderField(value, setPath, ecologyFields.find(f => f.key === 'mammalsAttracted')!, t)}
+      </div>
+
+      <SectionDivider title={t('plantAdmin.sections.symbiosis', 'Symbiosis & Management')} />
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'symbiosis')!, t)}
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'symbiosisNotes')!, t)}
+      {renderField(value, setPath, ecologyFields.find(f => f.key === 'ecologicalManagement')!, t)}
+    </div>
+  )
+
+  const renderConsumption = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.nutrition', 'Nutrition')} />
+      {renderField(value, setPath, consumptionFields.find(f => f.key === 'nutritionalValue')!, t)}
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'edibleOil')!, t)}
+        {renderField(value, setPath, consumptionFields.find(f => f.key === 'spiceMixes')!, t)}
+      </div>
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'infusionParts')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.infusion', 'Infusion')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionParts')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionRecipeIdeas')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'infusionMixes')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'medicinalBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.medicinal', 'Medicinal')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalUsage')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalWarning')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'medicinalHistory')!, t)}
+        </>
+      )}
+
+      {shouldShowField(consumptionFields.find(f => f.key === 'aromatherapyBenefits')!) && (
+        <>
+          <SectionDivider title={t('plantAdmin.sections.aromatherapy', 'Aromatherapy')} />
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'aromatherapyBenefits')!, t)}
+          {renderField(value, setPath, consumptionFields.find(f => f.key === 'essentialOilBlends')!, t)}
+        </>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.recipes', 'Recipes')} />
+      <RecipeEditor recipes={Array.isArray(value.recipes) ? value.recipes : []} onChange={(v) => setPath('recipes', v)} />
+    </div>
+  )
+
+  const renderMisc = () => (
+    <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.companionPlants', 'Companion & Related Plants')} />
+      <CompanionSelector
+        value={Array.isArray(value.companionPlants) ? value.companionPlants : []}
+        onChange={(v) => setPath('companionPlants', v)}
+        suggestions={companionSuggestions}
+        showSuggestions={showCompanionRecommendations}
+        onToggleSuggestions={() => setShowCompanionRecommendations(prev => !prev)}
+        currentPlantId={value.id}
+        language={language}
+      />
+
+      <SectionDivider title={t('plantAdmin.sections.biotopePlants', 'Biotope Plants')} />
+      <CompanionSelector
+        value={Array.isArray(value.biotopePlants) ? value.biotopePlants : []}
+        onChange={(v) => setPath('biotopePlants', v)}
+        suggestions={biotopeSuggestions}
+        showSuggestions={showBiotopeRecommendations}
+        onToggleSuggestions={() => setShowBiotopeRecommendations(prev => !prev)}
+        currentPlantId={value.id}
+        language={language}
+      />
+
+      <div className={fieldRowClass}>
+        <div>
+          <SectionDivider title={t('plantAdmin.sections.beneficialPlants', 'Beneficial Plants')} />
+          <CompanionSelector
+            value={Array.isArray(value.beneficialPlants) ? value.beneficialPlants : []}
+            onChange={(v) => setPath('beneficialPlants', v)}
+            suggestions={beneficialSuggestions}
+            showSuggestions={showBeneficialRecommendations}
+            onToggleSuggestions={() => setShowBeneficialRecommendations(prev => !prev)}
+            currentPlantId={value.id}
+            language={language}
+          />
+        </div>
+        <div>
+          <SectionDivider title={t('plantAdmin.sections.harmfulPlants', 'Harmful Plants')} />
+          <CompanionSelector
+            value={Array.isArray(value.harmfulPlants) ? value.harmfulPlants : []}
+            onChange={(v) => setPath('harmfulPlants', v)}
+            suggestions={harmfulSuggestions}
+            showSuggestions={showHarmfulRecommendations}
+            onToggleSuggestions={() => setShowHarmfulRecommendations(prev => !prev)}
+            currentPlantId={value.id}
+            language={language}
+          />
+        </div>
+      </div>
+
+      {plantVarieties && plantVarieties.length > 0 && (
+        <>
+          <SectionDivider title={`${t('plantAdmin.varieties', 'Varieties')} (${plantVarieties.length})`} />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+            {plantVarieties.map((v) => (
+              <a
+                key={v.id}
+                href={`/create-plant?id=${v.id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-2 rounded-xl border border-stone-200/70 dark:border-[#3e3e42]/60 bg-white/60 dark:bg-[#1f1f1f]/60 p-2 hover:bg-stone-50 dark:hover:bg-[#252526] transition-colors"
+              >
+                {v.imageUrl ? (
+                  <img src={v.imageUrl} alt="" className="h-10 w-10 rounded-lg object-cover flex-shrink-0" />
+                ) : (
+                  <div className="h-10 w-10 rounded-lg bg-stone-100 dark:bg-stone-800 flex-shrink-0" />
+                )}
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{v.name}</p>
+                  {v.variety && <p className="text-xs text-muted-foreground truncate italic">{v.variety}</p>}
+                </div>
+              </a>
+            ))}
+          </div>
+        </>
+      )}
+
+      <SectionDivider title={t('plantAdmin.sections.tags', 'Tags')} />
+      {renderFieldGroup(miscFields, { skipKeys: new Set(['companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants']) })}
+    </div>
+  )
+
+  const renderMeta = () => (
+    <div className="space-y-5">
+      {renderFieldGroup(metaFields)}
+      {plantReports && plantReports.length > 0 && (
+        <>
+          <SectionDivider title={`${t('plantAdmin.userReports', 'User Reports')} (${plantReports.length})`} />
+          <div className="space-y-3">
+            {plantReports.map((report) => (
+              <div
+                key={report.id}
+                className="rounded-xl border border-amber-200/70 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 p-4"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-amber-800 dark:text-amber-300">{report.userName}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(report.createdAt).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                  </span>
+                </div>
+                <p className="text-sm whitespace-pre-wrap">{report.note}</p>
+                {report.imageUrl && (
+                  <img src={report.imageUrl} alt="Report attachment" className="mt-2 rounded-lg max-h-48 object-contain border border-amber-200/50 dark:border-amber-800/30" />
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  )
+
+  const sectionRenderers: Record<string, () => React.ReactNode> = {
+    base: renderBase,
+    identity: renderIdentity,
+    care: renderCare,
+    growth: renderGrowth,
+    danger: renderDanger,
+    ecology: renderEcology,
+    consumption: renderConsumption,
+    misc: renderMisc,
+    meta: renderMeta,
+  }
+
+  return (
+    <div className="space-y-5">
+      {/* ── Pill Tab Navigation ── */}
+      <div className="sticky top-0 z-20 py-3 -mx-1 px-1">
+        <PillTabs
+          tabs={pillTabs}
+          activeKey={selectedCategory}
+          onTabChange={setSelectedCategory}
+          className="overflow-x-auto"
+        />
+      </div>
+
+      {/* ── Active section card ── */}
+      <div className={glassCardClass}>
+        <div className="p-5 sm:p-7">
+          <div className="flex items-center justify-between mb-5">
+            <h2 className="text-lg font-bold text-foreground">{categoryLabels[selectedCategory]}</h2>
+            {(() => {
+              const info = categoryProgress?.[selectedCategory as PlantFormCategory]
+              if (!info?.total) return null
+              return (
+                <span className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+                  info.status === 'done'
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-200'
+                    : 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200'
+                }`}>
+                  {info.status === 'done' ? t('plantAdmin.sectionFilled', 'Filled') : `${info.completed}/${info.total}`}
+                </span>
+              )
+            })()}
+          </div>
+          {sectionRenderers[selectedCategory]?.()}
+        </div>
       </div>
     </div>
   )

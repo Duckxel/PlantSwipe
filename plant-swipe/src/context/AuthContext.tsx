@@ -381,7 +381,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch {}
     }
 
-    // Fetch profile in background; do not block sign-in completion
+    // Update local session immediately so the `user` state is set before we
+    // return — this mirrors what signUp does and prevents a race condition on
+    // mobile where the dialog closes while `user` is still null.
+    await loadSession()
     refreshProfile().catch(() => {})
     return {}
   }

@@ -1214,17 +1214,6 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
               </Select>
             <MonthSelectorField label="Sowing Months" values={planting?.calendar?.sowingMonths || []} onChange={(sowingMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, sowingMonths } })} />
             <MonthSelectorField label="Planting Out Months" values={planting?.calendar?.plantingOutMonths || []} onChange={(plantingOutMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, plantingOutMonths } })} />
-              <div className="grid gap-2">
-                <Label>Promotion Month</Label>
-                <Select
-                  className={selectBaseClass}
-                  value={planting?.calendar?.promotionMonth || ''}
-                  onChange={(e) => setPlanting({ ...planting, calendar: { ...planting?.calendar, promotionMonth: e.target.value ? Number(e.target.value) : undefined } })}
-                >
-                  <option value="">Select...</option>
-                  {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => <option key={m} value={m}>{['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1]}</option>)}
-                </Select>
-              </div>
           </div>
           <ArrayInputField label="Site Preparation" values={planting?.sitePrep || []} onChange={(sitePrep) => setPlanting({ ...planting, sitePrep })} />
           <ArrayInputField label="Companion Plants" values={planting?.companionPlants || []} onChange={(companionPlants) => setPlanting({ ...planting, companionPlants })} />

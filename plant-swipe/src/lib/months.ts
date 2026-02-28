@@ -54,3 +54,31 @@ export function monthSlugsToNumbers(values?: string[] | null): number[] {
   }
   return result
 }
+
+/**
+ * Normalize a mixed array of month values (numbers, slug strings, short names)
+ * into an array of canonical slug strings (e.g. "january", "february").
+ * Handles data that may have been saved as numbers (1-12) or slugs.
+ */
+export function normalizeMonthsToSlugs(values?: unknown[] | null): string[] {
+  if (!Array.isArray(values)) return []
+  const result: string[] = []
+  for (const entry of values) {
+    let slug: string | null = null
+    if (typeof entry === 'number') {
+      slug = monthNumberToSlug(entry)
+    } else if (typeof entry === 'string') {
+      const lower = entry.trim().toLowerCase()
+      if ((MONTH_SLUGS as readonly string[]).includes(lower)) {
+        slug = lower
+      } else {
+        const num = monthSlugToNumber(entry)
+        if (num) slug = MONTH_SLUGS[num - 1]
+      }
+    }
+    if (slug && !result.includes(slug)) {
+      result.push(slug)
+    }
+  }
+  return result
+}

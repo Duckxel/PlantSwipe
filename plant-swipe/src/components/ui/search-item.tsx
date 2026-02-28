@@ -29,12 +29,25 @@ export interface SearchItemOption {
 }
 
 export interface SearchItemProps {
-  /** Currently selected option id (controlled) */
+  /** Currently selected option id (controlled, single-select mode) */
   value: string | null
-  /** Called when the user picks an option */
+  /** Called when the user picks an option (single-select mode) */
   onSelect: (option: SearchItemOption) => void
   /** Called when the user clears the selection */
   onClear?: () => void
+
+  // ---- Multi-select mode ----
+
+  /** Enable multi-select mode */
+  multiSelect?: boolean
+  /** Currently selected option ids (multi-select mode) */
+  values?: string[]
+  /** Called when the user confirms multi-selection */
+  onMultiSelect?: (options: SearchItemOption[]) => void
+  /** IDs to show as disabled (e.g. already-added items, current item) */
+  disabledIds?: Set<string>
+  /** Label for the confirm button in multi-select mode */
+  confirmLabel?: string
 
   // ---- Data source (choose ONE) ----
 
@@ -113,6 +126,11 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       value,
       onSelect,
       onClear,
+      multiSelect = false,
+      values = [],
+      onMultiSelect,
+      disabledIds,
+      confirmLabel = "Add Selected",
       options: staticOptions,
       onSearch,
       filterFn = defaultFilter,
@@ -136,19 +154,21 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     const [asyncResults, setAsyncResults] = React.useState<SearchItemOption[]>([])
     const [asyncLoading, setAsyncLoading] = React.useState(false)
     const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+    // Multi-select: local pending selection (not yet confirmed)
+    const [pendingIds, setPendingIds] = React.useState<Set<string>>(new Set())
 
     // In static mode keep a reference to all options for lookup
     const allOptions = staticOptions ?? asyncResults
 
-    // Resolve the currently selected option for display
+    // Resolve the currently selected option for display (single-select only)
     // Falls back to initialOption when async results haven't loaded yet
     const selectedOption = React.useMemo(
       () => {
-        if (!value) return null
+        if (multiSelect || !value) return null
         return allOptions.find((o) => o.id === value)
           ?? (initialOption && initialOption.id === value ? initialOption : null)
       },
-      [value, allOptions, initialOption],
+      [value, allOptions, initialOption, multiSelect],
     )
 
     // ------ Filtered list (static mode) ------
@@ -192,17 +212,41 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
-    // Reset search when dialog closes
+    // Reset search + pending selection when dialog closes
     React.useEffect(() => {
-      if (!open) setSearch("")
+      if (!open) {
+        setSearch("")
+        setPendingIds(new Set())
+      }
     }, [open])
 
+    // ------ Multi-select helpers ------
+    const togglePending = (id: string) => {
+      setPendingIds(prev => {
+        const next = new Set(prev)
+        if (next.has(id)) next.delete(id)
+        else next.add(id)
+        return next
+      })
+    }
+
+    const confirmMultiSelect = () => {
+      if (!onMultiSelect || pendingIds.size === 0) return
+      const selected = allOptions.filter(o => pendingIds.has(o.id))
+      onMultiSelect(selected)
+      setOpen(false)
+    }
+
     // ------ Trigger label ------
-    const triggerLabel = selectedOption
-      ? selectedLabel
-        ? selectedLabel(selectedOption)
-        : selectedOption.label
-      : placeholder
+    const triggerLabel = multiSelect
+      ? (values.length > 0
+        ? `${values.length} selected`
+        : placeholder)
+      : selectedOption
+        ? selectedLabel
+          ? selectedLabel(selectedOption)
+          : selectedOption.label
+        : placeholder
 
     // ------ Default card renderer ------
     const defaultRenderItem = (option: SearchItemOption, isSelected: boolean) => (
@@ -329,6 +373,22 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
               </div>
             </div>
 
+            {/* Multi-select: selection summary bar */}
+            {multiSelect && pendingIds.size > 0 && (
+              <div className="flex items-center justify-between px-5 py-2 border-b border-stone-100 dark:border-[#2a2a2d] bg-emerald-50 dark:bg-emerald-900/20">
+                <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
+                  {pendingIds.size} selected
+                </span>
+                <button
+                  type="button"
+                  onClick={confirmMultiSelect}
+                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+                >
+                  {confirmLabel}
+                </button>
+              </div>
+            )}
+
             {/* Options grid */}
             <div className="flex-1 overflow-y-auto px-4 py-3">
               {asyncLoading ? (
@@ -345,27 +405,46 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
               ) : (
                 <ul className="grid gap-3 grid-cols-2 sm:grid-cols-3" role="list">
                   {filteredOptions.map((option) => {
-                    const isActive = option.id === value
+                    const isItemDisabled = disabledIds?.has(option.id) ?? false
+                    const isActive = multiSelect
+                      ? pendingIds.has(option.id) || values.includes(option.id)
+                      : option.id === value
+                    const isAlreadySelected = multiSelect && values.includes(option.id)
                     return (
                       <li key={option.id} className="contents">
                         <button
                           type="button"
+                          disabled={isItemDisabled || isAlreadySelected}
                           onClick={() => {
-                            onSelect(option)
-                            setOpen(false)
+                            if (multiSelect) {
+                              togglePending(option.id)
+                            } else {
+                              onSelect(option)
+                              setOpen(false)
+                            }
                           }}
                           className={cn(
-                            "group relative w-full h-full rounded-xl sm:rounded-2xl border p-4 cursor-pointer transition-all text-left",
-                            isActive
-                              ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
-                              : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5",
+                            "group relative w-full h-full rounded-xl sm:rounded-2xl border cursor-pointer transition-all text-left overflow-hidden",
+                            renderItem ? "p-0" : "p-4",
+                            (isItemDisabled || isAlreadySelected)
+                              ? "opacity-50 cursor-not-allowed border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
+                              : isActive
+                                ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
+                                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-lg hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5",
                           )}
                         >
                           {/* Hover gradient accent */}
                           <div className={cn(
                             "absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 transition-opacity",
-                            isActive ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            isActive && !isItemDisabled && !isAlreadySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                           )} />
+
+                          {/* Multi-select checkmark */}
+                          {multiSelect && isActive && !isAlreadySelected && (
+                            <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center z-10">
+                              <Check className="h-3.5 w-3.5" />
+                            </div>
+                          )}
 
                           {renderItem
                             ? renderItem(option, isActive)
@@ -378,8 +457,31 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
               )}
             </div>
 
-            {/* Clear selection footer */}
-            {value && onClear && (
+            {/* Footer */}
+            {multiSelect ? (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={pendingIds.size === 0}
+                  onClick={confirmMultiSelect}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-medium transition-colors",
+                    pendingIds.size > 0
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-400 cursor-not-allowed",
+                  )}
+                >
+                  {confirmLabel}{pendingIds.size > 0 ? ` (${pendingIds.size})` : ""}
+                </button>
+              </div>
+            ) : value && onClear ? (
               <div className="px-5 py-3 border-t border-stone-100 dark:border-[#2a2a2d]">
                 <button
                   type="button"
@@ -392,7 +494,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                   Clear selection
                 </button>
               </div>
-            )}
+            ) : null}
           </DialogContent>
         </Dialog>
       </>

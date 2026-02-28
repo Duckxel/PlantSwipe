@@ -142,8 +142,7 @@
     "calendar": {
       "hemisphere": { "type": "string", "options": ["north","south","equatorial"] },
       "sowingMonths": { "type": "array", "items": "integer" },
-      "plantingOutMonths": { "type": "array", "items": "integer" },
-      "promotionMonth": { "type": "integer", "description": "Month (1–12) when the plant should be featured or promoted" }
+      "plantingOutMonths": { "type": "array", "items": "integer" }
     },
     "sitePrep": { "type": "array", "items": "string" },
     "companionPlants": { "type": "array", "items": "string" },

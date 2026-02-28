@@ -215,13 +215,14 @@ function escapeIlikePattern(input: string): string {
  * All strategies are executed before returning - Request Plant should only appear after this completes
  * 
  * Search strategies include:
- * 1. Exact name/scientific_name match
+ * 1. Exact name/scientific_name_species match
  * 2. Scientific name from genus + species
  * 3. Partial name match
  * 4. Genus-only match
- * 5. API common names against name/scientific_name
- * 6. Scanned name against database common names (identity->commonNames)
+ * 5. API common names against name/scientific_name_species
+ * 6. Scanned name against database common names (plant_translations.common_names)
  * 7. API common names against database common names
+ * 8. Scanned name against given_names/synonyms in plant_translations
  */
 async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Promise<string | undefined> {
   if (!topMatch?.name) {
@@ -241,11 +242,11 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
   const safeSpecies = topMatch.species ? escapeIlikePattern(topMatch.species) : null
   
   try {
-    // Strategy 1: Exact name match (case-insensitive) on name and scientific_name
+    // Strategy 1: Exact name match (case-insensitive) on name and scientific_name_species
     const { data: exactMatch, error: exactError } = await supabase
       .from('plants')
-      .select('id, name, scientific_name')
-      .or(`name.ilike.${safeName},scientific_name.ilike.${safeName}`)
+      .select('id, name, scientific_name_species')
+      .or(`name.ilike.${safeName},scientific_name_species.ilike.${safeName}`)
       .limit(1)
       .single()
     
@@ -261,8 +262,8 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       
       const { data: scientificMatch, error: sciError } = await supabase
         .from('plants')
-        .select('id, name, scientific_name')
-        .or(`scientific_name.ilike.${safeScientificName},scientific_name.ilike.${safeScientificName}%`)
+        .select('id, name, scientific_name_species')
+        .or(`scientific_name_species.ilike.${safeScientificName},scientific_name_species.ilike.${safeScientificName}%`)
         .limit(1)
         .single()
       
@@ -272,11 +273,11 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       }
     }
     
-    // Strategy 3: Partial name match (contains) on name and scientific_name
+    // Strategy 3: Partial name match (contains) on name and scientific_name_species
     const { data: partialMatch, error: partialError } = await supabase
       .from('plants')
-      .select('id, name, scientific_name')
-      .or(`name.ilike.%${safeName}%,scientific_name.ilike.%${safeName}%`)
+      .select('id, name, scientific_name_species')
+      .or(`name.ilike.%${safeName}%,scientific_name_species.ilike.%${safeName}%`)
       .limit(1)
       .single()
     
@@ -291,8 +292,8 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       
       const { data: genusMatch, error: genusError } = await supabase
         .from('plants')
-        .select('id, name, scientific_name')
-        .or(`scientific_name.ilike.${safeGenus}%,name.ilike.%${safeGenus}%`)
+        .select('id, name, scientific_name_species')
+        .or(`scientific_name_species.ilike.${safeGenus}%,name.ilike.%${safeGenus}%`)
         .limit(1)
         .single()
       
@@ -310,8 +311,8 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
         const safeCommonName = escapeIlikePattern(commonName)
         const { data: commonNameMatch, error: commonError } = await supabase
           .from('plants')
-          .select('id, name, scientific_name')
-          .or(`name.ilike.%${safeCommonName}%,scientific_name.ilike.%${safeCommonName}%`)
+          .select('id, name, scientific_name_species')
+          .or(`name.ilike.%${safeCommonName}%,scientific_name_species.ilike.%${safeCommonName}%`)
           .limit(1)
           .single()
         
@@ -322,54 +323,76 @@ async function findMatchingPlant(topMatch: PlantScanSuggestion | undefined): Pro
       }
     }
     
-    // Strategy 6: Search scanned plant name against database common names (identity->commonNames)
-    // The identity column is JSONB with commonNames as an array of strings
-    // We search the text representation of the array for partial matches
+    // Strategy 6: Search scanned plant name against database common names (plant_translations.common_names)
     console.log('[plantScan] Trying Strategy 6: scanned name against database common names')
-    const { data: dbCommonNameMatch, error: dbCommonError } = await supabase
-      .from('plants')
-      .select('id, name, scientific_name, identity')
-      .ilike('identity->>commonNames', `%${safeName}%`)
+    const { data: translationMatch, error: translationError } = await supabase
+      .from('plant_translations')
+      .select('plant_id')
+      .ilike('common_names::text', `%${safeName}%`)
+      .eq('language', 'en')
       .limit(1)
       .single()
     
-    if (dbCommonNameMatch && !dbCommonError) {
-      console.log('[plantScan] ✓ Strategy 6 (scanned name vs DB common names) found:', dbCommonNameMatch.name)
-      return dbCommonNameMatch.id
+    if (translationMatch && !translationError) {
+      const { data: plantFromTranslation } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name_species')
+        .eq('id', translationMatch.plant_id)
+        .single()
+      if (plantFromTranslation) {
+        console.log('[plantScan] ✓ Strategy 6 (scanned name vs DB common names) found:', plantFromTranslation.name)
+        return plantFromTranslation.id
+      }
     }
     
-    // Strategy 7: Search API common names against database common names (identity->commonNames)
+    // Strategy 7: Search API common names against database common names (plant_translations.common_names)
     if (topMatch.commonNames && topMatch.commonNames.length > 0) {
       console.log('[plantScan] Trying Strategy 7: API common names against database common names')
       
       for (const commonName of topMatch.commonNames.slice(0, 5)) {
         const safeCommonName = escapeIlikePattern(commonName)
-        const { data: crossCommonMatch, error: crossError } = await supabase
-          .from('plants')
-          .select('id, name, scientific_name, identity')
-          .ilike('identity->>commonNames', `%${safeCommonName}%`)
+        const { data: crossTranslationMatch, error: crossTransError } = await supabase
+          .from('plant_translations')
+          .select('plant_id')
+          .ilike('common_names::text', `%${safeCommonName}%`)
+          .eq('language', 'en')
           .limit(1)
           .single()
         
-        if (crossCommonMatch && !crossError) {
-          console.log('[plantScan] ✓ Strategy 7 (API common name vs DB common names) found:', crossCommonMatch.name, 'via', commonName)
-          return crossCommonMatch.id
+        if (crossTranslationMatch && !crossTransError) {
+          const { data: crossPlantMatch } = await supabase
+            .from('plants')
+            .select('id, name, scientific_name_species')
+            .eq('id', crossTranslationMatch.plant_id)
+            .single()
+          if (crossPlantMatch) {
+            console.log('[plantScan] ✓ Strategy 7 (API common name vs DB common names) found:', crossPlantMatch.name, 'via', commonName)
+            return crossPlantMatch.id
+          }
         }
       }
     }
     
-    // Strategy 8: Also search against identity->givenNames and identity->synonyms
-    console.log('[plantScan] Trying Strategy 8: scanned name against database givenNames and synonyms')
-    const { data: altNameMatch, error: altError } = await supabase
-      .from('plants')
-      .select('id, name, scientific_name, identity')
-      .or(`identity->>givenNames.ilike.%${safeName}%,identity->>synonyms.ilike.%${safeName}%`)
+    // Strategy 8: Search against given_names and synonyms in plant_translations
+    console.log('[plantScan] Trying Strategy 8: scanned name against database given_names and synonyms')
+    const { data: altTranslationMatch, error: altTransError } = await supabase
+      .from('plant_translations')
+      .select('plant_id')
+      .or(`given_names::text.ilike.%${safeName}%,synonyms::text.ilike.%${safeName}%`)
+      .eq('language', 'en')
       .limit(1)
       .single()
     
-    if (altNameMatch && !altError) {
-      console.log('[plantScan] ✓ Strategy 8 (scanned name vs DB givenNames/synonyms) found:', altNameMatch.name)
-      return altNameMatch.id
+    if (altTranslationMatch && !altTransError) {
+      const { data: altPlantMatch } = await supabase
+        .from('plants')
+        .select('id, name, scientific_name_species')
+        .eq('id', altTranslationMatch.plant_id)
+        .single()
+      if (altPlantMatch) {
+        console.log('[plantScan] ✓ Strategy 8 (scanned name vs DB given_names/synonyms) found:', altPlantMatch.name)
+        return altPlantMatch.id
+      }
     }
     
     console.log('[plantScan] ✗ No match found after all 8 strategies')
@@ -433,7 +456,7 @@ export async function createPlantScan(
     })
     .select(`
       *,
-      matched_plant:plants(id, name, scientific_name)
+      matched_plant:plants(id, name, scientific_name_species)
     `)
     .single()
   
@@ -487,7 +510,7 @@ async function recheckScanMatch(scan: any): Promise<any> {
       .eq('id', scan.id)
       .select(`
         *,
-        matched_plant:plants(id, name, scientific_name)
+        matched_plant:plants(id, name, scientific_name_species)
       `)
       .single()
     
@@ -517,7 +540,7 @@ export async function getUserScans(options?: {
     .from('plant_scans')
     .select(`
       *,
-      matched_plant:plants(id, name, scientific_name)
+      matched_plant:plants(id, name, scientific_name_species)
     `)
     .eq('user_id', session.user.id)
     .is('deleted_at', null)
@@ -584,7 +607,7 @@ export async function getScanById(scanId: string): Promise<PlantScan | null> {
     .from('plant_scans')
     .select(`
       *,
-      matched_plant:plants(id, name, scientific_name)
+      matched_plant:plants(id, name, scientific_name_species)
     `)
     .eq('id', scanId)
     .is('deleted_at', null)
@@ -625,7 +648,7 @@ export async function updateScan(
     .eq('user_id', session.user.id)
     .select(`
       *,
-      matched_plant:plants(id, name, scientific_name)
+      matched_plant:plants(id, name, scientific_name_species)
     `)
     .single()
   
@@ -686,7 +709,7 @@ function transformDbRow(row: any): PlantScan {
     matchedPlant: row.matched_plant ? {
       id: row.matched_plant.id,
       name: row.matched_plant.name,
-      scientificName: row.matched_plant.scientific_name
+      scientificName: row.matched_plant.scientific_name_species
     } : undefined,
     userNotes: row.user_notes,
     createdAt: row.created_at,
