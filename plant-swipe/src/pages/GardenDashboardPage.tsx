@@ -83,6 +83,7 @@ import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
@@ -2737,7 +2738,15 @@ export const GardenDashboardPage: React.FC = () => {
       {!loading && garden && canViewOverview && (
         <>
           <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
-            <div className="hidden md:block text-xl font-semibold">{garden.name}</div>
+            {user ? (
+              <GardenSwitcherDropdown
+                currentGarden={garden}
+                userId={user.id}
+                onSwitch={(gardenId) => navigate(`/garden/${gardenId}/${tab}`)}
+              />
+            ) : (
+              <div className="hidden md:block text-xl font-semibold">{garden.name}</div>
+            )}
             {!isMember && garden.privacy === 'public' && (
               <div className="hidden md:flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
                 <Globe className="w-3.5 h-3.5" />
