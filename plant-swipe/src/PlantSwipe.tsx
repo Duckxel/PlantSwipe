@@ -875,7 +875,7 @@ export default function PlantSwipe() {
       // This replaces lazy calculation since we need it for filter options anyway
       const rawUsageLabels = getPlantUsageLabels(p)
       rawUsageLabels.forEach(label => usageLabelsSet.add(label))
-      const usageLabelsLower = rawUsageLabels.map(l => l.toLowerCase())
+      const usageLabelsLower = rawUsageLabels.map(l => (typeof l === 'string' ? l : String(l || '')).toLowerCase())
 
       // Maintenance — new flat: careLevel (array), legacy: identity/care nested
       const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
