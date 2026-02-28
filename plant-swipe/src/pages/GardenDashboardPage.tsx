@@ -83,6 +83,7 @@ import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
@@ -2737,7 +2738,15 @@ export const GardenDashboardPage: React.FC = () => {
       {!loading && garden && canViewOverview && (
         <>
           <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
-            <div className="hidden md:block text-xl font-semibold">{garden.name}</div>
+            {user ? (
+              <GardenSwitcherDropdown
+                currentGarden={garden}
+                userId={user.id}
+                onSwitch={(gardenId) => navigate(`/garden/${gardenId}/${tab}`)}
+              />
+            ) : (
+              <div className="hidden md:block text-xl font-semibold">{garden.name}</div>
+            )}
             {!isMember && garden.privacy === 'public' && (
               <div className="hidden md:flex items-center gap-2 text-xs text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 rounded-full px-3 py-1.5">
                 <Globe className="w-3.5 h-3.5" />
@@ -4212,6 +4221,7 @@ function OverviewSection({
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
+  const { user: authUser } = useAuth();
   const [activity, setActivity] = React.useState<
     Array<{
       id: string;
@@ -4457,9 +4467,26 @@ function OverviewSection({
             <div className="relative z-10 p-8 md:p-10 min-h-[280px] flex flex-col justify-end">
               <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-6">
                 <div className="space-y-3">
-                  <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
-                    {garden.name}
-                  </h1>
+                  {authUser && garden ? (
+                    <GardenSwitcherDropdown
+                      currentGarden={garden}
+                      userId={authUser.id}
+                      onSwitch={(gid) => navigate(`/garden/${gid}/overview`)}
+                    >
+                      <h1
+                        className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
+                        role="button"
+                        tabIndex={0}
+                      >
+                        {garden.name}
+                        <ChevronDown className="w-5 h-5 opacity-70" />
+                      </h1>
+                    </GardenSwitcherDropdown>
+                  ) : (
+                    <h1 className="text-3xl md:text-4xl font-bold text-white drop-shadow-lg">
+                      {garden?.name}
+                    </h1>
+                  )}
                   <div className="flex flex-wrap items-center gap-4 text-white/90">
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🌱</span>
@@ -4532,9 +4559,26 @@ function OverviewSection({
 
             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6 relative">
               <div className="space-y-3">
-                <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
-                  {garden?.name || t("gardenDashboard.overview")}
-                </h1>
+                {authUser && garden ? (
+                  <GardenSwitcherDropdown
+                    currentGarden={garden}
+                    userId={authUser.id}
+                    onSwitch={(gid) => navigate(`/garden/${gid}/overview`)}
+                  >
+                    <h1
+                      className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent flex items-center gap-2 cursor-pointer hover:opacity-90 transition-opacity"
+                      role="button"
+                      tabIndex={0}
+                    >
+                      {garden.name}
+                      <ChevronDown className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    </h1>
+                  </GardenSwitcherDropdown>
+                ) : (
+                  <h1 className="text-3xl md:text-4xl font-bold bg-gradient-to-r from-emerald-600 to-teal-600 dark:from-emerald-400 dark:to-teal-400 bg-clip-text text-transparent">
+                    {garden?.name || t("gardenDashboard.overview")}
+                  </h1>
+                )}
                 <div className="flex flex-wrap items-center gap-3">
                   <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
                     <span className="text-lg">🌱</span>
