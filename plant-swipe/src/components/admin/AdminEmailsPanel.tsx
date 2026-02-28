@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { ScrollingTitle } from "@/components/ui/scrolling-title"
 import { TimezoneSelect } from "@/components/ui/timezone-select"
 import {
   Plus,
@@ -26,6 +27,7 @@ import {
   Zap,
   Shield,
   Check,
+  AlertTriangle,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -285,7 +287,10 @@ export const AdminEmailsPanel: React.FC = () => {
       : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState("")
-  
+  const [confirmDelete, setConfirmDelete] = React.useState<EmailTemplate | null>(null)
+  const [confirmDuplicate, setConfirmDuplicate] = React.useState<EmailTemplate | null>(null)
+  const [actionLoading, setActionLoading] = React.useState(false)
+
   // Automatic email triggers state
   const [triggers, setTriggers] = React.useState<EmailTrigger[]>([])
   const [loadingTriggers, setLoadingTriggers] = React.useState(false)
@@ -516,7 +521,7 @@ export const AdminEmailsPanel: React.FC = () => {
 
   const handleDeleteTemplate = React.useCallback(
     async (template: EmailTemplate) => {
-      if (!window.confirm(`Delete template "${template.title}"?`)) return
+      setActionLoading(true)
       try {
         const headers = await buildAdminHeaders()
         const resp = await fetch(`/api/admin/email-templates/${encodeURIComponent(template.id)}`, {
@@ -526,9 +531,12 @@ export const AdminEmailsPanel: React.FC = () => {
         })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to delete template")
+        setConfirmDelete(null)
         loadTemplates().catch(() => {})
       } catch (err) {
         alert((err as Error).message)
+      } finally {
+        setActionLoading(false)
       }
     },
     [loadTemplates],
@@ -536,6 +544,7 @@ export const AdminEmailsPanel: React.FC = () => {
 
   const handleDuplicateTemplate = React.useCallback(
     async (template: EmailTemplate) => {
+      setActionLoading(true)
       try {
         const headers = await buildAdminHeaders()
         const payload = {
@@ -547,21 +556,23 @@ export const AdminEmailsPanel: React.FC = () => {
           bodyJson: template.bodyJson,
           isActive: template.isActive,
         }
-        
+
         const resp = await fetch("/api/admin/email-templates", {
           method: "POST",
           headers,
           credentials: "same-origin",
           body: JSON.stringify(payload),
         })
-        
+
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to duplicate template")
-        
+
+        setConfirmDuplicate(null)
         loadTemplates().catch(() => {})
-        alert(`Template duplicated as "${payload.title}"`)
       } catch (err) {
         alert((err as Error).message)
+      } finally {
+        setActionLoading(false)
       }
     },
     [loadTemplates],
@@ -1119,60 +1130,66 @@ export const AdminEmailsPanel: React.FC = () => {
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
-                  className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5"
+                  className="group relative flex flex-col rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5"
                 >
                   {/* Preview gradient */}
                   <div className="absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
-                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {template.title}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
-                        {template.subject}
-                      </p>
-                    </div>
 
-                    <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-                  </div>
-
-                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
-                    <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
-                      <span>v{template.version}</span>
-                      <span>Used {template.campaignCount}×</span>
-                    </div>
-                    
-                    {template.variables?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
-                        {template.variables.slice(0, 3).map((variable) => (
-                          <span 
-                            key={variable} 
-                            className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 font-mono"
-                          >
-                            {variable}
-                          </span>
-                        ))}
-                        {template.variables.length > 3 && (
-                          <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
-                            +{template.variables.length - 3}
-                          </span>
-                        )}
+                  {/* Card body */}
+                  <div className="flex-1 p-4 sm:p-5">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
+                        <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
                       </div>
-                    )}
+
+                      <div className="flex-1 min-w-0">
+                        <ScrollingTitle
+                          as="h3"
+                          className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors"
+                        >
+                          {template.title}
+                        </ScrollingTitle>
+                        <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                          {template.subject}
+                        </p>
+                      </div>
+
+                      <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                    </div>
+
+                    <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
+                        <span>v{template.version}</span>
+                        <span>Used {template.campaignCount}×</span>
+                      </div>
+
+                      {template.variables?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
+                          {template.variables.slice(0, 3).map((variable) => (
+                            <span
+                              key={variable}
+                              className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 font-mono"
+                            >
+                              {variable}
+                            </span>
+                          ))}
+                          {template.variables.length > 3 && (
+                            <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
+                              +{template.variables.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Action buttons - Always visible on mobile, hover on desktop */}
-                  <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:mt-0 sm:pt-0 sm:absolute sm:top-3 sm:right-3 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                  {/* Action buttons - pinned to bottom-right */}
+                  <div className="flex items-center justify-end gap-1 px-3 sm:px-4 pb-3 sm:pb-4 pt-0">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDuplicateTemplate(template)
+                        setConfirmDuplicate(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
                       title="Duplicate template"
@@ -1183,7 +1200,7 @@ export const AdminEmailsPanel: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDeleteTemplate(template)
+                        setConfirmDelete(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                       title="Delete template"
@@ -1197,6 +1214,63 @@ export const AdminEmailsPanel: React.FC = () => {
           )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
+              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Delete Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              Are you sure you want to delete <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDelete?.title}"</span>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDelete(null)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 rounded-xl"
+              disabled={actionLoading}
+              onClick={() => confirmDelete && handleDeleteTemplate(confirmDelete)}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Confirmation Dialog */}
+      <Dialog open={!!confirmDuplicate} onOpenChange={(open) => !open && setConfirmDuplicate(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center mb-3">
+              <Copy className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Duplicate Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              This will create a copy of <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDuplicate?.title}"</span> as <span className="font-mono text-xs bg-stone-100 dark:bg-[#2a2a2d] px-1.5 py-0.5 rounded">"{confirmDuplicate?.title}_copy"</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDuplicate(null)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-xl bg-sky-500 hover:bg-sky-600 text-white"
+              disabled={actionLoading}
+              onClick={() => confirmDuplicate && handleDuplicateTemplate(confirmDuplicate)}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Copy className="h-4 w-4 mr-2" />}
+              Duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New Campaign Dialog (centered modal) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
