@@ -6892,6 +6892,13 @@ async function ensureNotificationTables() {
     } catch (alterErr) {
       // Column might already exist, ignore error
     }
+    // Add test_mode / test_user_id columns (for existing tables)
+    try {
+      await sql`alter table public.notification_campaigns add column if not exists test_mode boolean not null default false;`
+      await sql`alter table public.notification_campaigns add column if not exists test_user_id uuid;`
+    } catch (alterErr) {
+      // Columns might already exist, ignore error
+    }
     await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
     await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
 
@@ -7030,6 +7037,8 @@ const notificationInputSchema = z.object({
     .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   customUserIds: z.array(z.string().uuid()).optional(),
+  testMode: z.boolean().optional().default(false),
+  testUserId: z.string().uuid().optional().nullable(),
 })
 const notificationStateSchema = z.object({
   state: z.enum(['paused', 'scheduled']),
@@ -8651,8 +8660,12 @@ app.post('/api/admin/notifications', async (req, res) => {
     plannedFor,
     scheduleStartAt,
   })
-  const audience = parsed.audience
-  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const testMode = parsed.testMode === true
+  const testUserId = testMode && parsed.testUserId ? parsed.testUserId : null
+  const audience = testMode ? 'custom' : parsed.audience
+  const customIds = testMode && testUserId
+    ? [testUserId]
+    : audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
@@ -8663,7 +8676,8 @@ app.post('/api/admin/notifications', async (req, res) => {
       insert into public.notification_campaigns (
         title, description, delivery_mode, state, audience, filters, message_variants,
         randomize, timezone, planned_for, schedule_start_at, schedule_interval, cta_url,
-        custom_user_ids, template_id, run_count, created_by, updated_by, next_run_at, created_at, updated_at
+        custom_user_ids, template_id, run_count, created_by, updated_by, next_run_at,
+        test_mode, test_user_id, created_at, updated_at
       )
       values (
         ${parsed.title.trim()},
@@ -8685,6 +8699,8 @@ app.post('/api/admin/notifications', async (req, res) => {
         ${adminUuid},
         ${adminUuid},
         ${nextRunAt},
+        ${testMode},
+        ${testUserId},
         now(),
         now()
       )
@@ -27689,6 +27705,8 @@ function normalizeNotificationCampaign(row) {
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
     estimatedRecipients: Number(row.estimated_recipients || row.recipient_count || 0),
+    testMode: row.test_mode === true,
+    testUserId: row.test_user_id || null,
     stats,
   }
 }

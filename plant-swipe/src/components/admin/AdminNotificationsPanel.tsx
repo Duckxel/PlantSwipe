@@ -94,6 +94,8 @@ type NotificationCampaign = {
   nextRunAt: string | null
   lastRunAt: string | null
   estimatedRecipients: number
+  testMode: boolean
+  testUserId: string | null
   stats: { total: number; sent: number; pending: number; failed: number }
 }
 
@@ -1131,6 +1133,11 @@ export function AdminNotificationsPanel() {
                             <div className={cn("flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium", deliveryConfig.bg, deliveryConfig.text)}>
                               {deliveryConfig.label}
                             </div>
+                            {campaign.testMode && (
+                              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] sm:text-xs font-medium bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-dashed border-amber-300 dark:border-amber-700">
+                                Test
+                              </div>
+                            )}
                           </div>
                           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate">
                             {campaign.templateTitle || 'No template'} · {audienceLabels[campaign.audience] || campaign.audience}
