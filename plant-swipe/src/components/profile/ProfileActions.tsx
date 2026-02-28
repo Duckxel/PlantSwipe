@@ -95,7 +95,7 @@ export function useProfileActionsCount(userId: string | null | undefined) {
         fetchAllActionData(userId!),
         fetchActionStatuses(userId!),
       ])
-      if (cancelled || !data) return
+      if (cancelled || !data || !dbStatuses) return
       const synced = await syncCompletionsToDb(userId!, data, dbStatuses)
       if (cancelled) return
       setRemaining(getRemainingCount(data, synced))
@@ -169,41 +169,43 @@ export function ProfileActions({ userId }: Props) {
       fetchAllActionData(userId),
       fetchActionStatuses(userId),
     ])
-    if (result) {
-      setData(result)
-      const synced = await syncCompletionsToDb(userId, result, statuses)
+    // Skip the entire state update when either fetch fails so we never
+    // overwrite existing skip/completion data with an empty map.
+    if (!result || !statuses) return
 
-      // Merge pending optimistic skips: if the DB hasn't confirmed a skip
-      // yet (RPC still in-flight), preserve the optimistic state so the UI
-      // doesn't flash the action back into view.
-      for (const id of pendingSkipsRef.current) {
-        if (synced.get(id)?.skipped_at) {
-          pendingSkipsRef.current.delete(id)
-        } else {
-          const existing = synced.get(id)
-          synced.set(id, {
-            action_id: id,
-            completed_at: existing?.completed_at ?? null,
-            skipped_at: new Date().toISOString(),
-          })
-        }
+    setData(result)
+    const synced = await syncCompletionsToDb(userId, result, statuses)
+
+    // Merge pending optimistic skips: if the DB hasn't confirmed a skip
+    // yet (RPC still in-flight), preserve the optimistic state so the UI
+    // doesn't flash the action back into view.
+    for (const id of pendingSkipsRef.current) {
+      if (synced.get(id)?.skipped_at) {
+        pendingSkipsRef.current.delete(id)
+      } else {
+        const existing = synced.get(id)
+        synced.set(id, {
+          action_id: id,
+          completed_at: existing?.completed_at ?? null,
+          skipped_at: new Date().toISOString(),
+        })
       }
-
-      // Same protection for the "all done" dismiss
-      if (pendingDismissRef.current) {
-        if (synced.get('__all_done_dismissed')?.completed_at) {
-          pendingDismissRef.current = false
-        } else {
-          synced.set('__all_done_dismissed', {
-            action_id: '__all_done_dismissed',
-            completed_at: new Date().toISOString(),
-            skipped_at: null,
-          })
-        }
-      }
-
-      setDbStatuses(synced)
     }
+
+    // Same protection for the "all done" dismiss
+    if (pendingDismissRef.current) {
+      if (synced.get('__all_done_dismissed')?.completed_at) {
+        pendingDismissRef.current = false
+      } else {
+        synced.set('__all_done_dismissed', {
+          action_id: '__all_done_dismissed',
+          completed_at: new Date().toISOString(),
+          skipped_at: null,
+        })
+      }
+    }
+
+    setDbStatuses(synced)
   }, [userId])
 
   React.useEffect(() => { refresh() }, [refresh])

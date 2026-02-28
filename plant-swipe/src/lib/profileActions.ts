@@ -103,15 +103,19 @@ let _migrated = false
 /**
  * Fetch all action statuses for a user from the DB.
  * On first call, migrates any existing localStorage data.
+ * Returns `null` when the DB query fails so callers can keep their
+ * existing state instead of replacing it with an empty map.
  */
-export async function fetchActionStatuses(userId: string): Promise<ActionStatusMap> {
+export async function fetchActionStatuses(userId: string): Promise<ActionStatusMap | null> {
   const { data, error } = await supabase
     .from('user_action_status')
     .select('action_id, completed_at, skipped_at')
     .eq('user_id', userId)
 
+  if (error) return null
+
   const map: ActionStatusMap = new Map()
-  if (!error && data) {
+  if (data) {
     for (const row of data) {
       map.set(row.action_id, row)
     }
@@ -166,15 +170,30 @@ export async function syncCompletionsToDb(
 
 /**
  * Skip an action. Returns an optimistically-updated map.
- * The DB write happens in the background (fire-and-forget).
+ * The DB write happens in the background with automatic retry so
+ * the skip survives across page reloads even on transient failures.
  */
 export function skipAction(
   userId: string,
   actionId: string,
   dbStatuses: ActionStatusMap,
 ): ActionStatusMap {
-  // .then() is required to trigger the lazy PostgrestBuilder HTTP request
-  supabase.rpc('skip_action', { _user_id: userId, _action_id: actionId }).then(null, () => {})
+  const doRpc = () =>
+    supabase.rpc('skip_action', { _user_id: userId, _action_id: actionId })
+
+  // Fire with retry — the first .then() triggers the lazy PostgrestBuilder
+  doRpc().then(
+    ({ error }) => {
+      if (error) {
+        // PostgREST-level error (e.g. auth expired) — retry once after 2 s
+        setTimeout(() => doRpc().then(null, () => {}), 2000)
+      }
+    },
+    () => {
+      // Network-level rejection — retry once after 2 s
+      setTimeout(() => doRpc().then(null, () => {}), 2000)
+    },
+  )
 
   const next = new Map(dbStatuses)
   const existing = dbStatuses.get(actionId)
@@ -194,11 +213,18 @@ export function dismissAllDone(
   userId: string,
   dbStatuses: ActionStatusMap,
 ): ActionStatusMap {
-  // .then() is required to trigger the lazy PostgrestBuilder HTTP request
-  supabase.rpc('mark_action_completed', {
-    _user_id: userId,
-    _action_id: DISMISSED_ACTION_ID,
-  }).then(null, () => {})
+  const doRpc = () =>
+    supabase.rpc('mark_action_completed', {
+      _user_id: userId,
+      _action_id: DISMISSED_ACTION_ID,
+    })
+
+  doRpc().then(
+    ({ error }) => {
+      if (error) setTimeout(() => doRpc().then(null, () => {}), 2000)
+    },
+    () => setTimeout(() => doRpc().then(null, () => {}), 2000),
+  )
 
   const next = new Map(dbStatuses)
   next.set(DISMISSED_ACTION_ID, {
