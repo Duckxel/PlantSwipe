@@ -34,7 +34,8 @@ const ScrollingText: React.FC<{ children: string | undefined; className?: string
         ref={textRef}
         className={`whitespace-nowrap ${hovering ? "" : "overflow-hidden text-ellipsis"} ${className}`}
         style={hovering && overflow > 0 ? {
-          animation: `scroll-text-left 2.5s ease-in-out infinite`,
+          // Scale duration so text scrolls at ~40px/s — comfortable reading speed
+          animation: `scroll-text-left ${Math.max(2.5, overflow / 40 + 1.5)}s ease-in-out infinite`,
           ["--scroll-dist" as string]: `-${overflow}px`,
         } : undefined}
       >
