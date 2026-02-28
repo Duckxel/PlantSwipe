@@ -199,9 +199,13 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   )}
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
-                  <div className="overflow-hidden flex-1">
-                    <div className="font-semibold truncate text-sm">{p.name}</div>
-                    <div className="text-[10px] italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
+                  <div className="flex-1 min-w-0">
+                    <div className="group/name overflow-hidden [container-type:inline-size]">
+                      <div className="font-semibold text-sm whitespace-nowrap overflow-hidden text-ellipsis group-hover/name:overflow-visible group-hover/name:animate-scroll-name">{p.name}</div>
+                    </div>
+                    <div className="group/sci overflow-hidden [container-type:inline-size]">
+                      <div className="text-[10px] italic opacity-60 whitespace-nowrap overflow-hidden text-ellipsis group-hover/sci:overflow-visible group-hover/sci:animate-scroll-name">{p.scientificNameSpecies || p.scientificName}</div>
+                    </div>
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
                     <button
@@ -260,29 +264,35 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   )}
                 </div>
                 <div className="p-4 flex flex-col h-full min-w-0">
-                  <div className="overflow-hidden">
-                    <div className="font-semibold truncate text-lg">{p.name}</div>
-                    <div className="text-xs italic opacity-60 truncate">{p.scientificNameSpecies || p.scientificName}</div>
+                  <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                      <div className="group/name overflow-hidden [container-type:inline-size]">
+                        <div className="font-semibold text-lg whitespace-nowrap overflow-hidden text-ellipsis group-hover/name:overflow-visible group-hover/name:animate-scroll-name">{p.name}</div>
+                      </div>
+                      <div className="group/sci overflow-hidden [container-type:inline-size]">
+                        <div className="text-xs italic opacity-60 whitespace-nowrap overflow-hidden text-ellipsis group-hover/sci:overflow-visible group-hover/sci:animate-scroll-name">{p.scientificNameSpecies || p.scientificName}</div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      <button
+                        type="button"
+                        onClick={(e) => handleLike(e, p.id)}
+                        className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
+                        aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
+                      >
+                        <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => handleBookmark(e, p.id)}
+                        className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
+                        aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
+                      >
+                        <Bookmark className="h-5 w-5" />
+                      </button>
+                    </div>
                   </div>
                   <p className="text-sm line-clamp-2 text-stone-600 dark:text-stone-300 flex-1 mt-2">{p.description}</p>
-                  <div className="flex items-center justify-end gap-1 mt-2">
-                    <button
-                      type="button"
-                      onClick={(e) => handleLike(e, p.id)}
-                      className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
-                      aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
-                    >
-                      <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleBookmark(e, p.id)}
-                      className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
-                      aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
-                    >
-                      <Bookmark className="h-5 w-5" />
-                    </button>
-                  </div>
                 </div>
               </div>
             </Card>
