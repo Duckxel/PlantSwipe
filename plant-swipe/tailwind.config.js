@@ -10,7 +10,6 @@ module.exports = {
     		animation: {
     			'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',
     			'shimmer': 'shimmer 2s linear infinite',
-    			'scroll-name': 'scroll-name 3s linear infinite',
     		},
     		keyframes: {
     			'pulse-subtle': {
@@ -20,12 +19,6 @@ module.exports = {
     			'shimmer': {
     				'0%': { backgroundPosition: '-200% 0' },
     				'100%': { backgroundPosition: '200% 0' },
-    			},
-    			'scroll-name': {
-    				'0%': { transform: 'translateX(0)' },
-    				'40%': { transform: 'translateX(min(0px, calc(-100% + 100cqw)))' },
-    				'60%': { transform: 'translateX(min(0px, calc(-100% + 100cqw)))' },
-    				'100%': { transform: 'translateX(0)' },
     			},
     		},
   		borderRadius: {

@@ -9,6 +9,41 @@ import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighli
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { AddToBookmarkDialog } from "@/components/plant/AddToBookmarkDialog";
 
+/** Text that scrolls horizontally on hover when truncated */
+const ScrollingText: React.FC<{ children: string | undefined; className?: string }> = ({ children, className = "" }) => {
+  const textRef = useRef<HTMLDivElement>(null);
+  const [overflow, setOverflow] = useState(0);
+  const [hovering, setHovering] = useState(false);
+
+  const onEnter = useCallback(() => {
+    const el = textRef.current;
+    if (el && el.scrollWidth > el.clientWidth) {
+      setOverflow(el.scrollWidth - el.clientWidth);
+      setHovering(true);
+    }
+  }, []);
+
+  const onLeave = useCallback(() => {
+    setHovering(false);
+    setOverflow(0);
+  }, []);
+
+  return (
+    <div className="overflow-hidden" onMouseEnter={onEnter} onMouseLeave={onLeave}>
+      <div
+        ref={textRef}
+        className={`whitespace-nowrap ${hovering ? "" : "overflow-hidden text-ellipsis"} ${className}`}
+        style={hovering && overflow > 0 ? {
+          animation: `scroll-text-left 2.5s ease-in-out infinite`,
+          ["--scroll-dist" as string]: `-${overflow}px`,
+        } : undefined}
+      >
+        {children}
+      </div>
+    </div>
+  );
+};
+
 interface SearchPageProps {
   plants: Plant[];
   openInfo: (p: Plant) => void;
@@ -200,12 +235,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
                   <div className="flex-1 min-w-0">
-                    <div className="group/name overflow-hidden [container-type:inline-size]">
-                      <div className="font-semibold text-sm whitespace-nowrap overflow-hidden text-ellipsis group-hover/name:overflow-visible group-hover/name:animate-scroll-name">{p.name}</div>
-                    </div>
-                    <div className="group/sci overflow-hidden [container-type:inline-size]">
-                      <div className="text-[10px] italic opacity-60 whitespace-nowrap overflow-hidden text-ellipsis group-hover/sci:overflow-visible group-hover/sci:animate-scroll-name">{p.scientificNameSpecies || p.scientificName}</div>
-                    </div>
+                    <ScrollingText className="font-semibold text-sm">{p.name}</ScrollingText>
+                    <ScrollingText className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
                     <button
@@ -266,12 +297,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 <div className="p-4 flex flex-col h-full min-w-0">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1">
-                      <div className="group/name overflow-hidden [container-type:inline-size]">
-                        <div className="font-semibold text-lg whitespace-nowrap overflow-hidden text-ellipsis group-hover/name:overflow-visible group-hover/name:animate-scroll-name">{p.name}</div>
-                      </div>
-                      <div className="group/sci overflow-hidden [container-type:inline-size]">
-                        <div className="text-xs italic opacity-60 whitespace-nowrap overflow-hidden text-ellipsis group-hover/sci:overflow-visible group-hover/sci:animate-scroll-name">{p.scientificNameSpecies || p.scientificName}</div>
-                      </div>
+                      <ScrollingText className="font-semibold text-lg">{p.name}</ScrollingText>
+                      <ScrollingText className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button

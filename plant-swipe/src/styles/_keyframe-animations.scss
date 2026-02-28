@@ -95,3 +95,18 @@
     transform: translateX(100%);
   }
 }
+
+@keyframes scroll-text-left {
+  0% {
+    transform: translateX(0);
+  }
+  35% {
+    transform: translateX(var(--scroll-dist, 0px));
+  }
+  65% {
+    transform: translateX(var(--scroll-dist, 0px));
+  }
+  100% {
+    transform: translateX(0);
+  }
+}
