@@ -6,9 +6,9 @@
 
 update public.plants
 set featured_month = (
-  select coalesce(array_agg(slug order by idx), '{}'::text[])
+  select coalesce(array_agg(normalised.slug order by normalised.ord), '{}'::text[])
   from (
-    select idx, case
+    select t.ord, case
       when elem in ('january','february','march','april','may','june',
                     'july','august','september','october','november','december')
         then elem
@@ -33,8 +33,8 @@ set featured_month = (
         then lower(elem)
       else null  -- discard unrecognisable values
     end as slug,
-    idx
-    from unnest(featured_month) with ordinality as t(elem, idx)
+    t.ord
+    from unnest(featured_month) with ordinality as t(elem, ord)
   ) normalised
   where slug is not null
 )
