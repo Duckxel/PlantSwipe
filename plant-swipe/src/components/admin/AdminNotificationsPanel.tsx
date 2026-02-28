@@ -22,6 +22,7 @@ import {
   Clock,
   Send,
   Users,
+  User,
   Calendar,
   MessageSquare,
   CheckCircle2,
@@ -308,6 +309,8 @@ export function AdminNotificationsPanel() {
     timezone: DEFAULT_TIMEZONE,
     ctaUrl: '',
     customUserIds: '',
+    testMode: false,
+    testUserId: null as string | null,
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
 
@@ -456,6 +459,32 @@ export function AdminNotificationsPanel() {
   }, [activeView, loadCampaigns, loadTemplates, loadAutomations, loadMonitoring])
 
   // =========================================================================
+  // User search for test mode
+  // =========================================================================
+  const searchUsers = React.useCallback(async (query: string) => {
+    try {
+      let q = supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url')
+        .limit(20)
+      if (query) {
+        q = q.ilike('display_name', `%${query}%`)
+      }
+      const { data } = await q
+      return (data || []).map((u) => ({
+        id: u.id,
+        label: u.display_name || 'Unknown User',
+        description: u.id,
+        icon: u.avatar_url
+          ? <img src={u.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
+          : <User className="h-4 w-4 text-amber-600 dark:text-amber-400" />,
+      }))
+    } catch {
+      return []
+    }
+  }, [])
+
+  // =========================================================================
   // Campaign Actions
   // =========================================================================
   const handleCreateCampaign = React.useCallback(async () => {
@@ -478,16 +507,20 @@ export function AdminNotificationsPanel() {
         title: campaignForm.title.trim(),
         description: campaignForm.description.trim() || null,
         deliveryMode: campaignForm.deliveryMode,
-        audience: campaignForm.audience,
+        audience: campaignForm.testMode ? 'custom' : campaignForm.audience,
         templateId: campaignForm.templateId,
         messageVariants: selectedTemplate.messageVariants,
         randomize: selectedTemplate.randomize,
         plannedFor: campaignForm.deliveryMode === 'planned' ? campaignForm.plannedFor : null,
         timezone: campaignForm.timezone || DEFAULT_TIMEZONE,
         ctaUrl: campaignForm.ctaUrl.trim() || null,
-        customUserIds: campaignForm.audience === 'custom'
-          ? campaignForm.customUserIds.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0)
-          : [],
+        customUserIds: campaignForm.testMode && campaignForm.testUserId
+          ? [campaignForm.testUserId]
+          : campaignForm.audience === 'custom'
+            ? campaignForm.customUserIds.split(/\n+/).map(l => l.trim()).filter(l => l.length > 0)
+            : [],
+        testMode: campaignForm.testMode,
+        testUserId: campaignForm.testMode ? campaignForm.testUserId : null,
       }
       const resp = await fetch('/api/admin/notifications', {
         method: 'POST',
@@ -507,6 +540,8 @@ export function AdminNotificationsPanel() {
         timezone: DEFAULT_TIMEZONE,
         ctaUrl: '',
         customUserIds: '',
+        testMode: false,
+        testUserId: null,
       })
       setCampaignDialogOpen(false)
       loadCampaigns().catch(() => {})
@@ -1966,7 +2001,7 @@ export function AdminNotificationsPanel() {
               </div>
             </div>
 
-            {campaignForm.audience === 'custom' && (
+            {campaignForm.audience === 'custom' && !campaignForm.testMode && (
               <div className="space-y-1.5">
                 <Label htmlFor="campaign-custom-ids" className="text-xs sm:text-sm font-medium">Custom User IDs</Label>
                 <Textarea
@@ -1978,6 +2013,55 @@ export function AdminNotificationsPanel() {
                 />
               </div>
             )}
+
+            {/* Test Mode Toggle */}
+            <div className="rounded-xl border-2 border-dashed border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 sm:p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <Label className="text-xs sm:text-sm font-medium text-amber-800 dark:text-amber-300">
+                    Test Mode
+                  </Label>
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400 mt-0.5">
+                    Send only to a specific user instead of the full audience
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCampaignForm(prev => ({ ...prev, testMode: !prev.testMode, testUserId: null }))}
+                  className={cn(
+                    "relative h-6 w-11 rounded-full transition-colors flex-shrink-0",
+                    campaignForm.testMode ? "bg-amber-500" : "bg-stone-300 dark:bg-stone-600"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-1 h-4 w-4 rounded-full bg-white transition-transform shadow-sm",
+                      campaignForm.testMode ? "left-6" : "left-1"
+                    )}
+                  />
+                </button>
+              </div>
+
+              {campaignForm.testMode && (
+                <div className="space-y-1.5">
+                  <Label className="text-[10px] sm:text-xs font-medium text-amber-700 dark:text-amber-400">
+                    Test User
+                  </Label>
+                  <SearchItem
+                    value={campaignForm.testUserId}
+                    onSelect={(opt) => setCampaignForm(prev => ({ ...prev, testUserId: opt.id }))}
+                    onClear={() => setCampaignForm(prev => ({ ...prev, testUserId: null }))}
+                    onSearch={searchUsers}
+                    placeholder="Select a user..."
+                    title="Choose Test User"
+                    description="Search by display name to select who receives the test notification."
+                    searchPlaceholder="Search users..."
+                    emptyMessage="No users found."
+                    priorityZIndex={100}
+                  />
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Sticky footer */}
@@ -1991,15 +2075,22 @@ export function AdminNotificationsPanel() {
             </Button>
             <Button
               onClick={handleCreateCampaign}
-              disabled={campaignSaving}
-              className="w-full sm:flex-1 rounded-xl bg-amber-600 hover:bg-amber-700 h-10 text-sm order-1 sm:order-2"
+              disabled={campaignSaving || (campaignForm.testMode && !campaignForm.testUserId)}
+              className={cn(
+                "w-full sm:flex-1 rounded-xl h-10 text-sm order-1 sm:order-2",
+                campaignForm.testMode
+                  ? "bg-amber-500 hover:bg-amber-600"
+                  : "bg-amber-600 hover:bg-amber-700"
+              )}
             >
               {campaignSaving ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <Send className="mr-2 h-4 w-4" />
               )}
-              {campaignForm.deliveryMode === 'send_now' ? 'Create & Send' : 'Schedule Campaign'}
+              {campaignForm.testMode
+                ? 'Send Test'
+                : campaignForm.deliveryMode === 'send_now' ? 'Create & Send' : 'Schedule Campaign'}
             </Button>
           </div>
         </DialogContent>
