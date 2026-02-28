@@ -22,7 +22,7 @@ const parseDate = (value?: string): Date | null => {
  * Checks if a plant should be featured as "Plant of the Month"
  *
  * New schema: plant.featuredMonth is a MonthSlug[] (e.g. ["february"])
- * Legacy: plant.planting?.calendar?.promotionMonth or plant.identity?.promotionMonth (number 1-12)
+ * Legacy fallback: plant.planting?.calendar?.promotionMonth or plant.identity?.promotionMonth (number 1-12)
  */
 export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = new Date()): boolean => {
   if (!plant) return false

@@ -839,7 +839,9 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Translatable field from plant_translations
       overview: translation?.overview || undefined,
       // Non-translatable fields from plants table (enums)
-      promotionMonth: monthSlugToNumber(data.promotion_month) ?? undefined,
+      promotionMonth: Array.isArray(data.featured_month) && data.featured_month.length > 0
+        ? monthSlugToNumber(data.featured_month[0]) ?? undefined
+        : undefined,
       lifeCycle: (lifeCycleEnum.toUi(data.life_cycle) as NonNullable<Plant["identity"]>["lifeCycle"]) || undefined,
       season: seasonEnum.toUiArray(data.season) as NonNullable<Plant["identity"]>["season"],
       foliagePersistance: expandFoliagePersistanceFromDb(data.foliage_persistance),
@@ -1889,7 +1891,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
         // Note: enum fields (family, life_cycle, season, foliage_persistance, toxicity_*, living_space,
         // composition, maintenance_level) are NOT translated - they stay in plants table only
-        // Same for scientific_name, promotion_month, habitat, level_sun
+        // Same for scientific_name, featured_month, habitat, level_sun
         const p2 = plantToSave as any
         const translationPayload = {
           plant_id: savedId,

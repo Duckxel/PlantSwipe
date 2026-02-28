@@ -1231,7 +1231,7 @@ export default function PlantSwipe() {
       }
       
       // Discovery Algorithm:
-      // 1. Plants with promotion_month matching current month appear FIRST (shuffled among themselves)
+      // 1. Plants with featured_month matching current month appear FIRST (shuffled among themselves)
       // 2. All other plants follow (shuffled among themselves)
       // This ensures "Plant of the Month" plants get priority visibility in Discovery
       const now = new Date()
@@ -1271,13 +1271,13 @@ export default function PlantSwipe() {
 
   const sortedSearchResults = useMemo(() => {
     // For default sort:
-    // 1. Promotion Month plants first (featured for current month)
+    // 1. Featured Month plants first (featured for current month)
     // 2. Regular plants in the middle
     // 3. In-progress plants last
     if (searchSort === "default") {
       const arr = filtered.slice() as PreparedPlant[]
       arr.sort((a, b) => {
-        // Priority: Promotion Month > Regular > In Progress
+        // Priority: Featured Month > Regular > In Progress
         // Use pre-computed boolean flags for O(1) checks during sort
         const aPromoted = a._isPromoted ? -1 : 0
         const bPromoted = b._isPromoted ? -1 : 0
