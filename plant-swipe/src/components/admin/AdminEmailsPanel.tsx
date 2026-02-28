@@ -100,6 +100,35 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{url}}', description: 'Magic link URL to reset password', required: true },
     ]
   },
+  // Account Deletion
+  ACCOUNT_DELETION: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Friend Request Reminder
+  FRIEND_REQUEST_REMINDER: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "Recipient's display name (who received the friend request)", required: true },
+      { token: '{{sender}}', description: "Sender's display name (who sent the friend request)", required: true },
+      { token: '{{email}}', description: "Recipient's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Garden Invite Reminder
+  GARDEN_INVITE_REMINDER: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "Invitee's display name (who received the garden invite)", required: true },
+      { token: '{{sender}}', description: "Inviter's display name (who sent the garden invite)", required: true },
+      { token: '{{email}}', description: "Invitee's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
 }
 
 // Get category badge color

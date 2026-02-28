@@ -11053,6 +11053,24 @@ const DEFAULT_EMAIL_TRIGGERS = [
     displayName: 'Forgot Password Magic Link',
     description: 'Sent when a user requests a password reset via magic link. The link logs the user in and redirects to the password change page. Variables: {{url}}, {{user}}, {{email}}',
   },
+  // Account Deletion Confirmation
+  {
+    triggerType: 'ACCOUNT_DELETION',
+    displayName: 'Account Deletion Confirmation',
+    description: 'Sent when a user deletes their account. Variables: {{user}}, {{email}}',
+  },
+  // Friend Request Reminder (1 day after unanswered)
+  {
+    triggerType: 'FRIEND_REQUEST_REMINDER',
+    displayName: 'Friend Request Reminder',
+    description: 'Sent 1 day after a friend request if it has not been answered. Variables: {{user}}, {{sender}}',
+  },
+  // Garden Invite Reminder (1 day after unanswered)
+  {
+    triggerType: 'GARDEN_INVITE_REMINDER',
+    displayName: 'Garden Invite Reminder',
+    description: 'Sent 1 day after a garden invitation if it has not been answered. Variables: {{user}}, {{sender}}',
+  },
 ]
 
 // Cache to prevent running ensureDefaultEmailTriggers on every request
@@ -11246,7 +11264,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
   }
 })
 
-async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage }) {
+async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage, extraContext = {}, skipDedup = false }) {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
     console.error('[sendAutomaticEmail] No Resend API key configured')
@@ -11282,15 +11300,17 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Trigger is disabled' }
     }
 
-    const existingSend = await sql`
-      select id from public.admin_automatic_email_sends
-      where trigger_type = ${triggerType} and user_id = ${userId}
-      limit 1
-    `
+    if (!skipDedup) {
+      const existingSend = await sql`
+        select id from public.admin_automatic_email_sends
+        where trigger_type = ${triggerType} and user_id = ${userId}
+        limit 1
+      `
 
-    if (existingSend && existingSend.length > 0) {
-      console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
-      return { sent: false, reason: 'Already sent to this user' }
+      if (existingSend && existingSend.length > 0) {
+        console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
+        return { sent: false, reason: 'Already sent to this user' }
+      }
     }
 
     if (!trigger.template_id) {
@@ -11325,6 +11345,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       random: randomStr,
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
+      ...extraContext,
     }
     // Do not escape values in subject (email clients handle text subjects)
     const subject = replaceTemplateVariables(rawSubject, context, false)
@@ -11362,13 +11383,15 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
     const resendData = await resendResponse.json().catch(() => ({}))
     console.log(`[sendAutomaticEmail] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
 
-    try {
-      await sql`
-        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
-        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
-      `
-    } catch (logErr) {
-      console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
+    if (!skipDedup) {
+      try {
+        await sql`
+          insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+          values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+        `
+      } catch (logErr) {
+        console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
+      }
     }
 
     return { sent: true, resendId: resendData.id || null, trigger }
@@ -17477,6 +17500,27 @@ app.post('/api/account/delete', async (req, res) => {
     }
     const userId = user.id
 
+    // Send account deletion confirmation email BEFORE deleting data
+    try {
+      let displayName = 'User'
+      let userLang = 'en'
+      if (sql) {
+        const profileRows = await sql`select display_name, language from public.profiles where id = ${userId} limit 1`
+        if (profileRows?.[0]) {
+          displayName = profileRows[0].display_name || displayName
+          userLang = profileRows[0].language || userLang
+        }
+      }
+      await sendAutomaticEmail('ACCOUNT_DELETION', {
+        userId,
+        userEmail: user.email,
+        userDisplayName: displayName,
+        userLanguage: userLang,
+      })
+    } catch (emailErr) {
+      console.warn('[account-delete] Failed to send deletion confirmation email:', emailErr?.message || emailErr)
+    }
+
     let deletedGardens = 0
     let deletedGardenIds = []
     let deletedCoverImages = 0
@@ -17697,6 +17741,27 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       return
     }
     const userId = user.id
+
+    // Send account deletion confirmation email BEFORE deleting data
+    try {
+      let displayName = 'User'
+      let userLang = 'en'
+      if (sql) {
+        const profileRows = await sql`select display_name, language from public.profiles where id = ${userId} limit 1`
+        if (profileRows?.[0]) {
+          displayName = profileRows[0].display_name || displayName
+          userLang = profileRows[0].language || userLang
+        }
+      }
+      await sendAutomaticEmail('ACCOUNT_DELETION', {
+        userId,
+        userEmail: user.email,
+        userDisplayName: displayName,
+        userLanguage: userLang,
+      })
+    } catch (emailErr) {
+      console.warn('[account-delete-gdpr] Failed to send deletion confirmation email:', emailErr?.message || emailErr)
+    }
 
     // Log the deletion request for GDPR audit
     await logGdprAccess(userId, 'ACCOUNT_DELETION_STARTED', { userId: userId.slice(0, 8) + '...' }, req)
@@ -18571,6 +18636,101 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   console.log('[gdpr] Data retention cleanup completed')
+})
+
+// ========== REMINDER EMAIL CRON (friend requests & garden invites older than 1 day) ==========
+cron.schedule('0 */3 * * *', async () => {
+  if (!sql) return
+  console.log('[reminder-emails] Checking for pending friend requests and garden invites...')
+
+  // --- Friend Request Reminders ---
+  try {
+    await ensureDefaultEmailTriggers()
+    const pendingRequests = await sql`
+      select fr.id, fr.requester_id, fr.recipient_id,
+             req_p.display_name as requester_name,
+             rec_p.display_name as recipient_name,
+             rec_p.language as recipient_language,
+             u.email as recipient_email
+      from public.friend_requests fr
+      join public.profiles req_p on req_p.id = fr.requester_id
+      join public.profiles rec_p on rec_p.id = fr.recipient_id
+      join auth.users u on u.id = fr.recipient_id
+      where fr.status = 'pending'
+        and fr.created_at < now() - interval '1 day'
+        and fr.reminder_email_sent = false
+      limit 50
+    `
+
+    let sentCount = 0
+    for (const req of pendingRequests) {
+      try {
+        const senderRaw = req.requester_name || 'Someone'
+        const senderCap = senderRaw.charAt(0).toUpperCase() + senderRaw.slice(1).toLowerCase()
+        const result = await sendAutomaticEmail('FRIEND_REQUEST_REMINDER', {
+          userId: req.recipient_id,
+          userEmail: req.recipient_email,
+          userDisplayName: req.recipient_name || 'User',
+          userLanguage: req.recipient_language || 'en',
+          extraContext: { sender: senderCap },
+          skipDedup: true,
+        })
+        if (result.sent) {
+          await sql`update public.friend_requests set reminder_email_sent = true where id = ${req.id}`
+          sentCount++
+        }
+      } catch (e) {
+        console.warn('[reminder-emails] Failed to send friend request reminder:', e?.message)
+      }
+    }
+    if (sentCount > 0) console.log(`[reminder-emails] Sent ${sentCount} friend request reminders`)
+  } catch (err) {
+    console.error('[reminder-emails] Friend request reminder cron failed:', err?.message)
+  }
+
+  // --- Garden Invite Reminders ---
+  try {
+    const pendingInvites = await sql`
+      select gi.id, gi.inviter_id, gi.invitee_id,
+             inv_p.display_name as inviter_name,
+             ive_p.display_name as invitee_name,
+             ive_p.language as invitee_language,
+             u.email as invitee_email
+      from public.garden_invites gi
+      join public.profiles inv_p on inv_p.id = gi.inviter_id
+      join public.profiles ive_p on ive_p.id = gi.invitee_id
+      join auth.users u on u.id = gi.invitee_id
+      where gi.status = 'pending'
+        and gi.created_at < now() - interval '1 day'
+        and gi.reminder_email_sent = false
+      limit 50
+    `
+
+    let sentCount = 0
+    for (const inv of pendingInvites) {
+      try {
+        const senderRaw = inv.inviter_name || 'Someone'
+        const senderCap = senderRaw.charAt(0).toUpperCase() + senderRaw.slice(1).toLowerCase()
+        const result = await sendAutomaticEmail('GARDEN_INVITE_REMINDER', {
+          userId: inv.invitee_id,
+          userEmail: inv.invitee_email,
+          userDisplayName: inv.invitee_name || 'User',
+          userLanguage: inv.invitee_language || 'en',
+          extraContext: { sender: senderCap },
+          skipDedup: true,
+        })
+        if (result.sent) {
+          await sql`update public.garden_invites set reminder_email_sent = true where id = ${inv.id}`
+          sentCount++
+        }
+      } catch (e) {
+        console.warn('[reminder-emails] Failed to send garden invite reminder:', e?.message)
+      }
+    }
+    if (sentCount > 0) console.log(`[reminder-emails] Sent ${sentCount} garden invite reminders`)
+  } catch (err) {
+    console.error('[reminder-emails] Garden invite reminder cron failed:', err?.message)
+  }
 })
 
 // ========== END GDPR COMPLIANCE ENDPOINTS ==========
