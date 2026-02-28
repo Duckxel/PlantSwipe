@@ -432,9 +432,10 @@ type PlantDashboardRow = {
   gardensCount: number;
   likesCount: number;
   viewsCount: number;
+  imagesCount: number;
 };
 
-type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views";
+type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views" | "images";
 
 const normalizePlantStatus = (
   status?: unknown,
@@ -471,7 +472,7 @@ const toPromotionMonthSlug = (
 
 // Constants for persisting admin plants list state in sessionStorage
 const ADMIN_PLANTS_STATE_KEY = "admin-plants-list-state";
-const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views"];
+const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "name", "gardens", "likes", "views", "images"];
 
 // Type for persisted plant list state
 type AdminPlantsListState = {
@@ -3279,6 +3280,7 @@ export const AdminPage: React.FC = () => {
               gardensCount: gardensCountMap.get(plantId) ?? 0,
               likesCount: likesCountMap.get(plantId) ?? 0,
               viewsCount: viewsCountMap.get(plantId) ?? 0,
+              imagesCount: images.length,
             } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
@@ -3582,6 +3584,9 @@ export const AdminPage: React.FC = () => {
             return a.name.localeCompare(b.name);
           case "views":
             if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
+            return a.name.localeCompare(b.name);
+          case "images":
+            if (a.imagesCount !== b.imagesCount) return a.imagesCount - b.imagesCount;
             return a.name.localeCompare(b.name);
           case "status":
           default: {
@@ -8887,6 +8892,7 @@ export const AdminPage: React.FC = () => {
                                             <option value="gardens">Most in Gardens</option>
                                             <option value="likes">Most Likes</option>
                                             <option value="views">Most Views</option>
+                                            <option value="images">Image Count</option>
                                           </select>
                                         </div>
                                       </div>
@@ -9079,7 +9085,7 @@ export const AdminPage: React.FC = () => {
                                               Created {formatTimeAgo(plant.createdAt)}
                                             </span>
                                           )}
-                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plant.updatedAt && (
+                                          {plantSortOption !== "created" && plantSortOption !== "gardens" && plantSortOption !== "likes" && plantSortOption !== "views" && plantSortOption !== "images" && plant.updatedAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
                                               Updated {formatTimeAgo(plant.updatedAt)}
                                             </span>
@@ -9097,6 +9103,11 @@ export const AdminPage: React.FC = () => {
                                           {plantSortOption === "views" && (
                                             <span className="text-xs font-medium text-blue-600 dark:text-blue-400">
                                               {plant.viewsCount} {plant.viewsCount === 1 ? "view" : "views"}
+                                            </span>
+                                          )}
+                                          {plantSortOption === "images" && (
+                                            <span className="text-xs font-medium text-orange-600 dark:text-orange-400">
+                                              {plant.imagesCount} {plant.imagesCount === 1 ? "image" : "images"}
                                             </span>
                                           )}
                                         </div>
