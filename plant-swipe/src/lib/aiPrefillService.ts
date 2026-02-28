@@ -902,6 +902,18 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
 
+    // Save checkpoint: update the plant record timestamp so the dashboard
+    // reflects that this plant was recently touched, even if translation fails.
+    onProgress?.({ stage: 'saving', plantName: displayName })
+    try {
+      await supabase
+        .from('plants')
+        .update({ updated_time: new Date().toISOString(), updated_by: createdBy || null })
+        .eq('id', plantId)
+    } catch (saveErr) {
+      console.warn(`[aiPrefillService] Post-image save checkpoint failed for "${englishPlantName}":`, saveErr)
+    }
+
     // Stage 3: Translate to other languages (sequentially to avoid rate limiting)
     onProgress?.({ stage: 'translating', plantName: displayName })
     

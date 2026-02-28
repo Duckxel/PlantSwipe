@@ -2823,22 +2823,22 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by given_names in translations table
+      // Also search by common_names in translations table
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, given_names, plants!inner(id, name, scientific_name_species, status)")
+        .select("plant_id, common_names, plants!inner(id, name, scientific_name_species, status)")
         .eq("language", "en")
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where given_names contains the search term
+      // Filter translation matches where common_names contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
       const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
-      
+
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
-        const givenNames = Array.isArray(r?.given_names) ? r.given_names : [];
+        const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
         const matchesGivenName = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
         );
@@ -3153,7 +3153,7 @@ export const AdminPage: React.FC = () => {
         while (hasMore) {
           const { data, error: trError } = await supabase
             .from("plant_translations")
-            .select("plant_id, given_names")
+            .select("plant_id, common_names")
             .eq("language", "en")
             .range(offset, offset + pageSize - 1);
           if (trError) break;
@@ -3169,12 +3169,12 @@ export const AdminPage: React.FC = () => {
         return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
       });
 
-      // Build a map of plant_id -> given_names
+      // Build a map of plant_id -> common_names
       const givenNamesMap = new Map<string, string[]>();
       (translationsData || []).forEach((t: unknown) => {
         const tr = t as Record<string, unknown>;
-        if (tr?.plant_id && Array.isArray(tr.given_names)) {
-          givenNamesMap.set(String(tr.plant_id), (tr.given_names as unknown[]).map((n: unknown) => String(n || "")));
+        if (tr?.plant_id && Array.isArray(tr.common_names)) {
+          givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
         }
       });
 
