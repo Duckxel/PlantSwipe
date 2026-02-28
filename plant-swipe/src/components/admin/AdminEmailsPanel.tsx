@@ -3,7 +3,6 @@ import "./AdminEmailsPanel.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 import { ScrollingTitle } from "@/components/ui/scrolling-title"
 import { TimezoneSelect } from "@/components/ui/timezone-select"
@@ -969,27 +968,28 @@ export const AdminEmailsPanel: React.FC = () => {
                             <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                               Email Template
                             </Label>
-                            <Select
-                              value={trigger.templateId || ""}
-                              onChange={(e) => {
-                                const newTemplateId = e.target.value || null
-                                handleUpdateTrigger(trigger, { templateId: newTemplateId })
+                            <SearchItem
+                              value={trigger.templateId || null}
+                              onSelect={(opt) => {
+                                handleUpdateTrigger(trigger, { templateId: opt.id })
                               }}
+                              onClear={() => {
+                                handleUpdateTrigger(trigger, { templateId: null })
+                              }}
+                              options={templates.map((t) => ({
+                                id: t.id,
+                                label: t.title,
+                                description: t.subject,
+                                meta: `v${t.version}${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
+                                icon: <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+                              }))}
+                              placeholder="Select a template..."
+                              title="Choose Template"
+                              description="Search and select an email template for this trigger."
+                              searchPlaceholder="Search templates..."
+                              emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
                               disabled={savingTrigger === trigger.id}
-                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                            >
-                              <option value="">No template (disabled)</option>
-                              {templates.map((tpl) => (
-                                <option key={tpl.id} value={tpl.id}>
-                                  {tpl.title} (v{tpl.version})
-                                </option>
-                              ))}
-                            </Select>
-                            {trigger.templateId && trigger.templateTitle && (
-                              <p className="text-xs text-stone-500">
-                                Using: <span className="font-medium">{trigger.templateTitle}</span>
-                              </p>
-                            )}
+                            />
                             {!trigger.templateId && (
                               <p className="text-xs text-amber-600 dark:text-amber-400">
                                 ⚠️ Select a template to enable this trigger
