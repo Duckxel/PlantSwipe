@@ -52,18 +52,11 @@ function isCancellationError(err: unknown): boolean {
   return false
 }
 
-// AI section fill order — matches the 9 sections of the new schema
-const aiFieldOrder = [
-  'base',
-  'identity',
-  'care',
-  'growth',
-  'danger',
-  'ecology',
-  'consumption',
-  'misc',
-  'meta',
-].filter((key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase()))
+// AI field order — individual field names from plantSchema (same as CreatePlantPage)
+// This gives granular progress tracking per field instead of per section
+export const aiFieldOrder = Object.keys(plantSchema).filter(
+  (key) => !AI_EXCLUDED_FIELDS.has(key) && !AI_EXCLUDED_FIELDS.has(key.toLowerCase())
+)
 
 function generateUUIDv4(): string {
   try {

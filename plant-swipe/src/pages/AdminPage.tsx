@@ -103,7 +103,7 @@ import {
   savePersistedBroadcast,
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
-import { processAllPlantRequests } from "@/lib/aiPrefillService";
+import { processAllPlantRequests, aiFieldOrder as aiPrefillFieldOrder } from "@/lib/aiPrefillService";
 import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages } from "lucide-react";
@@ -3610,16 +3610,12 @@ export const AdminPage: React.FC = () => {
   const noPlantStatusesSelected = visiblePlantStatusesSet.size === 0;
 
 
-  // AI Prefill All functionality
-  const aiFieldOrder = React.useMemo(() => [
-    'plantType', 'utility', 'comestiblePart', 'fruitType', 'seasons', 'description',
-    'identity', 'plantCare', 'growth', 'usage', 'ecology', 'danger', 'miscellaneous'
-  ], []);
-
+  // AI Prefill All functionality — use the same field order as aiPrefillService
+  // so that buildCategoryProgress totals match what onFieldComplete reports
   const initAiPrefillCategoryProgress = React.useCallback(() => {
-    const progress = buildCategoryProgress(aiFieldOrder);
+    const progress = buildCategoryProgress(aiPrefillFieldOrder);
     setAiPrefillCategoryProgress(progress);
-  }, [aiFieldOrder]);
+  }, []);
 
   const markAiPrefillFieldComplete = React.useCallback((fieldKey: string) => {
     const category = mapFieldToCategory(fieldKey);
