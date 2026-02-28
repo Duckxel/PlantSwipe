@@ -151,9 +151,10 @@ export function ProfileActions({ userId }: Props) {
   const prevCompletedRef = React.useRef<Set<string>>(new Set())
   const [justCompleted, setJustCompleted] = React.useState<string | null>(null)
 
-  // Track optimistic skips that haven't been confirmed by the DB yet.
-  // This prevents refresh() from overwriting an in-flight skip with stale data.
+  // Track optimistic writes that haven't been confirmed by the DB yet.
+  // This prevents refresh() from overwriting in-flight RPCs with stale data.
   const pendingSkipsRef = React.useRef<Set<string>>(new Set())
+  const pendingDismissRef = React.useRef(false)
 
   // Derived state
   const skipped = React.useMemo(() => getSkippedSet(dbStatuses), [dbStatuses])
@@ -176,15 +177,26 @@ export function ProfileActions({ userId }: Props) {
       // doesn't flash the action back into view.
       for (const id of pendingSkipsRef.current) {
         if (synced.get(id)?.skipped_at) {
-          // DB confirmed — no longer pending
           pendingSkipsRef.current.delete(id)
         } else {
-          // Still in-flight — keep the optimistic skip
           const existing = synced.get(id)
           synced.set(id, {
             action_id: id,
             completed_at: existing?.completed_at ?? null,
             skipped_at: new Date().toISOString(),
+          })
+        }
+      }
+
+      // Same protection for the "all done" dismiss
+      if (pendingDismissRef.current) {
+        if (synced.get('__all_done_dismissed')?.completed_at) {
+          pendingDismissRef.current = false
+        } else {
+          synced.set('__all_done_dismissed', {
+            action_id: '__all_done_dismissed',
+            completed_at: new Date().toISOString(),
+            skipped_at: null,
           })
         }
       }
@@ -281,7 +293,7 @@ export function ProfileActions({ userId }: Props) {
                 {t('profileActions.congratulations', 'Congratulations!')}
               </div>
               <button
-                onClick={() => setDbStatuses(dismissAllDone(userId, dbStatuses))}
+                onClick={() => { pendingDismissRef.current = true; setDbStatuses(dismissAllDone(userId, dbStatuses)) }}
                 className="px-6 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
               >
                 {t('profileActions.hooray', 'Hooray!')}

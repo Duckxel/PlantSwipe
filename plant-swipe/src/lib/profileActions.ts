@@ -242,14 +242,17 @@ export function getSkippedSet(dbStatuses: ActionStatusMap): Set<string> {
 /**
  * Check if the "all done" celebration was dismissed.
  * Returns true only if the dismiss row exists AND all current actions are
- * completed — so adding a new action automatically un-dismisses.
+ * either completed or skipped — so adding a new action automatically
+ * un-dismisses.
  */
 export function isDismissedAllDone(
   dbStatuses: ActionStatusMap,
   liveData: ActionCheckData,
 ): boolean {
   if (!dbStatuses.get(DISMISSED_ACTION_ID)?.completed_at) return false
-  return PROFILE_ACTIONS.every((a) => isActionDone(a, liveData, dbStatuses))
+  return PROFILE_ACTIONS.every(
+    (a) => isActionDone(a, liveData, dbStatuses) || isActionSkipped(a.id, dbStatuses),
+  )
 }
 
 /**
