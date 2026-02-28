@@ -13,6 +13,7 @@ import {
   PartyPopper,
   Target,
 } from 'lucide-react'
+import { ConfettiButton } from '@/components/ConfettiButton'
 import {
   PROFILE_ACTIONS,
   type ActionCheckData,
@@ -292,12 +293,12 @@ export function ProfileActions({ userId }: Props) {
                 <PartyPopper className="h-4 w-4" />
                 {t('profileActions.congratulations', 'Congratulations!')}
               </div>
-              <button
+              <ConfettiButton
                 onClick={() => { pendingDismissRef.current = true; setDbStatuses(dismissAllDone(userId, dbStatuses)) }}
                 className="px-6 py-2 rounded-full bg-accent text-white text-sm font-semibold hover:opacity-90 transition-opacity shadow-sm"
               >
                 {t('profileActions.hooray', 'Hooray!')}
-              </button>
+              </ConfettiButton>
             </motion.div>
           ) : (
             <div className="space-y-2">
