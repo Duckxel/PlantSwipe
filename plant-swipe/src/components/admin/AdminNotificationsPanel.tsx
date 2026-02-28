@@ -4,10 +4,10 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Select } from '@/components/ui/select'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import {
   Dialog,
   DialogContent,
+  DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
@@ -296,8 +296,8 @@ export function AdminNotificationsPanel() {
   // State: Push Config
   const [pushConfigured, setPushConfigured] = React.useState(true)
 
-  // State: Campaign Form (Sheet)
-  const [campaignSheetOpen, setCampaignSheetOpen] = React.useState(false)
+  // State: Campaign Form (Dialog)
+  const [campaignDialogOpen, setCampaignDialogOpen] = React.useState(false)
   const [campaignForm, setCampaignForm] = React.useState({
     title: '',
     description: '',
@@ -508,7 +508,7 @@ export function AdminNotificationsPanel() {
         ctaUrl: '',
         customUserIds: '',
       })
-      setCampaignSheetOpen(false)
+      setCampaignDialogOpen(false)
       loadCampaigns().catch(() => {})
     } catch (err) {
       alert((err as Error).message)
@@ -971,7 +971,7 @@ export function AdminNotificationsPanel() {
           {/* Action Buttons */}
           {activeView === 'campaigns' && (
             <Button
-              onClick={() => setCampaignSheetOpen(true)}
+              onClick={() => setCampaignDialogOpen(true)}
               className="w-full sm:w-auto rounded-xl bg-amber-600 hover:bg-amber-700 text-white shadow-lg shadow-amber-500/20 h-10 sm:h-11 text-sm"
             >
               <Plus className="mr-2 h-4 w-4" />
@@ -1047,7 +1047,7 @@ export function AdminNotificationsPanel() {
               <p className="text-sm text-stone-500 dark:text-stone-400 mb-6 max-w-sm mx-auto">
                 Create your first campaign to start sending push notifications.
               </p>
-              <Button onClick={() => setCampaignSheetOpen(true)} className="rounded-xl bg-amber-600 hover:bg-amber-700">
+              <Button onClick={() => setCampaignDialogOpen(true)} className="rounded-xl bg-amber-600 hover:bg-amber-700">
                 <Plus className="mr-2 h-4 w-4" />
                 Create Campaign
               </Button>
@@ -1855,98 +1855,119 @@ export function AdminNotificationsPanel() {
         </DialogContent>
       </Dialog>
 
-      {/* ============= CAMPAIGN SHEET ============= */}
-      <Sheet open={campaignSheetOpen} onOpenChange={setCampaignSheetOpen}>
-        <SheetContent className="w-full sm:max-w-lg border-l border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] overflow-y-auto">
-          <SheetHeader className="pb-4 sm:pb-6 border-b border-stone-100 dark:border-[#2a2a2d]">
-            <SheetTitle className="text-lg sm:text-xl font-bold">Create Campaign</SheetTitle>
-            <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-              Schedule a push notification to send to your users
-            </p>
-          </SheetHeader>
+      {/* ============= CAMPAIGN DIALOG ============= */}
+      <Dialog open={campaignDialogOpen} onOpenChange={setCampaignDialogOpen}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-2xl max-h-[90vh] overflow-y-auto border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] p-0 rounded-2xl [&>button]:z-20">
+          <div className="sticky top-0 z-10 bg-white dark:bg-[#1a1a1d] border-b border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 pt-5 sm:pt-6 pb-4 pr-12">
+            <DialogHeader>
+              <DialogTitle className="text-lg sm:text-xl font-bold text-stone-900 dark:text-white">Create Campaign</DialogTitle>
+              <DialogDescription className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
+                Schedule a push notification to send to your users.
+              </DialogDescription>
+            </DialogHeader>
+          </div>
 
-          <div className="mt-4 sm:mt-6 space-y-4 sm:space-y-5">
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-title" className="text-xs sm:text-sm font-medium">Campaign Name</Label>
-              <Input
-                id="campaign-title"
-                value={campaignForm.title}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="e.g., Weekly Update"
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
-
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label className="text-xs sm:text-sm font-medium">Message Template</Label>
-              <SearchItem
-                value={campaignForm.templateId || null}
-                onSelect={(opt) => setCampaignForm(prev => ({ ...prev, templateId: opt.id }))}
-                onClear={() => setCampaignForm(prev => ({ ...prev, templateId: "" }))}
-                options={templates.map((t) => ({
-                  id: t.id,
-                  label: t.title,
-                  description: t.description || undefined,
-                  meta: `${t.messageVariants.length} variant${t.messageVariants.length !== 1 ? "s" : ""}${t.campaignCount > 0 ? ` · Used ${t.campaignCount}x` : ""}`,
-                  icon: <MessageSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
-                }))}
-                placeholder="Select a template..."
-                title="Choose Template"
-                description="Search and select a notification template for this campaign."
-                searchPlaceholder="Search templates..."
-                emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
-                priorityZIndex={100}
-              />
-              {templates.length === 0 && (
-                <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
-                  No templates available. Create one first.
-                </p>
-              )}
-            </div>
-
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-delivery" className="text-xs sm:text-sm font-medium">Delivery Mode</Label>
-              <Select
-                id="campaign-delivery"
-                value={campaignForm.deliveryMode}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, deliveryMode: e.target.value as 'send_now' | 'planned' }))}
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              >
-                {deliveryModeOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label} - {opt.description}</option>
-                ))}
-              </Select>
-            </div>
-
-            {campaignForm.deliveryMode === 'planned' && (
-              <div className="space-y-1.5 sm:space-y-2">
-                <Label htmlFor="campaign-datetime" className="text-xs sm:text-sm font-medium">Schedule For</Label>
+          <div className="px-5 sm:px-6 pb-2 space-y-5">
+            {/* Two-column grid for main fields */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-title" className="text-xs sm:text-sm font-medium">Campaign Name</Label>
                 <Input
-                  id="campaign-datetime"
-                  type="datetime-local"
-                  value={campaignForm.plannedFor}
-                  onChange={(e) => setCampaignForm(prev => ({ ...prev, plannedFor: e.target.value }))}
+                  id="campaign-title"
+                  value={campaignForm.title}
+                  onChange={(e) => setCampaignForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="e.g., Weekly Update"
                   className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
                 />
               </div>
-            )}
 
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-audience" className="text-xs sm:text-sm font-medium">Audience</Label>
-              <Select
-                id="campaign-audience"
-                value={campaignForm.audience}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, audience: e.target.value }))}
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              >
-                {audienceOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </Select>
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-medium">Message Template</Label>
+                <SearchItem
+                  value={campaignForm.templateId || null}
+                  onSelect={(opt) => setCampaignForm(prev => ({ ...prev, templateId: opt.id }))}
+                  onClear={() => setCampaignForm(prev => ({ ...prev, templateId: "" }))}
+                  options={templates.map((t) => ({
+                    id: t.id,
+                    label: t.title,
+                    description: t.description || undefined,
+                    meta: `${t.messageVariants.length} variant${t.messageVariants.length !== 1 ? "s" : ""}${t.campaignCount > 0 ? ` · Used ${t.campaignCount}x` : ""}`,
+                    icon: <MessageSquare className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
+                  }))}
+                  placeholder="Select a template..."
+                  title="Choose Template"
+                  description="Search and select a notification template for this campaign."
+                  searchPlaceholder="Search templates..."
+                  emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
+                  priorityZIndex={100}
+                />
+                {templates.length === 0 && (
+                  <p className="text-[10px] sm:text-xs text-amber-600 dark:text-amber-400">
+                    No templates available. Create one first.
+                  </p>
+                )}
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-delivery" className="text-xs sm:text-sm font-medium">Delivery Mode</Label>
+                <Select
+                  id="campaign-delivery"
+                  value={campaignForm.deliveryMode}
+                  onChange={(e) => setCampaignForm(prev => ({ ...prev, deliveryMode: e.target.value as 'send_now' | 'planned' }))}
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                >
+                  {deliveryModeOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label} - {opt.description}</option>
+                  ))}
+                </Select>
+              </div>
+
+              {campaignForm.deliveryMode === 'planned' && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="campaign-datetime" className="text-xs sm:text-sm font-medium">Schedule For</Label>
+                  <Input
+                    id="campaign-datetime"
+                    type="datetime-local"
+                    value={campaignForm.plannedFor}
+                    onChange={(e) => setCampaignForm(prev => ({ ...prev, plannedFor: e.target.value }))}
+                    className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Audience & CTA row */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-5">
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-audience" className="text-xs sm:text-sm font-medium">Audience</Label>
+                <Select
+                  id="campaign-audience"
+                  value={campaignForm.audience}
+                  onChange={(e) => setCampaignForm(prev => ({ ...prev, audience: e.target.value }))}
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                >
+                  {audienceOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="campaign-cta" className="text-xs sm:text-sm font-medium">
+                  CTA URL <span className="text-stone-400 font-normal">(optional)</span>
+                </Label>
+                <Input
+                  id="campaign-cta"
+                  value={campaignForm.ctaUrl}
+                  onChange={(e) => setCampaignForm(prev => ({ ...prev, ctaUrl: e.target.value }))}
+                  placeholder="https://..."
+                  className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
+                />
+              </div>
             </div>
 
             {campaignForm.audience === 'custom' && (
-              <div className="space-y-1.5 sm:space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="campaign-custom-ids" className="text-xs sm:text-sm font-medium">Custom User IDs</Label>
                 <Textarea
                   id="campaign-custom-ids"
@@ -1957,25 +1978,13 @@ export function AdminNotificationsPanel() {
                 />
               </div>
             )}
-
-            <div className="space-y-1.5 sm:space-y-2">
-              <Label htmlFor="campaign-cta" className="text-xs sm:text-sm font-medium">
-                CTA URL <span className="text-stone-400 font-normal">(optional)</span>
-              </Label>
-              <Input
-                id="campaign-cta"
-                value={campaignForm.ctaUrl}
-                onChange={(e) => setCampaignForm(prev => ({ ...prev, ctaUrl: e.target.value }))}
-                placeholder="https://..."
-                className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-              />
-            </div>
           </div>
 
-          <div className="mt-6 sm:mt-8 pt-4 sm:pt-6 border-t border-stone-100 dark:border-[#2a2a2d] flex flex-col sm:flex-row gap-2 sm:gap-3">
+          {/* Sticky footer */}
+          <div className="sticky bottom-0 bg-white dark:bg-[#1a1a1d] border-t border-stone-100 dark:border-[#2a2a2d] px-5 sm:px-6 py-4 flex flex-col sm:flex-row gap-2 sm:gap-3">
             <Button
               variant="outline"
-              onClick={() => setCampaignSheetOpen(false)}
+              onClick={() => setCampaignDialogOpen(false)}
               className="w-full sm:flex-1 rounded-xl h-10 text-sm order-2 sm:order-1"
             >
               Cancel
@@ -1993,8 +2002,8 @@ export function AdminNotificationsPanel() {
               {campaignForm.deliveryMode === 'send_now' ? 'Create & Send' : 'Schedule Campaign'}
             </Button>
           </div>
-        </SheetContent>
-      </Sheet>
+        </DialogContent>
+      </Dialog>
 
       {/* ============= TEMPLATE EDITOR MODAL ============= */}
       <Dialog open={templateSheetOpen} onOpenChange={setTemplateSheetOpen}>
