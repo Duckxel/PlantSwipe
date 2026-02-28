@@ -318,7 +318,6 @@ alter table if exists public.plant_translations drop column if exists admin_comm
 
 -- Drop columns that were moved to plants table (non-translatable enums)
 alter table if exists public.plant_translations drop column if exists scientific_name;
-alter table if exists public.plant_translations drop column if exists promotion_month;
 alter table if exists public.plant_translations drop column if exists level_sun;
 alter table if exists public.plant_translations drop column if exists habitat;
 alter table if exists public.plant_translations drop column if exists family;

@@ -1084,7 +1084,6 @@
       "hemisphere": "Hemisphere",
       "sowingMonths": "Sowing Months",
       "plantingOutMonths": "Planting Out Months",
-      "promotionMonth": "Promotion Month",
       "sitePreparation": "Site Preparation",
       "companionPlants": "Companion Plants",
       "avoidNear": "Avoid Planting Near",
@@ -2151,10 +2150,6 @@
         "overview": {
           "label": "Overview",
           "description": "Long presentation of the plant"
-        },
-        "promotionMonth": {
-          "label": "Promotion Month",
-          "description": "Month the plant should be promoted"
         },
         "lifeCycle": {
           "label": "Life Cycle",

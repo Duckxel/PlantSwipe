@@ -123,6 +123,22 @@ const monthOptions = [
   { label: "December", value: 12 },
 ] as const
 
+/** Slug-based month options for fields stored as text[] in the DB (e.g. featured_month) */
+const monthSlugOptions = [
+  { label: "January", value: "january" },
+  { label: "February", value: "february" },
+  { label: "March", value: "march" },
+  { label: "April", value: "april" },
+  { label: "May", value: "may" },
+  { label: "June", value: "june" },
+  { label: "July", value: "july" },
+  { label: "August", value: "august" },
+  { label: "September", value: "september" },
+  { label: "October", value: "october" },
+  { label: "November", value: "november" },
+  { label: "December", value: "december" },
+] as const
+
 const monthLookup = monthOptions.reduce((acc, option) => {
   const lower = option.label.toLowerCase()
   acc[lower] = option.value
@@ -906,7 +922,7 @@ const baseFields: FieldConfig[] = [
     { label: "Succulent", value: "succulent" },
   ] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
-  { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthOptions },
+  { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
 ]
 
 // ============================================================================
@@ -1079,7 +1095,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   const optionalLabel = t('plantAdmin.optionalLabel', 'optional')
   const isAdvice = field.key.toLowerCase().includes("advice")
     const isMonthMultiField = field.type === "multiselect" && field.options === monthOptions
-    const isPromotionMonthField = field.key === "identity.promotionMonth"
+    const isFeaturedMonthField = field.key === "featuredMonth"
   const translateOption = (optionKey: string, fallback: string) => {
     const fieldScoped = t(`${translationBase}.options.${optionKey}`, { defaultValue: '' })
     if (fieldScoped) return fieldScoped
@@ -1175,7 +1191,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
             </div>
           )
         case "select": {
-          const selectValue = isPromotionMonthField ? normalizeMonthValue(value) ?? value : value
+          const selectValue = isFeaturedMonthField ? normalizeMonthValue(value) ?? value : value
           const valueKey =
             normalizedOptions.find((opt) => Object.is(opt.value, selectValue))?.key ??
             (selectValue === null || selectValue === undefined ? "" : String(selectValue))
