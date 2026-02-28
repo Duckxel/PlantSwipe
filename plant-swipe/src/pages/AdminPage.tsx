@@ -3124,22 +3124,34 @@ export const AdminPage: React.FC = () => {
 
       if (plantsError) throw new Error(plantsError.message);
 
-      // Then, get English translations for all plants
-      // Batch plant IDs to avoid URL length limits (Supabase uses GET requests
-      // and hundreds of UUIDs in a single .in() clause exceeds the max URL length)
+      // Fetch all English translations at once (no .in() filter) to avoid
+      // Supabase URL length limits. Since we already load every plant above,
+      // we need translations for all of them anyway.
       const plantIds = (plantsData || []).map((p: unknown) => (p as Record<string, unknown>).id);
-      const TRANSLATION_BATCH_SIZE = 50;
-      const translationResults: unknown[] = [];
-      for (let i = 0; i < plantIds.length; i += TRANSLATION_BATCH_SIZE) {
-        const batch = plantIds.slice(i, i + TRANSLATION_BATCH_SIZE);
-        const { data } = await supabase
-          .from("plant_translations")
-          .select("plant_id, given_names")
-          .eq("language", "en")
-          .in("plant_id", batch);
-        if (data) translationResults.push(...data);
+      const plantIdSet = new Set(plantIds.map(String));
+      const allTranslations: unknown[] = [];
+      {
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error: trError } = await supabase
+            .from("plant_translations")
+            .select("plant_id, given_names")
+            .eq("language", "en")
+            .range(offset, offset + pageSize - 1);
+          if (trError) break;
+          if (!data || data.length === 0) { hasMore = false; break; }
+          allTranslations.push(...data);
+          offset += data.length;
+          if (data.length < pageSize) hasMore = false;
+        }
       }
-      const translationsData = translationResults;
+      // Filter to only the plant IDs we care about
+      const translationsData = allTranslations.filter((t: unknown) => {
+        const tr = t as Record<string, unknown>;
+        return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
+      });
 
       // Build a map of plant_id -> given_names
       const givenNamesMap = new Map<string, string[]>();
