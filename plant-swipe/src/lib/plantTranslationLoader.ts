@@ -296,7 +296,6 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       })
     }
 
-    const plantIds = plants.map((p: Record<string, unknown>) => p.id)
     // Fetch all translations for the language (no .in() filter) to avoid
     // Supabase URL length limits when there are hundreds of plant IDs.
     const { data: translations } = await supabase
@@ -434,7 +433,6 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       })
     }
 
-    const plantIds = plants.map((p) => p.id)
     // Fetch all translations for the language (no .in() filter) to avoid
     // Supabase URL length limits when there are hundreds of plant IDs.
     const { data: translationsData } = await supabase
