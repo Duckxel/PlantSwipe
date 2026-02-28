@@ -22,11 +22,9 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
 }) => {
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [loaded, setLoaded] = React.useState(false);
-  const [open, setOpen] = React.useState(false);
 
-  // Fetch user gardens lazily on first open
+  // Pre-fetch gardens on mount so they're ready when the dropdown opens
   React.useEffect(() => {
-    if (!open || loaded) return;
     let cancelled = false;
     getUserGardens(userId).then((g) => {
       if (!cancelled) {
@@ -35,18 +33,12 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
       }
     });
     return () => { cancelled = true; };
-  }, [open, loaded, userId]);
-
-  // Reset cache when userId changes
-  React.useEffect(() => {
-    setLoaded(false);
-    setGardens([]);
   }, [userId]);
 
   const otherGardens = gardens.filter((g) => g.id !== currentGarden.id);
 
   return (
-    <DropdownMenu open={open} onOpenChange={setOpen}>
+    <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
         <button
           className="hidden md:flex items-center gap-1.5 text-xl font-semibold text-left hover:opacity-80 transition-opacity cursor-pointer bg-transparent border-none outline-none p-0"
@@ -66,7 +58,7 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
           <span className="truncate">{currentGarden.name}</span>
         </DropdownMenuItem>
         {/* Other gardens */}
-        {!loaded && open && (
+        {!loaded && (
           <DropdownMenuItem disabled className="text-xs opacity-60">
             Loading...
           </DropdownMenuItem>
@@ -81,10 +73,7 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
             <DropdownMenuItem
               key={g.id}
               className="cursor-pointer"
-              onClick={() => {
-                onSwitch(g.id);
-                setOpen(false);
-              }}
+              onSelect={() => onSwitch(g.id)}
             >
               <Sprout className="h-4 w-4 mr-2 flex-shrink-0 opacity-50" />
               <span className="truncate">{g.name}</span>
