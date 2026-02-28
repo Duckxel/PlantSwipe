@@ -447,7 +447,6 @@ name                      TEXT NOT NULL UNIQUE   -- Canonical English name
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: plant, flower, bamboo, shrub, tree, cactus, succulent
 scientific_name_species   TEXT                   -- Latin species name
-variety   TEXT                   -- Latin variety name
 family                    TEXT                   -- Botanical family (Latin)
 featured_month            TEXT[]                 -- Multi-select months for promotion
 

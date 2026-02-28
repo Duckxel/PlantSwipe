@@ -998,7 +998,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   // Section 1: Base (translatable)
   flat.commonNames = translation?.common_names || plant.identity?.givenNames || []
   flat.scientificNameSpecies = data.scientific_name_species || data.scientific_name || plant.identity?.scientificName || undefined
-  flat.variety = translation?.variety || data.variety || undefined
+  flat.variety = translation?.variety || undefined
   flat.family = data.family || plant.identity?.family || undefined
   flat.presentation = translation?.presentation || plant.identity?.overview || plant.description || undefined
   flat.featuredMonth = data.featured_month || (plant.identity?.promotionMonth ? [plant.identity.promotionMonth] : [])
@@ -1382,8 +1382,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         try {
           const { data: siblings } = await supabase
             .from('plants')
-            .select('id, name, variety')
+            .select('id, name, plant_translations!inner(variety)')
             .eq('scientific_name_species', scientificNameSpecies.trim())
+            .eq('plant_translations.language', language || 'en')
             .neq('id', id)
             .order('name')
             .limit(50)
@@ -1398,12 +1399,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const imageMap = new Map<string, string>()
           if (images) images.forEach((img: any) => imageMap.set(img.plant_id, img.url))
           if (!ignore) {
-            setPlantVarieties(siblings.map((s: any) => ({
-              id: s.id,
-              name: s.name,
-              variety: s.variety || null,
-              imageUrl: imageMap.get(s.id) || null,
-            })))
+            setPlantVarieties(siblings.map((s: any) => {
+              const tr = Array.isArray(s.plant_translations) ? s.plant_translations[0] : s.plant_translations
+              return {
+                id: s.id,
+                name: s.name,
+                variety: tr?.variety || null,
+                imageUrl: imageMap.get(s.id) || null,
+              }
+            }))
           }
         } catch { if (!ignore) setPlantVarieties([]) }
       }
@@ -1683,7 +1687,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             name: trimmedName,
             // Section 1: Base
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
-            variety: p.variety || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity
@@ -1780,7 +1783,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           const nonEnglishUpdatePayload = {
             // Section 1: Base
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
-            variety: p.variety || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || (p.identity?.promotionMonth ? [monthNumberToSlug(p.identity.promotionMonth)] : []),
             // Section 2: Identity

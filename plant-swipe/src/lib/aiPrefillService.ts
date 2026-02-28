@@ -663,7 +663,6 @@ export async function processPlantRequest(
       // Section 1: Base
       plant_type: plant.plantType || null,
       scientific_name_species: plant.scientificNameSpecies || null,
-      variety: plant.variety || null,
       family: plant.family || null,
       featured_month: plant.featuredMonth || [],
       // Section 2: Identity

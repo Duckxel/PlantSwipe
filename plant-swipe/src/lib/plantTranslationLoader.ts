@@ -97,7 +97,7 @@ function mapDbRowToPlant(
 
     // Section 1: Base
     scientificNameSpecies: (basePlant.scientific_name_species as string) || undefined,
-    variety: (translation.variety as string) || (basePlant.variety as string) || undefined,
+    variety: (translation.variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
     featuredMonth: (basePlant.featured_month as MonthSlug[]) || [],
 
@@ -390,7 +390,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     const plantColumns = [
       'id', 'name',
       'plant_type',
-      'scientific_name_species', 'variety', 'family',
+      'scientific_name_species', 'family',
       'featured_month',
       'climate', 'season', 'utility', 'edible_part',
       'thorny', 'toxicity_human', 'toxicity_pets',
