@@ -658,6 +658,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400" />
                   <input
                     type="text"
+                    aria-label="Filter conversations"
                     placeholder="Filter conversations..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
@@ -743,6 +744,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   <input
                     ref={searchInputRef}
                     type="text"
+                    aria-label="Search in message content"
                     placeholder="Search in message content..."
                     value={messageSearchQuery}
                     onChange={(e) => setMessageSearchQuery(e.target.value)}
@@ -956,8 +958,8 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                             }}
                             className={cn(
                               "absolute bottom-1 right-1 p-1.5 rounded-full transition-all",
-                              "bg-black/60 text-white",
-                              "opacity-0 group-hover:opacity-100",
+                              "bg-black/60 text-white focus-visible:outline-none",
+                              "opacity-0 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-white",
                               "active:scale-95",
                               downloadSuccess === img.id && "bg-green-500"
                             )}
