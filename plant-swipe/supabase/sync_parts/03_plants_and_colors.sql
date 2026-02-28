@@ -410,26 +410,12 @@ begin
 end $rename_cols$;
 
 -- For text→text[] type-change renames, rename first then alter type in Phase 2.
--- promotion_month→featured_month, level_sun→sunlight, maintenance_level→care_level
+-- level_sun→sunlight, maintenance_level→care_level
 do $rename_and_retype$ declare
   r record;
 begin
   if not exists (select 1 from information_schema.tables where table_schema='public' and table_name='plants') then
     return;
-  end if;
-
-  -- promotion_month (text) → featured_month (text[])
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='promotion_month')
-     and not exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='featured_month')
-  then
-    for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'promotion_month') loop
-      execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
-    end loop;
-    alter table public.plants rename column promotion_month to featured_month;
-    alter table public.plants alter column featured_month type text[]
-      using case when featured_month is not null and trim(featured_month::text) <> '' then array[featured_month::text] else '{}'::text[] end;
-    alter table public.plants alter column featured_month set default '{}'::text[];
-    begin alter table public.plants alter column featured_month set not null; exception when others then null; end;
   end if;
 
   -- level_sun (text) → sunlight (text[])
@@ -616,12 +602,6 @@ begin
   if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='scientific_name') then
     update public.plants set scientific_name_species = scientific_name
       where scientific_name is not null and (scientific_name_species is null or trim(scientific_name_species) = '');
-  end if;
-
-  -- promotion_month (text) → featured_month (text[])
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='promotion_month') then
-    update public.plants set featured_month = array[promotion_month]
-      where promotion_month is not null and (featured_month is null or array_length(featured_month, 1) is null);
   end if;
 
   -- spiked → thorny
