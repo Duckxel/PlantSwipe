@@ -82,15 +82,22 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
       const { width, height } = container.getBoundingClientRect()
       if (width >= minWidth && height >= minHeight) {
         setDimensions({ width, height })
+      } else {
+        setDimensions(null)
       }
     })
-    
-    // Use ResizeObserver for subsequent dimension changes
+
+    // Use ResizeObserver for subsequent dimension changes.
+    // Reset dimensions to null when the container becomes too small
+    // (e.g. during tab switches or panel collapses) so recharts
+    // is unmounted and never sees 0 or negative dimensions.
     const resizeObserver = new ResizeObserver((entries) => {
       for (const entry of entries) {
         const { width, height } = entry.contentRect
         if (width >= minWidth && height >= minHeight) {
           setDimensions({ width, height })
+        } else {
+          setDimensions(null)
         }
       }
     })

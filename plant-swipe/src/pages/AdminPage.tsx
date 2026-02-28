@@ -3125,12 +3125,21 @@ export const AdminPage: React.FC = () => {
       if (plantsError) throw new Error(plantsError.message);
 
       // Then, get English translations for all plants
+      // Batch plant IDs to avoid URL length limits (Supabase uses GET requests
+      // and hundreds of UUIDs in a single .in() clause exceeds the max URL length)
       const plantIds = (plantsData || []).map((p: unknown) => (p as Record<string, unknown>).id);
-      const { data: translationsData } = await supabase
-        .from("plant_translations")
-        .select("plant_id, given_names")
-        .eq("language", "en")
-        .in("plant_id", plantIds.length > 0 ? plantIds : ["00000000-0000-0000-0000-000000000000"]); // Use dummy ID if no plants
+      const TRANSLATION_BATCH_SIZE = 50;
+      const translationResults: unknown[] = [];
+      for (let i = 0; i < plantIds.length; i += TRANSLATION_BATCH_SIZE) {
+        const batch = plantIds.slice(i, i + TRANSLATION_BATCH_SIZE);
+        const { data } = await supabase
+          .from("plant_translations")
+          .select("plant_id, given_names")
+          .eq("language", "en")
+          .in("plant_id", batch);
+        if (data) translationResults.push(...data);
+      }
+      const translationsData = translationResults;
 
       // Build a map of plant_id -> given_names
       const givenNamesMap = new Map<string, string[]>();
