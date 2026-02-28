@@ -6,7 +6,7 @@ interface ScrollingTitleProps {
   className?: string
   /** Tag to render (default: "span") */
   as?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "span" | "div"
-  /** Speed in pixels per second (default: 40) */
+  /** Speed in pixels per second (default: 25) */
   speed?: number
 }
 
@@ -19,7 +19,7 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   children,
   className,
   as: Tag = "span",
-  speed = 40,
+  speed = 25,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLElement>(null)
@@ -55,7 +55,7 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   }, [])
 
   // Duration scales with distance: longer text = longer animation
-  const duration = Math.max(2.5, scrollDistance / speed + 1.5)
+  const duration = Math.max(3, scrollDistance / speed)
 
   return (
     <div
