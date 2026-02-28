@@ -8,7 +8,7 @@ const INITIAL_RETRY_DELAY_GATEWAY_TIMEOUT = 3000 // 3 seconds for gateway timeou
 
 // Parallel processing configuration
 // Number of fields to process simultaneously (balance between speed and API rate limits)
-const PARALLEL_BATCH_SIZE = 4
+const PARALLEL_BATCH_SIZE = 6
 
 // Helper to delay execution (abortable)
 const delay = (ms: number, signal?: AbortSignal | null) => new Promise<void>((resolve, reject) => {
@@ -234,6 +234,14 @@ export async function fetchAiPlantFill({
     if (batch.length > 1) {
       // Try batch endpoint first for better performance
       try {
+        // Use aggregated data (includes results from prior batches) so the AI
+        // can reference previously-filled fields for better context
+        const batchExisting = batch.reduce((acc, key) => {
+          const val = aggregated[key]
+          if (val !== undefined) acc[key] = val
+          return acc
+        }, {} as Record<string, unknown>)
+
         const response = await fetchWithRetry('/api/admin/ai/plant-fill/batch', {
           method: 'POST',
           headers,
@@ -241,14 +249,7 @@ export async function fetchAiPlantFill({
             plantName,
             schema,
             fieldKeys: batch,
-            existingData: existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-              ? batch.reduce((acc, key) => {
-                  if (existingData[key] !== undefined) {
-                    acc[key] = existingData[key]
-                  }
-                  return acc
-                }, {} as Record<string, unknown>)
-              : undefined,
+            existingData: Object.keys(batchExisting).length ? batchExisting : undefined,
             language,
           }),
           signal,
@@ -307,10 +308,8 @@ export async function fetchAiPlantFill({
             plantName,
             schema,
             fieldKey,
-            existingField:
-              existingData && typeof existingData === 'object' && !Array.isArray(existingData)
-                ? existingData[fieldKey]
-                : undefined,
+            // Use aggregated data (includes results from prior batches)
+            existingField: aggregated[fieldKey] !== undefined ? aggregated[fieldKey] : undefined,
             language,
           }),
           signal,

@@ -5568,8 +5568,8 @@ app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
       res.status(400).json({ error: 'At least one field key is required' })
       return
     }
-    if (fieldKeys.length > 6) {
-      res.status(400).json({ error: 'Maximum 6 fields per batch request' })
+    if (fieldKeys.length > 10) {
+      res.status(400).json({ error: 'Maximum 10 fields per batch request' })
       return
     }
 
