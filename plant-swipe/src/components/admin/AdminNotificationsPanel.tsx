@@ -10,7 +10,9 @@ import {
   DialogContent,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from '@/components/ui/dialog'
+import { ScrollingTitle } from '@/components/ui/scrolling-title'
 import { supabase } from '@/lib/supabaseClient'
 import {
   BellRing,
@@ -40,6 +42,7 @@ import {
   Shuffle,
   PenLine,
   Type,
+  AlertTriangle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
@@ -276,6 +279,9 @@ export function AdminNotificationsPanel() {
   const [templates, setTemplates] = React.useState<NotificationTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState('')
+  const [confirmDeleteTemplate, setConfirmDeleteTemplate] = React.useState<NotificationTemplate | null>(null)
+  const [confirmDuplicateTemplate, setConfirmDuplicateTemplate] = React.useState<NotificationTemplate | null>(null)
+  const [templateActionLoading, setTemplateActionLoading] = React.useState(false)
 
   // State: Automations
   const [automations, setAutomations] = React.useState<NotificationAutomation[]>([])
@@ -770,7 +776,7 @@ export function AdminNotificationsPanel() {
   }, [templateForm, templateEditId, templateTranslations, loadTemplates])
 
   const handleDeleteTemplate = React.useCallback(async (template: NotificationTemplate) => {
-    if (!window.confirm(`Delete template "${template.title}"?`)) return
+    setTemplateActionLoading(true)
     try {
       const headers = await buildAdminHeaders()
       const resp = await fetch(`/api/admin/notification-templates/${encodeURIComponent(template.id)}`, {
@@ -780,13 +786,17 @@ export function AdminNotificationsPanel() {
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || 'Failed to delete template')
+      setConfirmDeleteTemplate(null)
       loadTemplates().catch(() => {})
     } catch (err) {
       alert((err as Error).message)
+    } finally {
+      setTemplateActionLoading(false)
     }
   }, [loadTemplates])
 
   const handleDuplicateTemplate = React.useCallback(async (template: NotificationTemplate) => {
+    setTemplateActionLoading(true)
     try {
       const headers = await buildAdminHeaders()
       const payload = {
@@ -804,10 +814,12 @@ export function AdminNotificationsPanel() {
       })
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || 'Failed to duplicate template')
+      setConfirmDuplicateTemplate(null)
       loadTemplates().catch(() => {})
-      alert(`Template duplicated as "${payload.title}"`)
     } catch (err) {
       alert((err as Error).message)
+    } finally {
+      setTemplateActionLoading(false)
     }
   }, [loadTemplates])
 
@@ -1689,70 +1701,76 @@ export function AdminNotificationsPanel() {
                 <div
                   key={template.id}
                   onClick={() => openTemplateEdit(template)}
-                  className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 cursor-pointer transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-xl hover:shadow-amber-500/10 sm:hover:-translate-y-0.5"
+                  className="group relative flex flex-col rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] cursor-pointer transition-all hover:border-amber-300 dark:hover:border-amber-800 hover:shadow-xl hover:shadow-amber-500/10 sm:hover:-translate-y-0.5"
                 >
                   {/* Preview gradient */}
                   <div className="absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-amber-400 via-orange-400 to-red-400 opacity-0 group-hover:opacity-100 transition-opacity" />
 
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 flex items-center justify-center">
-                      <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors">
-                        {template.title}
-                      </h3>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate">
-                          {template.messageVariants.length} variant{template.messageVariants.length !== 1 ? 's' : ''}
-                        </p>
-                        {template.translations && Object.keys(template.translations).length > 0 && (
-                          <span className="flex items-center gap-0.5 text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400">
-                            <Globe className="h-3 w-3" />
-                            {Object.keys(template.translations).length} lang{Object.keys(template.translations).length !== 1 ? 's' : ''}
-                          </span>
-                        )}
+                  {/* Card body */}
+                  <div className="flex-1 p-4 sm:p-5">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 flex items-center justify-center">
+                        <MessageSquare className="h-4 w-4 sm:h-5 sm:w-5 text-amber-600 dark:text-amber-400" />
                       </div>
+
+                      <div className="flex-1 min-w-0">
+                        <ScrollingTitle
+                          as="h3"
+                          className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base group-hover:text-amber-600 dark:group-hover:text-amber-400 transition-colors"
+                        >
+                          {template.title}
+                        </ScrollingTitle>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate">
+                            {template.messageVariants.length} variant{template.messageVariants.length !== 1 ? 's' : ''}
+                          </p>
+                          {template.translations && Object.keys(template.translations).length > 0 && (
+                            <span className="flex items-center gap-0.5 text-[10px] sm:text-xs text-emerald-600 dark:text-emerald-400">
+                              <Globe className="h-3 w-3" />
+                              {Object.keys(template.translations).length} lang{Object.keys(template.translations).length !== 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
                     </div>
 
-                    <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-amber-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                    <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
+                        <span className={template.isActive ? "text-amber-600" : "text-stone-400"}>
+                          {template.isActive ? "Active" : "Inactive"}
+                        </span>
+                        <span>Used in {template.campaignCount} campaign{template.campaignCount !== 1 ? 's' : ''}</span>
+                      </div>
+
+                      {template.messageVariants?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
+                          {template.messageVariants.slice(0, 2).map((variant, idx) => (
+                            <span
+                              key={idx}
+                              className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 truncate max-w-[120px]"
+                            >
+                              {variant}
+                            </span>
+                          ))}
+                          {template.messageVariants.length > 2 && (
+                            <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
+                              +{template.messageVariants.length - 2}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
-                    <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
-                      <span className={template.isActive ? "text-amber-600" : "text-stone-400"}>
-                        {template.isActive ? "Active" : "Inactive"}
-                      </span>
-                      <span>Used in {template.campaignCount} campaign{template.campaignCount !== 1 ? 's' : ''}</span>
-                    </div>
-
-                    {template.messageVariants?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
-                        {template.messageVariants.slice(0, 2).map((variant, idx) => (
-                          <span
-                            key={idx}
-                            className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 truncate max-w-[120px]"
-                          >
-                            {variant}
-                          </span>
-                        ))}
-                        {template.messageVariants.length > 2 && (
-                          <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
-                            +{template.messageVariants.length - 2}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:mt-0 sm:pt-0 sm:absolute sm:top-3 sm:right-3 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                  {/* Action buttons - pinned to bottom-right */}
+                  <div className="flex items-center justify-end gap-1 px-3 sm:px-4 pb-3 sm:pb-4 pt-0">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDuplicateTemplate(template)
+                        setConfirmDuplicateTemplate(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
                       title="Duplicate template"
@@ -1763,7 +1781,7 @@ export function AdminNotificationsPanel() {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDeleteTemplate(template)
+                        setConfirmDeleteTemplate(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                       title="Delete template"
@@ -1777,6 +1795,63 @@ export function AdminNotificationsPanel() {
           )}
         </div>
       )}
+
+      {/* Delete Template Confirmation Dialog */}
+      <Dialog open={!!confirmDeleteTemplate} onOpenChange={(open) => !open && setConfirmDeleteTemplate(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
+              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Delete Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              Are you sure you want to delete <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDeleteTemplate?.title}"</span>? This action cannot be undone.
+            </DialogDescription>
+          </div>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDeleteTemplate(null)} disabled={templateActionLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 rounded-xl"
+              disabled={templateActionLoading}
+              onClick={() => confirmDeleteTemplate && handleDeleteTemplate(confirmDeleteTemplate)}
+            >
+              {templateActionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Template Confirmation Dialog */}
+      <Dialog open={!!confirmDuplicateTemplate} onOpenChange={(open) => !open && setConfirmDuplicateTemplate(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <div className="flex flex-col items-center">
+            <div className="w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center mb-3">
+              <Copy className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Duplicate Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              This will create a copy of <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDuplicateTemplate?.title}"</span> as <span className="font-mono text-xs bg-stone-100 dark:bg-[#2a2a2d] px-1.5 py-0.5 rounded">"{confirmDuplicateTemplate?.title}_copy"</span>.
+            </DialogDescription>
+          </div>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDuplicateTemplate(null)} disabled={templateActionLoading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-xl bg-sky-500 hover:bg-sky-600 text-white"
+              disabled={templateActionLoading}
+              onClick={() => confirmDuplicateTemplate && handleDuplicateTemplate(confirmDuplicateTemplate)}
+            >
+              {templateActionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Copy className="h-4 w-4 mr-2" />}
+              Duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ============= CAMPAIGN SHEET ============= */}
       <Sheet open={campaignSheetOpen} onOpenChange={setCampaignSheetOpen}>
