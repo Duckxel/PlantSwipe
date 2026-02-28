@@ -3664,8 +3664,8 @@ export const AdminPage: React.FC = () => {
           onProgress: ({ stage, plantName }) => {
             setAiPrefillCurrentPlant(plantName);
             setAiPrefillStatus(stage);
-            // Reset category progress for new plant
-            if (stage === 'filling' || stage === 'translating_name') {
+            // Reset category progress only when starting a new plant
+            if (stage === 'translating_name') {
               initAiPrefillCategoryProgress();
               setAiPrefillCurrentField(null);
               setAiPrefillFieldProgress({ completed: 0, total: 0 });
@@ -3758,6 +3758,14 @@ export const AdminPage: React.FC = () => {
   const stopAiPrefill = React.useCallback(() => {
     if (aiPrefillAbortController) {
       aiPrefillAbortController.abort();
+      // Immediately update UI so the progress panel disappears
+      setAiPrefillRunning(false);
+      setAiPrefillAbortController(null);
+      setAiPrefillCurrentPlant(null);
+      setAiPrefillStatus('idle');
+      setAiPrefillCurrentField(null);
+      setAiPrefillFieldProgress({ completed: 0, total: 0 });
+      setAiPrefillStartTime(null);
       setAiPrefillError('AI Prefill was cancelled by user');
     }
   }, [aiPrefillAbortController]);
@@ -9504,71 +9512,51 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Image upload progress */}
-                                {aiPrefillStatus === 'uploading_images' && aiPrefillImageUpload.total > 0 && (
-                                  <div className="space-y-2">
-                                    <div className="flex items-center justify-between text-[11px]">
-                                      <span className="text-stone-500 dark:text-stone-400 flex items-center gap-1">
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                        Uploading image {aiPrefillImageUpload.current} of {aiPrefillImageUpload.total}
-                                      </span>
-                                      <span className="font-medium text-stone-700 dark:text-stone-200">
-                                        {aiPrefillImageUpload.uploaded} saved{aiPrefillImageUpload.failed > 0 ? `, ${aiPrefillImageUpload.failed} failed` : ''}
-                                      </span>
-                                    </div>
-                                    <div className="h-1.5 w-full rounded-full bg-stone-100 dark:bg-[#2a2a2d] overflow-hidden">
+                                {/* Category progress grid - visible at all stages so user can track what was filled */}
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                  {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                                    const info = aiPrefillCategoryProgress[cat];
+                                    if (!info?.total) return null;
+                                    const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
+                                    const isDone = info.status === 'done';
+                                    const isFilling = info.status === 'filling';
+                                    return (
                                       <div
-                                        className="h-full bg-gradient-to-r from-emerald-400 to-teal-500 rounded-full transition-all duration-300 ease-out"
-                                        style={{ width: `${Math.round((aiPrefillImageUpload.current / aiPrefillImageUpload.total) * 100)}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                )}
-
-                                {/* Category progress grid */}
-                                {aiPrefillStatus === 'filling' && (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
-                                      const info = aiPrefillCategoryProgress[cat];
-                                      if (!info?.total) return null;
-                                      const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0;
-                                      const isDone = info.status === 'done';
-                                      const isFilling = info.status === 'filling';
-                                      return (
-                                        <div 
-                                          key={cat} 
-                                          className={`rounded-lg p-2 transition-all ${
-                                            isDone 
-                                              ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50' 
-                                              : isFilling
-                                                ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
-                                                : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
-                                          }`}
-                                        >
-                                          <div className="flex items-center justify-between mb-1">
-                                            <span className={`text-[10px] font-medium truncate ${
-                                              isDone ? 'text-emerald-700 dark:text-emerald-300' : 
-                                              isFilling ? 'text-blue-700 dark:text-blue-300' : 
-                                              'text-stone-500 dark:text-stone-400'
-                                            }`}>
-                                              {aiPrefillCategoryLabels[cat]}
-                                            </span>
-                                            {isDone && <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />}
-                                            {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
-                                          </div>
-                                          <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
-                                            <div
-                                              className={`h-full transition-all duration-300 rounded-full ${
-                                                isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
-                                              }`}
-                                              style={{ width: `${percent}%` }}
-                                            />
-                                          </div>
+                                        key={cat}
+                                        className={`rounded-lg p-2 transition-all ${
+                                          isDone
+                                            ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
+                                            : isFilling
+                                              ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
+                                              : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
+                                        }`}
+                                      >
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className={`text-[10px] font-medium truncate ${
+                                            isDone ? 'text-emerald-700 dark:text-emerald-300' :
+                                            isFilling ? 'text-blue-700 dark:text-blue-300' :
+                                            'text-stone-500 dark:text-stone-400'
+                                          }`}>
+                                            {aiPrefillCategoryLabels[cat]}
+                                          </span>
+                                          {isDone && <Check className="h-3 w-3 text-emerald-500 flex-shrink-0" />}
+                                          {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
                                         </div>
-                                      );
-                                    })}
-                                  </div>
-                                )}
+                                        <div className="h-1 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
+                                          <div
+                                            className={`h-full transition-all duration-300 rounded-full ${
+                                              isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
+                                            }`}
+                                            style={{ width: `${percent}%` }}
+                                          />
+                                        </div>
+                                        <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
+                                          {info.completed}/{info.total}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
                             )}
 
