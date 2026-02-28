@@ -41,7 +41,7 @@
 --              updated_by, updated_time
 --
 -- TRANSLATABLE FIELDS (stored ONLY in plant_translations):
---   name, common_names, presentation, origin, allergens, poisoning_symptoms
+--   name, common_names, presentation, variety, origin, allergens, poisoning_symptoms
 --   soil_advice, mulch_advice, fertilizer_advice
 --   staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice
 --   pests, diseases
