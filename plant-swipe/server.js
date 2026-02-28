@@ -17500,27 +17500,6 @@ app.post('/api/account/delete', async (req, res) => {
     }
     const userId = user.id
 
-    // Send account deletion confirmation email BEFORE deleting data
-    try {
-      let displayName = 'User'
-      let userLang = 'en'
-      if (sql) {
-        const profileRows = await sql`select display_name, language from public.profiles where id = ${userId} limit 1`
-        if (profileRows?.[0]) {
-          displayName = profileRows[0].display_name || displayName
-          userLang = profileRows[0].language || userLang
-        }
-      }
-      await sendAutomaticEmail('ACCOUNT_DELETION', {
-        userId,
-        userEmail: user.email,
-        userDisplayName: displayName,
-        userLanguage: userLang,
-      })
-    } catch (emailErr) {
-      console.warn('[account-delete] Failed to send deletion confirmation email:', emailErr?.message || emailErr)
-    }
-
     let deletedGardens = 0
     let deletedGardenIds = []
     let deletedCoverImages = 0
