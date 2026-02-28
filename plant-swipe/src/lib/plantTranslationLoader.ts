@@ -252,6 +252,7 @@ function mapDbRowToPlant(
     popularity,
 
     // Legacy aliases for backward compatibility
+    plantType: (basePlant.plant_type as string) || undefined,
     description: (translation.presentation as string) || '',
     scientificName: (basePlant.scientific_name_species as string) || '',
     givenNames: (translation.common_names as string[]) || [],
@@ -388,6 +389,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
 
     const plantColumns = [
       'id', 'name',
+      'plant_type',
       'scientific_name_species', 'family',
       'featured_month',
       'climate', 'season', 'utility', 'edible_part',

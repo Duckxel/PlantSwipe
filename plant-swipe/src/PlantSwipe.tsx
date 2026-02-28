@@ -889,7 +889,15 @@ export default function PlantSwipe() {
 
       // Living space — new flat: livingSpace (array), legacy: identity nested
       const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
-      const livingSpace = String(livingSpaceArr[0] || (p.identity?.livingSpace as string) || '').toLowerCase()
+      const livingSpaceLower = livingSpaceArr.length > 0
+        ? livingSpaceArr.map(s => String(s).toLowerCase())
+        : [(p.identity?.livingSpace as string || '').toLowerCase()].filter(Boolean)
+      // Derive a single label: 'both' if plant has both indoor + outdoor (or explicit 'both')
+      const hasIndoor = livingSpaceLower.includes('indoor')
+      const hasOutdoor = livingSpaceLower.includes('outdoor')
+      const livingSpace = livingSpaceLower.includes('both') || (hasIndoor && hasOutdoor)
+        ? 'both'
+        : livingSpaceLower[0] || ''
 
       // Pre-parse createdAt for faster sorting
       const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
@@ -2830,9 +2838,14 @@ function getPlantUsageLabels(plant: Plant): string[] {
     })
   }
   
-  // Also check comestiblePart for edible-related labels
-  if (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0) {
-    const hasEdible = plant.comestiblePart.some(part => part && part.trim().length > 0)
+  // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
+  const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
+    ? plant.ediblePart
+    : (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0)
+      ? plant.comestiblePart
+      : null
+  if (edibleParts) {
+    const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
       const edibleLabel = formatClassificationLabel('comestible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
