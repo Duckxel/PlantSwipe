@@ -6941,10 +6941,12 @@ async function ensureNotificationTables() {
     await sql`create unique index if not exists user_notifications_unique_delivery on public.user_notifications (campaign_id, iteration, user_id);`
     // Immutable helper for date extraction in index expressions (timestamptz::date is STABLE, not IMMUTABLE)
     await sql`create or replace function public.immutable_date_utc(ts timestamptz) returns date language sql immutable strict parallel safe as $$ select (ts at time zone 'UTC')::date; $$;`
-    // Drop old index that used non-immutable expression (may or may not exist)
+    // Drop old indexes that didn't exclude manual tests (manual_test notifications would block scheduled sends)
     await sql`drop index if exists public.user_notifications_unique_automation;`
-    // Unique constraint for automation notifications: one notification per automation per user per day
-    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for))) where automation_id is not null;`
+    await sql`drop index if exists public.user_notifications_automation_unique_daily;`
+    // Unique constraint for automation notifications: one notification per automation per user per day.
+    // Excludes manual_test notifications so that "Test Now" never blocks the scheduled automatic send.
+    await sql`create unique index if not exists user_notifications_unique_automation on public.user_notifications (automation_id, user_id, (public.immutable_date_utc(scheduled_for))) where automation_id is not null and (payload->>'source' is distinct from 'manual_test');`
 
     // User Push Subscriptions
     await sql`
@@ -8506,7 +8508,12 @@ app.get('/api/admin/notifications', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(
+                (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
+                u.last_sign_in_at,
+                u.created_at,
+                now() - interval '30 days'
+              ) < now() - interval '7 days'
           )
           when n.audience = 'admins' then (
             select count(*)::bigint from public.profiles p 
@@ -9092,13 +9099,18 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'inactive_week') {
-      // Users inactive for 7+ days (based on last_seen_at or updated_at)
+      // Users inactive for 7+ days (based on web_visits activity, falling back to last_sign_in_at)
       const rows = await sql`
         select count(*)::bigint as count
         from public.profiles p
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
-          and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+          and coalesce(
+            (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
+            u.last_sign_in_at,
+            u.created_at,
+            now() - interval '30 days'
+          ) < now() - interval '7 days'
       `
       count = Number(rows?.[0]?.count || 0)
     } else if (audience === 'admins') {
@@ -9599,7 +9611,12 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(
+                (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
+                u.last_sign_in_at,
+                u.created_at,
+                now() - interval '30 days'
+              ) < now() - interval '7 days'
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${row.id}
@@ -9981,7 +9998,12 @@ async function runAutomation(automation) {
       from public.profiles p
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
-        and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+        and coalesce(
+          (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
+          u.last_sign_in_at,
+          u.created_at,
+          now() - interval '30 days'
+        ) < now() - interval '7 days'
       limit 5000
     `
   } else if (triggerType === 'daily_task_reminder') {
@@ -28554,7 +28576,12 @@ async function processDueAutomations() {
             from public.profiles p
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
-              and coalesce(u.last_sign_in_at, u.created_at, now() - interval '30 days') < now() - interval '7 days'
+              and coalesce(
+                (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
+                u.last_sign_in_at,
+                u.created_at,
+                now() - interval '30 days'
+              ) < now() - interval '7 days'
               and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE})) = ${sendHour}
               and not exists (
                 select 1 from public.user_notifications un
