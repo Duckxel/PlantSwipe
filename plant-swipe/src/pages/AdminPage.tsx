@@ -441,13 +441,22 @@ const normalizePlantStatus = (
 ): NormalizedPlantStatus => {
   if (!status || typeof status !== 'string') return "other";
   const normalized = status.toLowerCase();
-  if (normalized === "in progres" || normalized === "in progress") {
+  if (normalized === "in progres" || normalized === "in progress" || normalized === "in_progress") {
     return "in progres";
   }
   if (normalized === "review") return "review";
   if (normalized === "rework") return "rework";
   if (normalized === "approved") return "approved";
   return "other";
+};
+
+/** Map normalized UI status back to the DB column value */
+const normalizedStatusToDb: Record<NormalizedPlantStatus, string> = {
+  "in progres": "in_progress",
+  review: "review",
+  rework: "rework",
+  approved: "approved",
+  other: "other",
 };
 
 const toPromotionMonthSlug = (
@@ -3364,26 +3373,26 @@ export const AdminPage: React.FC = () => {
   );
 
   const handleBulkStatusChange = React.useCallback(
-    async (newStatus: string) => {
+    async (newStatus: NormalizedPlantStatus) => {
       if (selectedPlantIds.size === 0) return;
       setBulkActionLoading(true);
       try {
         const ids = Array.from(selectedPlantIds);
+        const dbStatus = normalizedStatusToDb[newStatus] ?? newStatus;
         // Update in batches of 50 to avoid URL length issues
         const batchSize = 50;
         for (let i = 0; i < ids.length; i += batchSize) {
           const batch = ids.slice(i, i + batchSize);
           const { error } = await supabase
             .from('plants')
-            .update({ status: newStatus })
+            .update({ status: dbStatus })
             .in('id', batch);
           if (error) throw new Error(error.message);
         }
         // Update local state
-        const normalizedNew = normalizePlantStatus(newStatus);
         setPlantDashboardRows((prev) =>
           prev.map((p) =>
-            selectedPlantIds.has(p.id) ? { ...p, status: normalizedNew } : p
+            selectedPlantIds.has(p.id) ? { ...p, status: newStatus } : p
           )
         );
         setSelectedPlantIds(new Set());
