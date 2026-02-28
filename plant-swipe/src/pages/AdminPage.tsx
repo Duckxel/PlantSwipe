@@ -3652,7 +3652,6 @@ export const AdminPage: React.FC = () => {
     setAiPrefillCompletedPlants([]);
     setAiPrefillStartTime(overallStartTime);
     setAiPrefillElapsedTime(0);
-    setAiPrefillPlantStartTime(plantStartTime);
     initAiPrefillCategoryProgress();
     
     try {
@@ -3710,7 +3709,6 @@ export const AdminPage: React.FC = () => {
             setAiPrefillCurrentPlant(plantName);
             // Track start time for new plant
             plantStartTime = Date.now();
-            setAiPrefillPlantStartTime(plantStartTime);
           },
           onPlantComplete: ({ plantName, requestId, success, error }) => {
             const durationMs = Date.now() - plantStartTime;
@@ -3751,7 +3749,6 @@ export const AdminPage: React.FC = () => {
       setAiPrefillCurrentField(null);
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
       setAiPrefillStartTime(null);
-      setAiPrefillPlantStartTime(null);
     }
   }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
