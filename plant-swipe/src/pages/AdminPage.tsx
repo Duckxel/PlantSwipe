@@ -1960,6 +1960,20 @@ export const AdminPage: React.FC = () => {
     Array<{ id: string; display_name: string | null; email: string | null }>
   >([]);
 
+  // Filtered plant requests (staff filter + search) — shared by UI and AI Prefill
+  const filteredPlantRequests = React.useMemo(() => {
+    const staffFiltered = hideStaffRequests
+      ? plantRequests.filter((req) => req.requester_is_staff !== true)
+      : plantRequests;
+    return requestSearchQuery.trim()
+      ? staffFiltered.filter((req) =>
+          req.plant_name
+            .toLowerCase()
+            .includes(requestSearchQuery.toLowerCase().trim()),
+        )
+      : staffFiltered;
+  }, [plantRequests, hideStaffRequests, requestSearchQuery]);
+
   // Bulk request state
   const [bulkRequestDialogOpen, setBulkRequestDialogOpen] = React.useState(false);
   const [bulkRequestInput, setBulkRequestInput] = React.useState("");
@@ -3632,16 +3646,16 @@ export const AdminPage: React.FC = () => {
   }, []);
 
   const runAiPrefillAll = React.useCallback(async () => {
-    if (aiPrefillRunning || plantRequests.length === 0) return;
-    
+    if (aiPrefillRunning || filteredPlantRequests.length === 0) return;
+
     const abortController = new AbortController();
     const overallStartTime = Date.now();
     let plantStartTime = Date.now();
-    
+
     setAiPrefillAbortController(abortController);
     setAiPrefillRunning(true);
     setAiPrefillError(null);
-    setAiPrefillProgress({ current: 0, total: plantRequests.length });
+    setAiPrefillProgress({ current: 0, total: filteredPlantRequests.length });
     setAiPrefillStatus('idle');
     setAiPrefillCurrentField(null);
     setAiPrefillFieldProgress({ completed: 0, total: 0 });
@@ -3649,10 +3663,10 @@ export const AdminPage: React.FC = () => {
     setAiPrefillStartTime(overallStartTime);
     setAiPrefillElapsedTime(0);
     initAiPrefillCategoryProgress();
-    
+
     try {
       await processAllPlantRequests(
-        plantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
+        filteredPlantRequests.map((req) => ({ id: req.id, plant_name: req.plant_name })),
         profile?.display_name || undefined,
         {
           signal: abortController.signal,
@@ -3746,7 +3760,7 @@ export const AdminPage: React.FC = () => {
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
       setAiPrefillStartTime(null);
     }
-  }, [aiPrefillRunning, plantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
+  }, [aiPrefillRunning, filteredPlantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
   const stopAiPrefill = React.useCallback(() => {
     if (aiPrefillAbortController) {
@@ -9213,9 +9227,9 @@ export const AdminPage: React.FC = () => {
                                 className="rounded-xl border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20 text-emerald-700 dark:text-emerald-300 hover:from-emerald-100 hover:to-teal-100 dark:hover:from-emerald-900/30 dark:hover:to-teal-900/30 shadow-sm hover:shadow-md transition-all"
                                 onClick={runAiPrefillAll}
                                 disabled={
-                                  plantRequestsLoading || plantRequests.length === 0
+                                  plantRequestsLoading || filteredPlantRequests.length === 0
                                 }
-                                title={`Automatically AI fill, save, and translate the ${plantRequests.length} loaded plant requests`}
+                                title={`Automatically AI fill, save, and translate the ${filteredPlantRequests.length} visible plant requests`}
                               >
                                 <Sparkles className="h-4 w-4 mr-2" />
                                 <span className="hidden sm:inline">AI Prefill All</span>
@@ -9716,21 +9730,7 @@ export const AdminPage: React.FC = () => {
                           </div>
                         ) : (
                           (() => {
-                            // Apply staff filter first, then search filter
-                            const staffFiltered = hideStaffRequests
-                              ? plantRequests.filter((req) => req.requester_is_staff !== true)
-                              : plantRequests;
-                            const filteredRequests = requestSearchQuery.trim()
-                              ? staffFiltered.filter((req) =>
-                                  req.plant_name
-                                    .toLowerCase()
-                                    .includes(
-                                      requestSearchQuery.toLowerCase().trim(),
-                                    ),
-                                )
-                              : staffFiltered;
-
-                            return filteredRequests.length === 0 ? (
+                            return filteredPlantRequests.length === 0 ? (
                               <div className="text-sm opacity-60">
                                 {requestSearchQuery.trim()
                                   ? "No requests match your search."
@@ -9738,7 +9738,7 @@ export const AdminPage: React.FC = () => {
                               </div>
                             ) : (
                               <div className="flex flex-col gap-3">
-                                {filteredRequests.map((req) => {
+                                {filteredPlantRequests.map((req) => {
                                   const updatedSource =
                                     req.updated_at ?? req.created_at;
                                   const updatedMs = updatedSource
@@ -9907,7 +9907,7 @@ export const AdminPage: React.FC = () => {
                                         </>
                                       ) : (
                                         <>
-                                          Load More ({hideStaffRequests ? staffFiltered.length : plantRequests.length} / {plantRequestsTotalCount})
+                                          Load More ({filteredPlantRequests.length} / {plantRequestsTotalCount})
                                         </>
                                       )}
                                     </Button>
