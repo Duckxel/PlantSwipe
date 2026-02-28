@@ -1215,7 +1215,7 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             <MonthSelectorField label="Sowing Months" values={planting?.calendar?.sowingMonths || []} onChange={(sowingMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, sowingMonths } })} />
             <MonthSelectorField label="Planting Out Months" values={planting?.calendar?.plantingOutMonths || []} onChange={(plantingOutMonths) => setPlanting({ ...planting, calendar: { ...planting?.calendar, plantingOutMonths } })} />
               <div className="grid gap-2">
-                <Label>Promotion Month</Label>
+                <Label>Featured Month</Label>
                 <Select
                   className={selectBaseClass}
                   value={planting?.calendar?.promotionMonth || ''}

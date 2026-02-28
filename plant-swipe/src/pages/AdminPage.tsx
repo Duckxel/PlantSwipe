@@ -388,7 +388,7 @@ const STATUS_DONUT_SEGMENTS: NormalizedPlantStatus[] = [
   "other",
 ];
 
-const PROMOTION_MONTH_SLUGS = [
+const FEATURED_MONTH_SLUGS = [
   "january",
   "february",
   "march",
@@ -403,9 +403,9 @@ const PROMOTION_MONTH_SLUGS = [
   "december",
 ] as const;
 
-type PromotionMonthSlug = (typeof PROMOTION_MONTH_SLUGS)[number];
+type FeaturedMonthSlug = (typeof FEATURED_MONTH_SLUGS)[number];
 
-const PROMOTION_MONTH_LABELS: Record<PromotionMonthSlug, string> = {
+const FEATURED_MONTH_LABELS: Record<FeaturedMonthSlug, string> = {
   january: "Jan",
   february: "Feb",
   march: "Mar",
@@ -425,7 +425,7 @@ type PlantDashboardRow = {
   name: string;
   givenNames: string[];
   status: NormalizedPlantStatus;
-  promotionMonths: PromotionMonthSlug[];
+  featuredMonths: FeaturedMonthSlug[];
   primaryImage: string | null;
   updatedAt: number | null;
   createdAt: number | null;
@@ -460,17 +460,17 @@ const normalizedStatusToDb: Record<NormalizedPlantStatus, string> = {
   other: "other",
 };
 
-const toPromotionMonthSlugs = (
+const toFeaturedMonthSlugs = (
   value?: unknown,
-): PromotionMonthSlug[] => {
+): FeaturedMonthSlug[] => {
   if (!value) return [];
   // featured_month is a text[] in the DB – Supabase returns it as a JS array
   const items: unknown[] = Array.isArray(value) ? value : typeof value === 'string' ? [value] : [];
   return items
     .filter((v): v is string => typeof v === 'string' && v.length > 0)
     .map((v) => v.toLowerCase())
-    .filter((v): v is PromotionMonthSlug =>
-      (PROMOTION_MONTH_SLUGS as readonly string[]).includes(v),
+    .filter((v): v is FeaturedMonthSlug =>
+      (FEATURED_MONTH_SLUGS as readonly string[]).includes(v),
     );
 };
 
@@ -482,7 +482,7 @@ const VALID_SORT_OPTIONS: PlantSortOption[] = ["status", "updated", "created", "
 type AdminPlantsListState = {
   searchQuery: string;
   sortOption: PlantSortOption;
-  promotionMonth: PromotionMonthSlug | "none" | "all";
+  featuredMonth: FeaturedMonthSlug | "none" | "all";
   statuses: NormalizedPlantStatus[];
   scrollPosition: number;
 };
@@ -505,9 +505,9 @@ const loadAdminPlantsState = (): Partial<AdminPlantsListState> => {
       result.sortOption = parsed.sortOption;
     }
     
-    if (parsed.promotionMonth === "all" || parsed.promotionMonth === "none" || 
-        (PROMOTION_MONTH_SLUGS as readonly string[]).includes(parsed.promotionMonth)) {
-      result.promotionMonth = parsed.promotionMonth;
+    if (parsed.featuredMonth === "all" || parsed.featuredMonth === "none" || 
+        (FEATURED_MONTH_SLUGS as readonly string[]).includes(parsed.featuredMonth)) {
+      result.featuredMonth = parsed.featuredMonth;
     }
     
     if (Array.isArray(parsed.statuses)) {
@@ -2056,9 +2056,9 @@ export const AdminPage: React.FC = () => {
   const [visiblePlantStatuses, setVisiblePlantStatuses] = React.useState<
     NormalizedPlantStatus[]
   >(savedPlantsState.statuses ?? DEFAULT_VISIBLE_PLANT_STATUSES);
-  const [selectedPromotionMonth, setSelectedPromotionMonth] = React.useState<
-    PromotionMonthSlug | "none" | "all"
-  >(savedPlantsState.promotionMonth ?? "all");
+  const [selectedFeaturedMonth, setSelectedFeaturedMonth] = React.useState<
+    FeaturedMonthSlug | "none" | "all"
+  >(savedPlantsState.featuredMonth ?? "all");
   const [plantSearchQuery, setPlantSearchQuery] =
     React.useState<string>(savedPlantsState.searchQuery ?? "");
   const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>(
@@ -2109,7 +2109,7 @@ export const AdminPage: React.FC = () => {
         saveAdminPlantsState({
           searchQuery: plantSearchQuery,
           sortOption: plantSortOption,
-          promotionMonth: selectedPromotionMonth,
+          featuredMonth: selectedFeaturedMonth,
           statuses: visiblePlantStatuses,
           scrollPosition: 0,
         });
@@ -2118,7 +2118,7 @@ export const AdminPage: React.FC = () => {
       // No scroll to restore, but mark as done
       scrollRestoredRef.current = true;
     }
-  }, [currentPath, plantDashboardInitialized, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses]);
+  }, [currentPath, plantDashboardInitialized, plantSearchQuery, plantSortOption, selectedFeaturedMonth, visiblePlantStatuses]);
 
   // AI Prefill All state
   const [aiPrefillRunning, setAiPrefillRunning] = React.useState<boolean>(false);
@@ -2803,13 +2803,13 @@ export const AdminPage: React.FC = () => {
       saveAdminPlantsState({
         searchQuery: plantSearchQuery,
         sortOption: plantSortOption,
-        promotionMonth: selectedPromotionMonth,
+        featuredMonth: selectedFeaturedMonth,
         statuses: visiblePlantStatuses,
         scrollPosition: window.scrollY,
       });
       navigate(`/create/${plantId}`);
     },
-    [navigate, plantSearchQuery, plantSortOption, selectedPromotionMonth, visiblePlantStatuses],
+    [navigate, plantSearchQuery, plantSortOption, selectedFeaturedMonth, visiblePlantStatuses],
   );
   const togglePlantStatusFilter = React.useCallback(
     (status: NormalizedPlantStatus) => {
@@ -3271,7 +3271,7 @@ export const AdminPage: React.FC = () => {
               name: r?.name ? String(r.name) : "Unnamed plant",
               givenNames,
               status: normalizePlantStatus(r?.status),
-              promotionMonths: toPromotionMonthSlugs(r?.featured_month),
+              featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
                 ? String((primaryImage as Record<string, unknown>).link)
                 : null,
@@ -3365,7 +3365,7 @@ export const AdminPage: React.FC = () => {
   // Clear selection when filters change (selected items might no longer be visible)
   React.useEffect(() => {
     setSelectedPlantIds(new Set());
-  }, [visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery]);
+  }, [visiblePlantStatuses, selectedFeaturedMonth, plantSearchQuery]);
 
   const togglePlantSelection = React.useCallback((plantId: string) => {
     setSelectedPlantIds((prev) => {
@@ -3497,29 +3497,29 @@ export const AdminPage: React.FC = () => {
     [plantStatusCounts],
   );
 
-  const promotionMonthData = React.useMemo(() => {
-    const counts = PROMOTION_MONTH_SLUGS.reduce(
+  const featuredMonthData = React.useMemo(() => {
+    const counts = FEATURED_MONTH_SLUGS.reduce(
       (acc, slug) => {
         acc[slug] = 0;
         return acc;
       },
-      {} as Record<PromotionMonthSlug, number>,
+      {} as Record<FeaturedMonthSlug, number>,
     );
     plantDashboardRows.forEach((plant) => {
-      plant.promotionMonths.forEach((month) => {
+      plant.featuredMonths.forEach((month) => {
         counts[month] += 1;
       });
     });
-    return PROMOTION_MONTH_SLUGS.map((slug) => ({
+    return FEATURED_MONTH_SLUGS.map((slug) => ({
       slug,
-      label: PROMOTION_MONTH_LABELS[slug],
+      label: FEATURED_MONTH_LABELS[slug],
       value: counts[slug],
     }));
   }, [plantDashboardRows]);
 
-  const hasPromotionMonthData = React.useMemo(
-    () => promotionMonthData.some((entry) => entry.value > 0),
-    [promotionMonthData],
+  const hasFeaturedMonthData = React.useMemo(
+    () => featuredMonthData.some((entry) => entry.value > 0),
+    [featuredMonthData],
   );
 
   // Use accurate counts from DB (not limited by pagination)
@@ -3564,13 +3564,13 @@ export const AdminPage: React.FC = () => {
         const matchesStatus =
           statuses.size === 0 ? false : statuses.has(plant.status);
         if (!matchesStatus) return false;
-        const matchesPromotion =
-          selectedPromotionMonth === "all"
+        const matchesFeaturedMonth =
+          selectedFeaturedMonth === "all"
             ? true
-            : selectedPromotionMonth === "none"
-              ? plant.promotionMonths.length === 0
-              : plant.promotionMonths.includes(selectedPromotionMonth);
-        if (!matchesPromotion) return false;
+            : selectedFeaturedMonth === "none"
+              ? plant.featuredMonths.length === 0
+              : plant.featuredMonths.includes(selectedFeaturedMonth);
+        if (!matchesFeaturedMonth) return false;
         // Search by name OR givenNames (common names)
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
@@ -3615,7 +3615,7 @@ export const AdminPage: React.FC = () => {
           }
         }
       });
-  }, [plantDashboardRows, visiblePlantStatuses, selectedPromotionMonth, plantSearchQuery, plantSortOption]);
+  }, [plantDashboardRows, visiblePlantStatuses, selectedFeaturedMonth, plantSearchQuery, plantSortOption]);
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantViewIsReports = requestViewMode === "reports";
@@ -8603,7 +8603,7 @@ export const AdminPage: React.FC = () => {
                                   <div className="text-left">
                                     <div className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base">Analytics & Charts</div>
                                     <div className="text-xs sm:text-sm text-stone-500 dark:text-stone-400">
-                                      Status distribution, progress gauge, and promotion calendar
+                                      Status distribution, progress gauge, and featured month calendar
                                     </div>
                                   </div>
                                 </div>
@@ -8799,14 +8799,14 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   </div>
 
-                                  {/* Promotion Calendar Chart */}
+                                  {/* Featured Month Chart */}
                                   <div className="rounded-xl border border-stone-200/80 dark:border-[#3e3e42] bg-stone-50/50 dark:bg-[#17171d] p-4 flex flex-col">
                                     <div className="flex items-center gap-3 mb-4">
                                       <div className="w-8 h-8 rounded-lg bg-cyan-100 dark:bg-cyan-900/30 flex items-center justify-center">
                                         <Calendar className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
                                       </div>
                                       <div>
-                                        <div className="text-sm font-semibold text-stone-900 dark:text-white">Promotion Calendar</div>
+                                        <div className="text-sm font-semibold text-stone-900 dark:text-white">Featured Month</div>
                                         <div className="text-xs text-stone-500 dark:text-stone-400">Plants promoted per month</div>
                                       </div>
                                     </div>
@@ -8815,9 +8815,9 @@ export const AdminPage: React.FC = () => {
                                         <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
                                           Loading chart...
                                         </div>
-                                      ) : !hasPromotionMonthData ? (
+                                      ) : !hasFeaturedMonthData ? (
                                         <div className="flex h-full items-center justify-center text-sm text-stone-500 dark:text-stone-400">
-                                          No promotion data yet.
+                                          No featured month data yet.
                                         </div>
                                       ) : (
                                         <ChartSuspense
@@ -8828,7 +8828,7 @@ export const AdminPage: React.FC = () => {
                                           }
                                         >
                                           <ResponsiveContainer width="100%" height="100%">
-                                            <BarChart data={promotionMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
+                                            <BarChart data={featuredMonthData} barCategoryGap="10%" margin={{ left: 16, right: 16, top: 16, bottom: 12 }}>
                                               <CartesianGrid
                                                 strokeDasharray="3 3"
                                                 stroke={isDark ? "rgba(255,255,255,0.08)" : "rgba(0,0,0,0.06)"}
@@ -8837,7 +8837,7 @@ export const AdminPage: React.FC = () => {
                                               <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
                                               <Tooltip
                                                 cursor={{ fill: isDark ? "rgba(255,255,255,0.05)" : "rgba(0,0,0,0.03)" }}
-                                                formatter={(value: number) => [`${value} plants`, "Promotions"]}
+                                                formatter={(value: number) => [`${value} plants`, "Featured"]}
                                               />
                                               <Bar 
                                                 dataKey="value" 
@@ -8846,7 +8846,7 @@ export const AdminPage: React.FC = () => {
                                                 cursor="pointer"
                                                 onClick={(data: { slug?: string }) => {
                                                   if (data?.slug) {
-                                                    setSelectedPromotionMonth(data.slug as PromotionMonthSlug);
+                                                    setSelectedFeaturedMonth(data.slug as FeaturedMonthSlug);
                                                   }
                                                 }}
                                               />
@@ -8882,16 +8882,16 @@ export const AdminPage: React.FC = () => {
                                         <div className="w-full md:w-52">
                                           <select
                                             className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
-                                            value={selectedPromotionMonth}
+                                            value={selectedFeaturedMonth}
                                             onChange={(e) =>
-                                              setSelectedPromotionMonth(e.target.value as PromotionMonthSlug | "none" | "all")
+                                              setSelectedFeaturedMonth(e.target.value as FeaturedMonthSlug | "none" | "all")
                                             }
                                           >
-                                            <option value="all">All promotion months</option>
+                                            <option value="all">All featured months</option>
                                             <option value="none">None assigned</option>
-                                            {PROMOTION_MONTH_SLUGS.map((slug) => (
+                                            {FEATURED_MONTH_SLUGS.map((slug) => (
                                               <option key={slug} value={slug}>
-                                                {PROMOTION_MONTH_LABELS[slug]}
+                                                {FEATURED_MONTH_LABELS[slug]}
                                               </option>
                                             ))}
                                           </select>
@@ -9097,7 +9097,7 @@ export const AdminPage: React.FC = () => {
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
                                           <span className="text-xs text-stone-500 dark:text-stone-400 flex items-center gap-1">
                                             <Calendar className="h-3 w-3" />
-                                            {plant.promotionMonths.length > 0 ? plant.promotionMonths.map((m) => PROMOTION_MONTH_LABELS[m]).join(", ") : "No month"}
+                                            {plant.featuredMonths.length > 0 ? plant.featuredMonths.map((m) => FEATURED_MONTH_LABELS[m]).join(", ") : "No month"}
                                           </span>
                                           {plantSortOption === "created" && plant.createdAt && (
                                             <span className="text-xs text-stone-400 dark:text-stone-500">
