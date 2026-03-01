@@ -1160,9 +1160,15 @@
     },
     "sunLevels": {
       "lowlight": "Low Light",
+      "mediumlight": "Medium Light",
       "shade": "Shade",
+      "deepshade": "Deep Shade",
+      "lightshade": "Light Shade",
+      "partialshade": "Partial Shade",
       "partialsun": "Partial Sun",
-      "fullsun": "Full Sun"
+      "fullsun": "Full Sun",
+      "directlight": "Direct Light",
+      "brightindirectlight": "Bright Indirect Light"
     },
     "maintenanceLevels": {
       "none": "None",

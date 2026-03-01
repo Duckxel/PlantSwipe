@@ -1160,9 +1160,15 @@
     },
     "sunLevels": {
       "lowlight": "Faible lumière",
+      "mediumlight": "Lumière moyenne",
       "shade": "Ombre",
-      "partialsun": "Mi-ombre",
-      "fullsun": "Plein soleil"
+      "deepshade": "Ombre profonde",
+      "lightshade": "Ombre légère",
+      "partialshade": "Mi-ombre",
+      "partialsun": "Mi-soleil",
+      "fullsun": "Plein soleil",
+      "directlight": "Lumière directe",
+      "brightindirectlight": "Lumière indirecte vive"
     },
     "maintenanceLevels": {
       "none": "Aucun",

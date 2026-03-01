@@ -1059,13 +1059,15 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   const sunSource = sunArr[0] ?? (plant.environment?.sunExposure as string) ?? undefined
   const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)
   if (sunSource && sunLevel) {
+    const sunKey = `plantDetails.sunLevels.${String(sunSource).toLowerCase().replace(/[_\s-]/g, "")}`
+    const sunTranslated = t(sunKey, { defaultValue: "" }) || formatIndicatorValue(sunSource)
     items.push({
       key: "sun",
-      label: formatIndicatorValue(sunSource) || t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
+      label: sunTranslated || t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
       description: t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
       icon: getSunIcon(sunLevel),
       accentClass: SUN_ACCENTS[sunLevel],
-      ariaValue: formatIndicatorValue(sunSource),
+      ariaValue: sunTranslated,
     })
   }
 
@@ -1385,6 +1387,7 @@ const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
   return value
     .toString()
+    .replace(/[_\-/+]/g, " ")
     .trim()
     .split(/\s+/)
     .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : ""))
