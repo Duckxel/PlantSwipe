@@ -12,6 +12,9 @@ import {
     Wrench,
     Flame,
     Snowflake,
+    AlertTriangle,
+    Skull,
+    Info,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
@@ -247,6 +250,59 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   const visibleStats = stats.filter((stat) => stat.visible)
 
+  // Determine toxicity warning for the top card
+  const getToxicitySeverity = (level?: string) => {
+    const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
+    switch (normalized) {
+      case 'slightlytoxic':
+      case 'midlyirritating':
+      case 'mildlyirritating':
+      case 'mild':
+        return 'mild' as const
+      case 'verytoxic':
+      case 'highlytoxic':
+      case 'toxic':
+        return 'high' as const
+      case 'deadly':
+      case 'lethallytoxic':
+      case 'lethal':
+      case 'fatal':
+        return 'lethal' as const
+      default:
+        return null
+    }
+  }
+
+  const humanSeverity = getToxicitySeverity(plant.toxicityHuman)
+  const petsSeverity = getToxicitySeverity(plant.toxicityPets)
+  const severityOrder = { mild: 1, high: 2, lethal: 3 }
+  const maxToxicitySeverity = humanSeverity && petsSeverity
+    ? (severityOrder[humanSeverity] >= severityOrder[petsSeverity] ? humanSeverity : petsSeverity)
+    : humanSeverity || petsSeverity
+
+  const toxicityWarningConfig = maxToxicitySeverity ? {
+    mild: {
+      Icon: Info,
+      label: t('plantDetails.toxicityWarning.mild', { defaultValue: 'Mildly Toxic' }),
+      className: 'border-stone-300/60 bg-stone-100/70 text-stone-700 hover:bg-stone-200/70 dark:border-stone-600/40 dark:bg-stone-800/50 dark:text-stone-300 dark:hover:bg-stone-700/50',
+    },
+    high: {
+      Icon: AlertTriangle,
+      label: t('plantDetails.toxicityWarning.high', { defaultValue: 'Toxic' }),
+      className: 'border-amber-400/70 bg-amber-50/80 text-amber-800 hover:bg-amber-100/80 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/40',
+    },
+    lethal: {
+      Icon: Skull,
+      label: t('plantDetails.toxicityWarning.lethal', { defaultValue: 'Lethal' }),
+      className: 'border-red-400/80 bg-red-50/80 text-red-800 hover:bg-red-100/80 dark:border-red-600/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/40',
+    },
+  }[maxToxicitySeverity] : null
+
+  const scrollToToxicity = () => {
+    const el = document.getElementById('toxicity-section')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
       <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
@@ -272,6 +328,16 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                 <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
                   {seasons.map(s => translateSeason(s)).join(" • ")}
                 </Badge>
+              )}
+              {toxicityWarningConfig && (
+                <button
+                  type="button"
+                  onClick={scrollToToxicity}
+                  className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full border px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium cursor-pointer transition-colors ${toxicityWarningConfig.className}`}
+                >
+                  <toxicityWarningConfig.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
+                  {toxicityWarningConfig.label}
+                </button>
               )}
             </div>
             <div>

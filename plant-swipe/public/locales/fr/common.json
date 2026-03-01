@@ -1176,6 +1176,11 @@
       "week": "semaine",
       "month": "mois",
       "year": "an"
+    },
+    "toxicityWarning": {
+      "mild": "Légèrement Toxique",
+      "high": "Toxique",
+      "lethal": "Létale"
     }
   },
   "bookmarks": {
