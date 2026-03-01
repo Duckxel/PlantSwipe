@@ -179,6 +179,7 @@ const TagInput: React.FC<{
   unique?: boolean
   caseInsensitive?: boolean
 }> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
+  const { t } = useTranslation('plantAdmin')
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
@@ -200,8 +201,8 @@ const TagInput: React.FC<{
   return (
     <div className="grid gap-2">
       <div className="flex gap-2">
-        <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }} placeholder={placeholder || "Add item and press Enter"} />
-        <Button type="button" onClick={commit}>Add</Button>
+        <Input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); commit() } }} placeholder={placeholder || t('plantAdmin.tagInput.placeholder', 'Add item and press Enter')} />
+        <Button type="button" onClick={commit}>{t('plantAdmin.tagInput.add', 'Add')}</Button>
       </div>
       <div className="flex flex-wrap gap-2">
         {value.map((tag, idx) => (
@@ -211,7 +212,7 @@ const TagInput: React.FC<{
               type="button"
               className="text-red-600 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-full w-4 h-4 flex items-center justify-center"
               onClick={() => onChange(value.filter((_, i) => i !== idx))}
-              aria-label={`Remove ${tag}`}
+              aria-label={t('plantAdmin.tagInput.removeAria', { tag, defaultValue: `Remove ${tag}` })}
             >
               <X className="h-3 w-3" />
             </button>
@@ -232,7 +233,7 @@ const CompanionSelector: React.FC<{
   /** Language for searching (e.g., 'en', 'fr'). When not 'en', searches plant_translations. */
   language?: string;
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
@@ -654,7 +655,7 @@ const WateringScheduleEditor: React.FC<{
   wateringMode?: WateringMode
   onWateringModeChange?: (mode: WateringMode) => void
 }> = ({ value, onChange, wateringMode, onWateringModeChange }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const schedules = Array.isArray(value) ? value : []
   const mode = deriveWateringMode(schedules, wateringMode)
 
@@ -798,6 +799,7 @@ const WateringScheduleEditor: React.FC<{
 }
 
 const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Record<string, string>) => void; keyLabel?: string; valueLabel?: string }> = ({ value, onChange, keyLabel, valueLabel }) => {
+  const { t } = useTranslation('plantAdmin')
   const [k, setK] = React.useState("")
   const [v, setV] = React.useState("")
   const commit = () => {
@@ -809,10 +811,10 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
   return (
     <div className="grid gap-3">
       <div className="grid gap-2 rounded-lg border border-dashed p-3 bg-white/60 dark:bg-black/10">
-        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || "Mix name"} />
-        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || "Benefits / description"} />
+        <Input value={k} onChange={(e) => setK(e.target.value)} placeholder={keyLabel || t('plantAdmin.keyValueList.keyPlaceholder', 'Mix name')} />
+        <Input value={v} onChange={(e) => setV(e.target.value)} placeholder={valueLabel || t('plantAdmin.keyValueList.valuePlaceholder', 'Benefits / description')} />
         <div className="flex justify-end">
-          <Button type="button" onClick={commit} disabled={!k.trim() || !v.trim()}>Add</Button>
+          <Button type="button" onClick={commit} disabled={!k.trim() || !v.trim()}>{t('plantAdmin.keyValueList.add', 'Add')}</Button>
         </div>
       </div>
       {Object.keys(value).length > 0 && (
@@ -827,7 +829,7 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
                 const copy = { ...value }
                 delete copy[key]
                 onChange(copy)
-              }}>Remove</button>
+              }}>{t('plantAdmin.keyValueList.remove', 'Remove')}</button>
             </div>
           ))}
         </div>
@@ -837,6 +839,7 @@ const KeyValueList: React.FC<{ value: Record<string, string>; onChange: (v: Reco
 }
 
 const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: PlantSource[]) => void }> = ({ value, onChange }) => {
+  const { t } = useTranslation('plantAdmin')
   const sources = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<PlantSource>({ name: "", url: "" })
   const addSource = () => {
@@ -849,19 +852,19 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
     <div className="grid gap-3">
       <div className="grid gap-2 rounded border border-dashed p-3 bg-white/60 dark:bg-black/10">
         <Input
-          placeholder="Source name"
+          placeholder={t('plantAdmin.sourcesEditor.namePlaceholder', 'Source name')}
           value={draft.name || ""}
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
         />
         <Input
-          placeholder="https://example.com"
+          placeholder={t('plantAdmin.sourcesEditor.urlPlaceholder', 'https://example.com')}
           value={draft.url || ""}
           onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
         />
         <div className="flex justify-between text-sm text-muted-foreground">
-          <span>Add multiple references as needed.</span>
+          <span>{t('plantAdmin.sourcesEditor.helperText', 'Add multiple references as needed.')}</span>
           <Button type="button" onClick={addSource} disabled={!draft.name?.trim()}>
-            Add source
+            {t('plantAdmin.sourcesEditor.addSource', 'Add source')}
           </Button>
         </div>
       </div>
@@ -876,7 +879,7 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
                 </a>
               )}
             </div>
-            <button type="button" className="text-red-600 hover:text-red-800" onClick={() => remove(idx)} aria-label="Remove source">
+            <button type="button" className="text-red-600 hover:text-red-800" onClick={() => remove(idx)} aria-label={t('plantAdmin.sourcesEditor.removeAria', 'Remove source')}>
               <X className="h-4 w-4" />
             </button>
           </div>
@@ -1084,7 +1087,7 @@ const metaFields: FieldConfig[] = [
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
-function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
+function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'plantAdmin'>) {
     const value = getValue(plant, field.key)
     const id = field.key.replace(/\./g, "-")
   const translationBase = `plantAdmin.fields.${field.key}`
@@ -1401,6 +1404,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
 }
 
 function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void }) {
+  const { t } = useTranslation('plantAdmin')
   const list = Array.isArray(images) ? images : []
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
@@ -1485,7 +1489,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
         <div className="flex items-center gap-2">
           {!isCollapsed && (
             <Button type="button" variant="outline" onClick={addImage}>
-              Add image
+              {t('plantAdmin.images.addImage', 'Add image')}
             </Button>
           )}
         </div>
@@ -1496,14 +1500,13 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
         <div>
           {list.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No images yet. Click to expand and add images.
+              {t('plantAdmin.images.noImagesCollapsed', 'No images yet. Click to expand and add images.')}
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {list.map((img, idx) => {
                 const previewKey = getPreviewKey(img, idx)
                 const hasError = previewErrors[previewKey]
-                const useLabel = img.use === 'primary' ? 'P' : img.use === 'discovery' ? 'D' : 'O'
                 return (
                   <div
                     key={previewKey}
@@ -1527,25 +1530,25 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-xs text-muted-foreground">No image</span>
+                        <span className="text-xs text-muted-foreground">{t('plantAdmin.images.noImage', 'No image')}</span>
                       </div>
                     )}
                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                      {useLabel}
+                      {img.use === 'primary' ? t('plantAdmin.images.primaryCount', 'P') : img.use === 'discovery' ? t('plantAdmin.images.discoveryCount', 'D') : t('plantAdmin.images.otherCount', 'O')}
                     </div>
                   </div>
                 )
               })}
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.</p>
+          <p className="text-xs text-muted-foreground mt-2">{t('plantAdmin.images.collapsedHint', 'Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.')}</p>
         </div>
       ) : (
         // Expanded view: Show full editor
         <>
           {!list.length && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No images yet. Click "Add image" to start.
+              {t('plantAdmin.images.noImagesExpanded', 'No images yet. Click "Add image" to start.')}
             </div>
           )}
           <div className="space-y-3">
@@ -1574,7 +1577,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                           />
                         ) : (
                           <span className="px-4 text-center text-xs text-muted-foreground">
-                            {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
+                            {img.link && hasError ? t('plantAdmin.images.previewFailed', 'Preview failed - double-check the URL.') : t('plantAdmin.images.previewHint', 'Preview appears after entering a valid URL.')}
                           </span>
                         )}
                       </div>
@@ -1586,7 +1589,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                         placeholder="https://example.com/photo.jpg"
                       />
                       <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Usage</span>
+                        <span className="text-muted-foreground">{t('plantAdmin.images.usage', 'Usage')}</span>
                         {(["primary","discovery","other"] as const).map((opt) => (
                           <button
                             key={opt}
@@ -1596,30 +1599,30 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                               (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
                             }`}
                           >
-                            {opt}
+                            {opt === 'primary' ? t('plantAdmin.images.usePrimary', 'primary') : opt === 'discovery' ? t('plantAdmin.images.useDiscovery', 'discovery') : t('plantAdmin.images.useOther', 'other')}
                           </button>
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {img.use === 'primary'
-                          ? 'Hero/detail image (only 1 allowed).'
+                          ? t('plantAdmin.images.heroPrimary', 'Hero/detail image (only 1 allowed).')
                           : img.use === 'discovery'
-                            ? 'Discovery cards/lists (only 1 allowed).'
-                            : 'Gallery image (unlimited).'}
+                            ? t('plantAdmin.images.heroDiscovery', 'Discovery cards/lists (only 1 allowed).')
+                            : t('plantAdmin.images.heroOther', 'Gallery image (unlimited).')}
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex gap-2">
                       <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
-                        Move up
+                        {t('plantAdmin.images.moveUp', 'Move up')}
                       </Button>
                       <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
-                        Move down
+                        {t('plantAdmin.images.moveDown', 'Move down')}
                       </Button>
                     </div>
                     <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
-                      Remove
+                      {t('plantAdmin.images.remove', 'Remove')}
                     </Button>
                   </div>
                 </div>
@@ -1717,6 +1720,7 @@ const TIME_ICONS: Record<RecipeTime, string> = {
 }
 
 function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange: (v: PlantRecipe[]) => void }) {
+  const { t } = useTranslation('plantAdmin')
   const [isCollapsed, setIsCollapsed] = React.useState(recipes.length > 3)
   const [newName, setNewName] = React.useState('')
   const [newCategory, setNewCategory] = React.useState<RecipeCategory>('Other')
@@ -1808,7 +1812,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                         value={recipe.name}
                         onChange={(e) => updateRecipe(idx, { name: e.target.value })}
                         className="h-8 text-sm"
-                        placeholder="Recipe name"
+                        placeholder={t('plantAdmin.recipeEditor.existingNamePlaceholder', 'Recipe name')}
                       />
                     </div>
                     <select
@@ -1817,7 +1821,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                       onChange={(e) => updateRecipe(idx, { category: e.target.value as RecipeCategory })}
                     >
                       {RECIPE_CATEGORIES.map(c => (
-                        <option key={c.value} value={c.value}>{c.label}</option>
+                        <option key={c.value} value={c.value}>{t(`plantAdmin.recipeEditor.categories.${sanitizeOptionKey(c.value)}`, c.label)}</option>
                       ))}
                     </select>
                     <select
@@ -1825,16 +1829,16 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                       value={recipe.time}
                       onChange={(e) => updateRecipe(idx, { time: e.target.value as RecipeTime })}
                     >
-                      {RECIPE_TIMES.map(t => (
-                        <option key={t.value} value={t.value}>{t.label}</option>
+                      {RECIPE_TIMES.map(rt => (
+                        <option key={rt.value} value={rt.value}>{t(`plantAdmin.recipeEditor.times.${sanitizeOptionKey(rt.value)}`, rt.label)}</option>
                       ))}
                     </select>
                     <button
                       type="button"
                       onClick={() => removeRecipe(idx)}
                       className="text-red-500 hover:text-red-700 p-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
-                      title="Remove recipe"
-                      aria-label={`Remove recipe: ${recipe.name || 'Untitled'}`}
+                      title={t('plantAdmin.recipeEditor.removeTitle', 'Remove recipe')}
+                      aria-label={t('plantAdmin.recipeEditor.removeAria', { name: recipe.name || 'Untitled', defaultValue: `Remove recipe: ${recipe.name || 'Untitled'}` })}
                     >
                       <X className="h-4 w-4" />
                     </button>
@@ -1845,7 +1849,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                       value={recipe.link || ''}
                       onChange={(e) => updateRecipe(idx, { link: e.target.value || undefined })}
                       className="h-7 text-xs"
-                      placeholder="Recipe URL (optional, e.g., https://example.com/recipe)"
+                      placeholder={t('plantAdmin.recipeEditor.urlPlaceholder', 'Recipe URL (optional, e.g., https://example.com/recipe)')}
                     />
                   </div>
                 </div>
@@ -1855,13 +1859,13 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
 
           {/* Add new recipe form */}
           <div className="rounded-lg border-2 border-dashed border-emerald-200 dark:border-emerald-800 p-3 space-y-2">
-            <div className="text-xs font-medium text-muted-foreground">Add new recipe</div>
+            <div className="text-xs font-medium text-muted-foreground">{t('plantAdmin.recipeEditor.addNewRecipe', 'Add new recipe')}</div>
             <div className="flex flex-col sm:flex-row gap-2">
               <div className="flex-1 min-w-0">
                 <Input
                   value={newName}
                   onChange={(e) => setNewName(e.target.value)}
-                  placeholder="Recipe name (e.g., Basil Pesto)"
+                  placeholder={t('plantAdmin.recipeEditor.namePlaceholder', 'Recipe name (e.g., Basil Pesto)')}
                   className="h-8 text-sm"
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') {
@@ -1896,7 +1900,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                 disabled={!newName.trim()}
                 className="shrink-0 h-8"
               >
-                Add
+                {t('plantAdmin.recipeEditor.add', 'Add')}
               </Button>
             </div>
             <div className="flex items-center gap-2">
@@ -1904,7 +1908,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
               <Input
                 value={newLink}
                 onChange={(e) => setNewLink(e.target.value)}
-                placeholder="Recipe URL (optional)"
+                placeholder={t('plantAdmin.recipeEditor.urlPlaceholderShort', 'Recipe URL (optional)')}
                 className="h-7 text-xs"
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') {
@@ -1917,12 +1921,12 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
           </div>
 
           {recipes.length === 0 && (
-            <p className="text-xs text-muted-foreground italic">No recipes yet. Add recipe ideas above.</p>
+            <p className="text-xs text-muted-foreground italic">{t('plantAdmin.recipeEditor.noRecipes', 'No recipes yet. Add recipe ideas above.')}</p>
           )}
         </>
       )}
       <p className="text-xs text-muted-foreground">
-        Structured recipe ideas with meal category, preparation time, and optional external link.
+        {t('plantAdmin.recipeEditor.helperText', 'Structured recipe ideas with meal category, preparation time, and optional external link.')}
       </p>
     </div>
   )
@@ -1940,7 +1944,7 @@ function getContrastColor(hex: string): string {
 }
 
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [open, setOpen] = React.useState(false)
   const [allColors, setAllColors] = React.useState<ColorWithMeta[]>([])
   const [primaryColors, setPrimaryColors] = React.useState<ColorWithMeta[]>([])
@@ -2401,7 +2405,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
 }
 
 export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
