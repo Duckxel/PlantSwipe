@@ -1124,7 +1124,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 }
 
 export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: string) => void; initialName?: string }> = ({ onCancel, onSaved, initialName }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const { id } = useParams<{ id?: string }>()
   const [searchParams] = useSearchParams()
   const prefillFromId = searchParams.get('prefillFrom')

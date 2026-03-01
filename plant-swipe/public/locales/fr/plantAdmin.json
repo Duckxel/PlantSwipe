@@ -1,0 +1,929 @@
+{
+  "plantAdmin": {
+    "languageLabel": "Langue",
+    "languageHelper": "L'IA répond dans la langue sélectionnée.",
+    "createTitle": "Créer une plante",
+    "createSubtitle": "Renseignez chaque champ grâce aux descriptions ou laissez l'IA aider.",
+    "editTitle": "Modifier la plante",
+    "editSubtitle": "Mettez la fiche à jour pour respecter la nouvelle structure de base de données.",
+    "translationNoTargets": "Aucune autre langue configurée pour la traduction.",
+    "translationRequiresBase": "Enregistrez la version anglaise avant de modifier les traductions.",
+    "deeplTranslate": "Traduction DeepL",
+    "aiFill": "Remplir avec l'IA",
+    "aiFilled": "Rempli par l'IA",
+    "overviewLength": "La présentation doit contenir entre 50 et 300 mots.",
+    "aiNameRequired": "Saisissez un nom avant d'utiliser le remplissage IA.",
+    "nameRequired": "Le nom est obligatoire",
+    "savePlant": "Enregistrer la plante",
+    "loadingPlant": "Chargement de la plante...",
+    "categoryProgressTitle": "Progression par catégorie",
+    "categoryProgressSummary": "Dernier récapitulatif du remplissage IA",
+    "categoryMenuTitle": "Menu rapide des catégories",
+    "backToPrevious": "Revenir à la page précédente",
+    "viewPlantInfo": "Voir la fiche plante",
+    "sectionFilled": "Rempli",
+    "sectionInProgress": "En cours",
+    "sectionLogTitle": "Sections terminées",
+    "errors": {
+      "loadPlant": "Échec du chargement de la plante",
+      "savePlant": "Échec de l'enregistrement de la plante",
+      "aiFill": "Échec du remplissage IA",
+      "translation": "Échec de la traduction"
+    },
+    "actions": {
+      "remove": "Supprimer"
+    },
+    "hideCompanionSuggestions": "Masquer les suggestions IA",
+    "showCompanionSuggestions": "Afficher les suggestions IA",
+    "companionSuggestionsReview": "Cliquez sur Ajouter pour associer les plantes suggérées. Toutes ne sont pas forcément dans la base de données.",
+    "noCompanions": "Aucune plante compagne ou associée ajoutée.",
+    "addCompanionBtn": "Ajouter des plantes compagnes / associées",
+    "selectCompanionTitle": "Sélectionner des plantes compagnes et associées",
+    "selectCompanionDesc": "Sélectionnez plusieurs plantes à ajouter comme compagnes ou variétés apparentées.",
+    "searchPlantsPlaceholder": "Rechercher des plantes par nom...",
+    "searchingBtn": "Recherche...",
+    "searchBtn": "Rechercher",
+    "noPlantsFound": "Aucune plante trouvée. Essayez un autre terme de recherche.",
+    "hideColorSuggestions": "Masquer les suggestions de couleurs IA",
+    "showColorSuggestions": "Afficher les suggestions de couleurs IA",
+    "colorSuggestionsReview": "Vérifiez et ajoutez les couleurs souhaitées à votre palette.",
+    "colorFallback": "Couleur",
+    "colorAdded": "Ajoutée",
+    "addColor": "Ajouter",
+    "colorsLabel": "Couleurs",
+    "colorSuggestionPlaceholder": "Les recommandations IA apparaîtront ici lorsqu'elles seront disponibles.",
+    "colors": {
+      "addColorButton": "Ajouter une couleur",
+      "dialogTitle": "Sélectionner ou ajouter une couleur",
+      "searchPlaceholder": "Rechercher des couleurs par nom",
+      "loading": "Chargement des couleurs...",
+      "noHex": "Pas de code hex",
+      "empty": "Aucune couleur trouvée.",
+      "insertHeading": "Ajouter une nouvelle couleur",
+      "colorNamePlaceholder": "Nom de la couleur",
+      "hexPlaceholder": "#codehex",
+      "insertButton": "Ajouter",
+      "saving": "Enregistrement...",
+      "paletteHelp": "Associez des couleurs existantes ou insérez-en de nouvelles pour cette plante.",
+      "multicolor": "Multicolore",
+      "bicolor": "Bicolore"
+    },
+    "watering": {
+      "seasonPlaceholder": "Saison (facultatif)",
+      "quantityPlaceholder": "Quantité",
+      "timePeriodPlaceholder": "Période",
+      "helper": "La saison est facultative. Ajoutez autant de calendriers d'arrosage que nécessaire.",
+      "addSchedule": "Ajouter un arrosage"
+    },
+    "selectOption": "Sélectionner une option",
+    "selectStatus": "Sélectionner un statut",
+    "optionalLabel": "facultatif",
+    "temperature": {
+      "min": "Min (°C)",
+      "minShort": "Min",
+      "ideal": "Idéal (°C)",
+      "idealShort": "Idéal",
+      "max": "Max (°C)",
+      "maxShort": "Max"
+    },
+    "basics": {
+      "name": {
+        "label": "Nom",
+        "placeholder": "Nom unique de la plante",
+        "description": "Nom de la plante (obligatoire et unique)."
+      },
+      "plantType": {
+        "label": "Type de plante",
+        "placeholder": "Sélectionner un type",
+        "description": "Classification principale de la plante"
+      },
+      "utility": {
+        "label": "Utilité",
+        "description": "Sélectionnez toutes les utilités pertinentes"
+      },
+      "comestiblePart": {
+        "label": "Partie comestible",
+        "description": "Parties comestibles (uniquement si la plante est comestible)."
+      },
+      "fruitType": {
+        "label": "Type de fruit",
+        "description": "Classification du fruit (si la plante en produit)."
+      }
+    },
+    "options": {
+      "plantType": {
+        "plant": "Plante",
+        "flower": "Fleur",
+        "bamboo": "Bambou",
+        "shrub": "Arbuste",
+        "tree": "Arbre",
+        "cactus": "Cactus",
+        "succulent": "Plante grasse"
+      },
+      "utility": {
+        "comestible": "Comestible",
+        "ornemental": "Ornementale",
+        "produce_fruit": "Produit des fruits",
+        "aromatic": "Aromatique",
+        "medicinal": "Médicinale",
+        "odorous": "Odorante",
+        "climbing": "Grimpante",
+        "cereal": "Céréalière",
+        "spice": "Épice"
+      },
+      "comestible": {
+        "flower": "Fleur",
+        "fruit": "Fruit",
+        "seed": "Graine",
+        "leaf": "Feuille",
+        "stem": "Tige",
+        "root": "Racine",
+        "bulb": "Bulbe",
+        "bark": "Écorce",
+        "wood": "Bois"
+      },
+      "fruit": {
+        "nut": "Noix",
+        "seed": "Graine",
+        "stone": "Fruit à noyau"
+      }
+    },
+    "optionLabels": {
+      "january": "Janvier",
+      "february": "Février",
+      "march": "Mars",
+      "april": "Avril",
+      "may": "Mai",
+      "june": "Juin",
+      "july": "Juillet",
+      "august": "Août",
+      "september": "Septembre",
+      "october": "Octobre",
+      "november": "Novembre",
+      "december": "Décembre",
+      "annual": "Annuelle",
+      "biennial": "Bisannuelle",
+      "biennials": "Bisannuelle",
+      "perennial": "Vivace",
+      "perenials": "Vivace",
+      "succulent_perennial": "Vivace succulente",
+      "ephemerals": "Éphémère",
+      "ephemeral": "Éphémère",
+      "monocarpic": "Monocarpique",
+      "polycarpic": "Polycarpique",
+      "short_cycle": "Cycle court",
+      "spring": "Printemps",
+      "summer": "Été",
+      "autumn": "Automne",
+      "winter": "Hiver",
+      "deciduous": "Caduc",
+      "evergreen": "Persistant",
+      "semi_evergreen": "Semi-persistant",
+      "marcescent": "Marcescent",
+      "winter_dormant": "Dormance hivernale",
+      "dry_season_deciduous": "Caduc en saison sèche",
+      "non_toxic": "Non toxique",
+      "slightly_toxic": "Légèrement toxique",
+      "very_toxic": "Très toxique",
+      "deadly": "Mortel",
+      "undetermined": "Indéterminé",
+      "midly_irritating": "Légèrement irritant",
+      "highly_toxic": "Très toxique",
+      "lethally_toxic": "Mortellement toxique",
+      "touch": "Toucher",
+      "ingestion": "Ingestion",
+      "eye_contact": "Contact oculaire",
+      "inhalation": "Inhalation",
+      "sap_contact": "Contact avec la sève",
+      "indoor": "Intérieur",
+      "outdoor": "Extérieur",
+      "both": "Intérieur & extérieur",
+      "terrarium": "Terrarium",
+      "greenhouse": "Serre",
+      "flowerbed": "Massif",
+      "path": "Allée",
+      "hedge": "Haie",
+      "ground_cover": "Couvre-sol",
+      "pot": "Pot",
+      "planter": "Jardinière",
+      "hanging": "Suspendu",
+      "window_box": "Bac de fenêtre",
+      "green_wall": "Mur végétal",
+      "border": "Bordure",
+      "edging": "Bordure basse",
+      "tree_base": "Pied d'arbre",
+      "vegetable_garden": "Potager",
+      "orchard": "Verger",
+      "free_growing": "Libre",
+      "trimmed_hedge": "Haie taillée",
+      "windbreak": "Brise-vent",
+      "pond_edge": "Bord de bassin",
+      "waterside": "Berge",
+      "grove": "Bosquet",
+      "background": "Arrière-plan",
+      "foreground": "Premier plan",
+      "upright": "Dressé",
+      "arborescent": "Arborescent",
+      "shrubby": "Arbustif",
+      "bushy": "Buissonnant",
+      "clumping": "En touffe",
+      "erect": "Érigé",
+      "creeping": "Rampant",
+      "carpeting": "Tapissant",
+      "prostrate": "Prostré",
+      "spreading": "Étalé",
+      "climbing": "Grimpant",
+      "twining": "Volubile",
+      "scrambling": "Sarmenteux",
+      "liana": "Liane",
+      "trailing": "Retombant",
+      "columnar": "Colonnaire",
+      "conical": "Conique",
+      "fastigiate": "Fastigié",
+      "globular": "Globuleux",
+      "spreading_flat": "Étalé à plat",
+      "rosette": "En rosette",
+      "cushion": "En coussin",
+      "ball_shaped": "En boule",
+      "succulent": "Succulente",
+      "palmate": "Palmé",
+      "rhizomatous": "Rhizomateux",
+      "suckering": "Drageonnant",
+      "easy": "Facile",
+      "complex": "Complexe",
+      "none": "Aucun",
+      "low": "Faible",
+      "moderate": "Modéré",
+      "heavy": "Élevé",
+      "partial_shade": "Mi-ombre",
+      "light_shade": "Ombre légère",
+      "deep_shade": "Ombre dense",
+      "direct_light": "Lumière directe",
+      "bright_indirect_light": "Lumière indirecte vive",
+      "medium_light": "Lumière moyenne",
+      "low_light": "Faible lumière",
+      "shade": "Ombre",
+      "partial_sun": "Mi-ombre",
+      "full_sun": "Plein soleil",
+      "surface": "Surface",
+      "buried": "Enterré",
+      "hose": "Tuyau",
+      "drop": "Goutte-à-goutte",
+      "drip": "Goutte-à-goutte",
+      "soaking": "Trempage",
+      "wick": "Mèche",
+      "drench": "Trempage",
+      "seed": "Semis",
+      "cutting": "Bouture",
+      "division": "Division",
+      "clump_division": "Division de touffe",
+      "bulb_division": "Division de bulbe",
+      "rhizome_division": "Division de rhizome",
+      "stolon": "Stolon",
+      "sucker": "Drageon",
+      "spore": "Spore",
+      "layering": "Marcottage",
+      "grafting": "Greffe",
+      "tissue_separation": "Séparation de tissus",
+      "bulb_separation": "Division de bulbes",
+      "open_ground": "Pleine terre",
+      "raised_bed": "Carré surélevé",
+      "rockery": "Rocaille",
+      "slope": "Talus",
+      "mound": "Butte",
+      "pond": "Bassin",
+      "waterlogged_soil": "Sol détrempé",
+      "hydroponic": "Hydroponie",
+      "aquaponic": "Aquaponie",
+      "mineral_substrate": "Substrat minéral",
+      "permaculture": "Permaculture",
+      "agroforestry": "Agroforesterie",
+      "tray": "Barquette",
+      "mini_greenhouse": "Mini-serre",
+      "polar": "Polaire",
+      "montane": "Montagnard",
+      "oceanic": "Océanique",
+      "degraded_oceanic": "Océanique dégradé",
+      "temperate_continental": "Continental tempéré",
+      "tropical_dry": "Tropical sec",
+      "tropical_humid": "Tropical humide",
+      "tropical_volcanic": "Tropical volcanique",
+      "tropical_cyclonic": "Tropical cyclonique",
+      "humid_insular": "Insulaire humide",
+      "subtropical_humid": "Subtropical humide",
+      "equatorial": "Équatorial",
+      "windswept_coastal": "Côtier venteux",
+      "edible": "Comestible",
+      "ornamental": "Ornementale",
+      "aromatic": "Aromatique",
+      "medicinal": "Médicinale",
+      "fragrant": "Odorante",
+      "infusion": "Infusion",
+      "cereal": "Céréalière",
+      "spice": "Épice",
+      "flower": "Fleur",
+      "fruit": "Fruit",
+      "leaf": "Feuille",
+      "stem": "Tige",
+      "bulb": "Bulbe",
+      "rhizome": "Rhizome",
+      "wood": "Bois",
+      "bark": "Écorce",
+      "less_than_1_year": "Moins d'1 an",
+      "2_years": "2 ans",
+      "3_10_years": "3–10 ans",
+      "10_50_years": "10–50 ans",
+      "50_years": "50+ ans",
+      "aquatic": "Aquatique",
+      "semi_aquatic": "Semi-aquatique",
+      "wetland": "Zone humide",
+      "tropical": "Tropical",
+      "temperate": "Tempéré",
+      "arid": "Aride",
+      "mediterranean": "Méditerranéen",
+      "mountain": "Montagne",
+      "grassland": "Prairie",
+      "forest": "Forêt",
+      "coastal": "Côtier",
+      "urban": "Urbain",
+      "least_concern": "Préoccupation mineure",
+      "near_threatened": "Quasi menacé",
+      "vulnerable": "Vulnérable",
+      "endangered": "En danger",
+      "critically_endangered": "En danger critique",
+      "extinct_in_wild": "Éteint à l'état sauvage",
+      "extinct": "Éteint",
+      "data_deficient": "Données insuffisantes",
+      "not_evaluated": "Non évalué",
+      "urban_garden": "Jardin urbain",
+      "periurban_garden": "Jardin périurbain",
+      "park": "Parc",
+      "urban_wasteland": "Friche urbaine",
+      "green_roof": "Toiture végétalisée",
+      "balcony": "Balcon",
+      "agricultural_hedge": "Haie bocagère",
+      "cultivated_orchard": "Verger cultivé",
+      "roadside": "Bord de route",
+      "drought": "Sécheresse",
+      "scorching_sun": "Soleil brûlant",
+      "permanent_shade": "Ombre permanente",
+      "excess_water": "Excès d'eau",
+      "frost": "Gel",
+      "heatwave": "Canicule",
+      "wind": "Vent",
+      "neutral": "Neutre",
+      "favorable": "Favorable",
+      "potentially_invasive": "Potentiellement envahissante",
+      "locally_invasive": "Envahissante localement",
+      "yes": "Oui",
+      "no": "Non",
+      "unknown": "Inconnu",
+      "vermiculite": "Vermiculite",
+      "perlite": "Perlite",
+      "sphagnum_moss": "Mousse de sphaigne",
+      "rock_wool": "Laine de roche",
+      "sand": "Sable",
+      "gravel": "Gravier",
+      "potting_soil": "Terreau",
+      "peat": "Tourbe",
+      "clay_pebbles": "Billes d'argile",
+      "coconut_fiber": "Fibre de coco",
+      "wood_chips": "Copeaux de bois",
+      "green_manure": "Engrais vert",
+      "cocoa_bean_hulls": "Coques de cacao",
+      "buckwheat_hulls": "Balle de sarrasin",
+      "cereal_straw": "Paille céréalière",
+      "hemp_straw": "Paille de chanvre",
+      "woven_fabric": "Toile tissée",
+      "pozzolana": "Pouzzolane",
+      "crushed_slate": "Ardoise concassée",
+      "clay_pellets": "Granulés d'argile",
+      "natural_mulch": "Paillage naturel",
+      "nitrogen": "Azote",
+      "phosphorus": "Phosphore",
+      "potassium": "Potassium",
+      "calcium": "Calcium",
+      "magnesium": "Magnésium",
+      "sulfur": "Soufre",
+      "iron": "Fer",
+      "boron": "Bore",
+      "manganese": "Manganèse",
+      "molybene": "Molybdène",
+      "chlorine": "Chlore",
+      "copper": "Cuivre",
+      "zinc": "Zinc",
+      "nitrate": "Nitrate",
+      "phosphate": "Phosphate",
+      "granular_fertilizer": "Engrais granulé",
+      "liquid_fertilizer": "Engrais liquide",
+      "meat_flour": "Farine animale",
+      "fish_flour": "Farine de poisson",
+      "crushed_bones": "Os broyés",
+      "crushed_horns": "Cornes broyées",
+      "slurry": "Lisiers",
+      "manure": "Fumier",
+      "animal_excrement": "Excréments animaux",
+      "sea_fertilizer": "Engrais marin",
+      "yurals": "Purins",
+      "wine": "Vin",
+      "guano": "Guano",
+      "coffee_grounds": "Marc de café",
+      "banana_peel": "Peau de banane",
+      "eggshell": "Coquille d'œuf",
+      "vegetable_cooking_water": "Eau de cuisson des légumes",
+      "urine": "Urine",
+      "grass_clippings": "Tonte de gazon",
+      "vegetable_waste": "Déchets végétaux",
+      "direct": "Pleine terre",
+      "row": "Rang",
+      "hill": "Butte",
+      "broadcast": "Épandre",
+      "seed_tray": "Plaque de semis",
+      "cell": "Alvéole",
+      "bee": "Abeille",
+      "wasp": "Guêpe",
+      "ant": "Fourmi",
+      "butterfly": "Papillon",
+      "bird": "Oiseau",
+      "mosquito": "Moustique",
+      "fly": "Mouche",
+      "beetle": "Coléoptère",
+      "ladybug": "Coccinelle",
+      "stagbeetle": "Lucane",
+      "cockchafer": "Hanneton",
+      "dungbeetle": "Bousier",
+      "weevil": "Charançon",
+      "week": "Semaine",
+      "month": "Mois",
+      "year": "An",
+      "in_progres": "En cours",
+      "in_progress": "En cours",
+      "rework": "À retravailler",
+      "review": "En révision",
+      "approved": "Approuvé",
+      "safe": "En sécurité",
+      "at_risk": "À risque"
+    },
+    "fields": {
+      "commonNames": {
+        "label": "Noms communs",
+        "description": "Autres noms communs de cette plante"
+      },
+      "scientificNameSpecies": {
+        "label": "Nom scientifique (espèce)",
+        "description": "Binôme latin (ex. Monstera deliciosa)"
+      },
+      "variety": {
+        "label": "Variété",
+        "description": "Nom de variété ou cultivar (ex. Spring Field, Variegata)"
+      },
+      "family": {
+        "label": "Famille",
+        "description": "Famille botanique (ex. Araceae)"
+      },
+      "plantType": {
+        "label": "Type de plante",
+        "description": "Type botanique principal de la plante"
+      },
+      "presentation": {
+        "label": "Présentation",
+        "description": "Description encyclopédique (150–300 mots)"
+      },
+      "featuredMonth": {
+        "label": "Mois à la une",
+        "description": "Mois où cette plante devrait être mise en avant"
+      },
+      "origin": {
+        "label": "Pays d'origine",
+        "description": "Pays ou régions d'origine"
+      },
+      "climate": {
+        "label": "Climat",
+        "description": "Types de climat où la plante pousse naturellement"
+      },
+      "season": {
+        "label": "Saison",
+        "description": "Saisons actives / de pointe"
+      },
+      "utility": {
+        "label": "Utilité / Usage",
+        "description": "Rôles pratiques ou ornementaux"
+      },
+      "ediblePart": {
+        "label": "Partie(s) comestible(s)",
+        "description": "Quelles parties sont comestibles (si applicable)"
+      },
+      "thorny": {
+        "label": "Épineuse ?",
+        "description": "La plante possède-t-elle des épines ?"
+      },
+      "lifeCycle": {
+        "label": "Cycle de vie",
+        "description": "Type(s) de cycle de vie"
+      },
+      "averageLifespan": {
+        "label": "Durée de vie moyenne",
+        "description": "Fourchette de durée de vie estimée"
+      },
+      "foliagePersistence": {
+        "label": "Persistance du feuillage",
+        "description": "Comportement des feuilles au fil des saisons"
+      },
+      "livingSpace": {
+        "label": "Espace de vie",
+        "description": "Où la plante peut être cultivée"
+      },
+      "landscaping": {
+        "label": "Aménagement / Emplacement",
+        "description": "Options de placement au jardin"
+      },
+      "plantHabit": {
+        "label": "Port / Forme",
+        "description": "Port de croissance et forme"
+      },
+      "toxicityHuman": {
+        "label": "Toxicité (humain)",
+        "description": "Niveau de toxicité pour l'humain"
+      },
+      "toxicityPets": {
+        "label": "Toxicité (animaux)",
+        "description": "Niveau de toxicité pour les animaux"
+      },
+      "poisoningMethod": {
+        "label": "Mode(s) d'empoisonnement",
+        "description": "Comment l'empoisonnement peut survenir"
+      },
+      "poisoningSymptoms": {
+        "label": "Symptômes d'empoisonnement",
+        "description": "Description des symptômes à titre préventif"
+      },
+      "allergens": {
+        "label": "Allergènes",
+        "description": "Allergènes connus"
+      },
+      "careLevel": {
+        "label": "Niveau d'entretien",
+        "description": "Difficulté d'entretien"
+      },
+      "sunlight": {
+        "label": "Ensoleillement / Exposition",
+        "description": "Besoins en lumière"
+      },
+      "temperatureMax": {
+        "label": "Température max. (°C)",
+        "description": "Température maximale tolérée"
+      },
+      "temperatureMin": {
+        "label": "Température min. (°C)",
+        "description": "Température minimale tolérée"
+      },
+      "temperatureIdeal": {
+        "label": "Température idéale (°C)",
+        "description": "Température idéale de croissance"
+      },
+      "wateringSchedules": {
+        "label": "Calendrier d'arrosage",
+        "description": "Arrosage global ou saisonnier (chaud/froid)"
+      },
+      "wateringType": {
+        "label": "Type d'arrosage",
+        "description": "Méthodes d'arrosage préférées"
+      },
+      "hygrometry": {
+        "label": "Humidité (%)",
+        "description": "Taux d'humidité préféré (0–100)"
+      },
+      "mistingFrequency": {
+        "label": "Brumisation (par semaine)",
+        "description": "Nombre de brumisations par semaine"
+      },
+      "specialNeeds": {
+        "label": "Besoins spéciaux",
+        "description": "Exigences de soin particulières"
+      },
+      "substrate": {
+        "label": "Substrat",
+        "description": "Substrats / types de sol adaptés"
+      },
+      "substrateMix": {
+        "label": "Mélange de substrat",
+        "description": "Noms de mélanges de substrat spéciaux"
+      },
+      "soilAdvice": {
+        "label": "Conseils sur le sol",
+        "description": "Texte de conseils sur le substrat / sol"
+      },
+      "mulchingNeeded": {
+        "label": "Paillage nécessaire ?",
+        "description": "Le paillage est-il recommandé ?"
+      },
+      "mulchType": {
+        "label": "Type de paillage",
+        "description": "Types de paillage recommandés"
+      },
+      "mulchAdvice": {
+        "label": "Conseils de paillage",
+        "description": "Guide de paillage"
+      },
+      "nutritionNeed": {
+        "label": "Besoins nutritifs",
+        "description": "Besoins nutritionnels essentiels"
+      },
+      "fertilizer": {
+        "label": "Engrais",
+        "description": "Types d'engrais recommandés"
+      },
+      "fertilizerAdvice": {
+        "label": "Conseils sur l'engrais",
+        "description": "Calendrier et conseils de fertilisation"
+      },
+      "sowingMonth": {
+        "label": "Mois de semis",
+        "description": "Meilleurs mois pour semer"
+      },
+      "floweringMonth": {
+        "label": "Mois de floraison",
+        "description": "Mois où la plante fleurit"
+      },
+      "fruitingMonth": {
+        "label": "Mois de fructification",
+        "description": "Mois où la plante fructifie"
+      },
+      "heightCm": {
+        "label": "Hauteur (cm)",
+        "description": "Hauteur à maturité en centimètres"
+      },
+      "wingspanCm": {
+        "label": "Envergure / Largeur (cm)",
+        "description": "Envergure à maturité en centimètres"
+      },
+      "separationCm": {
+        "label": "Espacement (cm)",
+        "description": "Distance recommandée entre deux plants"
+      },
+      "staking": {
+        "label": "Tuteurage nécessaire ?",
+        "description": "La plante a-t-elle besoin d'un tuteur ?"
+      },
+      "stakingAdvice": {
+        "label": "Conseils de tuteurage",
+        "description": "Type de support et méthode de tuteurage"
+      },
+      "division": {
+        "label": "Division / Multiplication",
+        "description": "Comment multiplier la plante"
+      },
+      "cultivationMode": {
+        "label": "Mode de culture",
+        "description": "Type de configuration de culture"
+      },
+      "sowingMethod": {
+        "label": "Méthode de semis",
+        "description": "Comment semer les graines"
+      },
+      "transplanting": {
+        "label": "Repiquage ?",
+        "description": "La plante nécessite-t-elle un repiquage ?"
+      },
+      "transplantingTime": {
+        "label": "Période de repiquage",
+        "description": "Quand repiquer (ex. après 4 vraies feuilles)"
+      },
+      "outdoorPlantingTime": {
+        "label": "Période de plantation en extérieur",
+        "description": "Quand planter en extérieur"
+      },
+      "sowingAdvice": {
+        "label": "Conseils de semis",
+        "description": "Instructions de semis et plantation"
+      },
+      "pruning": {
+        "label": "Taille nécessaire ?",
+        "description": "La plante a-t-elle besoin d'être taillée ?"
+      },
+      "pruningMonth": {
+        "label": "Mois de taille",
+        "description": "Meilleurs mois pour tailler"
+      },
+      "pruningAdvice": {
+        "label": "Conseils de taille",
+        "description": "Technique et astuces de taille"
+      },
+      "pests": {
+        "label": "Ravageurs",
+        "description": "Menaces de ravageurs courants"
+      },
+      "diseases": {
+        "label": "Maladies",
+        "description": "Maladies courantes"
+      },
+      "conservationStatus": {
+        "label": "Statut de conservation (UICN)",
+        "description": "Statut de conservation UICN"
+      },
+      "ecologicalStatus": {
+        "label": "Statut écologique",
+        "description": "Étiquettes de classification écologique"
+      },
+      "biotopes": {
+        "label": "Biotopes",
+        "description": "Environnements de biotope naturels"
+      },
+      "urbanBiotopes": {
+        "label": "Biotopes urbains",
+        "description": "Environnements anthropisés / urbains"
+      },
+      "ecologicalTolerance": {
+        "label": "Tolérance écologique",
+        "description": "Tolérances environnementales"
+      },
+      "biodiversityRole": {
+        "label": "Rôle pour la biodiversité",
+        "description": "Rôle dans la biodiversité du jardin"
+      },
+      "beneficialRoles": {
+        "label": "Rôle(s) bénéfique(s)",
+        "description": "Contributions écologiques positives"
+      },
+      "harmfulRoles": {
+        "label": "Rôle(s) nuisible(s)",
+        "description": "Effets écologiques négatifs"
+      },
+      "pollinatorsAttracted": {
+        "label": "Pollinisateurs attirés",
+        "description": "Quels pollinisateurs visitent cette plante"
+      },
+      "birdsAttracted": {
+        "label": "Oiseaux attirés",
+        "description": "Oiseaux attirés par cette plante"
+      },
+      "mammalsAttracted": {
+        "label": "Mammifères attirés",
+        "description": "Mammifères attirés par cette plante"
+      },
+      "symbiosis": {
+        "label": "Symbiose",
+        "description": "Relations symbiotiques (plantes, insectes, champignons)"
+      },
+      "symbiosisNotes": {
+        "label": "Notes de symbiose",
+        "description": "Description détaillée de la symbiose"
+      },
+      "ecologicalManagement": {
+        "label": "Gestion écologique",
+        "description": "Conseils de gestion éco-responsable"
+      },
+      "ecologicalImpact": {
+        "label": "Impact écologique",
+        "description": "Impact écologique global"
+      },
+      "nutritionalValue": {
+        "label": "Valeur nutritionnelle",
+        "description": "Informations nutritionnelles pour les plantes comestibles"
+      },
+      "infusionParts": {
+        "label": "Partie(s) pour infusion",
+        "description": "Quelles parties utiliser en infusion"
+      },
+      "infusionBenefits": {
+        "label": "Bienfaits de l'infusion",
+        "description": "Bienfaits pour la santé de l'infusion / tisane"
+      },
+      "infusionRecipeIdeas": {
+        "label": "Idées de recettes d'infusion",
+        "description": "Suggestions de recettes de tisane / infusion"
+      },
+      "medicinalBenefits": {
+        "label": "Bienfaits médicinaux",
+        "description": "Bienfaits pour la santé"
+      },
+      "medicinalUsage": {
+        "label": "Usage médical",
+        "description": "Comment utiliser à des fins médicinales"
+      },
+      "medicinalWarning": {
+        "label": "Avertissement / Sécurité",
+        "description": "Sécurité : recommandé aujourd'hui ou usage historique uniquement ?"
+      },
+      "medicinalHistory": {
+        "label": "Histoire médicinale",
+        "description": "Usage historique (ex. utilisé en Chine depuis le Xe siècle)"
+      },
+      "aromatherapyBenefits": {
+        "label": "Bienfaits en aromathérapie",
+        "description": "Bienfaits pour l'aromathérapie"
+      },
+      "essentialOilBlends": {
+        "label": "Mélanges d'huiles essentielles",
+        "description": "Idées de mélanges d'huiles essentielles"
+      },
+      "edibleOil": {
+        "label": "Huile comestible ?",
+        "description": "La plante produit-elle une huile comestible ?"
+      },
+      "spiceMixes": {
+        "label": "Mélanges d'épices",
+        "description": "Utilisations en mélanges d'épices"
+      },
+      "infusionMixes": {
+        "label": "Mélanges d'infusion",
+        "description": "Nom du mélange d'infusion → bienfait"
+      },
+      "companionPlants": {
+        "label": "Plantes compagnes",
+        "description": "Bonnes associations au jardin"
+      },
+      "biotopePlants": {
+        "label": "Plantes de biotope",
+        "description": "Plantes du même biotope"
+      },
+      "beneficialPlants": {
+        "label": "Plantes bénéfiques",
+        "description": "Plantes bénéfiques pour celle-ci"
+      },
+      "harmfulPlants": {
+        "label": "Plantes nuisibles",
+        "description": "Plantes à éviter à proximité"
+      },
+      "plantTags": {
+        "label": "Étiquettes de plante",
+        "description": "Étiquettes et mots-clés de recherche"
+      },
+      "biodiversityTags": {
+        "label": "Étiquettes biodiversité",
+        "description": "Étiquettes spécifiques à la biodiversité"
+      },
+      "sources": {
+        "label": "Sources",
+        "description": "Liens de référence et citations"
+      },
+      "status": {
+        "label": "Statut",
+        "description": "Statut éditorial"
+      },
+      "adminCommentary": {
+        "label": "Notes admin",
+        "description": "Notes internes pour les éditeurs"
+      },
+      "contributors": {
+        "label": "Contributeurs",
+        "description": "Personnes ayant contribué à cette fiche plante",
+        "placeholder": "Ajouter un nom"
+      }
+    },
+    "categories": {
+      "base": "Base",
+      "basics": "Base",
+      "identity": "Identité",
+      "safety": "Sécurité & Toxicité",
+      "care": "Entretien",
+      "careDetails": "Détails d'entretien",
+      "plantCare": "Entretien",
+      "growth": "Croissance",
+      "usage": "Consommation",
+      "consumption": "Consommation",
+      "ecology": "Écologie",
+      "danger": "Danger",
+      "miscellaneous": "Divers",
+      "misc": "Divers",
+      "meta": "Méta"
+    },
+    "sections": {
+      "taxonomy": "Taxonomie",
+      "presentation": "Présentation",
+      "images": "Images",
+      "originClimate": "Origine & Climat",
+      "utilityUse": "Utilité & Usage",
+      "lifecycle": "Cycle de vie & Feuillage",
+      "habitForm": "Port & Forme",
+      "colors": "Couleurs",
+      "safety": "Sécurité & Toxicité",
+      "conditions": "Conditions",
+      "temperature": "Température",
+      "watering": "Arrosage & Humidité",
+      "substrate": "Substrat & Sol",
+      "mulch": "Paillage",
+      "nutrition": "Nutrition",
+      "calendar": "Calendrier",
+      "dimensions": "Dimensions & Support",
+      "propagation": "Propagation & Culture",
+      "pruning": "Taille",
+      "conservation": "Conservation",
+      "habitats": "Habitats",
+      "toleranceRoles": "Tolérance & Rôles",
+      "wildlife": "Faune",
+      "symbiosis": "Symbiose & Gestion",
+      "infusion": "Infusion",
+      "medicinal": "Médecine",
+      "aromatherapy": "Aromathérapie",
+      "recipes": "Recettes",
+      "companionPlants": "Plantes compagnes & associées",
+      "biotopePlants": "Plantes de biotope",
+      "beneficialPlants": "Plantes bénéfiques",
+      "harmfulPlants": "Plantes nuisibles",
+      "tags": "Étiquettes"
+    },
+    "varieties": "Variétés",
+    "userReports": "Signalements utilisateurs"
+  }
+}

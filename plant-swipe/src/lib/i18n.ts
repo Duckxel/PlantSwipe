@@ -45,7 +45,8 @@ i18n
     supportedLngs: SUPPORTED_LANGUAGES,
     lng: detectInitialLanguage(), // Set initial language
     defaultNS: 'common',
-    ns: ['common', 'About', 'email', 'Landing', 'plantInfo'],
+    ns: ['common', 'About', 'email', 'Landing', 'plantInfo', 'plantAdmin'],
+    fallbackNS: 'common',
     backend: {
       loadPath: '/locales/{{lng}}/{{ns}}.json',
       queryStringParams: { v: import.meta.env.VITE_APP_VERSION || '1' },

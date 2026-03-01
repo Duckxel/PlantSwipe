@@ -232,7 +232,7 @@ const CompanionSelector: React.FC<{
   /** Language for searching (e.g., 'en', 'fr'). When not 'en', searches plant_translations. */
   language?: string;
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
   const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
@@ -654,7 +654,7 @@ const WateringScheduleEditor: React.FC<{
   wateringMode?: WateringMode
   onWateringModeChange?: (mode: WateringMode) => void
 }> = ({ value, onChange, wateringMode, onWateringModeChange }) => {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const schedules = Array.isArray(value) ? value : []
   const mode = deriveWateringMode(schedules, wateringMode)
 
@@ -1084,7 +1084,7 @@ const metaFields: FieldConfig[] = [
   { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
 ]
 
-function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'common'>) {
+function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'plantAdmin'>) {
     const value = getValue(plant, field.key)
     const id = field.key.replace(/\./g, "-")
   const translationBase = `plantAdmin.fields.${field.key}`
@@ -1940,7 +1940,7 @@ function getContrastColor(hex: string): string {
 }
 
 function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v: PlantColor[]) => void }) {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [open, setOpen] = React.useState(false)
   const [allColors, setAllColors] = React.useState<ColorWithMeta[]>([])
   const [primaryColors, setPrimaryColors] = React.useState<ColorWithMeta[]>([])
@@ -2401,7 +2401,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
 }
 
 export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
-  const { t } = useTranslation('common')
+  const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
   const [showCompanionRecommendations, setShowCompanionRecommendations] = React.useState(false)
