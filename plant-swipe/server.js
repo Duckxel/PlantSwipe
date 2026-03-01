@@ -6892,6 +6892,13 @@ async function ensureNotificationTables() {
     } catch (alterErr) {
       // Column might already exist, ignore error
     }
+    // Add test_mode / test_user_id columns (for existing tables)
+    try {
+      await sql`alter table public.notification_campaigns add column if not exists test_mode boolean not null default false;`
+      await sql`alter table public.notification_campaigns add column if not exists test_user_id uuid;`
+    } catch (alterErr) {
+      // Columns might already exist, ignore error
+    }
     await sql`create index if not exists notification_campaigns_next_run_idx on public.notification_campaigns (next_run_at) where deleted_at is null;`
     await sql`create index if not exists notification_campaigns_state_idx on public.notification_campaigns (state);`
 
@@ -7030,6 +7037,8 @@ const notificationInputSchema = z.object({
     .nullable()
     .transform((value) => (value && value.trim().length > 0 ? value.trim() : null)),
   customUserIds: z.array(z.string().uuid()).optional(),
+  testMode: z.boolean().optional().default(false),
+  testUserId: z.string().uuid().optional().nullable(),
 })
 const notificationStateSchema = z.object({
   state: z.enum(['paused', 'scheduled']),
@@ -7101,6 +7110,8 @@ const notificationCampaignInputSchema = z.object({
   customUserIds: z.array(z.string().uuid()).optional(),
 })
 
+const EMAIL_TEMPLATE_CATEGORIES = ['newsletter', 'automation', 'test', 'marketing', 'legal']
+
 const emailTemplateInputSchema = z.object({
   title: z.string().trim().min(3).max(120),
   subject: z.string().trim().min(3).max(240),
@@ -7119,6 +7130,7 @@ const emailTemplateInputSchema = z.object({
   bodyHtml: z.string().min(1),
   bodyJson: JsonValueSchema.optional().nullable(),
   isActive: z.boolean().optional(),
+  category: z.enum(['newsletter', 'automation', 'test', 'marketing', 'legal']).optional().default('newsletter'),
 })
 
 const emailCampaignInputSchema = z.object({
@@ -7147,6 +7159,7 @@ const emailCampaignInputSchema = z.object({
   testEmail: z.string().email().optional().nullable(),
   isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
   targetRoles: z.array(z.string().trim().min(1).max(50)).max(20).optional().default([]), // Empty = all users, non-empty = only users with ANY of these roles
+  category: z.enum(['newsletter', 'automation', 'test', 'marketing', 'legal']).optional().default('newsletter'),
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -8651,8 +8664,12 @@ app.post('/api/admin/notifications', async (req, res) => {
     plannedFor,
     scheduleStartAt,
   })
-  const audience = parsed.audience
-  const customIds = audience === 'custom' ? parsed.customUserIds || [] : []
+  const testMode = parsed.testMode === true
+  const testUserId = testMode && parsed.testUserId ? parsed.testUserId : null
+  const audience = testMode ? 'custom' : parsed.audience
+  const customIds = testMode && testUserId
+    ? [testUserId]
+    : audience === 'custom' ? parsed.customUserIds || [] : []
   const scheduleInterval = deliveryMode === 'scheduled' ? parsed.scheduleInterval || 'daily' : null
   const timezone = campaignTimezone
   const state = deliveryMode === 'scheduled' ? 'scheduled' : 'draft'
@@ -8663,7 +8680,8 @@ app.post('/api/admin/notifications', async (req, res) => {
       insert into public.notification_campaigns (
         title, description, delivery_mode, state, audience, filters, message_variants,
         randomize, timezone, planned_for, schedule_start_at, schedule_interval, cta_url,
-        custom_user_ids, template_id, run_count, created_by, updated_by, next_run_at, created_at, updated_at
+        custom_user_ids, template_id, run_count, created_by, updated_by, next_run_at,
+        test_mode, test_user_id, created_at, updated_at
       )
       values (
         ${parsed.title.trim()},
@@ -8685,6 +8703,8 @@ app.post('/api/admin/notifications', async (req, res) => {
         ${adminUuid},
         ${adminUuid},
         ${nextRunAt},
+        ${testMode},
+        ${testUserId},
         now(),
         now()
       )
@@ -10388,12 +10408,13 @@ app.post('/api/admin/email-templates', async (req, res) => {
     parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
   const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
   const isActive = parsed.isActive !== false
+  const category = parsed.category || 'newsletter'
   const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       insert into public.admin_email_templates (
         title, subject, description, preview_text, body_html, body_json, variables,
-        is_active, created_by, updated_by, created_at, updated_at
+        is_active, category, created_by, updated_by, created_at, updated_at
       )
       values (
         ${parsed.title},
@@ -10404,6 +10425,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
         ${bodyJsonFragment},
         ${variables},
         ${isActive},
+        ${category},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10456,6 +10478,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
     const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
     const isActive =
       parsed.isActive === undefined ? current.is_active !== false : parsed.isActive
+    const category = parsed.category || current.category || 'newsletter'
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10468,6 +10491,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
           body_json = ${bodyJsonFragment},
           variables = ${variables},
           is_active = ${isActive},
+          category = ${category},
           updated_by = ${adminUuid},
           updated_at = now()
       where id = ${templateId}
@@ -10625,6 +10649,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
     const isMarketing = parsed.isMarketing === true
     const targetRoles = Array.isArray(parsed.targetRoles) ? parsed.targetRoles.filter(r => typeof r === 'string' && r.length) : []
+    const campaignCategory = parsed.category || template.category || 'newsletter'
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10648,6 +10673,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         test_email,
         is_marketing,
         target_roles,
+        category,
         created_by,
         updated_by,
         created_at,
@@ -10673,6 +10699,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${testEmail},
         ${isMarketing},
         ${targetRoles},
+        ${campaignCategory},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10979,6 +11006,7 @@ function normalizeEmailTemplateRow(row) {
     variables,
     isActive: row.is_active !== false,
     version: Number(row.version || 1),
+    category: row.category || 'newsletter',
     lastUsedAt: row.last_used_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -11018,6 +11046,7 @@ function normalizeEmailCampaignRow(row) {
     testEmail: row.test_email || null,
     isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
     targetRoles: Array.isArray(row.target_roles) ? row.target_roles : [],
+    category: row.category || 'newsletter',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -11052,6 +11081,24 @@ const DEFAULT_EMAIL_TRIGGERS = [
     triggerType: 'FORGOT_PASSWORD',
     displayName: 'Forgot Password Magic Link',
     description: 'Sent when a user requests a password reset via magic link. The link logs the user in and redirects to the password change page. Variables: {{url}}, {{user}}, {{email}}',
+  },
+  // Account Deletion Confirmation
+  {
+    triggerType: 'ACCOUNT_DELETION',
+    displayName: 'Account Deletion Confirmation',
+    description: 'Sent when a user deletes their account. Variables: {{user}}, {{email}}',
+  },
+  // Friend Request Reminder (1 day after unanswered)
+  {
+    triggerType: 'FRIEND_REQUEST_REMINDER',
+    displayName: 'Friend Request Reminder',
+    description: 'Sent 1 day after a friend request if it has not been answered. Variables: {{user}}, {{sender}}',
+  },
+  // Garden Invite Reminder (1 day after unanswered)
+  {
+    triggerType: 'GARDEN_INVITE_REMINDER',
+    displayName: 'Garden Invite Reminder',
+    description: 'Sent 1 day after a garden invitation if it has not been answered. Variables: {{user}}, {{sender}}',
   },
 ]
 
@@ -11246,7 +11293,7 @@ app.put('/api/admin/email-triggers/:id', async (req, res) => {
   }
 })
 
-async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage }) {
+async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayName, userLanguage, extraContext = {}, skipDedup = false }) {
   const apiKey = process.env.RESEND_API_KEY || process.env.VITE_RESEND_API_KEY
   if (!apiKey) {
     console.error('[sendAutomaticEmail] No Resend API key configured')
@@ -11282,15 +11329,17 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       return { sent: false, reason: 'Trigger is disabled' }
     }
 
-    const existingSend = await sql`
-      select id from public.admin_automatic_email_sends
-      where trigger_type = ${triggerType} and user_id = ${userId}
-      limit 1
-    `
+    if (!skipDedup) {
+      const existingSend = await sql`
+        select id from public.admin_automatic_email_sends
+        where trigger_type = ${triggerType} and user_id = ${userId}
+        limit 1
+      `
 
-    if (existingSend && existingSend.length > 0) {
-      console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
-      return { sent: false, reason: 'Already sent to this user' }
+      if (existingSend && existingSend.length > 0) {
+        console.log(`[sendAutomaticEmail] Already sent "${triggerType}" to user ${userId}`)
+        return { sent: false, reason: 'Already sent to this user' }
+      }
     }
 
     if (!trigger.template_id) {
@@ -11325,6 +11374,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
       random: randomStr,
       url: websiteUrl.replace(/^https?:\/\//, ''),
       code: 'XXXXXX',
+      ...extraContext,
     }
     // Do not escape values in subject (email clients handle text subjects)
     const subject = replaceTemplateVariables(rawSubject, context, false)
@@ -11362,13 +11412,15 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
     const resendData = await resendResponse.json().catch(() => ({}))
     console.log(`[sendAutomaticEmail] Sent "${triggerType}" to ${userEmail}, Resend ID: ${resendData.id || 'unknown'}`)
 
-    try {
-      await sql`
-        insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
-        values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
-      `
-    } catch (logErr) {
-      console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
+    if (!skipDedup) {
+      try {
+        await sql`
+          insert into public.admin_automatic_email_sends (trigger_type, user_id, template_id, status)
+          values (${triggerType}, ${userId}, ${trigger.template_id}, 'sent')
+        `
+      } catch (logErr) {
+        console.warn('[sendAutomaticEmail] Failed to log send:', logErr?.message || logErr)
+      }
     }
 
     return { sent: true, resendId: resendData.id || null, trigger }
@@ -17698,6 +17750,27 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     }
     const userId = user.id
 
+    // Send account deletion confirmation email BEFORE deleting data
+    try {
+      let displayName = 'User'
+      let userLang = 'en'
+      if (sql) {
+        const profileRows = await sql`select display_name, language from public.profiles where id = ${userId} limit 1`
+        if (profileRows?.[0]) {
+          displayName = profileRows[0].display_name || displayName
+          userLang = profileRows[0].language || userLang
+        }
+      }
+      await sendAutomaticEmail('ACCOUNT_DELETION', {
+        userId,
+        userEmail: user.email,
+        userDisplayName: displayName,
+        userLanguage: userLang,
+      })
+    } catch (emailErr) {
+      console.warn('[account-delete-gdpr] Failed to send deletion confirmation email:', emailErr?.message || emailErr)
+    }
+
     // Log the deletion request for GDPR audit
     await logGdprAccess(userId, 'ACCOUNT_DELETION_STARTED', { userId: userId.slice(0, 8) + '...' }, req)
 
@@ -18571,6 +18644,101 @@ cron.schedule('0 3 * * *', async () => {
   }
 
   console.log('[gdpr] Data retention cleanup completed')
+})
+
+// ========== REMINDER EMAIL CRON (friend requests & garden invites older than 1 day) ==========
+cron.schedule('0 */3 * * *', async () => {
+  if (!sql) return
+  console.log('[reminder-emails] Checking for pending friend requests and garden invites...')
+
+  // --- Friend Request Reminders ---
+  try {
+    await ensureDefaultEmailTriggers()
+    const pendingRequests = await sql`
+      select fr.id, fr.requester_id, fr.recipient_id,
+             req_p.display_name as requester_name,
+             rec_p.display_name as recipient_name,
+             rec_p.language as recipient_language,
+             u.email as recipient_email
+      from public.friend_requests fr
+      join public.profiles req_p on req_p.id = fr.requester_id
+      join public.profiles rec_p on rec_p.id = fr.recipient_id
+      join auth.users u on u.id = fr.recipient_id
+      where fr.status = 'pending'
+        and fr.created_at < now() - interval '1 day'
+        and fr.reminder_email_sent = false
+      limit 50
+    `
+
+    let sentCount = 0
+    for (const req of pendingRequests) {
+      try {
+        const senderRaw = req.requester_name || 'Someone'
+        const senderCap = senderRaw.charAt(0).toUpperCase() + senderRaw.slice(1).toLowerCase()
+        const result = await sendAutomaticEmail('FRIEND_REQUEST_REMINDER', {
+          userId: req.recipient_id,
+          userEmail: req.recipient_email,
+          userDisplayName: req.recipient_name || 'User',
+          userLanguage: req.recipient_language || 'en',
+          extraContext: { sender: senderCap },
+          skipDedup: true,
+        })
+        if (result.sent) {
+          await sql`update public.friend_requests set reminder_email_sent = true where id = ${req.id}`
+          sentCount++
+        }
+      } catch (e) {
+        console.warn('[reminder-emails] Failed to send friend request reminder:', e?.message)
+      }
+    }
+    if (sentCount > 0) console.log(`[reminder-emails] Sent ${sentCount} friend request reminders`)
+  } catch (err) {
+    console.error('[reminder-emails] Friend request reminder cron failed:', err?.message)
+  }
+
+  // --- Garden Invite Reminders ---
+  try {
+    const pendingInvites = await sql`
+      select gi.id, gi.inviter_id, gi.invitee_id,
+             inv_p.display_name as inviter_name,
+             ive_p.display_name as invitee_name,
+             ive_p.language as invitee_language,
+             u.email as invitee_email
+      from public.garden_invites gi
+      join public.profiles inv_p on inv_p.id = gi.inviter_id
+      join public.profiles ive_p on ive_p.id = gi.invitee_id
+      join auth.users u on u.id = gi.invitee_id
+      where gi.status = 'pending'
+        and gi.created_at < now() - interval '1 day'
+        and gi.reminder_email_sent = false
+      limit 50
+    `
+
+    let sentCount = 0
+    for (const inv of pendingInvites) {
+      try {
+        const senderRaw = inv.inviter_name || 'Someone'
+        const senderCap = senderRaw.charAt(0).toUpperCase() + senderRaw.slice(1).toLowerCase()
+        const result = await sendAutomaticEmail('GARDEN_INVITE_REMINDER', {
+          userId: inv.invitee_id,
+          userEmail: inv.invitee_email,
+          userDisplayName: inv.invitee_name || 'User',
+          userLanguage: inv.invitee_language || 'en',
+          extraContext: { sender: senderCap },
+          skipDedup: true,
+        })
+        if (result.sent) {
+          await sql`update public.garden_invites set reminder_email_sent = true where id = ${inv.id}`
+          sentCount++
+        }
+      } catch (e) {
+        console.warn('[reminder-emails] Failed to send garden invite reminder:', e?.message)
+      }
+    }
+    if (sentCount > 0) console.log(`[reminder-emails] Sent ${sentCount} garden invite reminders`)
+  } catch (err) {
+    console.error('[reminder-emails] Garden invite reminder cron failed:', err?.message)
+  }
 })
 
 // ========== END GDPR COMPLIANCE ENDPOINTS ==========
@@ -24249,8 +24417,10 @@ app.post('/api/admin/email-templates', async (req, res) => {
 
     const {
       id, title, subject, description, previewText,
-      bodyHtml, bodyJson, variables, isActive
+      bodyHtml, bodyJson, variables, isActive, category
     } = req.body
+
+    const cat = EMAIL_TEMPLATE_CATEGORIES.includes(category) ? category : 'newsletter'
 
     let result
     if (id) {
@@ -24265,6 +24435,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
           body_json = ${bodyJson},
           variables = ${variables},
           is_active = ${isActive},
+          category = ${cat},
           updated_at = now(),
           version = version + 1
         where id = ${id}
@@ -24274,11 +24445,11 @@ app.post('/api/admin/email-templates', async (req, res) => {
       // Create new
       result = await sql`
         insert into public.admin_email_templates (
-          title, subject, description, preview_text, 
-          body_html, body_json, variables, is_active
+          title, subject, description, preview_text,
+          body_html, body_json, variables, is_active, category
         ) values (
           ${title}, ${subject}, ${description}, ${previewText},
-          ${bodyHtml}, ${bodyJson}, ${variables}, ${isActive}
+          ${bodyHtml}, ${bodyJson}, ${variables}, ${isActive}, ${cat}
         )
         returning id
       `
@@ -27550,6 +27721,8 @@ function normalizeNotificationCampaign(row) {
     createdAt: isoOrNull(row.created_at),
     updatedAt: isoOrNull(row.updated_at),
     estimatedRecipients: Number(row.estimated_recipients || row.recipient_count || 0),
+    testMode: row.test_mode === true,
+    testUserId: row.test_user_id || null,
     stats,
   }
 }

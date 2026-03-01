@@ -3,8 +3,8 @@ import "./AdminEmailsPanel.css"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
+import { ScrollingTitle } from "@/components/ui/scrolling-title"
 import { TimezoneSelect } from "@/components/ui/timezone-select"
 import {
   Plus,
@@ -26,6 +26,12 @@ import {
   Zap,
   Shield,
   Check,
+  AlertTriangle,
+  Settings,
+  Wrench,
+  Megaphone,
+  Landmark,
+  ArrowUpDown,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -98,6 +104,35 @@ const TRIGGER_VARIABLES: Record<string, {
       { token: '{{url}}', description: 'Magic link URL to reset password', required: true },
     ]
   },
+  // Account Deletion
+  ACCOUNT_DELETION: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "User's display name", required: true },
+      { token: '{{email}}', description: "User's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Friend Request Reminder
+  FRIEND_REQUEST_REMINDER: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "Recipient's display name (who received the friend request)", required: true },
+      { token: '{{sender}}', description: "Sender's display name (who sent the friend request)", required: true },
+      { token: '{{email}}', description: "Recipient's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
+  // Garden Invite Reminder
+  GARDEN_INVITE_REMINDER: {
+    category: 'general',
+    variables: [
+      { token: '{{user}}', description: "Invitee's display name (who received the garden invite)", required: true },
+      { token: '{{sender}}', description: "Inviter's display name (who sent the garden invite)", required: true },
+      { token: '{{email}}', description: "Invitee's email address" },
+      { token: '{{url}}', description: 'Website URL' },
+    ]
+  },
 }
 
 // Get category badge color
@@ -112,6 +147,8 @@ const getCategoryConfig = (category: 'general' | 'security' | 'marketing') => {
   }
 }
 
+type EmailTemplateCategory = 'newsletter' | 'automation' | 'test' | 'marketing' | 'legal'
+
 type EmailTemplate = {
   id: string
   title: string
@@ -123,11 +160,30 @@ type EmailTemplate = {
   variables: string[]
   isActive: boolean
   version: number
+  category: EmailTemplateCategory
   lastUsedAt: string | null
   campaignCount: number
   createdAt: string
   updatedAt: string
 }
+
+const TEMPLATE_CATEGORY_CONFIG: Record<EmailTemplateCategory, { Icon: React.ElementType; text: string; bg: string; gradient: string }> = {
+  newsletter: { Icon: FileText, text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30', gradient: 'from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30' },
+  automation: { Icon: Settings, text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', gradient: 'from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30' },
+  test: { Icon: Wrench, text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30', gradient: 'from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30' },
+  marketing: { Icon: Megaphone, text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30', gradient: 'from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30' },
+  legal: { Icon: Landmark, text: 'text-stone-600 dark:text-stone-400', bg: 'bg-stone-100 dark:bg-stone-800', gradient: 'from-stone-100 to-stone-200 dark:from-stone-800/50 dark:to-stone-900/50' },
+}
+
+const CATEGORY_SORT_ORDER: Record<EmailTemplateCategory, number> = {
+  newsletter: 0,
+  automation: 1,
+  test: 2,
+  marketing: 3,
+  legal: 4,
+}
+
+type TemplateSortMode = 'updated' | 'category'
 
 type EmailCampaign = {
   id: string
@@ -149,8 +205,9 @@ type EmailCampaign = {
   sendCompletedAt: string | null
   testMode: boolean
   testEmail: string | null
-  isMarketing: boolean // If true, only users with marketing_consent=true receive this
-  targetRoles: string[] // Empty = all users, non-empty = only users with ANY of these roles
+  isMarketing: boolean
+  targetRoles: string[]
+  category: EmailTemplateCategory
   createdAt: string
   updatedAt: string
 }
@@ -268,8 +325,9 @@ export const AdminEmailsPanel: React.FC = () => {
     previewText: "",
     testMode: false,
     testEmail: "dev@aphylia.app",
-    isMarketing: false, // If true, only send to users with marketing_consent=true
-    targetRoles: [] as string[], // Empty = all users, non-empty = only users with ANY of these roles
+    isMarketing: false,
+    targetRoles: [] as string[],
+    category: "newsletter" as EmailTemplateCategory,
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -285,21 +343,46 @@ export const AdminEmailsPanel: React.FC = () => {
       : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState("")
-  
+  const [templateSort, setTemplateSort] = React.useState<TemplateSortMode>('category')
+  const [confirmDelete, setConfirmDelete] = React.useState<EmailTemplate | null>(null)
+  const [confirmDuplicate, setConfirmDuplicate] = React.useState<EmailTemplate | null>(null)
+  const [actionLoading, setActionLoading] = React.useState(false)
+
   // Automatic email triggers state
   const [triggers, setTriggers] = React.useState<EmailTrigger[]>([])
   const [loadingTriggers, setLoadingTriggers] = React.useState(false)
   const [savingTrigger, setSavingTrigger] = React.useState<string | null>(null)
 
-  // Filter templates based on search query
+  // Filter and sort templates
   const filteredTemplates = React.useMemo(() => {
-    if (!templateSearch.trim()) return templates
-    const query = templateSearch.toLowerCase()
-    return templates.filter(t => 
-      t.title.toLowerCase().includes(query) || 
-      t.subject.toLowerCase().includes(query)
-    )
-  }, [templates, templateSearch])
+    let result = templates
+    if (templateSearch.trim()) {
+      const query = templateSearch.toLowerCase()
+      result = result.filter(t =>
+        t.title.toLowerCase().includes(query) ||
+        t.subject.toLowerCase().includes(query)
+      )
+    }
+    if (templateSort === 'category') {
+      result = [...result].sort((a, b) => {
+        const orderA = CATEGORY_SORT_ORDER[a.category] ?? 99
+        const orderB = CATEGORY_SORT_ORDER[b.category] ?? 99
+        if (orderA !== orderB) return orderA - orderB
+        return a.title.localeCompare(b.title)
+      })
+    }
+    return result
+  }, [templates, templateSearch, templateSort])
+
+  // Templates sorted by category for SearchItem dropdowns
+  const categorySortedTemplates = React.useMemo(() => {
+    return [...templates].sort((a, b) => {
+      const orderA = CATEGORY_SORT_ORDER[a.category] ?? 99
+      const orderB = CATEGORY_SORT_ORDER[b.category] ?? 99
+      if (orderA !== orderB) return orderA - orderB
+      return a.title.localeCompare(b.title)
+    })
+  }, [templates])
 
   const loadTemplates = React.useCallback(async () => {
     setLoadingTemplates(true)
@@ -416,6 +499,7 @@ export const AdminEmailsPanel: React.FC = () => {
         testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
         isMarketing: campaignForm.isMarketing,
         targetRoles: campaignForm.targetRoles,
+        category: campaignForm.category,
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -436,6 +520,7 @@ export const AdminEmailsPanel: React.FC = () => {
         testEmail: "dev@aphylia.app",
         isMarketing: false,
         targetRoles: [],
+        category: "newsletter",
       })
       setDialogOpen(false)
       loadCampaigns().catch(() => {})
@@ -516,7 +601,7 @@ export const AdminEmailsPanel: React.FC = () => {
 
   const handleDeleteTemplate = React.useCallback(
     async (template: EmailTemplate) => {
-      if (!window.confirm(`Delete template "${template.title}"?`)) return
+      setActionLoading(true)
       try {
         const headers = await buildAdminHeaders()
         const resp = await fetch(`/api/admin/email-templates/${encodeURIComponent(template.id)}`, {
@@ -526,9 +611,12 @@ export const AdminEmailsPanel: React.FC = () => {
         })
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to delete template")
+        setConfirmDelete(null)
         loadTemplates().catch(() => {})
       } catch (err) {
         alert((err as Error).message)
+      } finally {
+        setActionLoading(false)
       }
     },
     [loadTemplates],
@@ -536,6 +624,7 @@ export const AdminEmailsPanel: React.FC = () => {
 
   const handleDuplicateTemplate = React.useCallback(
     async (template: EmailTemplate) => {
+      setActionLoading(true)
       try {
         const headers = await buildAdminHeaders()
         const payload = {
@@ -547,21 +636,23 @@ export const AdminEmailsPanel: React.FC = () => {
           bodyJson: template.bodyJson,
           isActive: template.isActive,
         }
-        
+
         const resp = await fetch("/api/admin/email-templates", {
           method: "POST",
           headers,
           credentials: "same-origin",
           body: JSON.stringify(payload),
         })
-        
+
         const data = await resp.json().catch(() => ({}))
         if (!resp.ok) throw new Error(data?.error || "Failed to duplicate template")
-        
+
+        setConfirmDuplicate(null)
         loadTemplates().catch(() => {})
-        alert(`Template duplicated as "${payload.title}"`)
       } catch (err) {
         alert((err as Error).message)
+      } finally {
+        setActionLoading(false)
       }
     },
     [loadTemplates],
@@ -929,27 +1020,32 @@ export const AdminEmailsPanel: React.FC = () => {
                             <Label className="text-xs font-medium text-stone-600 dark:text-stone-400">
                               Email Template
                             </Label>
-                            <Select
-                              value={trigger.templateId || ""}
-                              onChange={(e) => {
-                                const newTemplateId = e.target.value || null
-                                handleUpdateTrigger(trigger, { templateId: newTemplateId })
+                            <SearchItem
+                              value={trigger.templateId || null}
+                              onSelect={(opt) => {
+                                handleUpdateTrigger(trigger, { templateId: opt.id })
                               }}
+                              onClear={() => {
+                                handleUpdateTrigger(trigger, { templateId: null })
+                              }}
+                              options={categorySortedTemplates.map((t) => {
+                                const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                                const CIcon = cc.Icon
+                                return {
+                                  id: t.id,
+                                  label: t.title,
+                                  description: t.subject,
+                                  meta: `v${t.version}${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
+                                  icon: <CIcon className={cn("h-4 w-4", cc.text)} />,
+                                }
+                              })}
+                              placeholder="Select a template..."
+                              title="Choose Template"
+                              description="Search and select an email template for this trigger."
+                              searchPlaceholder="Search templates..."
+                              emptyMessage={templates.length === 0 ? "No templates available. Create one first." : "No templates match your search."}
                               disabled={savingTrigger === trigger.id}
-                              className="w-full rounded-lg border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
-                            >
-                              <option value="">No template (disabled)</option>
-                              {templates.map((tpl) => (
-                                <option key={tpl.id} value={tpl.id}>
-                                  {tpl.title} (v{tpl.version})
-                                </option>
-                              ))}
-                            </Select>
-                            {trigger.templateId && trigger.templateTitle && (
-                              <p className="text-xs text-stone-500">
-                                Using: <span className="font-medium">{trigger.templateTitle}</span>
-                              </p>
-                            )}
+                            />
                             {!trigger.templateId && (
                               <p className="text-xs text-amber-600 dark:text-amber-400">
                                 ⚠️ Select a template to enable this trigger
@@ -1058,24 +1154,40 @@ export const AdminEmailsPanel: React.FC = () => {
       {/* Templates View */}
       {activeView === "templates" && (
         <div className="space-y-3 sm:space-y-4">
-          {/* Search Bar */}
+          {/* Search Bar + Sort Toggle */}
           {templates.length > 0 && (
-            <div className="relative">
-              <SearchInput
-                placeholder="Search templates..."
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                className="h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
-              />
-              {templateSearch && (
-                <button
-                  type="button"
-                  onClick={() => setTemplateSearch("")}
-                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors z-10"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <SearchInput
+                  placeholder="Search templates..."
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  className="h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
+                />
+                {templateSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTemplateSearch("")}
+                    className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors z-10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTemplateSort(prev => prev === 'updated' ? 'category' : 'updated')}
+                className={cn(
+                  "flex items-center gap-1.5 h-10 sm:h-11 px-3 rounded-xl border text-xs sm:text-sm font-medium transition-all whitespace-nowrap",
+                  templateSort === 'category'
+                    ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                    : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                )}
+                title={templateSort === 'category' ? 'Sorted by category' : 'Sorted by last update'}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{templateSort === 'category' ? 'Category' : 'Updated'}</span>
+              </button>
             </div>
           )}
 
@@ -1115,64 +1227,87 @@ export const AdminEmailsPanel: React.FC = () => {
             </div>
           ) : (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredTemplates.map((template) => (
+              {filteredTemplates.map((template, idx) => {
+                const catConfig = TEMPLATE_CATEGORY_CONFIG[template.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                const CatIcon = catConfig.Icon
+                const showCategoryHeader = templateSort === 'category' && (
+                  idx === 0 || filteredTemplates[idx - 1].category !== template.category
+                )
+                const categoryLabel = template.category.charAt(0).toUpperCase() + template.category.slice(1)
+                return (
+                <React.Fragment key={template.id}>
+                {showCategoryHeader && (
+                  <div className="col-span-full flex items-center gap-2 pt-2 first:pt-0">
+                    <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", catConfig.bg)}>
+                      <CatIcon className={cn("h-3.5 w-3.5", catConfig.text)} />
+                    </div>
+                    <span className="text-xs sm:text-sm font-semibold text-stone-700 dark:text-stone-300">{categoryLabel}</span>
+                    <div className="flex-1 h-px bg-stone-200 dark:bg-[#3e3e42]" />
+                  </div>
+                )}
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
-                  className="group relative rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 sm:p-5 cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5"
+                  className="group relative flex flex-col rounded-xl sm:rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] cursor-pointer transition-all hover:border-emerald-300 dark:hover:border-emerald-800 hover:shadow-xl hover:shadow-emerald-500/10 sm:hover:-translate-y-0.5"
                 >
                   {/* Preview gradient */}
                   <div className="absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
-                      <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                        {template.title}
-                      </h3>
-                      <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
-                        {template.subject}
-                      </p>
-                    </div>
 
-                    <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-                  </div>
-
-                  <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
-                    <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
-                      <span>v{template.version}</span>
-                      <span>Used {template.campaignCount}×</span>
-                    </div>
-                    
-                    {template.variables?.length > 0 && (
-                      <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
-                        {template.variables.slice(0, 3).map((variable) => (
-                          <span 
-                            key={variable} 
-                            className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 font-mono"
-                          >
-                            {variable}
-                          </span>
-                        ))}
-                        {template.variables.length > 3 && (
-                          <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
-                            +{template.variables.length - 3}
-                          </span>
-                        )}
+                  {/* Card body */}
+                  <div className="flex-1 p-4 sm:p-5">
+                    <div className="flex items-start gap-3 sm:gap-4">
+                      <div className={cn("flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br flex items-center justify-center", catConfig.gradient)}>
+                        <CatIcon className={cn("h-4 w-4 sm:h-5 sm:w-5", catConfig.text)} />
                       </div>
-                    )}
+
+                      <div className="flex-1 min-w-0">
+                        <ScrollingTitle
+                          as="h3"
+                          className="font-semibold text-stone-900 dark:text-white text-sm sm:text-base group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors"
+                        >
+                          {template.title}
+                        </ScrollingTitle>
+                        <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 truncate mt-0.5">
+                          {template.subject}
+                        </p>
+                      </div>
+
+                      <ChevronRight className="h-4 w-4 sm:h-5 sm:w-5 text-stone-300 dark:text-stone-600 group-hover:text-emerald-500 group-hover:translate-x-0.5 transition-all flex-shrink-0" />
+                    </div>
+
+                    <div className="mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                      <div className="flex items-center justify-between text-[10px] sm:text-xs text-stone-500 dark:text-stone-400">
+                        <span>v{template.version}</span>
+                        <span>Used {template.campaignCount}×</span>
+                      </div>
+
+                      {template.variables?.length > 0 && (
+                        <div className="flex flex-wrap gap-1 sm:gap-1.5 mt-2 sm:mt-3">
+                          {template.variables.slice(0, 3).map((variable) => (
+                            <span
+                              key={variable}
+                              className="px-1.5 sm:px-2 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] sm:text-xs text-stone-600 dark:text-stone-400 font-mono"
+                            >
+                              {variable}
+                            </span>
+                          ))}
+                          {template.variables.length > 3 && (
+                            <span className="px-1.5 sm:px-2 py-0.5 text-[10px] sm:text-xs text-stone-400">
+                              +{template.variables.length - 3}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Action buttons - Always visible on mobile, hover on desktop */}
-                  <div className="flex items-center justify-end gap-1 mt-3 pt-2 border-t border-stone-100 dark:border-[#2a2a2d] sm:border-0 sm:mt-0 sm:pt-0 sm:absolute sm:top-3 sm:right-3 sm:opacity-0 sm:group-hover:opacity-100 transition-all">
+                  {/* Action buttons - pinned to bottom-right */}
+                  <div className="flex items-center justify-end gap-1 px-3 sm:px-4 pb-3 sm:pb-4 pt-0">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDuplicateTemplate(template)
+                        setConfirmDuplicate(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 transition-all"
                       title="Duplicate template"
@@ -1183,7 +1318,7 @@ export const AdminEmailsPanel: React.FC = () => {
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation()
-                        handleDeleteTemplate(template)
+                        setConfirmDelete(template)
                       }}
                       className="p-1.5 sm:p-2 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 transition-all"
                       title="Delete template"
@@ -1192,11 +1327,70 @@ export const AdminEmailsPanel: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              ))}
+                </React.Fragment>
+                )
+              })}
             </div>
           )}
         </div>
       )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={!!confirmDelete} onOpenChange={(open) => !open && setConfirmDelete(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mb-3">
+              <AlertTriangle className="h-6 w-6 text-red-600 dark:text-red-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Delete Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              Are you sure you want to delete <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDelete?.title}"</span>? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDelete(null)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1 rounded-xl"
+              disabled={actionLoading}
+              onClick={() => confirmDelete && handleDeleteTemplate(confirmDelete)}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Trash2 className="h-4 w-4 mr-2" />}
+              Delete
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Confirmation Dialog */}
+      <Dialog open={!!confirmDuplicate} onOpenChange={(open) => !open && setConfirmDuplicate(null)}>
+        <DialogContent className="w-[calc(100vw-2rem)] max-w-md border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] rounded-2xl">
+          <DialogHeader>
+            <div className="mx-auto w-12 h-12 rounded-full bg-sky-100 dark:bg-sky-900/30 flex items-center justify-center mb-3">
+              <Copy className="h-6 w-6 text-sky-600 dark:text-sky-400" />
+            </div>
+            <DialogTitle className="text-center text-lg font-bold text-stone-900 dark:text-white">Duplicate Template</DialogTitle>
+            <DialogDescription className="text-center text-sm text-stone-500 dark:text-stone-400 mt-1">
+              This will create a copy of <span className="font-semibold text-stone-700 dark:text-stone-200">"{confirmDuplicate?.title}"</span> as <span className="font-mono text-xs bg-stone-100 dark:bg-[#2a2a2d] px-1.5 py-0.5 rounded">"{confirmDuplicate?.title}_copy"</span>.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex flex-col-reverse sm:flex-row gap-2 mt-2">
+            <Button variant="outline" className="flex-1 rounded-xl" onClick={() => setConfirmDuplicate(null)} disabled={actionLoading}>
+              Cancel
+            </Button>
+            <Button
+              className="flex-1 rounded-xl bg-sky-500 hover:bg-sky-600 text-white"
+              disabled={actionLoading}
+              onClick={() => confirmDuplicate && handleDuplicateTemplate(confirmDuplicate)}
+            >
+              {actionLoading ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Copy className="h-4 w-4 mr-2" />}
+              Duplicate
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* New Campaign Dialog (centered modal) */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -1231,15 +1425,21 @@ export const AdminEmailsPanel: React.FC = () => {
                 <Label className="text-xs sm:text-sm font-medium">Email Template</Label>
                 <SearchItem
                   value={campaignForm.templateId || null}
-                  onSelect={(opt) => setCampaignForm((prev) => ({ ...prev, templateId: opt.id }))}
+                  onSelect={(opt) => {
+                    const selectedTpl = templates.find((t) => t.id === opt.id)
+                    setCampaignForm((prev) => ({ ...prev, templateId: opt.id, category: selectedTpl?.category || prev.category }))
+                  }}
                   onClear={() => setCampaignForm((prev) => ({ ...prev, templateId: "" }))}
-                  options={templates.map((t) => ({
+                  options={categorySortedTemplates.map((t) => {
+                    const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                    const CIcon = cc.Icon
+                    return {
                     id: t.id,
                     label: t.title,
                     description: t.subject,
                     meta: `v${t.version} · Used ${t.campaignCount}x${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
-                    icon: <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
-                  }))}
+                    icon: <CIcon className={cn("h-4 w-4", cc.text)} />,
+                  }})}
                   placeholder="Select a template..."
                   title="Choose Template"
                   description="Search and select an email template for this campaign."
@@ -1327,6 +1527,32 @@ export const AdminEmailsPanel: React.FC = () => {
                   placeholder="Notes for your team..."
                   className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
                 />
+              </div>
+
+              {/* Category */}
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-medium">Category</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.entries(TEMPLATE_CATEGORY_CONFIG) as [EmailTemplateCategory, typeof TEMPLATE_CATEGORY_CONFIG[EmailTemplateCategory]][]).map(([value, cfg]) => {
+                    const CIcon = cfg.Icon
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setCampaignForm((prev) => ({ ...prev, category: value }))}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                          campaignForm.category === value
+                            ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                            : "border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                        )}
+                      >
+                        <CIcon className={cn("h-3 w-3", campaignForm.category === value ? cfg.text : "")} />
+                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 

@@ -8,42 +8,7 @@ import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp, H
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { AddToBookmarkDialog } from "@/components/plant/AddToBookmarkDialog";
-
-/** Text that scrolls horizontally on hover when truncated */
-const ScrollingText: React.FC<{ children: string | undefined; className?: string }> = ({ children, className = "" }) => {
-  const textRef = useRef<HTMLDivElement>(null);
-  const [overflow, setOverflow] = useState(0);
-  const [hovering, setHovering] = useState(false);
-
-  const onEnter = useCallback(() => {
-    const el = textRef.current;
-    if (el && el.scrollWidth > el.clientWidth) {
-      setOverflow(el.scrollWidth - el.clientWidth);
-      setHovering(true);
-    }
-  }, []);
-
-  const onLeave = useCallback(() => {
-    setHovering(false);
-    setOverflow(0);
-  }, []);
-
-  return (
-    <div className="overflow-hidden" onMouseEnter={onEnter} onMouseLeave={onLeave}>
-      <div
-        ref={textRef}
-        className={`whitespace-nowrap ${hovering ? "" : "overflow-hidden text-ellipsis"} ${className}`}
-        style={hovering && overflow > 0 ? {
-          // Scale duration so text scrolls at ~40px/s — comfortable reading speed
-          animation: `scroll-text-left ${Math.max(2.5, overflow / 40 + 1.5)}s ease-in-out infinite`,
-          ["--scroll-dist" as string]: `-${overflow}px`,
-        } : undefined}
-      >
-        {children}
-      </div>
-    </div>
-  );
-};
+import { ScrollingTitle } from "@/components/ui/scrolling-title";
 
 interface SearchPageProps {
   plants: Plant[];
@@ -236,11 +201,11 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
                   <div className="flex-1 min-w-0 space-y-0.5">
-                    <ScrollingText className="font-semibold text-sm">{p.name}</ScrollingText>
-                    <ScrollingText className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
-                    {p.family && <ScrollingText className="text-[10px] opacity-50">{p.family}</ScrollingText>}
+                    <ScrollingTitle className="font-semibold text-sm">{p.name}</ScrollingTitle>
+                    <ScrollingTitle className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
+                    {p.family && <ScrollingTitle className="text-[10px] opacity-50">{p.family}</ScrollingTitle>}
                     {p.variety && (
-                      <ScrollingText className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingText>
+                      <ScrollingTitle className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingTitle>
                     )}
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
@@ -302,11 +267,11 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 <div className="p-4 flex flex-col h-full min-w-0">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1 space-y-0.5">
-                      <ScrollingText className="font-semibold text-lg">{p.name}</ScrollingText>
-                      <ScrollingText className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingText>
-                      {p.family && <ScrollingText className="text-xs opacity-50">{p.family}</ScrollingText>}
+                      <ScrollingTitle className="font-semibold text-lg">{p.name}</ScrollingTitle>
+                      <ScrollingTitle className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
+                      {p.family && <ScrollingTitle className="text-xs opacity-50">{p.family}</ScrollingTitle>}
                       {p.variety && (
-                        <ScrollingText className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingText>
+                        <ScrollingTitle className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingTitle>
                       )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">

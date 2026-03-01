@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 26, 2026
+> **Last Updated:** February 28, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Feb 28, 2026:** Added 3 new email automation triggers: `ACCOUNT_DELETION`, `FRIEND_REQUEST_REMINDER`, `GARDEN_INVITE_REMINDER`. Added `reminder_email_sent` column to `friend_requests` and `garden_invites` tables. Added server-side cron job (every 3 hours) for reminder emails. Added detailed table definitions for `friend_requests`, `garden_invites`, `admin_email_triggers`, `admin_automatic_email_sends`.
 - **Feb 27, 2026:** Added `user_action_status` table to sync profile action completion/skip state across devices. Actions marked completed are never reverted (sticky). RPCs: `mark_action_completed`, `bulk_mark_actions_completed`, `skip_action`, `unskip_action`.
 - **Feb 26, 2026:** Added `plant_type` column (single-select: plant, flower, bamboo, shrub, tree, cactus, succulent) and `watering_mode` column (always | seasonal) to `plants` table. Updated sync_parts to include both columns in CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
 - **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
@@ -37,7 +38,6 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Feb 12, 2026:** Added `plant_recipes` table with `category`, `time`, and `link` columns.
 - **Feb 10, 2026:** Added `impressions` table to track page view counts.
 - **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type.
-- **Feb 8, 2026:** Added `job`, `profile_link`, `show_country` columns to `profiles`.
 
 ### Required Extensions
 ```sql
@@ -675,6 +675,123 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
 **Time values:** `quick` (Quick and Effortless), `30_plus` (30+ minutes Meals), `slow_cooking` (Slow Cooking), `undefined`
 
+### `friend_requests`
+
+```sql
+id                  UUID PRIMARY KEY
+requester_id        UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+recipient_id        UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected'))
+reminder_email_sent BOOLEAN NOT NULL DEFAULT false  -- Whether a reminder email was sent for this request
+UNIQUE(requester_id, recipient_id)
+CHECK (requester_id <> recipient_id)
+```
+
+**RLS:** Users can SELECT requests where they are requester or recipient. INSERT only as requester (cannot target shadow-banned users). UPDATE only as recipient or admin. DELETE as either party or admin.
+
+### `garden_invites`
+
+```sql
+id                  UUID PRIMARY KEY
+garden_id           UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+inviter_id          UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+invitee_id          UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+role                TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner', 'member'))
+status              TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'declined', 'cancelled'))
+message             TEXT
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+responded_at        TIMESTAMPTZ
+reminder_email_sent BOOLEAN NOT NULL DEFAULT false  -- Whether a reminder email was sent for this invite
+UNIQUE(garden_id, invitee_id)
+CHECK (inviter_id <> invitee_id)
+```
+
+**RLS:** Users can SELECT invites where they are inviter or invitee. INSERT only as inviter who is a garden member (cannot target shadow-banned users). UPDATE as invitee or inviter. DELETE as either party or admin.
+
+### `admin_email_templates`
+
+Stores email templates used by campaigns and automated triggers.
+
+```sql
+id              UUID PRIMARY KEY
+title           TEXT NOT NULL
+subject         TEXT NOT NULL
+description     TEXT                     -- Internal notes
+preview_text    TEXT                     -- Email preview text
+body_html       TEXT NOT NULL            -- HTML body content
+body_json       JSONB                    -- Tiptap JSON document
+variables       TEXT[] DEFAULT '{}'      -- Extracted template variables (e.g. {{user}})
+is_active       BOOLEAN DEFAULT true
+version         INTEGER DEFAULT 1
+category        TEXT NOT NULL DEFAULT 'newsletter'
+                CHECK (category IN ('newsletter','automation','test','marketing','legal'))
+last_used_at    TIMESTAMPTZ
+campaign_count  INTEGER DEFAULT 0
+created_by      UUID REFERENCES profiles(id) ON DELETE SET NULL
+updated_by      UUID REFERENCES profiles(id) ON DELETE SET NULL
+created_at      TIMESTAMPTZ DEFAULT now()
+updated_at      TIMESTAMPTZ DEFAULT now()
+```
+
+**Categories:**
+
+| Category | Description | Icon |
+|----------|-------------|------|
+| `newsletter` | Regular newsletters and updates | Document (folded corner) |
+| `automation` | Automated/triggered emails | Cogwheel |
+| `test` | Test and development emails | Wrench |
+| `marketing` | Marketing and promotional emails | Megaphone |
+| `legal` | Legal notices and compliance emails | Landmark |
+
+**RLS:** Admin-only full access.
+
+### `admin_email_triggers`
+
+Configuration table for automatic email triggers (welcome emails, account deletion, reminders, etc.).
+
+```sql
+id              UUID PRIMARY KEY
+trigger_type    TEXT NOT NULL UNIQUE     -- e.g., 'WELCOME_EMAIL', 'ACCOUNT_DELETION'
+display_name    TEXT NOT NULL            -- e.g., 'New User Welcome Email'
+description     TEXT                     -- e.g., 'Sent when a new user creates an account'
+is_enabled      BOOLEAN DEFAULT false    -- Whether this trigger is active
+template_id     UUID REFERENCES admin_email_templates(id) ON DELETE SET NULL
+created_at      TIMESTAMPTZ DEFAULT now()
+updated_at      TIMESTAMPTZ DEFAULT now()
+```
+
+**Default trigger types:**
+
+| Trigger Type | Display Name | Default Enabled |
+|-------------|-------------|----------------|
+| `WELCOME_EMAIL` | New User Welcome Email | false |
+| `BAN_USER` | User Ban Notification | true |
+| `ACCOUNT_DELETION` | Account Deletion Confirmation | false |
+| `FRIEND_REQUEST_REMINDER` | Friend Request Reminder | false |
+| `GARDEN_INVITE_REMINDER` | Garden Invite Reminder | false |
+
+**RLS:** Admin-only full access. Service role SELECT for edge functions.
+
+### `admin_automatic_email_sends`
+
+Tracking table for automatic email sends to prevent duplicates.
+
+```sql
+id              UUID PRIMARY KEY
+trigger_type    TEXT NOT NULL
+user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE
+template_id     UUID REFERENCES admin_email_templates(id) ON DELETE SET NULL
+sent_at         TIMESTAMPTZ DEFAULT now()
+status          TEXT DEFAULT 'sent'
+error           TEXT
+UNIQUE(trigger_type, user_id)
+```
+
+**Note:** The `UNIQUE(trigger_type, user_id)` constraint provides per-user deduplication. Triggers like `FRIEND_REQUEST_REMINDER` and `GARDEN_INVITE_REMINDER` use `skipDedup` mode and instead track sends via the `reminder_email_sent` column on their respective tables.
+
+**RLS:** Admin-only full access. Service role full access for edge functions.
+
 ---
 
 ## Row Level Security (RLS)
@@ -753,6 +870,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `cleanup_expired_garden_invites` | `0 2 * * *` (2 AM daily) | Remove expired invites |
 | `cleanup_old_task_occurrences` | `0 3 * * 0` (3 AM weekly) | Archive old task data |
 | `cleanup_expired_verification_codes` | `30 2 * * *` (2:30 AM daily) | Remove expired OTP codes |
+| `reminder_emails` (server-side) | `0 */3 * * *` (every 3 hours) | Send reminder emails for pending friend requests and garden invites older than 1 day |
 
 ---
 
@@ -808,6 +926,18 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `daily_task_reminder` | Cron (hourly) | Sends reminders about incomplete tasks for today |
 | `journal_continue_reminder` | Cron (hourly) | Encourages users who journaled yesterday to continue |
 | `plant_request_fulfilled` | Event-driven | Notifies users when a plant they requested is added to the encyclopedia. Triggered by AI prefill or manual plant creation. Supports `{{plant}}` and `{{plantName}}` template variables. |
+
+### Email Automation Trigger Types
+
+Configured via `/admin/emails/automatic`. Templates support `{{variable}}` placeholders.
+
+| Trigger Type | Kind | Variables | Description |
+|-------------|------|-----------|-------------|
+| `WELCOME_EMAIL` | Event-driven | `{{user}}`, `{{email}}`, `{{url}}` | Sent when a new user creates an account |
+| `BAN_USER` | Event-driven | `{{user}}`, `{{email}}`, `{{url}}` | Sent when a user is marked as threat level 3 (ban) |
+| `ACCOUNT_DELETION` | Event-driven | `{{user}}`, `{{email}}`, `{{url}}` | Sent when a user deletes their account (GDPR endpoint only) |
+| `FRIEND_REQUEST_REMINDER` | Server cron (3h) | `{{user}}`, `{{sender}}`, `{{email}}`, `{{url}}` | Sent 1 day after a friend request if not yet answered. Uses `reminder_email_sent` column for dedup. |
+| `GARDEN_INVITE_REMINDER` | Server cron (3h) | `{{user}}`, `{{sender}}`, `{{email}}`, `{{url}}` | Sent 1 day after a garden invite if not yet answered. Uses `reminder_email_sent` column for dedup. |
 
 ---
 

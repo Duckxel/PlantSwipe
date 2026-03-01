@@ -78,6 +78,7 @@ create table if not exists public.admin_email_templates (
   variables text[] default '{}',
   is_active boolean default true,
   version integer default 1,
+  category text not null default 'newsletter' check (category in ('newsletter','automation','test','marketing','legal')),
   last_used_at timestamptz,
   campaign_count integer default 0,
   created_by uuid references public.profiles(id) on delete set null,
@@ -89,6 +90,7 @@ create table if not exists public.admin_email_templates (
 -- Ensure columns exist if table was already created
 alter table public.admin_email_templates add column if not exists created_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_templates add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_templates add column if not exists category text not null default 'newsletter';
 
 alter table public.admin_email_templates enable row level security;
 
@@ -197,6 +199,7 @@ alter table public.admin_email_campaigns add column if not exists test_email tex
 alter table public.admin_email_campaigns add column if not exists is_marketing boolean default false; -- If true, only send to users with marketing_consent=true
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 alter table public.admin_email_campaigns add column if not exists target_roles text[] default '{}'; -- Empty array = all users, non-empty = only users with ANY of these roles
+alter table public.admin_email_campaigns add column if not exists category text not null default 'newsletter'; -- newsletter, automation, test, marketing, legal
 
 alter table public.admin_email_campaigns enable row level security;
 
@@ -247,9 +250,12 @@ create table if not exists public.admin_email_triggers (
 
 -- Insert default trigger types
 insert into public.admin_email_triggers (trigger_type, display_name, description, is_enabled)
-values 
+values
   ('WELCOME_EMAIL', 'New User Welcome Email', 'Automatically sent when a new user creates an account', false),
-  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', true)
+  ('BAN_USER', 'User Ban Notification', 'Sent when a user is marked as threat level 3 (ban)', true),
+  ('ACCOUNT_DELETION', 'Account Deletion Confirmation', 'Sent when a user deletes their account', false),
+  ('FRIEND_REQUEST_REMINDER', 'Friend Request Reminder', 'Sent 1 day after a friend request if it has not been answered', false),
+  ('GARDEN_INVITE_REMINDER', 'Garden Invite Reminder', 'Sent 1 day after a garden invitation if it has not been answered', false)
 on conflict (trigger_type) do update set is_enabled = true where admin_email_triggers.trigger_type = 'BAN_USER';
 
 alter table public.admin_email_triggers enable row level security;
@@ -497,6 +503,9 @@ create table if not exists public.friend_requests (
   unique(requester_id, recipient_id),
   check (requester_id <> recipient_id)
 );
+
+-- Track whether a reminder email was sent for unanswered friend requests
+alter table public.friend_requests add column if not exists reminder_email_sent boolean not null default false;
 
 do $$
 begin
@@ -812,6 +821,9 @@ create table if not exists public.garden_invites (
   unique(garden_id, invitee_id),
   check (inviter_id <> invitee_id)
 );
+
+-- Track whether a reminder email was sent for unanswered garden invites
+alter table public.garden_invites add column if not exists reminder_email_sent boolean not null default false;
 
 -- Indexes for garden_invites
 create index if not exists garden_invites_garden_idx on public.garden_invites(garden_id);
