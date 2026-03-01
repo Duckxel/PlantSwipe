@@ -709,6 +709,43 @@ CHECK (inviter_id <> invitee_id)
 
 **RLS:** Users can SELECT invites where they are inviter or invitee. INSERT only as inviter who is a garden member (cannot target shadow-banned users). UPDATE as invitee or inviter. DELETE as either party or admin.
 
+### `admin_email_templates`
+
+Stores email templates used by campaigns and automated triggers.
+
+```sql
+id              UUID PRIMARY KEY
+title           TEXT NOT NULL
+subject         TEXT NOT NULL
+description     TEXT                     -- Internal notes
+preview_text    TEXT                     -- Email preview text
+body_html       TEXT NOT NULL            -- HTML body content
+body_json       JSONB                    -- Tiptap JSON document
+variables       TEXT[] DEFAULT '{}'      -- Extracted template variables (e.g. {{user}})
+is_active       BOOLEAN DEFAULT true
+version         INTEGER DEFAULT 1
+category        TEXT NOT NULL DEFAULT 'newsletter'
+                CHECK (category IN ('newsletter','automation','test','marketing','legal'))
+last_used_at    TIMESTAMPTZ
+campaign_count  INTEGER DEFAULT 0
+created_by      UUID REFERENCES profiles(id) ON DELETE SET NULL
+updated_by      UUID REFERENCES profiles(id) ON DELETE SET NULL
+created_at      TIMESTAMPTZ DEFAULT now()
+updated_at      TIMESTAMPTZ DEFAULT now()
+```
+
+**Categories:**
+
+| Category | Description | Icon |
+|----------|-------------|------|
+| `newsletter` | Regular newsletters and updates | Document (folded corner) |
+| `automation` | Automated/triggered emails | Cogwheel |
+| `test` | Test and development emails | Wrench |
+| `marketing` | Marketing and promotional emails | Megaphone |
+| `legal` | Legal notices and compliance emails | Landmark |
+
+**RLS:** Admin-only full access.
+
 ### `admin_email_triggers`
 
 Configuration table for automatic email triggers (welcome emails, account deletion, reminders, etc.).

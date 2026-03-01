@@ -7110,6 +7110,8 @@ const notificationCampaignInputSchema = z.object({
   customUserIds: z.array(z.string().uuid()).optional(),
 })
 
+const EMAIL_TEMPLATE_CATEGORIES = ['newsletter', 'automation', 'test', 'marketing', 'legal']
+
 const emailTemplateInputSchema = z.object({
   title: z.string().trim().min(3).max(120),
   subject: z.string().trim().min(3).max(240),
@@ -7128,6 +7130,7 @@ const emailTemplateInputSchema = z.object({
   bodyHtml: z.string().min(1),
   bodyJson: JsonValueSchema.optional().nullable(),
   isActive: z.boolean().optional(),
+  category: z.enum(['newsletter', 'automation', 'test', 'marketing', 'legal']).optional().default('newsletter'),
 })
 
 const emailCampaignInputSchema = z.object({
@@ -7156,6 +7159,7 @@ const emailCampaignInputSchema = z.object({
   testEmail: z.string().email().optional().nullable(),
   isMarketing: z.boolean().optional().default(false), // If true, only send to users with marketing_consent=true
   targetRoles: z.array(z.string().trim().min(1).max(50)).max(20).optional().default([]), // Empty = all users, non-empty = only users with ANY of these roles
+  category: z.enum(['newsletter', 'automation', 'test', 'marketing', 'legal']).optional().default('newsletter'),
 })
 
 const emailCampaignUpdateSchema = z.object({
@@ -10404,12 +10408,13 @@ app.post('/api/admin/email-templates', async (req, res) => {
     parsed.bodyJson === null || parsed.bodyJson === undefined ? null : sql.json(parsed.bodyJson)
   const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
   const isActive = parsed.isActive !== false
+  const category = parsed.category || 'newsletter'
   const adminUuid = toAdminUuid(adminId)
   try {
     const rows = await sql`
       insert into public.admin_email_templates (
         title, subject, description, preview_text, body_html, body_json, variables,
-        is_active, created_by, updated_by, created_at, updated_at
+        is_active, category, created_by, updated_by, created_at, updated_at
       )
       values (
         ${parsed.title},
@@ -10420,6 +10425,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
         ${bodyJsonFragment},
         ${variables},
         ${isActive},
+        ${category},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10472,6 +10478,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
     const variables = extractEmailTemplateVariables(parsed.subject, parsed.bodyHtml)
     const isActive =
       parsed.isActive === undefined ? current.is_active !== false : parsed.isActive
+    const category = parsed.category || current.category || 'newsletter'
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10484,6 +10491,7 @@ app.put('/api/admin/email-templates/:id', async (req, res) => {
           body_json = ${bodyJsonFragment},
           variables = ${variables},
           is_active = ${isActive},
+          category = ${category},
           updated_by = ${adminUuid},
           updated_at = now()
       where id = ${templateId}
@@ -10641,6 +10649,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
     const testEmail = testMode && parsed.testEmail ? parsed.testEmail : null
     const isMarketing = parsed.isMarketing === true
     const targetRoles = Array.isArray(parsed.targetRoles) ? parsed.targetRoles.filter(r => typeof r === 'string' && r.length) : []
+    const campaignCategory = parsed.category || template.category || 'newsletter'
     const adminUuid = toAdminUuid(adminId)
 
     const rows = await sql`
@@ -10664,6 +10673,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         test_email,
         is_marketing,
         target_roles,
+        category,
         created_by,
         updated_by,
         created_at,
@@ -10689,6 +10699,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${testEmail},
         ${isMarketing},
         ${targetRoles},
+        ${campaignCategory},
         ${adminUuid},
         ${adminUuid},
         now(),
@@ -10995,6 +11006,7 @@ function normalizeEmailTemplateRow(row) {
     variables,
     isActive: row.is_active !== false,
     version: Number(row.version || 1),
+    category: row.category || 'newsletter',
     lastUsedAt: row.last_used_at || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -11034,6 +11046,7 @@ function normalizeEmailCampaignRow(row) {
     testEmail: row.test_email || null,
     isMarketing: row.is_marketing === true, // If true, only users with marketing_consent receive this
     targetRoles: Array.isArray(row.target_roles) ? row.target_roles : [],
+    category: row.category || 'newsletter',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }
@@ -24404,8 +24417,10 @@ app.post('/api/admin/email-templates', async (req, res) => {
 
     const {
       id, title, subject, description, previewText,
-      bodyHtml, bodyJson, variables, isActive
+      bodyHtml, bodyJson, variables, isActive, category
     } = req.body
+
+    const cat = EMAIL_TEMPLATE_CATEGORIES.includes(category) ? category : 'newsletter'
 
     let result
     if (id) {
@@ -24420,6 +24435,7 @@ app.post('/api/admin/email-templates', async (req, res) => {
           body_json = ${bodyJson},
           variables = ${variables},
           is_active = ${isActive},
+          category = ${cat},
           updated_at = now(),
           version = version + 1
         where id = ${id}
@@ -24429,11 +24445,11 @@ app.post('/api/admin/email-templates', async (req, res) => {
       // Create new
       result = await sql`
         insert into public.admin_email_templates (
-          title, subject, description, preview_text, 
-          body_html, body_json, variables, is_active
+          title, subject, description, preview_text,
+          body_html, body_json, variables, is_active, category
         ) values (
           ${title}, ${subject}, ${description}, ${previewText},
-          ${bodyHtml}, ${bodyJson}, ${variables}, ${isActive}
+          ${bodyHtml}, ${bodyJson}, ${variables}, ${isActive}, ${cat}
         )
         returning id
       `

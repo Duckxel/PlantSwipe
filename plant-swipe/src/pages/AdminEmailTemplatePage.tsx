@@ -25,7 +25,13 @@ import {
   History,
   Plus,
   RotateCcw,
+  FileText,
+  Settings,
+  Wrench,
+  Megaphone,
+  Landmark,
 } from "lucide-react"
+import { cn } from "@/lib/utils"
 import { BlogEditor, type BlogEditorHandle } from "@/components/blog/BlogEditor"
 import { VariableHighlighter } from "@/components/tiptap-extensions/variable-highlighter"
 import type { JSONContent } from "@tiptap/core"
@@ -47,6 +53,8 @@ const LANGUAGE_NAMES: Record<SupportedLanguage, string> = {
   fr: "Français",
 }
 
+type EmailTemplateCategory = 'newsletter' | 'automation' | 'test' | 'marketing' | 'legal'
+
 type EmailTemplate = {
   id: string
   title: string
@@ -58,11 +66,20 @@ type EmailTemplate = {
   variables: string[]
   isActive: boolean
   version: number
+  category: EmailTemplateCategory
   lastUsedAt: string | null
   campaignCount: number
   createdAt: string
   updatedAt: string
 }
+
+const CATEGORY_OPTIONS: { value: EmailTemplateCategory; label: string; Icon: React.ElementType; color: string }[] = [
+  { value: 'newsletter', label: 'Newsletter', Icon: FileText, color: 'text-emerald-600 dark:text-emerald-400' },
+  { value: 'automation', label: 'Automation', Icon: Settings, color: 'text-blue-600 dark:text-blue-400' },
+  { value: 'test', label: 'Test', Icon: Wrench, color: 'text-amber-600 dark:text-amber-400' },
+  { value: 'marketing', label: 'Marketing', Icon: Megaphone, color: 'text-pink-600 dark:text-pink-400' },
+  { value: 'legal', label: 'Legal', Icon: Landmark, color: 'text-stone-600 dark:text-stone-400' },
+]
 
 type TemplateVersion = {
   id: string
@@ -120,12 +137,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
     title: string
     subject: string
     description: string
+    category: EmailTemplateCategory
     bodyHtml: string
     bodyDoc: JSONContent | null
   }>({
     title: "",
     subject: "",
     description: "",
+    category: "newsletter",
     bodyHtml: "",
     bodyDoc: null,
   })
@@ -181,6 +200,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             title: foundTemplate.title,
             subject: foundTemplate.subject,
             description: foundTemplate.description || "",
+            category: foundTemplate.category || "newsletter",
             bodyHtml: foundTemplate.bodyHtml,
             bodyDoc: foundTemplate.bodyJson,
           })
@@ -446,6 +466,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         subject: defaultContent.subject.trim(),
         previewText: "",
         description: templateForm.description.trim(),
+        category: templateForm.category,
         bodyHtml: defaultContent.bodyHtml,
         bodyJson: defaultContent.bodyDoc,
         isActive: true,
@@ -540,13 +561,14 @@ export const AdminEmailTemplatePage: React.FC = () => {
       if (!resp.ok) throw new Error(data?.error || "Failed to restore version")
 
       // Update local state
-      setTemplateForm({
+      setTemplateForm((prev) => ({
         title: version.title,
         subject: version.subject,
         description: version.description || "",
+        category: prev.category,
         bodyHtml: version.bodyHtml,
         bodyDoc: version.bodyJson,
-      })
+      }))
       setInitialBody({
         html: version.bodyHtml,
         doc: version.bodyJson,
@@ -666,6 +688,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
         subject: defaultContent.subject.trim(),
         previewText: "",
         description: templateForm.description.trim(),
+        category: templateForm.category,
         bodyHtml: defaultContent.bodyHtml,
         bodyJson: defaultContent.bodyDoc,
         isActive: true,
@@ -721,6 +744,7 @@ export const AdminEmailTemplatePage: React.FC = () => {
             title: savedTemplate.title ?? templateForm.title,
             subject: savedTemplate.subject ?? defaultContent.subject,
             description: savedTemplate.description ?? templateForm.description,
+            category: savedTemplate.category ?? templateForm.category,
             bodyHtml: savedTemplate.bodyHtml ?? defaultContent.bodyHtml,
             bodyJson: savedTemplate.bodyJson ?? defaultContent.bodyDoc,
             updatedAt: savedTemplate.updatedAt ?? new Date().toISOString(),
@@ -1272,6 +1296,30 @@ export const AdminEmailTemplatePage: React.FC = () => {
                       placeholder="Notes about this template..."
                       className="min-h-[70px] rounded-xl border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] focus:bg-white dark:focus:bg-[#1e1e20] resize-none text-sm"
                     />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="template-category" className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                      Category
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {CATEGORY_OPTIONS.map(({ value, label, Icon, color }) => (
+                        <button
+                          key={value}
+                          type="button"
+                          onClick={() => setTemplateForm((prev) => ({ ...prev, category: value }))}
+                          className={cn(
+                            "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                            templateForm.category === value
+                              ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                              : "border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                          )}
+                        >
+                          <Icon className={cn("h-3.5 w-3.5", templateForm.category === value ? color : "")} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
               </div>

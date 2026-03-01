@@ -27,6 +27,10 @@ import {
   Shield,
   Check,
   AlertTriangle,
+  Settings,
+  Wrench,
+  Megaphone,
+  Landmark,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -142,6 +146,8 @@ const getCategoryConfig = (category: 'general' | 'security' | 'marketing') => {
   }
 }
 
+type EmailTemplateCategory = 'newsletter' | 'automation' | 'test' | 'marketing' | 'legal'
+
 type EmailTemplate = {
   id: string
   title: string
@@ -153,10 +159,19 @@ type EmailTemplate = {
   variables: string[]
   isActive: boolean
   version: number
+  category: EmailTemplateCategory
   lastUsedAt: string | null
   campaignCount: number
   createdAt: string
   updatedAt: string
+}
+
+const TEMPLATE_CATEGORY_CONFIG: Record<EmailTemplateCategory, { Icon: React.ElementType; text: string; bg: string; gradient: string }> = {
+  newsletter: { Icon: FileText, text: 'text-emerald-600 dark:text-emerald-400', bg: 'bg-emerald-100 dark:bg-emerald-900/30', gradient: 'from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30' },
+  automation: { Icon: Settings, text: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-100 dark:bg-blue-900/30', gradient: 'from-blue-100 to-indigo-100 dark:from-blue-900/30 dark:to-indigo-900/30' },
+  test: { Icon: Wrench, text: 'text-amber-600 dark:text-amber-400', bg: 'bg-amber-100 dark:bg-amber-900/30', gradient: 'from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30' },
+  marketing: { Icon: Megaphone, text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30', gradient: 'from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30' },
+  legal: { Icon: Landmark, text: 'text-stone-600 dark:text-stone-400', bg: 'bg-stone-100 dark:bg-stone-800', gradient: 'from-stone-100 to-stone-200 dark:from-stone-800/50 dark:to-stone-900/50' },
 }
 
 type EmailCampaign = {
@@ -179,8 +194,9 @@ type EmailCampaign = {
   sendCompletedAt: string | null
   testMode: boolean
   testEmail: string | null
-  isMarketing: boolean // If true, only users with marketing_consent=true receive this
-  targetRoles: string[] // Empty = all users, non-empty = only users with ANY of these roles
+  isMarketing: boolean
+  targetRoles: string[]
+  category: EmailTemplateCategory
   createdAt: string
   updatedAt: string
 }
@@ -298,8 +314,9 @@ export const AdminEmailsPanel: React.FC = () => {
     previewText: "",
     testMode: false,
     testEmail: "dev@aphylia.app",
-    isMarketing: false, // If true, only send to users with marketing_consent=true
-    targetRoles: [] as string[], // Empty = all users, non-empty = only users with ANY of these roles
+    isMarketing: false,
+    targetRoles: [] as string[],
+    category: "newsletter" as EmailTemplateCategory,
   })
   const [campaignSaving, setCampaignSaving] = React.useState(false)
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -449,6 +466,7 @@ export const AdminEmailsPanel: React.FC = () => {
         testEmail: campaignForm.testMode ? campaignForm.testEmail.trim() : null,
         isMarketing: campaignForm.isMarketing,
         targetRoles: campaignForm.targetRoles,
+        category: campaignForm.category,
       }
       const resp = await fetch("/api/admin/email-campaigns", {
         method: "POST",
@@ -469,6 +487,7 @@ export const AdminEmailsPanel: React.FC = () => {
         testEmail: "dev@aphylia.app",
         isMarketing: false,
         targetRoles: [],
+        category: "newsletter",
       })
       setDialogOpen(false)
       loadCampaigns().catch(() => {})
@@ -976,13 +995,17 @@ export const AdminEmailsPanel: React.FC = () => {
                               onClear={() => {
                                 handleUpdateTrigger(trigger, { templateId: null })
                               }}
-                              options={templates.map((t) => ({
-                                id: t.id,
-                                label: t.title,
-                                description: t.subject,
-                                meta: `v${t.version}${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
-                                icon: <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
-                              }))}
+                              options={templates.map((t) => {
+                                const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                                const CIcon = cc.Icon
+                                return {
+                                  id: t.id,
+                                  label: t.title,
+                                  description: t.subject,
+                                  meta: `v${t.version}${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
+                                  icon: <CIcon className={cn("h-4 w-4", cc.text)} />,
+                                }
+                              })}
                               placeholder="Select a template..."
                               title="Choose Template"
                               description="Search and select an email template for this trigger."
@@ -1155,7 +1178,10 @@ export const AdminEmailsPanel: React.FC = () => {
             </div>
           ) : (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredTemplates.map((template) => (
+              {filteredTemplates.map((template) => {
+                const catConfig = TEMPLATE_CATEGORY_CONFIG[template.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                const CatIcon = catConfig.Icon
+                return (
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
@@ -1167,8 +1193,8 @@ export const AdminEmailsPanel: React.FC = () => {
                   {/* Card body */}
                   <div className="flex-1 p-4 sm:p-5">
                     <div className="flex items-start gap-3 sm:gap-4">
-                      <div className="flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
-                        <FileText className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600 dark:text-emerald-400" />
+                      <div className={cn("flex-shrink-0 w-9 h-9 sm:w-11 sm:h-11 rounded-xl bg-gradient-to-br flex items-center justify-center", catConfig.gradient)}>
+                        <CatIcon className={cn("h-4 w-4 sm:h-5 sm:w-5", catConfig.text)} />
                       </div>
 
                       <div className="flex-1 min-w-0">
@@ -1238,7 +1264,8 @@ export const AdminEmailsPanel: React.FC = () => {
                     </button>
                   </div>
                 </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
@@ -1334,15 +1361,21 @@ export const AdminEmailsPanel: React.FC = () => {
                 <Label className="text-xs sm:text-sm font-medium">Email Template</Label>
                 <SearchItem
                   value={campaignForm.templateId || null}
-                  onSelect={(opt) => setCampaignForm((prev) => ({ ...prev, templateId: opt.id }))}
+                  onSelect={(opt) => {
+                    const selectedTpl = templates.find((t) => t.id === opt.id)
+                    setCampaignForm((prev) => ({ ...prev, templateId: opt.id, category: selectedTpl?.category || prev.category }))
+                  }}
                   onClear={() => setCampaignForm((prev) => ({ ...prev, templateId: "" }))}
-                  options={templates.map((t) => ({
+                  options={templates.map((t) => {
+                    const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
+                    const CIcon = cc.Icon
+                    return {
                     id: t.id,
                     label: t.title,
                     description: t.subject,
                     meta: `v${t.version} · Used ${t.campaignCount}x${t.variables?.length > 0 ? ` · ${t.variables.length} var${t.variables.length > 1 ? "s" : ""}` : ""}`,
-                    icon: <FileText className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />,
-                  }))}
+                    icon: <CIcon className={cn("h-4 w-4", cc.text)} />,
+                  }})}
                   placeholder="Select a template..."
                   title="Choose Template"
                   description="Search and select an email template for this campaign."
@@ -1430,6 +1463,32 @@ export const AdminEmailsPanel: React.FC = () => {
                   placeholder="Notes for your team..."
                   className="rounded-xl border-stone-200 dark:border-[#3e3e42] h-10 text-sm"
                 />
+              </div>
+
+              {/* Category */}
+              <div className="space-y-1.5">
+                <Label className="text-xs sm:text-sm font-medium">Category</Label>
+                <div className="flex flex-wrap gap-1.5">
+                  {(Object.entries(TEMPLATE_CATEGORY_CONFIG) as [EmailTemplateCategory, typeof TEMPLATE_CATEGORY_CONFIG[EmailTemplateCategory]][]).map(([value, cfg]) => {
+                    const CIcon = cfg.Icon
+                    return (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setCampaignForm((prev) => ({ ...prev, category: value }))}
+                        className={cn(
+                          "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                          campaignForm.category === value
+                            ? "border-emerald-400 dark:border-emerald-600 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                            : "border-stone-200 dark:border-[#3e3e42] bg-stone-50 dark:bg-[#2a2a2d] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                        )}
+                      >
+                        <CIcon className={cn("h-3 w-3", campaignForm.category === value ? cfg.text : "")} />
+                        {value.charAt(0).toUpperCase() + value.slice(1)}
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
             </div>
 

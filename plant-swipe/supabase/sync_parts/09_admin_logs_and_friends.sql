@@ -78,6 +78,7 @@ create table if not exists public.admin_email_templates (
   variables text[] default '{}',
   is_active boolean default true,
   version integer default 1,
+  category text not null default 'newsletter' check (category in ('newsletter','automation','test','marketing','legal')),
   last_used_at timestamptz,
   campaign_count integer default 0,
   created_by uuid references public.profiles(id) on delete set null,
@@ -89,6 +90,7 @@ create table if not exists public.admin_email_templates (
 -- Ensure columns exist if table was already created
 alter table public.admin_email_templates add column if not exists created_by uuid references public.profiles(id) on delete set null;
 alter table public.admin_email_templates add column if not exists updated_by uuid references public.profiles(id) on delete set null;
+alter table public.admin_email_templates add column if not exists category text not null default 'newsletter';
 
 alter table public.admin_email_templates enable row level security;
 
@@ -197,6 +199,7 @@ alter table public.admin_email_campaigns add column if not exists test_email tex
 alter table public.admin_email_campaigns add column if not exists is_marketing boolean default false; -- If true, only send to users with marketing_consent=true
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 alter table public.admin_email_campaigns add column if not exists target_roles text[] default '{}'; -- Empty array = all users, non-empty = only users with ANY of these roles
+alter table public.admin_email_campaigns add column if not exists category text not null default 'newsletter'; -- newsletter, automation, test, marketing, legal
 
 alter table public.admin_email_campaigns enable row level security;
 
