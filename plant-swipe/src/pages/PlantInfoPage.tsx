@@ -1469,6 +1469,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
 
+      const hasMedicinalContent = !!(
+        plant.medicinalBenefits || plant.medicinalUsage || plant.medicinalWarning ||
+        plant.medicinalHistory || plant.infusionBenefits || plant.aromatherapyBenefits ||
+        plant.essentialOilBlends
+      )
+
       // ── Section 8: Misc ──
       const miscItems = filterInfoItems([
         { label: tp('labels.companions'), value: companionNames.length ? companionNames.join(' • ') : null },
@@ -1488,7 +1494,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { title: tp('sections.growthStructure'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
         { title: tp('sections.danger'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
         { title: tp('sections.ecology'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
-        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems },
+        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined },
         { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
 
@@ -1712,6 +1718,11 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                       variant={item.variant}
                     />
                   ))}
+                  {section.disclaimer && (
+                    <p className="mt-3 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic px-1">
+                      {section.disclaimer}
+                    </p>
+                  )}
                 </InfoCard>
               </div>
             ))}
