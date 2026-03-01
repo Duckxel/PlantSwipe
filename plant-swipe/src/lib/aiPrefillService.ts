@@ -37,7 +37,15 @@ import {
   recipeTimeEnum,
 } from "@/lib/composition"
 
-const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images'])
+const AI_EXCLUDED_FIELDS = new Set([
+  'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
+  // Meta fields — admin-only
+  'meta', 'adminCommentary', 'contributors', 'status',
+  // Featured months — curated by admin
+  'featuredMonth',
+  // Plant link fields — AI is unaware of plants in our DB
+  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
+])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 
 // Helper to check if an error is a cancellation/abort error
