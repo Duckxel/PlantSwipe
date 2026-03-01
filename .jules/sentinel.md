@@ -1,9 +1,4 @@
-# Sentinel's Journal
-
-This journal records critical security learnings, patterns, and architectural insights discovered during security audits and fixes.
-
-Format:
-`## YYYY-MM-DD - [Title]`
-`**Vulnerability:** [What you found]`
-`**Learning:** [Why it existed]`
-`**Prevention:** [How to avoid next time]`
+## 2026-03-01 - Missing Authentication on Admin Endpoints
+**Vulnerability:** Several sensitive administrative endpoints in `plant-swipe/server.js` (e.g. `/api/admin/backup-db`, `/api/admin/stats`, `/api/admin/pull-code`) had hardcoded `const uid = "public"` instead of properly validating user privileges. This allowed unauthenticated users to bypass admin checks.
+**Learning:** Security validation functions like `ensureAdmin(req, res)` were replaced with a hardcoded string, completely undermining the authorization mechanism. This is a critical risk, as it exposed sensitive endpoints (such as database backup generation/downloading and server restarts) to the public.
+**Prevention:** Ensure that all protected routes correctly invoke the `await ensureAdmin(req, res)` middleware and check the return value. Automated testing should include unauthenticated access attempts to admin endpoints to prevent regressions.
