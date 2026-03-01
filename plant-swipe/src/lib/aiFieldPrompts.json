@@ -134,7 +134,7 @@
   ],
   "meta": [
     "When meta data is requested for {{plantName}}, return:",
-    "- `adminCommentary`: string for internal editor notes (max 50 chars)",
+    "- `adminCommentary`: string for internal editor notes (max 200 chars)",
     "Leave status and timestamps untouched."
   ]
 }
