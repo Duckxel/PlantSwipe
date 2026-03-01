@@ -462,7 +462,12 @@
       "review": "En révision",
       "approved": "Approuvé",
       "safe": "En sécurité",
-      "at_risk": "À risque"
+      "at_risk": "À risque",
+      "plant": "Plante",
+      "bamboo": "Bambou",
+      "shrub": "Arbuste",
+      "tree": "Arbre",
+      "cactus": "Cactus"
     },
     "fields": {
       "commonNames": {
