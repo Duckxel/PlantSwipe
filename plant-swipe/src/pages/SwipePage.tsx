@@ -1,10 +1,11 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue } from "framer-motion"
+import { motion, AnimatePresence, useTransform, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
   ChevronUp,
   ChevronDown,
   Heart,
+  Info,
   Sparkles,
   PartyPopper,
   Palette,
@@ -267,6 +268,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
     }
   }, [handleInfo, handlePass, handlePrevious])
 
+  // Info reveal panel: opacity derived from card's horizontal drag position
+  // As the card moves left (x goes negative), the panel fades in
+  const infoRevealOpacity = useTransform(x, [-150, -40, 0], [1, 0.6, 0])
+  const infoRevealScale = useTransform(x, [-150, -40, 0], [1, 0.96, 0.92])
+
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
   const prefersCoarsePointer = usePrefersCoarsePointer()
 
@@ -429,6 +435,30 @@ export const SwipePage = React.memo<SwipePageProps>(({
             marginBottom: '8px',
           }}
         >
+          {/* Info reveal panel — sits behind the card, visible on swipe left */}
+          {current && (
+            <motion.div
+              className="absolute inset-0 z-0 flex flex-col items-center justify-center rounded-[24px] bg-gradient-to-br from-emerald-50 via-white to-emerald-100 dark:from-[#1a1f1a] dark:via-[#1e1e1e] dark:to-[#1a2418] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none"
+              style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
+            >
+              <div className="flex flex-col items-center gap-4 px-8 text-center">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                  <Info className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-lg font-semibold text-stone-800 dark:text-stone-100">{current.name}</p>
+                  {(current.scientificNameSpecies || current.scientificName) && (
+                    <p className="text-sm italic text-stone-500 dark:text-stone-400">{current.scientificNameSpecies || current.scientificName}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                  <ChevronLeft className="h-4 w-4" />
+                  <span>{t("plant.info")}</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           <AnimatePresence initial={false} mode="sync">
             {current ? (
               <motion.div
@@ -622,6 +652,30 @@ export const SwipePage = React.memo<SwipePageProps>(({
               className="relative mx-auto w-full max-w-3xl min-h-[520px] swipe-card-container"
               style={{ height: desktopCardHeight }}
             >
+              {/* Info reveal panel — sits behind the card, visible on swipe left */}
+              {current && (
+                <motion.div
+                  className="absolute inset-0 z-0 flex flex-col items-center justify-center rounded-[24px] bg-gradient-to-br from-emerald-50 via-white to-emerald-100 dark:from-[#1a1f1a] dark:via-[#1e1e1e] dark:to-[#1a2418] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none"
+                  style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
+                >
+                  <div className="flex flex-col items-center gap-5 px-10 text-center">
+                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                      <Info className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <p className="text-xl font-semibold text-stone-800 dark:text-stone-100">{current.name}</p>
+                      {(current.scientificNameSpecies || current.scientificName) && (
+                        <p className="text-sm italic text-stone-500 dark:text-stone-400">{current.scientificNameSpecies || current.scientificName}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-base font-medium text-emerald-600 dark:text-emerald-400">
+                      <ChevronLeft className="h-5 w-5" />
+                      <span>{t("plant.info")}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               <AnimatePresence initial={false} mode="sync">
                 {current ? (
                   <motion.div
