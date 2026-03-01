@@ -929,6 +929,28 @@
       "tags": "Étiquettes"
     },
     "varieties": "Variétés",
-    "userReports": "Signalements utilisateurs"
+    "userReports": "Signalements utilisateurs",
+    "images": {
+      "noImagesCollapsed": "Aucune image. Cliquez pour développer et ajouter des images.",
+      "noImage": "Pas d'image",
+      "collapsedHint": "Cliquez pour développer et modifier les images. 1 seule image Principale (pages de détail) et 1 seule Découverte (listes/cartes) autorisées. Ajoutez autant d'images Autres que vous le souhaitez pour la galerie.",
+      "noImagesExpanded": "Aucune image. Cliquez sur « Ajouter une image » pour commencer.",
+      "previewFailed": "Aperçu échoué — vérifiez l'URL.",
+      "previewHint": "L'aperçu apparaît après avoir saisi une URL valide.",
+      "usage": "Utilisation",
+      "usePrimary": "principale",
+      "useDiscovery": "découverte",
+      "useOther": "autre",
+      "heroPrimary": "Image principale / détail (1 seule autorisée).",
+      "heroDiscovery": "Cartes / listes découverte (1 seule autorisée).",
+      "heroOther": "Image de galerie (illimité).",
+      "moveUp": "Monter",
+      "moveDown": "Descendre",
+      "remove": "Supprimer",
+      "addImage": "Ajouter une image",
+      "primaryCount": "P",
+      "discoveryCount": "D",
+      "otherCount": "A"
+    }
   }
 }

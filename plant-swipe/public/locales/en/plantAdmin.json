@@ -929,6 +929,28 @@
       "tags": "Tags"
     },
     "varieties": "Varieties",
-    "userReports": "User Reports"
+    "userReports": "User Reports",
+    "images": {
+      "noImagesCollapsed": "No images yet. Click to expand and add images.",
+      "noImage": "No image",
+      "collapsedHint": "Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.",
+      "noImagesExpanded": "No images yet. Click \"Add image\" to start.",
+      "previewFailed": "Preview failed - double-check the URL.",
+      "previewHint": "Preview appears after entering a valid URL.",
+      "usage": "Usage",
+      "usePrimary": "primary",
+      "useDiscovery": "discovery",
+      "useOther": "other",
+      "heroPrimary": "Hero/detail image (only 1 allowed).",
+      "heroDiscovery": "Discovery cards/lists (only 1 allowed).",
+      "heroOther": "Gallery image (unlimited).",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove",
+      "addImage": "Add image",
+      "primaryCount": "P",
+      "discoveryCount": "D",
+      "otherCount": "O"
+    }
   }
 }

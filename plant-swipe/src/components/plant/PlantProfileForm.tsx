@@ -1401,6 +1401,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
 }
 
 function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void }) {
+  const { t } = useTranslation('plantAdmin')
   const list = Array.isArray(images) ? images : []
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(true)
@@ -1485,7 +1486,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
         <div className="flex items-center gap-2">
           {!isCollapsed && (
             <Button type="button" variant="outline" onClick={addImage}>
-              Add image
+              {t('plantAdmin.images.addImage', 'Add image')}
             </Button>
           )}
         </div>
@@ -1496,14 +1497,13 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
         <div>
           {list.length === 0 ? (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No images yet. Click to expand and add images.
+              {t('plantAdmin.images.noImagesCollapsed', 'No images yet. Click to expand and add images.')}
             </div>
           ) : (
             <div className="flex flex-wrap gap-2">
               {list.map((img, idx) => {
                 const previewKey = getPreviewKey(img, idx)
                 const hasError = previewErrors[previewKey]
-                const useLabel = img.use === 'primary' ? 'P' : img.use === 'discovery' ? 'D' : 'O'
                 return (
                   <div
                     key={previewKey}
@@ -1527,25 +1527,25 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                       />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center">
-                        <span className="text-xs text-muted-foreground">No image</span>
+                        <span className="text-xs text-muted-foreground">{t('plantAdmin.images.noImage', 'No image')}</span>
                       </div>
                     )}
                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
-                      {useLabel}
+                      {img.use === 'primary' ? t('plantAdmin.images.primaryCount', 'P') : img.use === 'discovery' ? t('plantAdmin.images.discoveryCount', 'D') : t('plantAdmin.images.otherCount', 'O')}
                     </div>
                   </div>
                 )
               })}
             </div>
           )}
-          <p className="text-xs text-muted-foreground mt-2">Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.</p>
+          <p className="text-xs text-muted-foreground mt-2">{t('plantAdmin.images.collapsedHint', 'Click to expand and edit images. Only 1 Primary (detail pages) and 1 Discovery (list cards) allowed. Add unlimited Other images for the gallery.')}</p>
         </div>
       ) : (
         // Expanded view: Show full editor
         <>
           {!list.length && (
             <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No images yet. Click "Add image" to start.
+              {t('plantAdmin.images.noImagesExpanded', 'No images yet. Click "Add image" to start.')}
             </div>
           )}
           <div className="space-y-3">
@@ -1574,7 +1574,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                           />
                         ) : (
                           <span className="px-4 text-center text-xs text-muted-foreground">
-                            {img.link && hasError ? 'Preview failed - double-check the URL.' : 'Preview appears after entering a valid URL.'}
+                            {img.link && hasError ? t('plantAdmin.images.previewFailed', 'Preview failed - double-check the URL.') : t('plantAdmin.images.previewHint', 'Preview appears after entering a valid URL.')}
                           </span>
                         )}
                       </div>
@@ -1586,7 +1586,7 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                         placeholder="https://example.com/photo.jpg"
                       />
                       <div className="flex flex-wrap items-center gap-2 text-sm">
-                        <span className="text-muted-foreground">Usage</span>
+                        <span className="text-muted-foreground">{t('plantAdmin.images.usage', 'Usage')}</span>
                         {(["primary","discovery","other"] as const).map((opt) => (
                           <button
                             key={opt}
@@ -1596,30 +1596,30 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
                               (img.use || 'other') === opt ? "bg-black text-white dark:bg-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"
                             }`}
                           >
-                            {opt}
+                            {opt === 'primary' ? t('plantAdmin.images.usePrimary', 'primary') : opt === 'discovery' ? t('plantAdmin.images.useDiscovery', 'discovery') : t('plantAdmin.images.useOther', 'other')}
                           </button>
                         ))}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {img.use === 'primary'
-                          ? 'Hero/detail image (only 1 allowed).'
+                          ? t('plantAdmin.images.heroPrimary', 'Hero/detail image (only 1 allowed).')
                           : img.use === 'discovery'
-                            ? 'Discovery cards/lists (only 1 allowed).'
-                            : 'Gallery image (unlimited).'}
+                            ? t('plantAdmin.images.heroDiscovery', 'Discovery cards/lists (only 1 allowed).')
+                            : t('plantAdmin.images.heroOther', 'Gallery image (unlimited).')}
                       </p>
                     </div>
                   </div>
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex gap-2">
                       <Button type="button" variant="ghost" onClick={() => moveImage(idx, -1)} disabled={idx === 0}>
-                        Move up
+                        {t('plantAdmin.images.moveUp', 'Move up')}
                       </Button>
                       <Button type="button" variant="ghost" onClick={() => moveImage(idx, 1)} disabled={idx === list.length - 1}>
-                        Move down
+                        {t('plantAdmin.images.moveDown', 'Move down')}
                       </Button>
                     </div>
                     <Button type="button" variant="ghost" className="text-red-600" onClick={() => removeImage(idx)}>
-                      Remove
+                      {t('plantAdmin.images.remove', 'Remove')}
                     </Button>
                   </div>
                 </div>
