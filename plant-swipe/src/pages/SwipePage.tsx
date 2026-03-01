@@ -379,9 +379,9 @@ export const SwipePage = React.memo<SwipePageProps>(({
           </div>
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
           {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
-          <div className="mt-5">
+          <div className="mt-5 flex justify-center">
             <Button
-              className="rounded-2xl px-5 bg-white/95 text-black hover:bg-white"
+              className="rounded-2xl px-12 bg-white/95 text-black hover:bg-white"
               onClick={() => handleInfo()}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -536,7 +536,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     {/* Info button - inside card so it moves with swipe */}
                     {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
                     <div
-                      className="mt-5"
+                      className="mt-5 flex justify-center"
                       onPointerDownCapture={(e) => {
                         e.stopPropagation()
                         blockTapProcessing()
@@ -552,7 +552,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 px-5 bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        className="rounded-2xl h-11 px-12 bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
                         <ChevronLeft className="h-4 w-4" />
