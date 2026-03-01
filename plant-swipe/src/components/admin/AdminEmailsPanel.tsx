@@ -31,6 +31,7 @@ import {
   Wrench,
   Megaphone,
   Landmark,
+  ArrowUpDown,
 } from "lucide-react"
 import type { JSONContent } from "@tiptap/core"
 import { cn } from "@/lib/utils"
@@ -173,6 +174,16 @@ const TEMPLATE_CATEGORY_CONFIG: Record<EmailTemplateCategory, { Icon: React.Elem
   marketing: { Icon: Megaphone, text: 'text-pink-600 dark:text-pink-400', bg: 'bg-pink-100 dark:bg-pink-900/30', gradient: 'from-pink-100 to-rose-100 dark:from-pink-900/30 dark:to-rose-900/30' },
   legal: { Icon: Landmark, text: 'text-stone-600 dark:text-stone-400', bg: 'bg-stone-100 dark:bg-stone-800', gradient: 'from-stone-100 to-stone-200 dark:from-stone-800/50 dark:to-stone-900/50' },
 }
+
+const CATEGORY_SORT_ORDER: Record<EmailTemplateCategory, number> = {
+  newsletter: 0,
+  automation: 1,
+  test: 2,
+  marketing: 3,
+  legal: 4,
+}
+
+type TemplateSortMode = 'updated' | 'category'
 
 type EmailCampaign = {
   id: string
@@ -332,6 +343,7 @@ export const AdminEmailsPanel: React.FC = () => {
       : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState("")
+  const [templateSort, setTemplateSort] = React.useState<TemplateSortMode>('updated')
   const [confirmDelete, setConfirmDelete] = React.useState<EmailTemplate | null>(null)
   const [confirmDuplicate, setConfirmDuplicate] = React.useState<EmailTemplate | null>(null)
   const [actionLoading, setActionLoading] = React.useState(false)
@@ -341,15 +353,36 @@ export const AdminEmailsPanel: React.FC = () => {
   const [loadingTriggers, setLoadingTriggers] = React.useState(false)
   const [savingTrigger, setSavingTrigger] = React.useState<string | null>(null)
 
-  // Filter templates based on search query
+  // Filter and sort templates
   const filteredTemplates = React.useMemo(() => {
-    if (!templateSearch.trim()) return templates
-    const query = templateSearch.toLowerCase()
-    return templates.filter(t => 
-      t.title.toLowerCase().includes(query) || 
-      t.subject.toLowerCase().includes(query)
-    )
-  }, [templates, templateSearch])
+    let result = templates
+    if (templateSearch.trim()) {
+      const query = templateSearch.toLowerCase()
+      result = result.filter(t =>
+        t.title.toLowerCase().includes(query) ||
+        t.subject.toLowerCase().includes(query)
+      )
+    }
+    if (templateSort === 'category') {
+      result = [...result].sort((a, b) => {
+        const orderA = CATEGORY_SORT_ORDER[a.category] ?? 99
+        const orderB = CATEGORY_SORT_ORDER[b.category] ?? 99
+        if (orderA !== orderB) return orderA - orderB
+        return a.title.localeCompare(b.title)
+      })
+    }
+    return result
+  }, [templates, templateSearch, templateSort])
+
+  // Templates sorted by category for SearchItem dropdowns
+  const categorySortedTemplates = React.useMemo(() => {
+    return [...templates].sort((a, b) => {
+      const orderA = CATEGORY_SORT_ORDER[a.category] ?? 99
+      const orderB = CATEGORY_SORT_ORDER[b.category] ?? 99
+      if (orderA !== orderB) return orderA - orderB
+      return a.title.localeCompare(b.title)
+    })
+  }, [templates])
 
   const loadTemplates = React.useCallback(async () => {
     setLoadingTemplates(true)
@@ -995,7 +1028,7 @@ export const AdminEmailsPanel: React.FC = () => {
                               onClear={() => {
                                 handleUpdateTrigger(trigger, { templateId: null })
                               }}
-                              options={templates.map((t) => {
+                              options={categorySortedTemplates.map((t) => {
                                 const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
                                 const CIcon = cc.Icon
                                 return {
@@ -1121,24 +1154,40 @@ export const AdminEmailsPanel: React.FC = () => {
       {/* Templates View */}
       {activeView === "templates" && (
         <div className="space-y-3 sm:space-y-4">
-          {/* Search Bar */}
+          {/* Search Bar + Sort Toggle */}
           {templates.length > 0 && (
-            <div className="relative">
-              <SearchInput
-                placeholder="Search templates..."
-                value={templateSearch}
-                onChange={(e) => setTemplateSearch(e.target.value)}
-                className="h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
-              />
-              {templateSearch && (
-                <button
-                  type="button"
-                  onClick={() => setTemplateSearch("")}
-                  className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors z-10"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
+            <div className="flex items-center gap-2">
+              <div className="relative flex-1">
+                <SearchInput
+                  placeholder="Search templates..."
+                  value={templateSearch}
+                  onChange={(e) => setTemplateSearch(e.target.value)}
+                  className="h-10 sm:h-11 rounded-xl border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-sm"
+                />
+                {templateSearch && (
+                  <button
+                    type="button"
+                    onClick={() => setTemplateSearch("")}
+                    className="absolute right-2.5 sm:right-3 top-1/2 -translate-y-1/2 p-1 rounded-md text-stone-400 hover:text-stone-600 hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors z-10"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setTemplateSort(prev => prev === 'updated' ? 'category' : 'updated')}
+                className={cn(
+                  "flex items-center gap-1.5 h-10 sm:h-11 px-3 rounded-xl border text-xs sm:text-sm font-medium transition-all whitespace-nowrap",
+                  templateSort === 'category'
+                    ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300"
+                    : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] text-stone-500 dark:text-stone-400 hover:border-stone-300 dark:hover:border-[#4e4e52]"
+                )}
+                title={templateSort === 'category' ? 'Sorted by category' : 'Sorted by last update'}
+              >
+                <ArrowUpDown className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">{templateSort === 'category' ? 'Category' : 'Updated'}</span>
+              </button>
             </div>
           )}
 
@@ -1178,10 +1227,24 @@ export const AdminEmailsPanel: React.FC = () => {
             </div>
           ) : (
             <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-              {filteredTemplates.map((template) => {
+              {filteredTemplates.map((template, idx) => {
                 const catConfig = TEMPLATE_CATEGORY_CONFIG[template.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
                 const CatIcon = catConfig.Icon
+                const showCategoryHeader = templateSort === 'category' && (
+                  idx === 0 || filteredTemplates[idx - 1].category !== template.category
+                )
+                const categoryLabel = template.category.charAt(0).toUpperCase() + template.category.slice(1)
                 return (
+                <React.Fragment key={template.id}>
+                {showCategoryHeader && (
+                  <div className="col-span-full flex items-center gap-2 pt-2 first:pt-0">
+                    <div className={cn("w-6 h-6 rounded-lg flex items-center justify-center", catConfig.bg)}>
+                      <CatIcon className={cn("h-3.5 w-3.5", catConfig.text)} />
+                    </div>
+                    <span className="text-xs sm:text-sm font-semibold text-stone-700 dark:text-stone-300">{categoryLabel}</span>
+                    <div className="flex-1 h-px bg-stone-200 dark:bg-[#3e3e42]" />
+                  </div>
+                )}
                 <div
                   key={template.id}
                   onClick={() => navigate(`/admin/emails/templates/${template.id}`)}
@@ -1264,6 +1327,7 @@ export const AdminEmailsPanel: React.FC = () => {
                     </button>
                   </div>
                 </div>
+                </React.Fragment>
                 )
               })}
             </div>
@@ -1366,7 +1430,7 @@ export const AdminEmailsPanel: React.FC = () => {
                     setCampaignForm((prev) => ({ ...prev, templateId: opt.id, category: selectedTpl?.category || prev.category }))
                   }}
                   onClear={() => setCampaignForm((prev) => ({ ...prev, templateId: "" }))}
-                  options={templates.map((t) => {
+                  options={categorySortedTemplates.map((t) => {
                     const cc = TEMPLATE_CATEGORY_CONFIG[t.category] || TEMPLATE_CATEGORY_CONFIG.newsletter
                     const CIcon = cc.Icon
                     return {
