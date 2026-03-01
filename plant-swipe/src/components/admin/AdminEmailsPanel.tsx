@@ -343,7 +343,7 @@ export const AdminEmailsPanel: React.FC = () => {
       : "campaigns"
   const [loadingTemplates, setLoadingTemplates] = React.useState(false)
   const [templateSearch, setTemplateSearch] = React.useState("")
-  const [templateSort, setTemplateSort] = React.useState<TemplateSortMode>('updated')
+  const [templateSort, setTemplateSort] = React.useState<TemplateSortMode>('category')
   const [confirmDelete, setConfirmDelete] = React.useState<EmailTemplate | null>(null)
   const [confirmDuplicate, setConfirmDuplicate] = React.useState<EmailTemplate | null>(null)
   const [actionLoading, setActionLoading] = React.useState(false)
