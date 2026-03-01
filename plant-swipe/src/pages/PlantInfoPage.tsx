@@ -2061,11 +2061,59 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
         </div>
       </CardHeader>
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
-        <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
+        <div className="overflow-hidden">
+          <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
+        </div>
       </div>
     </Card>
+  )
+}
+
+const NOTE_CLAMP_LINES = 4
+
+const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => {
+  const { t } = useTranslation('plantInfo')
+  const [expanded, setExpanded] = React.useState(false)
+  const [clamped, setClamped] = React.useState(false)
+  const contentRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    // Re-measure whenever expanded changes back to collapsed
+    if (!expanded) {
+      setClamped(el.scrollHeight > el.clientHeight + 1)
+    }
+  }, [value, expanded])
+
+  return (
+    <div className="py-1 sm:py-1.5">
+      <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
+          <Info className="h-3.5 w-3.5" />
+          <span className="tracking-[0.25em]">{label}</span>
+        </div>
+        <div
+          ref={contentRef}
+          className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100"
+          style={expanded ? undefined : { WebkitLineClamp: NOTE_CLAMP_LINES, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+        >
+          {value}
+        </div>
+        {(clamped || expanded) && (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1.5 flex items-center gap-1 text-[10px] sm:text-xs font-medium text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100 transition-colors"
+          >
+            <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+            {expanded ? t('note.showLess') : t('note.showMore')}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -2078,17 +2126,7 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
   if (value === undefined || value === null) return null
   if (typeof value === 'string' && !value.trim()) return null
     if (variant === 'note') {
-      return (
-        <div className="py-1 sm:py-1.5">
-          <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
-              <Info className="h-3.5 w-3.5" />
-              <span className="tracking-[0.25em]">{label}</span>
-            </div>
-            <div className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100">{value}</div>
-          </div>
-        </div>
-      )
+      return <CollapsibleNote label={label} value={value} />
     }
   return (
     <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
