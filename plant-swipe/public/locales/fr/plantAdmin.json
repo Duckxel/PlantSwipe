@@ -951,6 +951,54 @@
       "primaryCount": "P",
       "discoveryCount": "D",
       "otherCount": "A"
+    },
+    "tagInput": {
+      "placeholder": "Ajouter un élément et appuyer sur Entrée",
+      "add": "Ajouter",
+      "removeAria": "Retirer {{tag}}"
+    },
+    "keyValueList": {
+      "keyPlaceholder": "Nom du mélange",
+      "valuePlaceholder": "Bienfaits / description",
+      "add": "Ajouter",
+      "remove": "Retirer"
+    },
+    "sourcesEditor": {
+      "namePlaceholder": "Nom de la source",
+      "urlPlaceholder": "https://example.com",
+      "helperText": "Ajoutez autant de références que nécessaire.",
+      "addSource": "Ajouter une source",
+      "removeAria": "Retirer la source"
+    },
+    "recipeEditor": {
+      "addNewRecipe": "Ajouter une recette",
+      "namePlaceholder": "Nom de la recette (ex. Pesto au basilic)",
+      "existingNamePlaceholder": "Nom de la recette",
+      "urlPlaceholder": "URL de la recette (optionnel, ex. https://example.com/recette)",
+      "urlPlaceholderShort": "URL de la recette (optionnel)",
+      "add": "Ajouter",
+      "noRecipes": "Aucune recette. Ajoutez des idées de recettes ci-dessus.",
+      "helperText": "Idées de recettes structurées avec catégorie, temps de préparation et lien externe optionnel.",
+      "removeTitle": "Supprimer la recette",
+      "removeAria": "Supprimer la recette : {{name}}",
+      "collapse": "Réduire",
+      "expand": "Développer",
+      "categories": {
+        "breakfast_brunch": "Petit-déjeuner & Brunch",
+        "starters_appetizers": "Entrées & Amuse-bouches",
+        "soups_salads": "Soupes & Salades",
+        "main_courses": "Plats principaux",
+        "side_dishes": "Accompagnements",
+        "desserts": "Desserts",
+        "drinks": "Boissons",
+        "other": "Autre"
+      },
+      "times": {
+        "quick_and_effortless": "Rapide et facile",
+        "30_minutes_meals": "Repas de 30+ minutes",
+        "slow_cooking": "Cuisson lente",
+        "undefined": "Indéfini"
+      }
     }
   }
 }

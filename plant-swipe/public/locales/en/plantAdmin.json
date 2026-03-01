@@ -951,6 +951,54 @@
       "primaryCount": "P",
       "discoveryCount": "D",
       "otherCount": "O"
+    },
+    "tagInput": {
+      "placeholder": "Add item and press Enter",
+      "add": "Add",
+      "removeAria": "Remove {{tag}}"
+    },
+    "keyValueList": {
+      "keyPlaceholder": "Mix name",
+      "valuePlaceholder": "Benefits / description",
+      "add": "Add",
+      "remove": "Remove"
+    },
+    "sourcesEditor": {
+      "namePlaceholder": "Source name",
+      "urlPlaceholder": "https://example.com",
+      "helperText": "Add multiple references as needed.",
+      "addSource": "Add source",
+      "removeAria": "Remove source"
+    },
+    "recipeEditor": {
+      "addNewRecipe": "Add new recipe",
+      "namePlaceholder": "Recipe name (e.g., Basil Pesto)",
+      "existingNamePlaceholder": "Recipe name",
+      "urlPlaceholder": "Recipe URL (optional, e.g., https://example.com/recipe)",
+      "urlPlaceholderShort": "Recipe URL (optional)",
+      "add": "Add",
+      "noRecipes": "No recipes yet. Add recipe ideas above.",
+      "helperText": "Structured recipe ideas with meal category, preparation time, and optional external link.",
+      "removeTitle": "Remove recipe",
+      "removeAria": "Remove recipe: {{name}}",
+      "collapse": "Collapse",
+      "expand": "Expand",
+      "categories": {
+        "breakfast_brunch": "Breakfast & Brunch",
+        "starters_appetizers": "Starters & Appetizers",
+        "soups_salads": "Soups & Salads",
+        "main_courses": "Main Courses",
+        "side_dishes": "Side Dishes",
+        "desserts": "Desserts",
+        "drinks": "Drinks",
+        "other": "Other"
+      },
+      "times": {
+        "quick_and_effortless": "Quick and Effortless",
+        "30_minutes_meals": "30+ minutes Meals",
+        "slow_cooking": "Slow Cooking",
+        "undefined": "Undefined"
+      }
     }
   }
 }
