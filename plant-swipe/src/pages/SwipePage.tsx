@@ -438,21 +438,21 @@ export const SwipePage = React.memo<SwipePageProps>(({
           {/* Info reveal panel — sits behind the card, visible on swipe left */}
           {current && (
             <motion.div
-              className="absolute inset-0 z-0 flex flex-col items-center justify-center rounded-[24px] bg-gradient-to-br from-emerald-50 via-white to-emerald-100 dark:from-[#1a1f1a] dark:via-[#1e1e1e] dark:to-[#1a2418] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none"
+              className="absolute inset-0 z-0 flex items-center justify-end rounded-[24px] bg-gradient-to-l from-emerald-50 via-emerald-50 to-white dark:from-[#1a2418] dark:via-[#1a1f1a] dark:to-[#1e1e1e] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none overflow-hidden"
               style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
             >
-              <div className="flex flex-col items-center gap-4 px-8 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
-                  <Info className="h-8 w-8 text-emerald-600 dark:text-emerald-400" />
+              <div className="flex flex-col items-center gap-3 w-[200px] shrink-0 pr-4 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                  <Info className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
                 </div>
-                <div className="space-y-1">
-                  <p className="text-lg font-semibold text-stone-800 dark:text-stone-100">{current.name}</p>
+                <div className="space-y-0.5 max-w-[180px]">
+                  <p className="text-base font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
                   {(current.scientificNameSpecies || current.scientificName) && (
-                    <p className="text-sm italic text-stone-500 dark:text-stone-400">{current.scientificNameSpecies || current.scientificName}</p>
+                    <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                  <ChevronLeft className="h-4 w-4" />
+                <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <ChevronLeft className="h-3.5 w-3.5" />
                   <span>{t("plant.info")}</span>
                 </div>
               </div>
@@ -655,21 +655,21 @@ export const SwipePage = React.memo<SwipePageProps>(({
               {/* Info reveal panel — sits behind the card, visible on swipe left */}
               {current && (
                 <motion.div
-                  className="absolute inset-0 z-0 flex flex-col items-center justify-center rounded-[24px] bg-gradient-to-br from-emerald-50 via-white to-emerald-100 dark:from-[#1a1f1a] dark:via-[#1e1e1e] dark:to-[#1a2418] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none"
+                  className="absolute inset-0 z-0 flex items-center justify-end rounded-[24px] bg-gradient-to-l from-emerald-50 via-emerald-50 to-white dark:from-[#1a2418] dark:via-[#1a1f1a] dark:to-[#1e1e1e] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none overflow-hidden"
                   style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
                 >
-                  <div className="flex flex-col items-center gap-5 px-10 text-center">
-                    <div className="flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
-                      <Info className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+                  <div className="flex flex-col items-center gap-4 w-[280px] shrink-0 pr-6 text-center">
+                    <div className="flex h-18 w-18 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                      <Info className="h-9 w-9 text-emerald-600 dark:text-emerald-400" />
                     </div>
-                    <div className="space-y-1.5">
-                      <p className="text-xl font-semibold text-stone-800 dark:text-stone-100">{current.name}</p>
+                    <div className="space-y-1 max-w-[250px]">
+                      <p className="text-lg font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
                       {(current.scientificNameSpecies || current.scientificName) && (
-                        <p className="text-sm italic text-stone-500 dark:text-stone-400">{current.scientificNameSpecies || current.scientificName}</p>
+                        <p className="text-sm italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
                       )}
                     </div>
-                    <div className="flex items-center gap-2 text-base font-medium text-emerald-600 dark:text-emerald-400">
-                      <ChevronLeft className="h-5 w-5" />
+                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      <ChevronLeft className="h-4 w-4" />
                       <span>{t("plant.info")}</span>
                     </div>
                   </div>
