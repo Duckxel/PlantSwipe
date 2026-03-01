@@ -1718,12 +1718,12 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
                       variant={item.variant}
                     />
                   ))}
-                  {section.disclaimer && (
-                    <p className="mt-3 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic px-1">
-                      {section.disclaimer}
-                    </p>
-                  )}
                 </InfoCard>
+                {section.disclaimer && (
+                  <p className="mt-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic px-3">
+                    {section.disclaimer}
+                  </p>
+                )}
               </div>
             ))}
           </div>
