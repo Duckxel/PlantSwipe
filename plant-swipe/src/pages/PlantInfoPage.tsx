@@ -1453,9 +1453,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ])
 
       // ── Section 7: Consumption / Usage ──
-      const consumptionItems = filterInfoItems([
+      const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
+        { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
+      ])
+      const consumptionMedicinalItems = filterInfoItems([
         { label: tp('labels.infusionBenefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
         { label: tp('labels.infusionRecipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
         { label: tp('labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
@@ -1465,15 +1469,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.medicinalHistory'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
         { label: tp('labels.aromatherapyBenefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
         { label: tp('labels.essentialOilBlends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
-        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
-        { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
-
-      const hasMedicinalContent = !!(
-        plant.medicinalBenefits || plant.medicinalUsage || plant.medicinalWarning ||
-        plant.medicinalHistory || plant.infusionBenefits || plant.aromatherapyBenefits ||
-        plant.essentialOilBlends
-      )
+      const consumptionItems = [...consumptionBaseItems, ...consumptionMedicinalItems]
+      const hasMedicinalContent = consumptionMedicinalItems.length > 0
 
       // ── Section 8: Misc ──
       const miscItems = filterInfoItems([
@@ -1494,7 +1492,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { title: tp('sections.growthStructure'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
         { title: tp('sections.danger'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
         { title: tp('sections.ecology'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
-        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined },
+        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined, disclaimerAfter: consumptionBaseItems.length },
         { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
 
@@ -1709,21 +1707,22 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             {infoSections.map((section) => (
               <div key={section.title} className="break-inside-avoid mb-3 sm:mb-4">
                 <InfoCard title={section.title} icon={section.icon}>
-                  {section.items.map((item) => (
-                    <InfoItem
-                      key={`${section.title}-${item.label}`}
-                      label={item.label}
-                      value={item.value || '—'}
-                      icon={item.icon}
-                      variant={item.variant}
-                    />
+                  {section.items.map((item, idx) => (
+                    <React.Fragment key={`${section.title}-${item.label}`}>
+                      {section.disclaimer && idx === (section.disclaimerAfter ?? section.items.length) && (
+                        <p className="py-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic">
+                          {section.disclaimer}
+                        </p>
+                      )}
+                      <InfoItem
+                        label={item.label}
+                        value={item.value || '—'}
+                        icon={item.icon}
+                        variant={item.variant}
+                      />
+                    </React.Fragment>
                   ))}
                 </InfoCard>
-                {section.disclaimer && (
-                  <p className="mt-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic px-3">
-                    {section.disclaimer}
-                  </p>
-                )}
               </div>
             ))}
           </div>
