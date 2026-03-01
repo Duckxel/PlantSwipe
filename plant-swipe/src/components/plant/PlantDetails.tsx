@@ -313,8 +313,8 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)",
           }}
         />
-        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:p-8">
-          <div className="space-y-3 sm:space-y-4">
+        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+          <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
                 {translatePlantType(plant.plantType)}
@@ -362,9 +362,9 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               </button>
             )}
           </div>
-          <div className="flex w-full justify-center">
+          <div className="flex w-full justify-center lg:w-auto">
             {activeImage ? (
-              <div className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+              <div className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                 <img
                   src={activeImage.link}
                   alt={plant.name}
@@ -390,7 +390,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                 )}
               </div>
             ) : (
-              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground">
+              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
                 {t('plantDetails.noImage')}
               </div>
             )}
