@@ -258,7 +258,7 @@ const CompanionSelector: React.FC<{
     const loadMissing = async () => {
       setLoadingCompanions(true)
       try {
-        let plantNames: { id: string; name: string }[] = []
+        const plantNames: { id: string; name: string }[] = []
 
         // Batch the queries to avoid URL length limits
         for (let i = 0; i < missing.length; i += BATCH) {

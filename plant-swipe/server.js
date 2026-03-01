@@ -12630,7 +12630,7 @@ app.post('/api/security/check-email-available', requireCsrfToken, async (req, re
 
 // Admin: global stats (bypass RLS via server connection)
 app.get('/api/admin/stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   try {
     let profilesCount = 0
@@ -16988,7 +16988,7 @@ const backupTokenStore = new Map()
 // Admin: create a gzip'ed pg_dump and return a one-time download token
 app.post('/api/admin/backup-db', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     if (!connectionString) {
@@ -17066,7 +17066,7 @@ app.post('/api/admin/backup-db', async (req, res) => {
 
 // Admin: download a previously created backup (one-time token + admin auth)
 app.get('/api/admin/download-backup', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
 
   const token = (req.query.token || '').toString().trim()
@@ -17110,7 +17110,7 @@ app.get('/api/admin/download-backup', async (req, res) => {
 // Admin: refresh website by invoking scripts/refresh-plant-swipe.sh from repo root
 async function handlePullCode(req, res) {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     const branch = (req.query.branch || '').toString().trim() || undefined
@@ -17219,7 +17219,7 @@ app.options('/api/admin/pull-code', (_req, res) => {
 // Admin: stream pull/build logs via Server-Sent Events (SSE)
 app.get('/api/admin/pull-code/stream', async (req, res) => {
   try {
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     // Require admin (same policy as other admin endpoints)
@@ -17387,7 +17387,7 @@ app.get('/api/admin/branches', async (req, res) => {
       'Expires': '0'
     })
 
-    const uid = "public"
+    const uid = await ensureAdmin(req, res)
     if (!uid) return
 
     // Always operate from the repository root and mark it safe for this process
@@ -18745,7 +18745,7 @@ cron.schedule('0 */3 * * *', async () => {
 
 // Admin: unique visitors stats (past 10m and 7 days)
 app.get('/api/admin/visitors-stats', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   // Helper that always succeeds using in-memory analytics
   const respondFromMemory = (extra = {}) => {
@@ -18863,7 +18863,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
 
 // Admin: total unique visitors across last 7 days (distinct IPs, UTC calendar days)
 app.get('/api/admin/visitors-unique-7d', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   const respondFromMemory = (extra = {}) => {
     try {
@@ -18916,7 +18916,7 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
 
 // Admin: breakdown of where visitors come from (top countries and top referrers)
 app.get('/api/admin/sources-breakdown', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   try {
     // Memory fallback cannot easily yield breakdowns; prefer DB or Supabase REST
@@ -18986,7 +18986,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
 
 // Admin: list unique IP addresses connected in the last N minutes (default 60)
 app.get('/api/admin/online-ips', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   const minutesParam = Number(req.query.minutes || req.query.window || 60)
   const windowMinutes = Number.isFinite(minutesParam) && minutesParam > 0 ? Math.min(24 * 60, Math.floor(minutesParam)) : 60
@@ -19060,7 +19060,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
 // Admin: simple online users count (unique IPs past 60 minutes)
 app.get('/api/admin/online-users', async (req, res) => {
-  const uid = "public"
+  const uid = await ensureAdmin(req, res)
   if (!uid) return
   const respondFromMemory = (extra = {}) => {
     try {
