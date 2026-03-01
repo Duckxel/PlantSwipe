@@ -188,7 +188,11 @@ do $$ declare
     'gdpr_audit_log',
     'user_cookie_consent',
     -- Analytics: Page Impressions
-    'impressions'
+    'impressions',
+    -- User Action Status (profile onboarding sync)
+    'user_action_status',
+    -- Plant Stocks (shop availability & pricing)
+    'plant_stocks'
   ];
   rec record;
 begin
