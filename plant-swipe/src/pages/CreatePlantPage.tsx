@@ -87,7 +87,15 @@ const ALLOWED_BIOTOPES = new Set(['temperate_deciduous_forest','mixed_forest','c
 const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
 const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'])
 
-const AI_EXCLUDED_FIELDS = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta', 'adminCommentary'])
+const AI_EXCLUDED_FIELDS = new Set([
+  'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
+  // Meta fields — admin-only
+  'meta', 'adminCommentary', 'contributors', 'status',
+  // Featured months — curated by admin
+  'featuredMonth',
+  // Plant link fields — AI is unaware of plants in our DB
+  'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
+])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
