@@ -2,8 +2,6 @@ import React from "react"
 import { motion, AnimatePresence, useTransform, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
-  ChevronUp,
-  ChevronDown,
   Heart,
   Info,
   Sparkles,
@@ -381,43 +379,13 @@ export const SwipePage = React.memo<SwipePageProps>(({
           </div>
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
           {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
-          <div className="mt-5 grid w-full gap-2 grid-cols-3">
-            <Button
-              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={() => handlePrevious()}
-              aria-label={t("plant.back")}
-              title={`${t("plant.back")} (Down Arrow)`}
-            >
-              {isDesktop ? (
-                <>
-                  <ChevronDown className="h-4 w-4 mr-1" />
-                  {t("plant.back")}
-                </>
-              ) : (
-                <ChevronDown className="h-5 w-5" />
-              )}
-            </Button>
+          <div className="mt-5">
             <Button
               className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
               onClick={() => handleInfo()}
             >
+              <ChevronLeft className="h-4 w-4" />
               {t("plant.info")}
-              <ChevronLeft className="h-4 w-4 ml-1" />
-            </Button>
-            <Button
-              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={() => handlePass()}
-              aria-label={t("plant.next")}
-              title={`${t("plant.next")} (Up Arrow)`}
-            >
-              {isDesktop ? (
-                <>
-                  {t("plant.next")}
-                  <ChevronUp className="h-4 w-4 ml-1" />
-                </>
-              ) : (
-                <ChevronUp className="h-5 w-5" />
-              )}
             </Button>
           </div>
         </div>
@@ -565,10 +533,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                     {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
                     
-                    {/* Navigation buttons - inside card so they move with swipe */}
+                    {/* Info button - inside card so it moves with swipe */}
                     {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
-                    <div 
-                      className="mt-5 grid w-full gap-2 grid-cols-3"
+                    <div
+                      className="mt-5"
                       onPointerDownCapture={(e) => {
                         e.stopPropagation()
                         blockTapProcessing()
@@ -584,29 +552,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={(e) => { e.stopPropagation(); handlePrevious() }}
-                        aria-label={t("plant.back")}
-                        title={t("plant.back")}
-                      >
-                        <ChevronDown className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        className="rounded-2xl h-11 w-full bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
+                        <ChevronLeft className="h-4 w-4" />
                         {t("plant.info")}
-                        <ChevronLeft className="h-4 w-4 ml-1" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={(e) => { e.stopPropagation(); handlePass() }}
-                        aria-label={t("plant.next")}
-                        title={t("plant.next")}
-                      >
-                        <ChevronUp className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
