@@ -1492,7 +1492,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { title: tp('sections.growthStructure'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
         { title: tp('sections.danger'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
         { title: tp('sections.ecology'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
-        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined, disclaimerAfter: consumptionBaseItems.length },
+        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined, disclaimerAfter: 0 },
         { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
 
