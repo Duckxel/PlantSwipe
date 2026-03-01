@@ -329,16 +329,6 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                   {seasons.map(s => translateSeason(s)).join(" • ")}
                 </Badge>
               )}
-              {toxicityWarningConfig && (
-                <button
-                  type="button"
-                  onClick={scrollToToxicity}
-                  className={`inline-flex items-center gap-1 sm:gap-1.5 rounded-full border px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium cursor-pointer transition-colors ${toxicityWarningConfig.className}`}
-                >
-                  <toxicityWarningConfig.Icon className="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                  {toxicityWarningConfig.label}
-                </button>
-              )}
             </div>
             <div>
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
@@ -396,6 +386,18 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             )}
           </div>
         </div>
+        {toxicityWarningConfig && (
+          <div className="relative px-3 pb-3 sm:px-4 sm:pb-4 md:px-6 md:pb-6 lg:px-8 lg:pb-8 -mt-1">
+            <button
+              type="button"
+              onClick={scrollToToxicity}
+              className={`inline-flex items-center gap-2 sm:gap-2.5 rounded-xl border-2 px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-colors shadow-sm ${toxicityWarningConfig.className}`}
+            >
+              <toxicityWarningConfig.Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+              {toxicityWarningConfig.label}
+            </button>
+          </div>
+        )}
       </div>
 
       {visibleStats.length > 0 && (
