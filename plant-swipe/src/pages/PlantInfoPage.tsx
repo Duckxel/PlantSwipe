@@ -2074,7 +2074,7 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
 const NOTE_CLAMP_LINES = 4
 
 const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => {
-  const { t } = useTranslation('plantInfo')
+  const { t } = useTranslation(['common', 'plantInfo'])
   const [expanded, setExpanded] = React.useState(false)
   const [clamped, setClamped] = React.useState(false)
   const contentRef = React.useRef<HTMLDivElement>(null)
@@ -2109,7 +2109,7 @@ const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ 
             className="mt-1.5 flex items-center gap-1 text-[10px] sm:text-xs font-medium text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100 transition-colors"
           >
             <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
-            {expanded ? t('note.showLess') : t('note.showMore')}
+            {expanded ? t('plantInfo:note.showLess', 'Show less') : t('plantInfo:note.showMore', 'Show more')}
           </button>
         )}
       </div>
