@@ -344,7 +344,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
           <button
             type="button"
             onClick={() => handlePass()}
-            className="text-white/70 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+            className="text-white/70 hover:text-white transition-colors drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
             aria-label={t("plant.next")}
             title={t("plant.next")}
           >
@@ -507,7 +507,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handlePass() }}
-                      className="text-white/70 active:scale-90 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+                      className="text-white/70 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
                       aria-label={t("plant.next")}
                       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                     >
