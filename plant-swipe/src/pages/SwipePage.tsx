@@ -2,6 +2,7 @@ import React from "react"
 import { motion, AnimatePresence, useTransform, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
+  ChevronUp,
   Heart,
   Info,
   Sparkles,
@@ -338,6 +339,18 @@ export const SwipePage = React.memo<SwipePageProps>(({
             ))}
           </div>
         )}
+        {/* Next chevron - top center */}
+        <div className="absolute top-3 left-0 right-0 z-40 flex justify-center">
+          <button
+            type="button"
+            onClick={() => handlePass()}
+            className="text-white/70 hover:text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+            aria-label={t("plant.next")}
+            title={t("plant.next")}
+          >
+            <ChevronUp className="h-7 w-7" />
+          </button>
+        </div>
         {/* Like button - desktop */}
         <div className="absolute top-4 right-4 z-40">
           <button
@@ -475,9 +488,36 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     </div>
                   )}
                   
+                  {/* Next chevron - top center */}
+                  <div
+                    className="absolute top-3 left-0 right-0 z-[100] flex justify-center"
+                    onPointerDownCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onPointerMoveCapture={(e) => e.stopPropagation()}
+                    onPointerUpCapture={(e) => e.stopPropagation()}
+                    onTouchStartCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onTouchMoveCapture={(e) => e.stopPropagation()}
+                    onTouchEndCapture={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handlePass() }}
+                      className="text-white/70 active:scale-90 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+                      aria-label={t("plant.next")}
+                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                    >
+                      <ChevronUp className="h-7 w-7" />
+                    </button>
+                  </div>
+
                   {/* Like button - inside card so it moves with swipe */}
                   {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
-                  <div 
+                  <div
                     className="absolute top-4 right-4 z-[100]"
                     onPointerDownCapture={(e) => {
                       e.stopPropagation()
