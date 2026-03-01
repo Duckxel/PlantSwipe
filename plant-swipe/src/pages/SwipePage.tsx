@@ -381,7 +381,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
           {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
           <div className="mt-5">
             <Button
-              className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
+              className="rounded-2xl px-5 bg-white/95 text-black hover:bg-white"
               onClick={() => handleInfo()}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -552,7 +552,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 w-full bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        className="rounded-2xl h-11 px-5 bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
                         <ChevronLeft className="h-4 w-4" />
