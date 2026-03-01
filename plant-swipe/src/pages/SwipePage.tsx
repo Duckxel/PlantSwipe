@@ -2,8 +2,8 @@ import React from "react"
 import { motion, AnimatePresence, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
-  ChevronRight,
   ChevronUp,
+  ChevronDown,
   Heart,
   Sparkles,
   PartyPopper,
@@ -246,15 +246,15 @@ export const SwipePage = React.memo<SwipePageProps>(({
       }
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault()
-          handlePrevious()
-          break
-        case "ArrowRight":
+        case "ArrowUp":
           e.preventDefault()
           handlePass()
           break
-        case "ArrowUp":
+        case "ArrowDown":
+          e.preventDefault()
+          handlePrevious()
+          break
+        case "ArrowLeft":
           e.preventDefault()
           handleInfo()
           break
@@ -380,15 +380,15 @@ export const SwipePage = React.memo<SwipePageProps>(({
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
               onClick={() => handlePrevious()}
               aria-label={t("plant.back")}
-              title={`${t("plant.back")} (Left Arrow)`}
+              title={`${t("plant.back")} (Down Arrow)`}
             >
               {isDesktop ? (
                 <>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
+                  <ChevronDown className="h-4 w-4 mr-1" />
                   {t("plant.back")}
                 </>
               ) : (
-                <ChevronLeft className="h-5 w-5" />
+                <ChevronDown className="h-5 w-5" />
               )}
             </Button>
             <Button
@@ -396,21 +396,21 @@ export const SwipePage = React.memo<SwipePageProps>(({
               onClick={() => handleInfo()}
             >
               {t("plant.info")}
-              <ChevronUp className="h-4 w-4 ml-1" />
+              <ChevronLeft className="h-4 w-4 ml-1" />
             </Button>
             <Button
               className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
               onClick={() => handlePass()}
               aria-label={t("plant.next")}
-              title={`${t("plant.next")} (Right Arrow)`}
+              title={`${t("plant.next")} (Up Arrow)`}
             >
               {isDesktop ? (
                 <>
                   {t("plant.next")}
-                  <ChevronRight className="h-4 w-4 ml-1" />
+                  <ChevronUp className="h-4 w-4 ml-1" />
                 </>
               ) : (
-                <ChevronRight className="h-5 w-5" />
+                <ChevronUp className="h-5 w-5" />
               )}
             </Button>
           </div>
@@ -434,10 +434,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
               <motion.div
                 key={current.id}
                 drag
-                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
+                dragElastic={{ left: 0.2, right: 0.05, top: 0.25, bottom: 0.25 }}
                 dragMomentum={false}
                 style={{ x, y }}
-                dragConstraints={{ left: -250, right: 250, top: -200, bottom: 0 }}
+                dragConstraints={{ left: -200, right: 0, top: -250, bottom: 250 }}
                 onDragEnd={onDragEnd}
                 initial={false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
@@ -559,7 +559,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                         aria-label={t("plant.back")}
                         title={t("plant.back")}
                       >
-                        <ChevronLeft className="h-5 w-5" />
+                        <ChevronDown className="h-5 w-5" />
                       </button>
                       <button
                         type="button"
@@ -567,7 +567,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
                         {t("plant.info")}
-                        <ChevronUp className="h-4 w-4 ml-1" />
+                        <ChevronLeft className="h-4 w-4 ml-1" />
                       </button>
                       <button
                         type="button"
@@ -576,7 +576,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                         aria-label={t("plant.next")}
                         title={t("plant.next")}
                       >
-                        <ChevronRight className="h-5 w-5" />
+                        <ChevronUp className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
@@ -627,10 +627,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
                   <motion.div
                     key={current.id}
                     drag
-                    dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
+                    dragElastic={{ left: 0.22, right: 0.05, top: 0.28, bottom: 0.28 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
+                    dragConstraints={{ left: -300, right: 0, top: -350, bottom: 350 }}
                     onDragEnd={onDragEnd}
                     onDoubleClick={handleDesktopDoubleClick}
                     initial={false}
