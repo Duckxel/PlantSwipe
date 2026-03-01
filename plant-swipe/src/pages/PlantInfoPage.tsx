@@ -1485,7 +1485,7 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       // ── All sections in spec order ──
       const infoSections = [
-        { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems },
+        { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems, disclaimer: undefined as string | undefined, disclaimerAfter: undefined as number | undefined },
         { title: tp('sections.safety'), icon: <Skull className="h-4 w-4" />, items: safetyItems },
         { title: tp('sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
         { title: tp('sections.careDetails'), icon: <Thermometer className="h-4 w-4" />, items: careDetails },
