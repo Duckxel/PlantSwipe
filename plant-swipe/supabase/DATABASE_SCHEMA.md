@@ -104,6 +104,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `substrate_recipes` | Admin-managed substrate mix recipes |
 | `substrate_recipe_translations` | Recipe name/description translations |
 | `requested_plants` | User-requested plants to add |
+| `plant_stocks` | Plant seed/plant availability, quantity, and pricing for the shop |
 
 ### Gardens
 
@@ -396,6 +397,20 @@ user_notes                  TEXT
 created_at                  TIMESTAMPTZ DEFAULT NOW()
 updated_at                  TIMESTAMPTZ DEFAULT NOW()
 deleted_at                  TIMESTAMPTZ      -- Soft delete
+```
+
+### `plant_stocks`
+
+Manages plant seed/plant availability, quantity, and pricing for the shop. Anyone authenticated can read; only admins can write.
+
+```sql
+id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id    TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE  -- UNIQUE
+quantity    INTEGER NOT NULL DEFAULT 0 CHECK (quantity >= 0)
+price       NUMERIC(10,2) NOT NULL DEFAULT 0.00 CHECK (price >= 0)
+is_available BOOLEAN NOT NULL DEFAULT false
+updated_by  UUID REFERENCES auth.users(id) ON DELETE SET NULL
+created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 ### `impressions`
@@ -855,6 +870,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `substrate_recipe_translations` | Anyone can SELECT; only admins/editors can INSERT/UPDATE/DELETE |
 | `plant_scans` | Users can manage own scans |
 | `impressions` | Admin SELECT only; server writes via service role |
+| `plant_stocks` | Authenticated users can SELECT; only admins can INSERT/UPDATE/DELETE |
 
 ---
 
