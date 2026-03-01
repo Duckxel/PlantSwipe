@@ -197,14 +197,18 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
             }}
           >
             <button 
+              type="button"
               onClick={handleEdit}
-              className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-white dark:hover:bg-black text-stone-600 dark:text-stone-300 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10"
+              className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-white dark:hover:bg-black text-stone-600 dark:text-stone-300 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              aria-label={t('bookmarks.edit', { defaultValue: 'Edit bookmark' })}
             >
               <Edit2 className="h-3 w-3" />
             </button>
             <button 
+              type="button"
               onClick={handleDelete}
-              className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-red-50 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10"
+              className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-red-50 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+              aria-label={t('bookmarks.delete', { defaultValue: 'Delete bookmark' })}
             >
               <Trash2 className="h-3 w-3" />
             </button>
