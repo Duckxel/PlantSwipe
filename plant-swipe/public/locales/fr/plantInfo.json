@@ -99,6 +99,13 @@
     "consumption": "Consommation & Usage",
     "misc": "Compagnons & Étiquettes"
   },
+  "disclaimers": {
+    "medicinal": "Les informations médicinales fournies sont à titre éducatif uniquement et ne constituent pas un avis médical. Consultez toujours un professionnel de santé qualifié avant d'utiliser une plante à des fins médicinales."
+  },
+  "note": {
+    "showMore": "Voir plus",
+    "showLess": "Voir moins"
+  },
   "labels": {
     "family": "Famille",
     "origin": "Origine",

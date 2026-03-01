@@ -1453,9 +1453,13 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       ])
 
       // ── Section 7: Consumption / Usage ──
-      const consumptionItems = filterInfoItems([
+      const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
+        { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
+      ])
+      const consumptionMedicinalItems = filterInfoItems([
         { label: tp('labels.infusionBenefits'), value: formatTextValue(plant.infusionBenefits), variant: 'note' },
         { label: tp('labels.infusionRecipes'), value: formatTextValue(plant.infusionRecipeIdeas), variant: 'note' },
         { label: tp('labels.infusionMix'), value: infusionMixSummary, variant: 'note' },
@@ -1465,9 +1469,9 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
         { label: tp('labels.medicinalHistory'), value: formatTextValue(plant.medicinalHistory), variant: 'note' },
         { label: tp('labels.aromatherapyBenefits'), value: formatTextValue(plant.aromatherapyBenefits), variant: 'note' },
         { label: tp('labels.essentialOilBlends'), value: formatTextValue(plant.essentialOilBlends), variant: 'note' },
-        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
-        { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
+      const consumptionItems = [...consumptionBaseItems, ...consumptionMedicinalItems]
+      const hasMedicinalContent = consumptionMedicinalItems.length > 0
 
       // ── Section 8: Misc ──
       const miscItems = filterInfoItems([
@@ -1481,14 +1485,14 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
 
       // ── All sections in spec order ──
       const infoSections = [
-        { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems },
+        { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems, disclaimer: undefined as string | undefined, disclaimerAfter: undefined as number | undefined },
         { title: tp('sections.safety'), icon: <Skull className="h-4 w-4" />, items: safetyItems },
         { title: tp('sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
         { title: tp('sections.careDetails'), icon: <Thermometer className="h-4 w-4" />, items: careDetails },
         { title: tp('sections.growthStructure'), icon: <Sprout className="h-4 w-4" />, items: growthItems },
         { title: tp('sections.danger'), icon: <AlertTriangle className="h-4 w-4" />, items: dangerItems },
         { title: tp('sections.ecology'), icon: <TreeDeciduous className="h-4 w-4" />, items: ecologyItems },
-        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems },
+        { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined, disclaimerAfter: 0 },
         { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
 
@@ -1703,14 +1707,20 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
             {infoSections.map((section) => (
               <div key={section.title} className="break-inside-avoid mb-3 sm:mb-4">
                 <InfoCard title={section.title} icon={section.icon}>
-                  {section.items.map((item) => (
-                    <InfoItem
-                      key={`${section.title}-${item.label}`}
-                      label={item.label}
-                      value={item.value || '—'}
-                      icon={item.icon}
-                      variant={item.variant}
-                    />
+                  {section.items.map((item, idx) => (
+                    <React.Fragment key={`${section.title}-${item.label}`}>
+                      {section.disclaimer && idx === (section.disclaimerAfter ?? section.items.length) && (
+                        <p className="py-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic">
+                          {section.disclaimer}
+                        </p>
+                      )}
+                      <InfoItem
+                        label={item.label}
+                        value={item.value || '—'}
+                        icon={item.icon}
+                        variant={item.variant}
+                      />
+                    </React.Fragment>
                   ))}
                 </InfoCard>
               </div>
@@ -2051,11 +2061,59 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
         </div>
       </CardHeader>
       <div
-        className={`overflow-hidden transition-all duration-300 ease-in-out ${isExpanded ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'}`}
+        className={`grid transition-all duration-300 ease-in-out ${isExpanded ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'}`}
       >
-        <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
+        <div className="overflow-hidden">
+          <CardContent className="space-y-1.5 sm:space-y-2 p-4 sm:p-6 pt-0">{children}</CardContent>
+        </div>
       </div>
     </Card>
+  )
+}
+
+const NOTE_CLAMP_LINES = 4
+
+const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ label, value }) => {
+  const { t } = useTranslation(['common', 'plantInfo'])
+  const [expanded, setExpanded] = React.useState(false)
+  const [clamped, setClamped] = React.useState(false)
+  const contentRef = React.useRef<HTMLDivElement>(null)
+
+  React.useEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    // Re-measure whenever expanded changes back to collapsed
+    if (!expanded) {
+      setClamped(el.scrollHeight > el.clientHeight + 1)
+    }
+  }, [value, expanded])
+
+  return (
+    <div className="py-1 sm:py-1.5">
+      <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
+        <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
+          <Info className="h-3.5 w-3.5" />
+          <span className="tracking-[0.25em]">{label}</span>
+        </div>
+        <div
+          ref={contentRef}
+          className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100"
+          style={expanded ? undefined : { WebkitLineClamp: NOTE_CLAMP_LINES, display: '-webkit-box', WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+        >
+          {value}
+        </div>
+        {(clamped || expanded) && (
+          <button
+            type="button"
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1.5 flex items-center gap-1 text-[10px] sm:text-xs font-medium text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100 transition-colors"
+          >
+            <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+            {expanded ? t('plantInfo:note.showLess', 'Show less') : t('plantInfo:note.showMore', 'Show more')}
+          </button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -2068,17 +2126,7 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
   if (value === undefined || value === null) return null
   if (typeof value === 'string' && !value.trim()) return null
     if (variant === 'note') {
-      return (
-        <div className="py-1 sm:py-1.5">
-          <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
-              <Info className="h-3.5 w-3.5" />
-              <span className="tracking-[0.25em]">{label}</span>
-            </div>
-            <div className="mt-1 text-xs sm:text-sm leading-relaxed text-sky-900 dark:text-sky-100">{value}</div>
-          </div>
-        </div>
-      )
+      return <CollapsibleNote label={label} value={value} />
     }
   return (
     <div className="flex items-start gap-2 sm:gap-3 py-1 sm:py-1.5">
