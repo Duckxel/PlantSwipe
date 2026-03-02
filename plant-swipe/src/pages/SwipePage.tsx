@@ -1,10 +1,10 @@
 import React from "react"
-import { motion, AnimatePresence, type MotionValue } from "framer-motion"
+import { motion, AnimatePresence, useTransform, type MotionValue } from "framer-motion"
 import {
   ChevronLeft,
-  ChevronRight,
   ChevronUp,
   Heart,
+  Info,
   Sparkles,
   PartyPopper,
   Palette,
@@ -247,15 +247,15 @@ export const SwipePage = React.memo<SwipePageProps>(({
       }
 
       switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault()
-          handlePrevious()
-          break
-        case "ArrowRight":
+        case "ArrowUp":
           e.preventDefault()
           handlePass()
           break
-        case "ArrowUp":
+        case "ArrowDown":
+          e.preventDefault()
+          handlePrevious()
+          break
+        case "ArrowLeft":
           e.preventDefault()
           handleInfo()
           break
@@ -267,6 +267,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
       window.removeEventListener("keydown", handleKeyDown)
     }
   }, [handleInfo, handlePass, handlePrevious])
+
+  // Info reveal panel: opacity derived from card's horizontal drag position
+  // As the card moves left (x goes negative), the panel fades in
+  const infoRevealOpacity = useTransform(x, [-150, -40, 0], [1, 0.6, 0])
+  const infoRevealScale = useTransform(x, [-150, -40, 0], [1, 0.96, 0.92])
 
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
   const prefersCoarsePointer = usePrefersCoarsePointer()
@@ -335,6 +340,18 @@ export const SwipePage = React.memo<SwipePageProps>(({
             ))}
           </div>
         )}
+        {/* Next chevron - top center */}
+        <div className="absolute top-3 left-0 right-0 z-40 flex justify-center">
+          <button
+            type="button"
+            onClick={() => handlePass()}
+            className="text-white/70 hover:text-white transition-colors drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+            aria-label={t("plant.next")}
+            title={t("plant.next")}
+          >
+            <ChevronUp className="h-7 w-7" />
+          </button>
+        </div>
         {/* Like button - desktop */}
         <div className="absolute top-4 right-4 z-40">
           <button
@@ -376,43 +393,13 @@ export const SwipePage = React.memo<SwipePageProps>(({
           </div>
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
           {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
-          <div className="mt-5 grid w-full gap-2 grid-cols-3">
+          <div className="mt-5 flex justify-center">
             <Button
-              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={() => handlePrevious()}
-              aria-label={t("plant.back")}
-              title={`${t("plant.back")} (Left Arrow)`}
-            >
-              {isDesktop ? (
-                <>
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  {t("plant.back")}
-                </>
-              ) : (
-                <ChevronLeft className="h-5 w-5" />
-              )}
-            </Button>
-            <Button
-              className="rounded-2xl w-full bg-white/95 text-black hover:bg-white"
+              className="rounded-2xl px-12 bg-white/95 text-black hover:bg-white"
               onClick={() => handleInfo()}
             >
+              <ChevronLeft className="h-4 w-4" />
               {t("plant.info")}
-              <ChevronUp className="h-4 w-4 ml-1" />
-            </Button>
-            <Button
-              className="rounded-2xl w-full text-white transition-colors bg-black/80 hover:bg-black"
-              onClick={() => handlePass()}
-              aria-label={t("plant.next")}
-              title={`${t("plant.next")} (Right Arrow)`}
-            >
-              {isDesktop ? (
-                <>
-                  {t("plant.next")}
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </>
-              ) : (
-                <ChevronRight className="h-5 w-5" />
-              )}
             </Button>
           </div>
         </div>
@@ -430,15 +417,39 @@ export const SwipePage = React.memo<SwipePageProps>(({
             marginBottom: '8px',
           }}
         >
+          {/* Info reveal panel — sits behind the card, visible on swipe left */}
+          {current && (
+            <motion.div
+              className="absolute inset-0 z-0 flex items-center justify-end rounded-[24px] bg-gradient-to-l from-emerald-50 via-emerald-50 to-white dark:from-[#1a2418] dark:via-[#1a1f1a] dark:to-[#1e1e1e] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none overflow-hidden"
+              style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
+            >
+              <div className="flex flex-col items-center gap-3 w-[200px] shrink-0 pr-4 text-center">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                  <Info className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+                </div>
+                <div className="space-y-0.5 max-w-[180px]">
+                  <p className="text-base font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
+                  {(current.scientificNameSpecies || current.scientificName) && (
+                    <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  <span>{t("plant.info")}</span>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
           <AnimatePresence initial={false} mode="sync">
             {current ? (
               <motion.div
                 key={current.id}
                 drag
-                dragElastic={{ left: 0.25, right: 0.25, top: 0.15, bottom: 0.05 }}
+                dragElastic={{ left: 0.2, right: 0.05, top: 0.25, bottom: 0.25 }}
                 dragMomentum={false}
                 style={{ x, y }}
-                dragConstraints={{ left: -250, right: 250, top: -200, bottom: 0 }}
+                dragConstraints={{ left: -200, right: 0, top: -250, bottom: 250 }}
                 onDragEnd={onDragEnd}
                 initial={false}
                 animate={{ opacity: 1, x: 0, y: 0 }}
@@ -478,9 +489,36 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     </div>
                   )}
                   
+                  {/* Next chevron - top center */}
+                  <div
+                    className="absolute top-3 left-0 right-0 z-[100] flex justify-center"
+                    onPointerDownCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onPointerMoveCapture={(e) => e.stopPropagation()}
+                    onPointerUpCapture={(e) => e.stopPropagation()}
+                    onTouchStartCapture={(e) => {
+                      e.stopPropagation()
+                      blockTapProcessing()
+                    }}
+                    onTouchMoveCapture={(e) => e.stopPropagation()}
+                    onTouchEndCapture={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); handlePass() }}
+                      className="text-white/70 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+                      aria-label={t("plant.next")}
+                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                    >
+                      <ChevronUp className="h-7 w-7" />
+                    </button>
+                  </div>
+
                   {/* Like button - inside card so it moves with swipe */}
                   {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
-                  <div 
+                  <div
                     className="absolute top-4 right-4 z-[100]"
                     onPointerDownCapture={(e) => {
                       e.stopPropagation()
@@ -536,10 +574,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
                     {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
                     
-                    {/* Navigation buttons - inside card so they move with swipe */}
+                    {/* Info button - inside card so it moves with swipe */}
                     {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
-                    <div 
-                      className="mt-5 grid w-full gap-2 grid-cols-3"
+                    <div
+                      className="mt-5 flex justify-center"
                       onPointerDownCapture={(e) => {
                         e.stopPropagation()
                         blockTapProcessing()
@@ -555,29 +593,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={(e) => { e.stopPropagation(); handlePrevious() }}
-                        aria-label={t("plant.back")}
-                        title={t("plant.back")}
-                      >
-                        <ChevronLeft className="h-5 w-5" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-2xl h-11 bg-white text-black active:scale-95 flex items-center justify-center shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        className="rounded-2xl h-11 px-12 bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
                       >
+                        <ChevronLeft className="h-4 w-4" />
                         {t("plant.info")}
-                        <ChevronUp className="h-4 w-4 ml-1" />
-                      </button>
-                      <button
-                        type="button"
-                        className="rounded-2xl h-11 text-white bg-black/90 active:scale-95 flex items-center justify-center shadow-lg border border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
-                        onClick={(e) => { e.stopPropagation(); handlePass() }}
-                        aria-label={t("plant.next")}
-                        title={t("plant.next")}
-                      >
-                        <ChevronRight className="h-5 w-5" />
                       </button>
                     </div>
                   </div>
@@ -623,15 +643,39 @@ export const SwipePage = React.memo<SwipePageProps>(({
               className="relative mx-auto w-full max-w-3xl min-h-[520px] swipe-card-container"
               style={{ height: desktopCardHeight }}
             >
+              {/* Info reveal panel — sits behind the card, visible on swipe left */}
+              {current && (
+                <motion.div
+                  className="absolute inset-0 z-0 flex items-center justify-end rounded-[24px] bg-gradient-to-l from-emerald-50 via-emerald-50 to-white dark:from-[#1a2418] dark:via-[#1a1f1a] dark:to-[#1e1e1e] border border-emerald-200/60 dark:border-emerald-800/40 pointer-events-none overflow-hidden"
+                  style={{ opacity: infoRevealOpacity, scale: infoRevealScale }}
+                >
+                  <div className="flex flex-col items-center gap-4 w-[280px] shrink-0 pr-6 text-center">
+                    <div className="flex h-18 w-18 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/50">
+                      <Info className="h-9 w-9 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div className="space-y-1 max-w-[250px]">
+                      <p className="text-lg font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
+                      {(current.scientificNameSpecies || current.scientificName) && (
+                        <p className="text-sm italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                      <ChevronLeft className="h-4 w-4" />
+                      <span>{t("plant.info")}</span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+
               <AnimatePresence initial={false} mode="sync">
                 {current ? (
                   <motion.div
                     key={current.id}
                     drag
-                    dragElastic={{ left: 0.28, right: 0.28, top: 0.18, bottom: 0.08 }}
+                    dragElastic={{ left: 0.22, right: 0.05, top: 0.28, bottom: 0.28 }}
                     dragMomentum={false}
                     style={{ x, y }}
-                    dragConstraints={{ left: -500, right: 500, top: -280, bottom: 0 }}
+                    dragConstraints={{ left: -300, right: 0, top: -350, bottom: 350 }}
                     onDragEnd={onDragEnd}
                     onDoubleClick={handleDesktopDoubleClick}
                     initial={false}
@@ -1027,13 +1071,15 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorIte
   const sunSource = sunArr[0] ?? (plant.environment?.sunExposure as string) ?? undefined
   const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)
   if (sunSource && sunLevel) {
+    const sunKey = `plantDetails.sunLevels.${String(sunSource).toLowerCase().replace(/[_\s-]/g, "")}`
+    const sunTranslated = t(sunKey, { defaultValue: "" }) || formatIndicatorValue(sunSource)
     items.push({
       key: "sun",
-      label: formatIndicatorValue(sunSource) || t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
+      label: sunTranslated || t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
       description: t("discoveryPage.indicators.sunLevel", { defaultValue: "Sun level" }),
       icon: getSunIcon(sunLevel),
       accentClass: SUN_ACCENTS[sunLevel],
-      ariaValue: formatIndicatorValue(sunSource),
+      ariaValue: sunTranslated,
     })
   }
 
@@ -1353,6 +1399,7 @@ const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
   return value
     .toString()
+    .replace(/[_\-/+]/g, " ")
     .trim()
     .split(/\s+/)
     .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : ""))

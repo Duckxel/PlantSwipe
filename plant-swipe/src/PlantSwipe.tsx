@@ -1444,46 +1444,46 @@ export default function PlantSwipe() {
   const onDragEnd = React.useCallback((_: unknown, info: { offset: { x: number; y: number }; velocity: { x: number; y: number } }) => {
     const dx = info.offset.x
     const dy = info.offset.y
-    
+
     // Get absolute offset values - this is the actual distance the card traveled
     const absOffsetX = Math.abs(dx)
     const absOffsetY = Math.abs(dy)
-    
+
     let actionTaken = false
-    
+
     // ONLY trigger actions based on actual distance traveled (threshold = 100px)
     // Velocity is IGNORED to prevent taps/clicks from being interpreted as swipes
     // The card must physically move at least 100px to trigger any action
-    
+
     // Prioritize vertical swipe over horizontal if vertical movement is greater
     if (absOffsetY > absOffsetX && absOffsetY > threshold) {
       if (dy < -threshold) {
-        // Swipe up (bottom to top) = open info
-        animate(x, 0, { duration: 0.1 })
-        animate(y, 0, { duration: 0.1 })
-        handleInfo()
-        actionTaken = true
-      }
-      // Note: swipe down does nothing
-    }
-    
-    // Horizontal swipe detection - only if horizontal movement is greater than vertical
-    if (!actionTaken && absOffsetX > absOffsetY && absOffsetX > threshold) {
-      if (dx < -threshold) {
-        // Swipe left (right to left) = next
+        // Swipe up (bottom to top) = next plant
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePass()
         actionTaken = true
-      } else if (dx > threshold) {
-        // Swipe right (left to right) = previous
+      } else if (dy > threshold) {
+        // Swipe down (top to bottom) = previous plant
         animate(x, 0, { duration: 0.1 })
         animate(y, 0, { duration: 0.1 })
         handlePrevious()
         actionTaken = true
       }
     }
-    
+
+    // Horizontal swipe detection - only if horizontal movement is greater than vertical
+    if (!actionTaken && absOffsetX > absOffsetY && absOffsetX > threshold) {
+      if (dx < -threshold) {
+        // Swipe left (right to left) = open plant info
+        animate(x, 0, { duration: 0.1 })
+        animate(y, 0, { duration: 0.1 })
+        handleInfo()
+        actionTaken = true
+      }
+      // Note: swipe right does nothing
+    }
+
     // No action taken - snap back to center smoothly
     if (!actionTaken) {
       animate(x, 0, { duration: 0.2, type: "spring", stiffness: 300, damping: 30 })
