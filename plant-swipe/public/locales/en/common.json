@@ -584,6 +584,12 @@
       "updated": "Timezone updated successfully",
       "failedToUpdate": "Failed to update timezone"
     },
+    "parent": {
+      "title": "Parent Mode",
+      "description": "Enable if you have children to surface safety warnings more prominently.",
+      "label": "I am a parent",
+      "labelDescription": "Toxicity and safety warnings will be highlighted more prominently on plant pages."
+    },
     "email": {
       "title": "Email Address",
       "emailAddressLabel": "Email Address:",

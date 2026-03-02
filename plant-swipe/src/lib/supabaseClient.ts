@@ -107,6 +107,8 @@ export type ProfileRow = {
   email_verified?: boolean | null
   // Force password change (after forgot-password magic link login)
   force_password_change?: boolean | null
+  // Parent mode: surfaces child-safety warnings more prominently
+  parent?: boolean | null
 }
 
 export type BlogPostRow = {
