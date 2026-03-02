@@ -115,33 +115,36 @@ const useSafeContainerDimensions = (minWidth = 1, minHeight = 1) => {
 
 // Chart components that use the shared context
 // SafeResponsiveContainer waits for valid dimensions before rendering
-const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = ({ minWidth, minHeight, ...restProps }) => {
-  const charts = useCharts()
-  const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
-  
+const ResponsiveContainerImpl: React.FC<ResponsiveContainerProps> = ({ minWidth, minHeight, children, ...restProps }) => {
+  const { containerRef, dimensions, isReady } = useSafeContainerDimensions(1, 1)
+
   // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
   const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
   const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
-  
+
   return (
-    <div 
-      ref={containerRef} 
-      style={{ 
-        width: restProps.width ?? '100%', 
+    <div
+      ref={containerRef}
+      style={{
+        width: restProps.width ?? '100%',
         height: restProps.height ?? '100%',
         minWidth: safeMinWidth,
         minHeight: safeMinHeight,
       }}
     >
-      {isReady ? (
-        <charts.ResponsiveContainer 
-          debounce={50}
-          {...restProps}
-          width="100%"
-          height="100%"
-          minWidth={safeMinWidth}
-          minHeight={safeMinHeight}
-        />
+      {isReady && dimensions ? (
+        // Pass measured pixel dimensions directly to the chart child,
+        // bypassing Recharts' ResponsiveContainer entirely to avoid
+        // the -1 initial state warning it logs before its own
+        // ResizeObserver fires.
+        React.Children.map(children, child =>
+          React.isValidElement(child)
+            ? React.cloneElement(child as React.ReactElement<{ width?: number; height?: number }>, {
+                width: dimensions.width,
+                height: dimensions.height,
+              })
+            : child
+        )
       ) : (
         <div className="w-full h-full flex items-center justify-center">
           <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
@@ -289,47 +292,37 @@ export const ChartSuspense: React.FC<{ children: React.ReactNode; fallback?: Rea
 // Standalone SafeResponsiveContainer for use with direct recharts imports
 // This prevents the negative dimensions (-1, -1) warning by waiting for valid measurements
 export const SafeResponsiveContainer: React.FC<
-  ResponsiveContainerProps & { 
-    loadingFallback?: React.ReactNode 
+  ResponsiveContainerProps & {
+    loadingFallback?: React.ReactNode
   }
 > = ({ loadingFallback, children, minWidth, minHeight, ...restProps }) => {
-  const { containerRef, isReady } = useSafeContainerDimensions(1, 1)
-  // Dynamically import ResponsiveContainer from recharts
-  const [RechartResponsiveContainer, setRechartResponsiveContainer] = useState<
-    typeof import('recharts').ResponsiveContainer | null
-  >(null)
-  
+  const { containerRef, dimensions, isReady } = useSafeContainerDimensions(1, 1)
+
   // Enforce a floor of 1 so recharts never sees 0 or negative dimensions
   const safeMinWidth = Math.max(Number(minWidth) || 1, 1)
   const safeMinHeight = Math.max(Number(minHeight) || 1, 1)
-  
-  useEffect(() => {
-    import('recharts').then((mod) => {
-      setRechartResponsiveContainer(() => mod.ResponsiveContainer)
-    })
-  }, [])
-  
+
   return (
-    <div 
-      ref={containerRef} 
-      style={{ 
-        width: restProps.width ?? '100%', 
+    <div
+      ref={containerRef}
+      style={{
+        width: restProps.width ?? '100%',
         height: restProps.height ?? '100%',
         minWidth: safeMinWidth,
         minHeight: safeMinHeight,
       }}
     >
-      {isReady && RechartResponsiveContainer ? (
-        <RechartResponsiveContainer 
-          debounce={50}
-          {...restProps}
-          width="100%"
-          height="100%"
-          minWidth={safeMinWidth}
-          minHeight={safeMinHeight}
-        >
-          {children}
-        </RechartResponsiveContainer>
+      {isReady && dimensions ? (
+        // Pass measured pixel dimensions directly to the chart child,
+        // bypassing Recharts' ResponsiveContainer to avoid -1 warnings
+        React.Children.map(children, child =>
+          React.isValidElement(child)
+            ? React.cloneElement(child as React.ReactElement<{ width?: number; height?: number }>, {
+                width: dimensions.width,
+                height: dimensions.height,
+              })
+            : child
+        )
       ) : (
         loadingFallback ?? (
           <div className="w-full h-full flex items-center justify-center">
