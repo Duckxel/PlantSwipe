@@ -13,14 +13,14 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { 
-  Camera, 
-  Upload, 
-  Plus, 
-  Loader2, 
-  Leaf, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Camera,
+  Upload,
+  Plus,
+  Loader2,
+  Leaf,
+  AlertCircle,
+  CheckCircle2,
   ExternalLink,
   Trash2,
   ScanLine,
@@ -29,7 +29,9 @@ import {
   Image as ImageIcon,
   Search,
   FlaskConical,
-  ZoomIn
+  ZoomIn,
+  Crown,
+  Lock
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
@@ -45,12 +47,14 @@ import {
 } from '@/lib/plantScan'
 import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { checkPremiumAccess } from '@/constants/userRoles'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic scan API data */
 export const ScanPage: React.FC = () => {
   const { t } = useTranslation('common')
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const navigate = useLanguageNavigate()
+  const isPremium = checkPremiumAccess(profile)
   
   usePageMetadata({ 
     title: t('scan.pageTitle', { defaultValue: 'Plant Scanner' }),
@@ -342,6 +346,43 @@ export const ScanPage: React.FC = () => {
         <p className="text-stone-500 dark:text-stone-400 max-w-sm">
           {t('scan.signInDescription', { defaultValue: 'Please log in to identify plants and save your scan history.' })}
         </p>
+      </div>
+    )
+  }
+
+  if (!isPremium) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
+        <div className="relative w-24 h-24 mb-6">
+          <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center">
+            <ScanLine className="h-12 w-12 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
+            <Lock className="h-5 w-5 text-white" />
+          </div>
+        </div>
+        <h2 className="text-2xl font-bold text-stone-900 dark:text-white mb-2">
+          {t('scan.premiumTitle', { defaultValue: 'Premium Feature' })}
+        </h2>
+        <p className="text-stone-500 dark:text-stone-400 max-w-sm mb-6">
+          {t('scan.premiumDescription', { defaultValue: 'Plant Scanner is available exclusively for Plus and VIP members. Upgrade to identify any plant instantly with AI.' })}
+        </p>
+        <div className="flex flex-col gap-3 w-full max-w-xs">
+          <Button
+            onClick={() => navigate('/pricing')}
+            className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white gap-2 shadow-lg"
+          >
+            <Crown className="h-5 w-5" />
+            {t('scan.upgradeToPremium', { defaultValue: 'Upgrade to Premium' })}
+          </Button>
+          <Button
+            onClick={() => navigate('/')}
+            variant="ghost"
+            className="rounded-full text-stone-500"
+          >
+            {t('common.goBack', { defaultValue: 'Go Back' })}
+          </Button>
+        </div>
       </div>
     )
   }

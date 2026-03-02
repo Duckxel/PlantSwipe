@@ -201,6 +201,28 @@ export function checkFullAdminAccess(profile: { is_admin?: boolean | null; roles
 }
 
 /**
+ * Premium roles: Admin, Plus, or VIP
+ * Users with any of these roles get access to premium features (e.g. Plant Scanner)
+ */
+export const PREMIUM_ROLES: UserRole[] = [USER_ROLES.ADMIN, USER_ROLES.PLUS, USER_ROLES.VIP]
+
+/**
+ * Check if user has premium access (Admin, Plus, or VIP role)
+ */
+export function hasPremiumAccess(roles: string[] | null | undefined): boolean {
+  return hasAnyRole(roles, PREMIUM_ROLES)
+}
+
+/**
+ * Check premium access from a profile object (supports both roles array and legacy is_admin)
+ */
+export function checkPremiumAccess(profile: { is_admin?: boolean | null; roles?: string[] | null } | null | undefined): boolean {
+  if (!profile) return false
+  if (profile.is_admin === true) return true
+  return hasPremiumAccess(profile.roles)
+}
+
+/**
  * Check if user has Bug Catcher role
  */
 export function hasBugCatcherRole(roles: string[] | null | undefined): boolean {

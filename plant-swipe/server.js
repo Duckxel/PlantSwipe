@@ -19855,6 +19855,29 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
     return
   }
 
+  // Premium check: only Admin, Plus, or VIP users can scan
+  try {
+    let isPremium = false
+    if (sql) {
+      const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
+      if (rows?.[0]) {
+        if (rows[0].is_admin === true) isPremium = true
+        const roles = rows[0].roles
+        if (Array.isArray(roles) && (roles.includes('admin') || roles.includes('plus') || roles.includes('vip'))) {
+          isPremium = true
+        }
+      }
+    }
+    if (!isPremium) {
+      res.status(403).json({ error: 'Premium subscription required to use the Plant Scanner' })
+      return
+    }
+  } catch (premiumErr) {
+    console.error('[scan] Premium check failed:', premiumErr)
+    res.status(500).json({ error: 'Failed to verify subscription status' })
+    return
+  }
+
   // Rate limit: 30 scans per hour per user
   if (await checkRateLimit('scan', req, res, user)) {
     return
