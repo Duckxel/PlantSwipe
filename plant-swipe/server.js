@@ -14913,50 +14913,54 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
     if (sql) {
       try {
         const [aggRows, rows, refRows, uaRows, lastCountryRow, rpmRow] = await Promise.all([
-          sql`
-            select count(*)::int as connections_count,
-                   max(occurred_at) as last_seen_at,
-                   count(distinct user_id)::int as users_count
-            from ${sql ? sql`` : ''} public.web_visits
-            where ip_address = ${ip}::inet
-          `,
-          sql`
-            select v.user_id as id,
-                   u.email,
-                   p.display_name,
-                   max(v.occurred_at) as last_seen_at
-            from ${sql ? sql`` : ''} public.web_visits v
-            left join auth.users u on u.id = v.user_id
-            left join public.profiles p on p.id = v.user_id
-            where v.ip_address = ${ip}::inet and v.user_id is not null
-            group by v.user_id, u.email, p.display_name
-            order by last_seen_at desc
-          `,
-          sql`
-            select source, visits from (
-              select case
-                       when v.referrer is null or v.referrer = '' then 'direct'
-                       when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
-                       else v.referrer
-                     end as source,
-                     count(*)::int as visits
-              from ${sql ? sql`` : ''} public.web_visits v
-              where v.ip_address = ${ip}::inet
-                and v.occurred_at >= now() - interval '30 days'
-              group by 1
-            ) s
-            order by visits desc
-            limit 10
-          `,
-          sql`
-            select v.user_agent, count(*)::int as visits
-            from ${sql ? sql`` : ''} public.web_visits v
-            where v.ip_address = ${ip}::inet
-              and v.occurred_at >= now() - interval '30 days'
-            group by v.user_agent
-            order by visits desc
-            limit 200
-          `,
+          sql.unsafe(
+            `select count(*)::int as connections_count,
+                    max(occurred_at) as last_seen_at,
+                    count(distinct user_id)::int as users_count
+             from ${VISITS_TABLE_SQL_IDENT}
+             where ip_address = $1::inet`,
+            [ip]
+          ),
+          sql.unsafe(
+            `select v.user_id as id,
+                    u.email,
+                    p.display_name,
+                    max(v.occurred_at) as last_seen_at
+             from ${VISITS_TABLE_SQL_IDENT} v
+             left join auth.users u on u.id = v.user_id
+             left join public.profiles p on p.id = v.user_id
+             where v.ip_address = $1::inet and v.user_id is not null
+             group by v.user_id, u.email, p.display_name
+             order by last_seen_at desc`,
+            [ip]
+          ),
+          sql.unsafe(
+            `select source, visits from (
+               select case
+                        when v.referrer is null or v.referrer = '' then 'direct'
+                        when v.referrer ilike 'http%' then split_part(split_part(v.referrer, '://', 2), '/', 1)
+                        else v.referrer
+                      end as source,
+                      count(*)::int as visits
+               from ${VISITS_TABLE_SQL_IDENT} v
+               where v.ip_address = $1::inet
+                 and v.occurred_at >= now() - interval '30 days'
+               group by 1
+             ) s
+             order by visits desc
+             limit 10`,
+            [ip]
+          ),
+          sql.unsafe(
+            `select v.user_agent, count(*)::int as visits
+             from ${VISITS_TABLE_SQL_IDENT} v
+             where v.ip_address = $1::inet
+               and v.occurred_at >= now() - interval '30 days'
+             group by v.user_agent
+             order by visits desc
+             limit 200`,
+            [ip]
+          ),
           sql.unsafe(`select geo_country from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and geo_country is not null and geo_country <> '' order by occurred_at desc limit 1`, [ip]),
           sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where ip_address = $1::inet and occurred_at >= now() - interval '5 minutes'`, [ip]),
         ])
@@ -15310,7 +15314,10 @@ app.get('/api/admin/member-list', async (req, res) => {
         : sortRaw === 'role' || sortRaw.startsWith('role')
           ? 'role'
           : 'newest'
-    const filterRole = (req.query.role || '').toString().trim().toLowerCase()
+    const filterRoleRaw = (req.query.role || '').toString().trim().toLowerCase()
+    // Whitelist known roles to prevent SQL injection via string interpolation
+    const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta']
+    const filterRole = KNOWN_ROLES.includes(filterRoleRaw) ? filterRoleRaw : ''
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
       if (!Array.isArray(rows)) return []
@@ -18947,7 +18954,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       const daysParam = Number(req.query.days || 30)
@@ -18980,7 +18987,8 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
 
     res.status(200).json({ ok: true, topCountries: [], topReferrers: [], via: 'memory' })
   } catch (e) {
-    res.status(500).json({ ok: false, error: e?.message || 'Failed to load sources breakdown' })
+    console.error('[sources-breakdown] Query failed, returning empty:', e?.message)
+    res.json({ ok: true, topCountries: [], otherCountries: { count: 0, visits: 0 }, topReferrers: [], otherReferrers: { count: 0, visits: 0 }, via: 'memory', error: e?.message })
   }
 })
 
@@ -19013,13 +19021,13 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
   try {
     if (sql) {
-      const rows = await sql`
-        select distinct v.ip_address as ip
-        from ${VISITS_TABLE_SQL_IDENT} v
-        where v.ip_address is not null
-          and v.occurred_at >= now() - interval '${windowMinutes} minutes'
-        order by ip asc
-      `
+      const rows = await sql.unsafe(
+        `select distinct v.ip_address as ip
+         from ${VISITS_TABLE_SQL_IDENT} v
+         where v.ip_address is not null
+           and v.occurred_at >= now() - interval '${windowMinutes} minutes'
+         order by ip asc`
+      )
       const ips = Array.isArray(rows) ? rows.map(r => String(r.ip)).filter(Boolean) : []
       res.json({ ok: true, ips, via: 'database', windowMinutes, count: ips.length, updatedAt: Date.now() })
       return
