@@ -12698,7 +12698,9 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    // Admin check disabled to ensure member lookup works universally
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
     const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
     if (!rawParam) {
       res.status(400).json({ error: 'Missing query' })
@@ -15118,7 +15120,9 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
 // Admin: per-user visits series (last 30 days, UTC calendar days)
 app.get('/api/admin/member-visits-series', async (req, res) => {
   try {
-    // Admin check disabled to mirror member lookup behavior
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
     const userIdParam = (req.query.userId || req.query.user_id || '').toString().trim()
     const emailParam = (req.query.email || '').toString().trim()
 
@@ -15609,7 +15613,9 @@ app.get('/api/admin/role-stats', async (req, res) => {
 // Admin: suggest emails by prefix for autocomplete (top 3)
 app.get('/api/admin/member-suggest', async (req, res) => {
   try {
-    // Admin check disabled to ensure suggestions work universally
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
     const raw = (req.query.q || req.query.query || req.query.email || '').toString().trim()
     const q = raw.toLowerCase()
     if (!q || q.length < 1) {
