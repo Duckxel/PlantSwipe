@@ -584,6 +584,12 @@
       "updated": "Fuseau horaire mis à jour avec succès",
       "failedToUpdate": "Échec de la mise à jour du fuseau horaire"
     },
+    "parent": {
+      "title": "Mode Parent",
+      "description": "Activez si vous avez des enfants pour afficher les avertissements de sécurité de manière plus visible.",
+      "label": "Je suis parent",
+      "labelDescription": "Les avertissements de toxicité et de sécurité seront mis en évidence de manière plus visible sur les pages de plantes."
+    },
     "email": {
       "title": "Adresse e-mail",
       "emailAddressLabel": "Adresse e-mail :",
@@ -1176,6 +1182,12 @@
       "week": "semaine",
       "month": "mois",
       "year": "an"
+    },
+    "toxicityWarning": {
+      "high": "Toxique",
+      "lethal": "Létale",
+      "toPets": "pour les animaux",
+      "toHumans": "pour les humains"
     }
   },
   "bookmarks": {

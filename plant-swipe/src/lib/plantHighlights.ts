@@ -33,3 +33,11 @@ export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(
 }
 
 export const isPopularPlant = (plant?: Plant | null): boolean => Boolean(plant?.popularity?.isTopPick)
+
+const DANGEROUS_TOXICITY = new Set(['very_toxic', 'deadly'])
+
+/** Returns true when either toxicityHuman or toxicityPets is very_toxic or deadly. */
+export const isDangerouslyToxic = (plant?: Plant | null): boolean => {
+  if (!plant) return false
+  return DANGEROUS_TOXICITY.has(plant.toxicityHuman ?? '') || DANGEROUS_TOXICITY.has(plant.toxicityPets ?? '')
+}

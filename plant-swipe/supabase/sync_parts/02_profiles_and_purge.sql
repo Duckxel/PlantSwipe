@@ -48,6 +48,9 @@ COMMENT ON COLUMN public.profiles.show_country IS 'Whether to display country on
 -- Shadow ban backup: stores pre-ban profile/garden/bookmark settings so shadow ban is fully reversible
 alter table if exists public.profiles add column if not exists shadow_ban_backup jsonb;
 COMMENT ON COLUMN public.profiles.shadow_ban_backup IS 'Stores pre-shadow-ban settings (profile privacy, garden privacy, bookmark visibility, notification prefs) so that shadow ban applied at threat_level=3 is fully reversible.';
+-- Parent mode: when true, surfaces child-safety warnings (e.g. toxicity) more prominently
+alter table if exists public.profiles add column if not exists parent boolean not null default false;
+COMMENT ON COLUMN public.profiles.parent IS 'When true the user is a parent; used to surface child-safety warnings more prominently.';
 
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);

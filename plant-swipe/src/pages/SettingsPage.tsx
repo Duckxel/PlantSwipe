@@ -138,6 +138,7 @@ export default function SettingsPage() {
   const [showPasswordForm, setShowPasswordForm] = React.useState(false)
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
+  const [isParent, setIsParent] = React.useState(false)
   const [gardenInvitePrivacy, setGardenInvitePrivacy] = React.useState<'anyone' | 'friends_only'>('anyone')
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
@@ -302,6 +303,7 @@ export default function SettingsPage() {
         if (profile) {
           setIsPrivate(Boolean((profile as any).is_private || false))
           setDisableFriendRequests(Boolean((profile as any).disable_friend_requests || false))
+          setIsParent(Boolean((profile as any).parent || false))
           setGardenInvitePrivacy((profile as any).garden_invite_privacy || 'anyone')
           const savedTimezone = (profile as any).timezone
           setTimezone(savedTimezone || detectedTimezone)
@@ -315,12 +317,13 @@ export default function SettingsPage() {
           // Fetch profile if not loaded
           const { data } = await supabase
             .from('profiles')
-            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time, garden_type, experience_level, looking_for')
+            .select('is_private, disable_friend_requests, garden_invite_privacy, timezone, country, city, notification_time, garden_type, experience_level, looking_for, parent')
             .eq('id', user.id)
             .maybeSingle()
           if (data) {
             setIsPrivate(Boolean(data.is_private || false))
             setDisableFriendRequests(Boolean(data.disable_friend_requests || false))
+            setIsParent(Boolean((data as any).parent || false))
             setGardenInvitePrivacy((data as any).garden_invite_privacy || 'anyone')
             setTimezone(data.timezone || detectedTimezone)
             setCountry((data as any).country || '')
@@ -565,6 +568,33 @@ export default function SettingsPage() {
     } catch (e: any) {
       setError(e?.message || t('settings.privacy.failedToUpdate'))
       setIsPrivate(!newPrivacyValue)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleToggleParent = async () => {
+    if (!user?.id) return
+
+    const newValue = !isParent
+    setSaving(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ parent: newValue })
+        .eq('id', user.id)
+
+      if (updateError) throw updateError
+
+      setIsParent(newValue)
+      setSuccess(t('common.saved', { defaultValue: 'Saved' }))
+      await refreshProfile()
+    } catch (e: any) {
+      setError(e?.message || t('common.error'))
+      setIsParent(!newValue)
     } finally {
       setSaving(false)
     }
@@ -2231,6 +2261,37 @@ export default function SettingsPage() {
               >
                 {saving ? t('common.saving', { defaultValue: 'Saving...' }) : t('settings.timezone.save', { defaultValue: 'Save Timezone' })}
               </Button>
+            </CardContent>
+          </Card>
+
+          {/* Parent Mode */}
+          <Card className={glassCard}>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Shield className="h-5 w-5 text-emerald-600" />
+                <CardTitle>{t('settings.parent.title', { defaultValue: 'Parent Mode' })}</CardTitle>
+              </div>
+              <CardDescription>{t('settings.parent.description', { defaultValue: 'Enable if you have children to surface safety warnings more prominently.' })}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                <input
+                  type="checkbox"
+                  id="parent-mode"
+                  checked={isParent}
+                  onChange={handleToggleParent}
+                  disabled={saving}
+                  className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                />
+                <div className="flex-1">
+                  <Label htmlFor="parent-mode" className="font-semibold cursor-pointer text-base">
+                    {t('settings.parent.label', { defaultValue: 'I am a parent' })}
+                  </Label>
+                  <p className="text-sm opacity-70 mt-1">
+                    {t('settings.parent.labelDescription', { defaultValue: 'Toxicity and safety warnings will be highlighted more prominently on plant pages.' })}
+                  </p>
+                </div>
+              </div>
             </CardContent>
           </Card>
 

@@ -4,8 +4,8 @@ import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "react-i18next";
-import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp, Heart, Bookmark } from "lucide-react";
-import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights";
+import { Flame, PartyPopper, Sparkles, Loader2, Sprout, FlaskConical, ArrowUp, Heart, Bookmark, Skull } from "lucide-react";
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant, isDangerouslyToxic } from "@/lib/plantHighlights";
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { AddToBookmarkDialog } from "@/components/plant/AddToBookmarkDialog";
 import { ScrollingTitle } from "@/components/ui/scrolling-title";
@@ -17,6 +17,7 @@ interface SearchPageProps {
   toggleLiked?: (plantId: string) => void;
   userId?: string;
   ensureLoggedIn?: () => boolean;
+  isParent?: boolean;
 }
 
 export const SearchPage: React.FC<SearchPageProps> = React.memo(({
@@ -26,6 +27,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   toggleLiked,
   userId,
   ensureLoggedIn,
+  isParent = false,
 }) => {
   const { t } = useTranslation("common");
   const seoTitle = t("seo.search.title", { defaultValue: "Advanced plant search" });
@@ -129,6 +131,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
           const isInProgress = statusStr === 'in_progress' || statusStr === 'in progres' || statusStr === 'in progress'
           const isLiked = likedIds.includes(p.id)
 
+          const showToxicSkull = isParent && isDangerouslyToxic(p)
+
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
           if (isPlantOfTheMonth(p)) {
             highlightBadges.push({
@@ -198,6 +202,13 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                       </Badge>
                     </div>
                   )}
+                  {showToxicSkull && (
+                    <div className="absolute bottom-2 left-2 z-10">
+                      <Badge className="rounded-full p-1.5 bg-red-500/90 text-white shadow-lg">
+                        <Skull className="h-3.5 w-3.5" />
+                      </Badge>
+                    </div>
+                  )}
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
                   <div className="flex-1 min-w-0 space-y-0.5">
@@ -260,6 +271,13 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     <div className="absolute bottom-3 right-3 z-10">
                       <Badge className="rounded-full p-2 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
                         <FlaskConical className="h-5 w-5" />
+                      </Badge>
+                    </div>
+                  )}
+                  {showToxicSkull && (
+                    <div className="absolute bottom-3 left-3 z-10">
+                      <Badge className="rounded-full p-1.5 bg-red-500/90 text-white shadow-lg">
+                        <Skull className="h-4 w-4" />
                       </Badge>
                     </div>
                   )}

@@ -2285,6 +2285,7 @@ export default function PlantSwipe() {
                     toggleLiked={toggleLiked}
                     userId={user?.id}
                     ensureLoggedIn={ensureLoggedIn}
+                    isParent={Boolean(profile?.parent)}
                   />
                 </Suspense>
               }

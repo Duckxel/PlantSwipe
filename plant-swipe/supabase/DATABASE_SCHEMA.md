@@ -291,6 +291,7 @@ notification_time           TEXT DEFAULT '10h' (0-23h)
 email_verified              BOOLEAN DEFAULT false
 force_password_change       BOOLEAN DEFAULT false  -- When true, user must change password before accessing app
 shadow_ban_backup           JSONB                  -- Stores pre-shadow-ban settings for reversibility when threat_level=3
+parent                      BOOLEAN DEFAULT false  -- When true, user is a parent; surfaces child-safety warnings
 -- Communication preferences
 email_product_updates       BOOLEAN DEFAULT true
 email_tips_advice           BOOLEAN DEFAULT true

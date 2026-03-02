@@ -18,6 +18,7 @@ import {
   Utensils,
   HeartPulse,
   Wind,
+  Skull,
 } from "lucide-react"
 
 // Double-tap heart animation component
@@ -66,7 +67,7 @@ import { rarityTone, seasonBadge } from "@/constants/badges"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Link } from "@/components/i18n/Link"
-import { isNewPlant, isPlantOfTheMonth, isPopularPlant } from "@/lib/plantHighlights"
+import { isNewPlant, isPlantOfTheMonth, isPopularPlant, isDangerouslyToxic } from "@/lib/plantHighlights"
 import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { resolveColorValue } from "@/lib/colors"
@@ -1011,6 +1012,17 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
 
 const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
   const items: IndicatorItem[] = []
+
+  if (isDangerouslyToxic(plant)) {
+    items.push({
+      key: "toxic",
+      label: t("discoveryPage.indicators.toxic", { defaultValue: "Toxic" }),
+      description: t("discoveryPage.indicators.toxic", { defaultValue: "Toxic" }),
+      icon: <Skull className="h-5 w-5" />,
+      accentClass: "text-red-200",
+    })
+  }
+
   const sunArr = Array.isArray(plant.sunlight) ? plant.sunlight : []
   const sunSource = sunArr[0] ?? (plant.environment?.sunExposure as string) ?? undefined
   const sunLevel = resolveSunLevel(typeof sunSource === 'string' ? sunSource : undefined)

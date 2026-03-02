@@ -1106,14 +1106,24 @@ const PlantInfoPage: React.FC = () => {
                 </Badge>
               </div>
             )}
-            <PlantDetails 
-              plant={plant} 
-              liked={likedIds.includes(plant.id)} 
-              onToggleLike={toggleLiked} 
+            <PlantDetails
+              plant={plant}
+              liked={likedIds.includes(plant.id)}
+              onToggleLike={toggleLiked}
               onBookmark={handleBookmark}
               isBookmarked={isBookmarked}
             />
-            <MoreInformationSection plant={plant} />
+            {Boolean(profile?.parent) && (
+              <ToxicityWarningBanner
+                toxicityHuman={plant.toxicityHuman}
+                toxicityPets={plant.toxicityPets}
+                poisoningMethod={plant.poisoningMethod}
+                poisoningSymptoms={plant.poisoningSymptoms}
+                allergens={plant.allergens}
+                t={t}
+              />
+            )}
+            <MoreInformationSection plant={plant} hideToxicityBanner={Boolean(profile?.parent)} />
           </>
         )
       })()}
@@ -1151,7 +1161,7 @@ const PlantInfoPage: React.FC = () => {
   )
 }
 
-const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
+const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: boolean }> = ({ plant, hideToxicityBanner = false }) => {
   const { t } = useTranslation(['common', 'plantInfo'])
   const tp = (key: string, fallback?: string) => t(`plantInfo:${key}`, fallback || key)
   const currentLang = useLanguage()
@@ -1685,14 +1695,16 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 
       {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
-        <ToxicityWarningBanner
-          toxicityHuman={plant.toxicityHuman}
-          toxicityPets={plant.toxicityPets}
-          poisoningMethod={plant.poisoningMethod}
-          poisoningSymptoms={plant.poisoningSymptoms}
-          allergens={plant.allergens}
-          t={t}
-        />
+        {!hideToxicityBanner && (
+          <ToxicityWarningBanner
+            toxicityHuman={plant.toxicityHuman}
+            toxicityPets={plant.toxicityPets}
+            poisoningMethod={plant.poisoningMethod}
+            poisoningSymptoms={plant.poisoningSymptoms}
+            allergens={plant.allergens}
+            t={t}
+          />
+        )}
 
       {/* Info Cards Section - Dynamic grid based on content */}
         {infoSections.length > 0 && (
@@ -2261,7 +2273,7 @@ const ToxicityWarningBanner: React.FC<{
   
   if (neitherKnown) {
     return (
-      <div className="rounded-2xl sm:rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-600 bg-stone-50/80 dark:bg-stone-900/50 p-4 sm:p-6">
+      <div id="toxicity-section" className="rounded-2xl sm:rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-600 bg-stone-50/80 dark:bg-stone-900/50 p-4 sm:p-6">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 h-12 w-12 sm:h-14 sm:w-14 rounded-xl bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
             <Info className="h-6 w-6 sm:h-7 sm:w-7 text-stone-500 dark:text-stone-400" />
@@ -2278,7 +2290,7 @@ const ToxicityWarningBanner: React.FC<{
   
   if (bothSafe) {
     return (
-      <div className="rounded-xl sm:rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-r from-emerald-50/50 to-green-50/30 dark:from-emerald-950/20 dark:to-green-950/10 p-3 sm:p-4">
+      <div id="toxicity-section" className="rounded-xl sm:rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-r from-emerald-50/50 to-green-50/30 dark:from-emerald-950/20 dark:to-green-950/10 p-3 sm:p-4">
         <div className="flex items-center gap-3">
           <div className="flex-shrink-0 h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-emerald-400/70 dark:bg-emerald-600/60 flex items-center justify-center">
             <ShieldCheck className="h-5 w-5 sm:h-6 sm:w-6 text-white" />
@@ -2480,7 +2492,7 @@ const ToxicityWarningBanner: React.FC<{
   // For mild toxicity, show a simpler inline layout without the dramatic header
   if (maxSeverity === 'mild') {
     return (
-      <div className={`${bannerStyle.rounded} border ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding}`}>
+      <div id="toxicity-section" className={`${bannerStyle.rounded} border ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding}`}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3">
           {renderToxicityCard(humanConfig, 'human', t('plantInfo:toxicityBanner.humans'))}
           {renderToxicityCard(petsConfig, 'pets', t('plantInfo:toxicityBanner.pets'))}
@@ -2496,7 +2508,7 @@ const ToxicityWarningBanner: React.FC<{
   const titleSize = maxSeverity === 'lethal' ? 'text-lg sm:text-xl font-bold' : 'text-base sm:text-lg font-semibold'
 
   return (
-    <div className={`${bannerStyle.rounded} border ${maxSeverity === 'lethal' ? 'border-2' : ''} ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding} ${bannerStyle.shadow}`}>
+    <div id="toxicity-section" className={`${bannerStyle.rounded} border ${maxSeverity === 'lethal' ? 'border-2' : ''} ${bannerStyle.border} bg-gradient-to-r ${bannerStyle.bg} ${bannerStyle.padding} ${bannerStyle.shadow}`}>
       <div className={maxSeverity === 'lethal' ? 'space-y-4' : 'space-y-3'}>
         {/* Header with warning icon - scaled based on severity */}
         <div className="flex items-center gap-2.5 sm:gap-3">

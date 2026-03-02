@@ -12,6 +12,8 @@ import {
     Wrench,
     Flame,
     Snowflake,
+    AlertTriangle,
+    Skull,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
@@ -247,6 +249,68 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   const visibleStats = stats.filter((stat) => stat.visible)
 
+  // Determine toxicity warning for the top card — only very_toxic and deadly trigger it
+  const getToxicitySeverity = (level?: string) => {
+    const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
+    switch (normalized) {
+      case 'verytoxic':
+      case 'highlytoxic':
+      case 'toxic':
+        return 'high' as const
+      case 'deadly':
+      case 'lethallytoxic':
+      case 'lethal':
+      case 'fatal':
+        return 'lethal' as const
+      default:
+        return null
+    }
+  }
+
+  const humanSeverity = getToxicitySeverity(plant.toxicityHuman)
+  const petsSeverity = getToxicitySeverity(plant.toxicityPets)
+  const severityOrder = { high: 1, lethal: 2 }
+  const maxToxicitySeverity = humanSeverity && petsSeverity
+    ? (severityOrder[humanSeverity] >= severityOrder[petsSeverity] ? humanSeverity : petsSeverity)
+    : humanSeverity || petsSeverity
+
+  const toxicityTarget = humanSeverity && petsSeverity
+    ? null // both → generic label
+    : humanSeverity
+      ? 'humans' as const
+      : petsSeverity
+        ? 'pets' as const
+        : null
+
+  const toxicityStyles = {
+    high: {
+      Icon: AlertTriangle,
+      className: 'border-amber-400/70 bg-amber-50/80 text-amber-800 hover:bg-amber-100/80 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/40',
+    },
+    lethal: {
+      Icon: Skull,
+      className: 'border-red-400/80 bg-red-50/80 text-red-800 hover:bg-red-100/80 dark:border-red-600/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/40',
+    },
+  }
+
+  const toxicityWarningConfig = maxToxicitySeverity ? (() => {
+    const style = toxicityStyles[maxToxicitySeverity]
+    const baseLabel = maxToxicitySeverity === 'high'
+      ? t('plantDetails.toxicityWarning.high', { defaultValue: 'Toxic' })
+      : t('plantDetails.toxicityWarning.lethal', { defaultValue: 'Lethal' })
+    const suffix = toxicityTarget === 'humans'
+      ? ` ${t('plantDetails.toxicityWarning.toHumans', { defaultValue: 'to humans' })}`
+      : toxicityTarget === 'pets'
+        ? ` ${t('plantDetails.toxicityWarning.toPets', { defaultValue: 'to pets' })}`
+        : ''
+    return { ...style, label: `${baseLabel}${suffix}` }
+  })() : null
+
+  const scrollToToxicity = () => {
+    const el = document.getElementById('toxicity-section')
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
+
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
       <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
@@ -294,6 +358,16 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             </div>
             {(plant.presentation || plant.description || plant.identity?.overview) && (
               <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.presentation || plant.description || plant.identity?.overview}</p>
+            )}
+            {toxicityWarningConfig && (
+              <button
+                type="button"
+                onClick={scrollToToxicity}
+                className={`inline-flex items-center gap-2 sm:gap-2.5 rounded-xl border-2 px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-colors shadow-sm ${toxicityWarningConfig.className}`}
+              >
+                <toxicityWarningConfig.Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                {toxicityWarningConfig.label}
+              </button>
             )}
           </div>
           <div className="flex w-full justify-center lg:w-auto">
