@@ -4773,10 +4773,19 @@ export const AdminPage: React.FC = () => {
       if (isInitial) setVisitorsLoading(true);
       else setVisitorsRefreshing(true);
       try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        try {
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
+            ?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
         const resp = await fetchWithRetry(
           `/api/admin/visitors-stats?days=${visitorsWindowDays}`,
           {
-            headers: { Accept: "application/json" },
+            headers,
             credentials: "same-origin",
           },
         ).catch(() => null);
@@ -4803,7 +4812,7 @@ export const AdminPage: React.FC = () => {
           const totalResp = await fetchWithRetry(
             "/api/admin/visitors-unique-7d",
             {
-              headers: { Accept: "application/json" },
+              headers,
               credentials: "same-origin",
             },
           ).catch(() => null);
@@ -4822,7 +4831,7 @@ export const AdminPage: React.FC = () => {
           const sb = await fetchWithRetry(
             `/api/admin/sources-breakdown?days=${visitorsWindowDays}`,
             {
-              headers: { Accept: "application/json" },
+              headers,
               credentials: "same-origin",
             },
           ).catch(() => null);

@@ -99,6 +99,9 @@ export default defineConfig({
   envPrefix: ['VITE_'],
   resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
   build: {
+    // Disable modulepreload injection to avoid "preloaded but not used" warnings
+    // for lazy-loaded route chunks that aren't needed on the current page
+    modulePreload: false,
     // Disable sourcemaps in production to reduce memory usage
     sourcemap: false,
     // Use esbuild for minification (faster and uses less memory than terser)
