@@ -322,6 +322,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 <div key={image.id} className="relative group">
                   <button
                     onClick={() => setSelectedIndex(index)}
+                    aria-label={t('common.viewImage', { defaultValue: 'View image' })}
                     className="relative aspect-square w-full overflow-hidden rounded-md bg-stone-100 dark:bg-[#2a2a2d] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <img
@@ -347,6 +348,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                       e.stopPropagation()
                       downloadImage(image, index)
                     }}
+                    aria-label={t('common.downloadImage', { defaultValue: 'Download image' })}
                     className={cn(
                       "absolute bottom-1.5 right-1.5 p-2 rounded-full transition-all",
                       "bg-black/60 text-white",
@@ -450,6 +452,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                       e.stopPropagation()
                       shareImage(selectedImage)
                     }}
+                    aria-label={t('common.shareImage', { defaultValue: 'Share image' })}
                     className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-white/10 active:bg-white/20 transition-colors"
                   >
                     <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
@@ -466,6 +469,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                     downloadImage(selectedImage, selectedIndex || 0)
                   }}
                   disabled={downloadingId === selectedImage.id}
+                  aria-label={t('common.downloadImage', { defaultValue: 'Download image' })}
                   className={cn(
                     "flex flex-col items-center gap-1 p-3 rounded-xl transition-colors",
                     "hover:bg-white/10 active:bg-white/20",
@@ -505,6 +509,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 "text-white active:scale-95",
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
+              aria-label={t('common.previousImage', { defaultValue: 'Previous image' })}
               onClick={(e) => {
                 e.stopPropagation()
                 goToPrevious()
@@ -522,6 +527,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 "text-white active:scale-95",
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
+              aria-label={t('common.nextImage', { defaultValue: 'Next image' })}
               onClick={(e) => {
                 e.stopPropagation()
                 goToNext()
