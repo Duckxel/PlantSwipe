@@ -1106,14 +1106,24 @@ const PlantInfoPage: React.FC = () => {
                 </Badge>
               </div>
             )}
-            <PlantDetails 
-              plant={plant} 
-              liked={likedIds.includes(plant.id)} 
-              onToggleLike={toggleLiked} 
+            <PlantDetails
+              plant={plant}
+              liked={likedIds.includes(plant.id)}
+              onToggleLike={toggleLiked}
               onBookmark={handleBookmark}
               isBookmarked={isBookmarked}
             />
-            <MoreInformationSection plant={plant} />
+            {Boolean(profile?.parent) && (
+              <ToxicityWarningBanner
+                toxicityHuman={plant.toxicityHuman}
+                toxicityPets={plant.toxicityPets}
+                poisoningMethod={plant.poisoningMethod}
+                poisoningSymptoms={plant.poisoningSymptoms}
+                allergens={plant.allergens}
+                t={t}
+              />
+            )}
+            <MoreInformationSection plant={plant} hideToxicityBanner={Boolean(profile?.parent)} />
           </>
         )
       })()}
@@ -1151,7 +1161,7 @@ const PlantInfoPage: React.FC = () => {
   )
 }
 
-const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
+const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: boolean }> = ({ plant, hideToxicityBanner = false }) => {
   const { t } = useTranslation(['common', 'plantInfo'])
   const tp = (key: string, fallback?: string) => t(`plantInfo:${key}`, fallback || key)
   const currentLang = useLanguage()
@@ -1685,14 +1695,16 @@ const MoreInformationSection: React.FC<{ plant: Plant }> = ({ plant }) => {
       <ProAdviceSection plantId={plant.id} plantName={plant.name} />
 
       {/* Prominent Toxicity Warning Banner - Placed before detailed info cards */}
-        <ToxicityWarningBanner
-          toxicityHuman={plant.toxicityHuman}
-          toxicityPets={plant.toxicityPets}
-          poisoningMethod={plant.poisoningMethod}
-          poisoningSymptoms={plant.poisoningSymptoms}
-          allergens={plant.allergens}
-          t={t}
-        />
+        {!hideToxicityBanner && (
+          <ToxicityWarningBanner
+            toxicityHuman={plant.toxicityHuman}
+            toxicityPets={plant.toxicityPets}
+            poisoningMethod={plant.poisoningMethod}
+            poisoningSymptoms={plant.poisoningSymptoms}
+            allergens={plant.allergens}
+            t={t}
+          />
+        )}
 
       {/* Info Cards Section - Dynamic grid based on content */}
         {infoSections.length > 0 && (
