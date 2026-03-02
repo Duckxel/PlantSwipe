@@ -203,7 +203,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                   {showToxicSkull && (
-                    <div className="absolute top-2 right-2 z-10">
+                    <div className="absolute bottom-2 left-2 z-10">
                       <Badge className="rounded-full p-1.5 bg-red-500/90 text-white shadow-lg">
                         <Skull className="h-3.5 w-3.5" />
                       </Badge>
@@ -275,7 +275,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                   {showToxicSkull && (
-                    <div className="absolute top-3 right-3 z-10">
+                    <div className="absolute bottom-3 left-3 z-10">
                       <Badge className="rounded-full p-1.5 bg-red-500/90 text-white shadow-lg">
                         <Skull className="h-4 w-4" />
                       </Badge>
