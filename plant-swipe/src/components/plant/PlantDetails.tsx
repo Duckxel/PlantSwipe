@@ -14,7 +14,6 @@ import {
     Snowflake,
     AlertTriangle,
     Skull,
-    Info,
   } from "lucide-react"
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer"
 
@@ -250,15 +249,10 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   const visibleStats = stats.filter((stat) => stat.visible)
 
-  // Determine toxicity warning for the top card
+  // Determine toxicity warning for the top card — only very_toxic and deadly trigger it
   const getToxicitySeverity = (level?: string) => {
     const normalized = level?.toLowerCase().replace(/[_\s-]/g, '') || ''
     switch (normalized) {
-      case 'slightlytoxic':
-      case 'midlyirritating':
-      case 'mildlyirritating':
-      case 'mild':
-        return 'mild' as const
       case 'verytoxic':
       case 'highlytoxic':
       case 'toxic':
@@ -275,28 +269,42 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   const humanSeverity = getToxicitySeverity(plant.toxicityHuman)
   const petsSeverity = getToxicitySeverity(plant.toxicityPets)
-  const severityOrder = { mild: 1, high: 2, lethal: 3 }
+  const severityOrder = { high: 1, lethal: 2 }
   const maxToxicitySeverity = humanSeverity && petsSeverity
     ? (severityOrder[humanSeverity] >= severityOrder[petsSeverity] ? humanSeverity : petsSeverity)
     : humanSeverity || petsSeverity
 
-  const toxicityWarningConfig = maxToxicitySeverity ? {
-    mild: {
-      Icon: Info,
-      label: t('plantDetails.toxicityWarning.mild', { defaultValue: 'Mildly Toxic' }),
-      className: 'border-stone-300/60 bg-stone-100/70 text-stone-700 hover:bg-stone-200/70 dark:border-stone-600/40 dark:bg-stone-800/50 dark:text-stone-300 dark:hover:bg-stone-700/50',
-    },
+  const toxicityTarget = humanSeverity && petsSeverity
+    ? null // both → generic label
+    : humanSeverity
+      ? 'humans' as const
+      : petsSeverity
+        ? 'pets' as const
+        : null
+
+  const toxicityStyles = {
     high: {
       Icon: AlertTriangle,
-      label: t('plantDetails.toxicityWarning.high', { defaultValue: 'Toxic' }),
       className: 'border-amber-400/70 bg-amber-50/80 text-amber-800 hover:bg-amber-100/80 dark:border-amber-600/50 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-900/40',
     },
     lethal: {
       Icon: Skull,
-      label: t('plantDetails.toxicityWarning.lethal', { defaultValue: 'Lethal' }),
       className: 'border-red-400/80 bg-red-50/80 text-red-800 hover:bg-red-100/80 dark:border-red-600/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-900/40',
     },
-  }[maxToxicitySeverity] : null
+  }
+
+  const toxicityWarningConfig = maxToxicitySeverity ? (() => {
+    const style = toxicityStyles[maxToxicitySeverity]
+    const baseLabel = maxToxicitySeverity === 'high'
+      ? t('plantDetails.toxicityWarning.high', { defaultValue: 'Toxic' })
+      : t('plantDetails.toxicityWarning.lethal', { defaultValue: 'Lethal' })
+    const suffix = toxicityTarget === 'humans'
+      ? ` ${t('plantDetails.toxicityWarning.toHumans', { defaultValue: 'to humans' })}`
+      : toxicityTarget === 'pets'
+        ? ` ${t('plantDetails.toxicityWarning.toPets', { defaultValue: 'to pets' })}`
+        : ''
+    return { ...style, label: `${baseLabel}${suffix}` }
+  })() : null
 
   const scrollToToxicity = () => {
     const el = document.getElementById('toxicity-section')

@@ -1178,9 +1178,10 @@
       "year": "an"
     },
     "toxicityWarning": {
-      "mild": "Légèrement Toxique",
       "high": "Toxique",
-      "lethal": "Létale"
+      "lethal": "Létale",
+      "toPets": "pour les animaux",
+      "toHumans": "pour les humains"
     }
   },
   "bookmarks": {
