@@ -14,13 +14,20 @@ import {
   Home,
   Leaf,
   Droplets,
+  Search,
+  MessageSquarePlus,
+  Plus,
 } from "lucide-react"
 import React from "react"
 import { useTranslation } from "react-i18next"
 import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { SearchInput } from "@/components/ui/search-input"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { useAuth } from "@/context/AuthContext"
+import { checkEditorAccess } from "@/constants/userRoles"
+import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog"
 import type { LucideIcon } from "lucide-react"
 
 interface Category {
@@ -52,7 +59,9 @@ const categories: Category[] = [
 export default function CategoriesPage() {
   const { t } = useTranslation("common")
   const navigate = useLanguageNavigate()
+  const { user, profile } = useAuth()
   const [searchValue, setSearchValue] = React.useState("")
+  const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
 
   usePageMetadata({
     title: t("categories.title", { defaultValue: "Categories" }),
@@ -77,21 +86,58 @@ export default function CategoriesPage() {
         </p>
       </div>
 
-      <form className="mx-auto mb-6 max-w-md" onSubmit={handleSearchSubmit}>
-        <SearchInput
-          placeholder={t("plant.searchPlaceholder", { defaultValue: "Search plants..." })}
-          value={searchValue}
-          onChange={(e) => setSearchValue(e.target.value)}
-        />
-      </form>
-
-      <div className="mb-6 flex justify-center">
-        <button
-          onClick={() => navigate("/search")}
-          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
-        >
-          {t("categories.viewAll", { defaultValue: "View All Plants" })}
-        </button>
+      {/* Search bar — matches Search page backdrop style */}
+      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-6 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+        <form onSubmit={handleSearchSubmit}>
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+            <div className="flex flex-1 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => navigate("/search")}
+                className="shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                title={t("categories.viewAll", { defaultValue: "View All Plants" })}
+              >
+                <Search className="h-5 w-5" />
+              </button>
+              <div className="flex-1">
+                <SearchInput
+                  variant="lg"
+                  className="rounded-2xl"
+                  placeholder={t("plant.searchPlaceholder", { defaultValue: "Search plants..." })}
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  onClear={() => setSearchValue("")}
+                />
+              </div>
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
+              {user && (
+                <>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-2xl w-full lg:w-auto"
+                    onClick={() => setRequestDialogOpen(true)}
+                  >
+                    <MessageSquarePlus className="h-4 w-4 mr-2" />
+                    {t("requestPlant.button", { defaultValue: "Request Plant" })}
+                  </Button>
+                  {checkEditorAccess(profile) && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="rounded-2xl w-full lg:w-auto"
+                      onClick={() => navigate("/create")}
+                    >
+                      <Plus className="h-4 w-4 mr-2" />
+                      {t("common.addPlant")}
+                    </Button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </form>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -119,6 +165,8 @@ export default function CategoriesPage() {
           </Card>
         ))}
       </div>
+
+      <RequestPlantDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />
     </div>
   )
 }
