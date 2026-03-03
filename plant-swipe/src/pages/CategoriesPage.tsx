@@ -18,7 +18,6 @@ import {
 import React from "react"
 import { useTranslation } from "react-i18next"
 import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
 import { SearchInput } from "@/components/ui/search-input"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
