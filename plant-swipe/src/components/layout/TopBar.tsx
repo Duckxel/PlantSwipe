@@ -108,7 +108,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
           <>
             <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
             <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished || gardenInvites.length > 0} />
-            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+            <NavPill to="/search/categories" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
           </>
         ) : (
           // Logged-out navigation: Features, How it works, FAQ, Encyclopedia, Pricing (same on all pages)
@@ -116,7 +116,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
             <NavPillAnchor to="/#features" icon={<LayoutGrid className="h-4 w-4" />} label={t('common.landingFeatures', { defaultValue: 'Features' })} />
             <NavPillAnchor to="/#how-it-works" icon={<Route className="h-4 w-4" />} label={t('common.landingHowItWorks', { defaultValue: 'How it works' })} />
             <NavPillAnchor to="/#faq" icon={<HelpCircle className="h-4 w-4" />} label={t('common.landingFaq', { defaultValue: 'FAQ' })} />
-            <NavPill to="/search" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+            <NavPill to="/search/categories" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
             <NavPill to="/pricing" isActive={pathWithoutLang === '/pricing'} icon={<CreditCard className="h-4 w-4" />} label={t('common.pricing', { defaultValue: 'Pricing' })} />
           </>
         )}

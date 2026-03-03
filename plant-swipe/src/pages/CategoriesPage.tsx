@@ -17,6 +17,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { Card } from "@/components/ui/card"
+import { Button } from "@/components/ui/button"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { LucideIcon } from "lucide-react"
@@ -65,6 +66,16 @@ export default function CategoriesPage() {
         <p className="mt-2 text-muted-foreground">
           {t("categories.subtitle", { defaultValue: "Browse plants by category" })}
         </p>
+      </div>
+
+      <div className="mb-6 flex justify-center">
+        <Button
+          variant="outline"
+          size="lg"
+          onClick={() => navigate("/search")}
+        >
+          {t("categories.viewAll", { defaultValue: "View All Plants" })}
+        </Button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">

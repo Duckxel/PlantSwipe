@@ -140,9 +140,9 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   isActive={currentView === 'gardens'}
                   showDot={hasUnfinished || gardenInvites.length > 0}
                 />
-                <NavItem 
-                  to="/search" 
-                  icon={<Search className="h-5 w-5" />} 
+                <NavItem
+                  to="/search/categories"
+                  icon={<Search className="h-5 w-5" />}
                   label={t('common.search', { defaultValue: 'Search' })}
                   isActive={currentView === 'search'}
                 />
@@ -163,9 +163,9 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   label={t('common.home', { defaultValue: 'Home' })}
                   isActive={currentView === 'home'}
                 />
-                <NavItem 
-                  to="/search" 
-                  icon={<Search className="h-5 w-5" />} 
+                <NavItem
+                  to="/search/categories"
+                  icon={<Search className="h-5 w-5" />}
                   label={t('common.search', { defaultValue: 'Search' })}
                   isActive={currentView === 'search'}
                 />

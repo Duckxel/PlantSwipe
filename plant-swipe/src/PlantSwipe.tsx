@@ -500,8 +500,9 @@ export default function PlantSwipe() {
         hasParams = true
       }
 
-      // Clear URL parameters after applying to keep URL clean
+      // Clear URL parameters after applying and collapse filters
       if (hasParams) {
+        setShowFilters(false)
         setSearchParams({}, { replace: true })
       }
     }

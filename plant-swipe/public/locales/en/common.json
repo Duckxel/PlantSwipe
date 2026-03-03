@@ -2450,6 +2450,7 @@
   "categories": {
     "title": "Categories",
     "subtitle": "Browse plants by category",
+    "viewAll": "View All Plants",
     "tree": "Tree",
     "treeDesc": "Large woody plants with a single trunk",
     "shrub": "Shrub",

@@ -2450,6 +2450,7 @@
   "categories": {
     "title": "Catégories",
     "subtitle": "Parcourir les plantes par catégorie",
+    "viewAll": "Voir toutes les plantes",
     "tree": "Arbre",
     "treeDesc": "Grandes plantes ligneuses à tronc unique",
     "shrub": "Arbuste",
