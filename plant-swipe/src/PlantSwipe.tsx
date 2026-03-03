@@ -72,6 +72,7 @@ const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
+const CategoriesPageLazy = lazy(() => import("@/pages/CategoriesPage"))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
@@ -442,13 +443,65 @@ export default function PlantSwipe() {
     setLikedIds(arr)
   }, [profile])
 
-  // Read search query from URL parameters when on search page
+  // Read search query and filter params from URL when on search page
   React.useEffect(() => {
     if (pathWithoutLang.startsWith("/search")) {
+      let hasParams = false
+
       const urlQuery = searchParams.get("q")
       if (urlQuery && urlQuery !== query) {
         setQuery(urlQuery)
-        // Clear the URL parameter after setting the query to keep URL clean
+        hasParams = true
+      }
+
+      const urlType = searchParams.get("type")
+      if (urlType) {
+        setTypeFilter(urlType.toLowerCase())
+        hasParams = true
+      }
+
+      const urlUsage = searchParams.get("usage")
+      if (urlUsage) {
+        setUsageFilters(urlUsage.split(",").map(u => u.trim().toLowerCase()))
+        hasParams = true
+      }
+
+      const urlLivingSpace = searchParams.get("livingSpace")
+      if (urlLivingSpace) {
+        setLivingSpaceFilters(urlLivingSpace.split(",").map(s => s.trim().toLowerCase()))
+        hasParams = true
+      }
+
+      const urlSeason = searchParams.get("season")
+      if (urlSeason) {
+        setSeasonFilter(urlSeason.toLowerCase())
+        hasParams = true
+      }
+
+      const urlMaintenance = searchParams.get("maintenance")
+      if (urlMaintenance) {
+        setMaintenanceFilter(urlMaintenance.toLowerCase())
+        hasParams = true
+      }
+
+      const urlHabitat = searchParams.get("habitat")
+      if (urlHabitat) {
+        setHabitatFilters(urlHabitat.split(",").map(h => h.trim().toLowerCase()))
+        hasParams = true
+      }
+
+      if (searchParams.get("petSafe") === "true") {
+        setPetSafe(true)
+        hasParams = true
+      }
+
+      if (searchParams.get("humanSafe") === "true") {
+        setHumanSafe(true)
+        hasParams = true
+      }
+
+      // Clear URL parameters after applying to keep URL clean
+      if (hasParams) {
         setSearchParams({}, { replace: true })
       }
     }
@@ -956,7 +1009,7 @@ export default function PlantSwipe() {
           const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${typeLabel || ''} ${usageLabelsLower.join(' ')} ${(p.lifeCycle || []).join(' ')} ${p.family || ''} ${p.variety || ''} ${(p.plantHabit || []).join(' ')}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -1107,8 +1160,14 @@ export default function PlantSwipe() {
       if (onlySeeds && !p.seedsAvailable) return false
       if (onlyFavorites && !likedSet.has(p.id)) return false
       
-      // String equality checks - still O(1)
-      if (normalizedType && p._typeLabel !== normalizedType) return false
+      // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
+      if (normalizedType) {
+        if (normalizedType.includes(',')) {
+          if (!normalizedType.split(',').some(t => p._typeLabel === t.trim())) return false
+        } else {
+          if (p._typeLabel !== normalizedType) return false
+        }
+      }
       if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
       
       // Season filter - O(1) Set lookup
@@ -2271,6 +2330,14 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <GardenDashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/search/categories"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <CategoriesPageLazy />
                 </Suspense>
               }
             />
