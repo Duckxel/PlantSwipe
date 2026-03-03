@@ -99,6 +99,15 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   const [plantHabitSectionOpen, setPlantHabitSectionOpen] = useState(false)
   const [ediblePartSectionOpen, setEdiblePartSectionOpen] = useState(false)
 
+  const hasEdibleUsage = usageFilters.some(u => u.toLowerCase() === 'comestible')
+
+  // Clear edible part filters when "Comestible" usage is deselected
+  useEffect(() => {
+    if (!hasEdibleUsage && ediblePartFilters.length > 0) {
+      setEdiblePartFilters([])
+    }
+  }, [hasEdibleUsage, ediblePartFilters.length, setEdiblePartFilters])
+
   // Auto-expand advanced colors if selected
   useEffect(() => {
     if (colorFilter.length === 0) return
@@ -572,40 +581,42 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         )}
       </div>
 
-      {/* Edible Part */}
-      <div>
-        <FilterSectionHeader
-          label={t("plant.ediblePartLabel", { defaultValue: "Edible Part" })}
-          isOpen={ediblePartSectionOpen}
-          onToggle={() => setEdiblePartSectionOpen((prev) => !prev)}
-        />
-        {ediblePartSectionOpen && (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {(["fruit", "flower", "leaf", "stem", "seed", "rhizome", "bulb", "bark"] as const).map((option) => {
-              const isSelected = ediblePartFilters.includes(option)
-              return (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() =>
-                    setEdiblePartFilters((current) =>
-                      isSelected ? current.filter((v) => v !== option) : [...current, option]
-                    )
-                  }
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-                    isSelected
-                      ? "bg-orange-600 dark:bg-orange-500 text-white"
-                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-                  }`}
-                  aria-pressed={isSelected}
-                >
-                  {t(`plantInfo:enums.ediblePart.${option}`, { defaultValue: option })}
-                </button>
-              )
-            })}
-          </div>
-        )}
-      </div>
+      {/* Edible Part — only visible when Usage: Edible (Comestible) is active */}
+      {hasEdibleUsage && (
+        <div>
+          <FilterSectionHeader
+            label={t("plant.ediblePartLabel", { defaultValue: "Edible Part" })}
+            isOpen={ediblePartSectionOpen}
+            onToggle={() => setEdiblePartSectionOpen((prev) => !prev)}
+          />
+          {ediblePartSectionOpen && (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {(["fruit", "flower", "leaf", "stem", "seed", "rhizome", "bulb", "bark"] as const).map((option) => {
+                const isSelected = ediblePartFilters.includes(option)
+                return (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() =>
+                      setEdiblePartFilters((current) =>
+                        isSelected ? current.filter((v) => v !== option) : [...current, option]
+                      )
+                    }
+                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                      isSelected
+                        ? "bg-orange-600 dark:bg-orange-500 text-white"
+                        : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                    }`}
+                    aria-pressed={isSelected}
+                  >
+                    {t(`plantInfo:enums.ediblePart.${option}`, { defaultValue: option })}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Active filters summary */}
       <div className="text-xs space-y-1">
