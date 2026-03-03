@@ -24,7 +24,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, Crown } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
@@ -85,6 +85,7 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
+import { checkPremiumAccess } from "@/constants/userRoles";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
 
@@ -107,6 +108,7 @@ export const GardenDashboardPage: React.FC = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { t } = useTranslation("common");
   const currentLang = useLanguage();
+  const isPremium = checkPremiumAccess(profile);
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
   // derive tab from URL path segment after /garden/:id
@@ -3158,12 +3160,23 @@ export const GardenDashboardPage: React.FC = () => {
                 path="journal"
                 element={
                   canViewFullGarden ? (
-                    <GardenJournalSection
-                      gardenId={id!}
-                      garden={garden}
-                      plants={plants}
-                      members={members}
-                    />
+                    isPremium ? (
+                      <GardenJournalSection
+                        gardenId={id!}
+                        garden={garden}
+                        plants={plants}
+                        members={members}
+                      />
+                    ) : (
+                      <PremiumFeatureGate
+                        featureName={t("gardenDashboard.journal", "Journal")}
+                        featureDescription={t("gardenDashboard.premiumJournalDescription", "Track your garden's progress with photos, mood tracking, and AI-powered feedback. Available for Plus and VIP members.")}
+                        icon={<BookOpen className="h-12 w-12 text-amber-600 dark:text-amber-400" />}
+                        onUpgrade={() => navigate("/pricing")}
+                        onGoBack={() => navigate(`/garden/${id}/overview`)}
+                        t={t}
+                      />
+                    )
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -3173,15 +3186,26 @@ export const GardenDashboardPage: React.FC = () => {
                 path="analytics"
                 element={
                   canViewFullGarden ? (
-                    <GardenAnalyticsSection
-                      gardenId={id!}
-                      garden={garden}
-                      plants={plants}
-                      members={members}
-                      dailyStats={dailyStats}
-                      onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
-                      hideAiFeatures={garden?.hideAiChat ?? false}
-                    />
+                    isPremium ? (
+                      <GardenAnalyticsSection
+                        gardenId={id!}
+                        garden={garden}
+                        plants={plants}
+                        members={members}
+                        dailyStats={dailyStats}
+                        onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
+                        hideAiFeatures={garden?.hideAiChat ?? false}
+                      />
+                    ) : (
+                      <PremiumFeatureGate
+                        featureName={t("gardenDashboard.analytics", "Analytics")}
+                        featureDescription={t("gardenDashboard.premiumAnalyticsDescription", "Unlock detailed garden analytics, task insights, and AI-powered gardener advice. Available for Plus and VIP members.")}
+                        icon={<BarChart3 className="h-12 w-12 text-amber-600 dark:text-amber-400" />}
+                        onUpgrade={() => navigate("/pricing")}
+                        onGoBack={() => navigate(`/garden/${id}/overview`)}
+                        t={t}
+                      />
+                    )
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -3602,8 +3626,8 @@ export const GardenDashboardPage: React.FC = () => {
         </>
       )}
       
-      {/* Aphylia AI Chat - Only visible for garden members when not hidden in settings */}
-      {garden && user && isMember && !garden.hideAiChat && (
+      {/* Aphylia AI Chat - Only visible for premium garden members when not hidden in settings */}
+      {garden && user && isMember && isPremium && !garden.hideAiChat && (
         <AphyliaChatPortal 
           garden={garden} 
           members={members}
@@ -3616,6 +3640,58 @@ export const GardenDashboardPage: React.FC = () => {
     </div>
   );
 };
+
+// Premium feature gate - shown when a non-premium user tries to access a premium feature
+function PremiumFeatureGate({
+  featureName,
+  featureDescription,
+  icon,
+  onUpgrade,
+  onGoBack,
+  t,
+}: {
+  featureName: string;
+  featureDescription: string;
+  icon: React.ReactNode;
+  onUpgrade: () => void;
+  onGoBack: () => void;
+  t: (key: string, fallback?: string | Record<string, string>) => string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-[50vh] px-4 text-center">
+      <div className="relative w-24 h-24 mb-6">
+        <div className="w-24 h-24 rounded-full bg-gradient-to-br from-amber-100 to-amber-200 dark:from-amber-900/30 dark:to-amber-800/30 flex items-center justify-center">
+          {icon}
+        </div>
+        <div className="absolute -bottom-1 -right-1 w-10 h-10 rounded-full bg-amber-500 flex items-center justify-center shadow-lg">
+          <Lock className="h-5 w-5 text-white" />
+        </div>
+      </div>
+      <h2 className="text-2xl font-bold text-stone-900 dark:text-white mb-2">
+        {featureName}
+      </h2>
+      <p className="text-stone-500 dark:text-stone-400 max-w-sm mb-6">
+        {featureDescription}
+      </p>
+      <div className="flex flex-col gap-3 w-full max-w-xs">
+        <Button
+          onClick={onUpgrade}
+          className="rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white gap-2 shadow-lg"
+        >
+          <Crown className="h-5 w-5" />
+          {t("gardenDashboard.upgradeToPremium", "Upgrade to Premium")}
+        </Button>
+        <Button
+          onClick={onGoBack}
+          variant="ghost"
+          className="rounded-full text-stone-500"
+        >
+          {t("common.goBack", "Go Back")}
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 // Portal wrapper to render chat outside the main component tree
 // This prevents the chat from interfering with React Router rendering

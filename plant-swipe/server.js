@@ -2573,6 +2573,24 @@ async function isAdminFromRequest(req) {
   }
 }
 
+// Check if a user has premium access (Admin, Plus, or VIP role)
+// Used to gate premium features like Plant Scanner, Garden AI, Analytics, and Journal
+async function isPremiumUser(userId) {
+  if (!userId || !sql) return false
+  try {
+    const rows = await sql`select is_admin, roles from public.profiles where id = ${userId} limit 1`
+    if (!rows?.[0]) return false
+    if (rows[0].is_admin === true) return true
+    const roles = rows[0].roles
+    if (Array.isArray(roles) && (roles.includes('admin') || roles.includes('plus') || roles.includes('vip'))) {
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 // Determine whether a user has editor access (admin OR editor role)
 // This allows editors to access plant creation, blog, notifications, emails, and requests
 async function isEditorFromRequest(req) {
@@ -19857,18 +19875,7 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
 
   // Premium check: only Admin, Plus, or VIP users can scan
   try {
-    let isPremium = false
-    if (sql) {
-      const rows = await sql`select is_admin, roles from public.profiles where id = ${user.id} limit 1`
-      if (rows?.[0]) {
-        if (rows[0].is_admin === true) isPremium = true
-        const roles = rows[0].roles
-        if (Array.isArray(roles) && (roles.includes('admin') || roles.includes('plus') || roles.includes('vip'))) {
-          isPremium = true
-        }
-      }
-    }
-    if (!isPremium) {
+    if (!(await isPremiumUser(user.id))) {
       res.status(403).json({ error: 'Premium subscription required to use the Plant Scanner' })
       return
     }
@@ -21651,6 +21658,12 @@ app.get('/api/garden/:id/analytics', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
+    // Premium check: only Admin, Plus, or VIP users can access analytics
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access Garden Analytics' })
+      return
+    }
+
     // Verify membership
     const membership = await sql`
       select 1 from public.garden_members
@@ -21845,6 +21858,12 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can access AI advice
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access AI Gardener Advice' })
+      return
+    }
 
     const forceRefresh = req.query.refresh === 'true'
 
@@ -23578,6 +23597,12 @@ app.get('/api/garden/:id/journal', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can access Journal
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
     await ensureJournalTables()
 
     // Verify membership
@@ -23666,6 +23691,12 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
 
+    // Premium check: only Admin, Plus, or VIP users can create journal entries
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
+
     // Rate limit: 20 journal entries per hour per user
     if (await checkRateLimit('gardenJournal', req, res, user)) {
       return
@@ -23746,6 +23777,13 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can update journal entries
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
+
     await ensureJournalTables()
 
     const { entryId, title, content, mood, isPrivate, tags, photos } = req.body || {}
@@ -23802,6 +23840,13 @@ app.delete('/api/garden/:id/journal/:entryId', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can delete journal entries
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
+
     await ensureJournalTables()
 
     // Verify ownership or owner role
@@ -23840,6 +23885,13 @@ app.delete('/api/garden/:id/journal/photo/:photoId', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can manage journal photos
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
+
     await ensureJournalTables()
 
     // Only garden owners can delete individual photos
@@ -23890,6 +23942,13 @@ app.post('/api/garden/:id/journal/:entryId/feedback', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     if (!openai) { res.status(500).json({ ok: false, error: 'AI not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can get AI feedback
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required to access the Garden Journal' })
+      return
+    }
+
     await ensureJournalTables()
 
     // Get entry with photos
@@ -24026,6 +24085,12 @@ app.get('/api/garden/:id/advice/export', async (req, res) => {
     const user = await getUserFromRequestOrToken(req)
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    // Premium check: only Admin, Plus, or VIP users can export AI advice
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ ok: false, error: 'Premium subscription required' })
+      return
+    }
 
     const format = req.query.format || 'json' // json, txt, md
 
@@ -25140,7 +25205,13 @@ app.post('/api/ai/garden-chat/upload', chatImageUpload.single('image'), async (r
       res.status(401).json({ error: 'Unauthorized' })
       return
     }
-    
+
+    // Premium check: only Admin, Plus, or VIP users can use AI chat
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ error: 'Premium subscription required to use the AI Garden Chat' })
+      return
+    }
+
     // Rate limit: 50 image uploads per hour per user (admins exempt)
     if (await checkRateLimit('imageUpload', req, res, user)) {
       return
@@ -27172,7 +27243,13 @@ app.post('/api/ai/garden-chat', async (req, res) => {
       res.status(401).json({ error: 'Unauthorized' })
       return
     }
-    
+
+    // Premium check: only Admin, Plus, or VIP users can use AI chat
+    if (!(await isPremiumUser(user.id))) {
+      res.status(403).json({ error: 'Premium subscription required to use the AI Garden Chat' })
+      return
+    }
+
     // Rate limit: 60 AI chat messages per hour per user (admins exempt)
     if (await checkRateLimit('aiChat', req, res, user)) {
       return
