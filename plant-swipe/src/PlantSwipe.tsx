@@ -5,7 +5,7 @@ import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutGrid, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGlobalNavigationTracker } from "@/hooks/useNavigationHistory";
@@ -251,7 +251,7 @@ export default function PlantSwipe() {
     pathWithoutLang === "/" ? "landing" :
     pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
-    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang === "/search" ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
     pathWithoutLang.startsWith("/create") ? "create" : "discovery"
   
@@ -500,9 +500,8 @@ export default function PlantSwipe() {
         hasParams = true
       }
 
-      // Clear URL parameters after applying and collapse filters
+      // Clear URL parameters after applying to keep URL clean
       if (hasParams) {
-        setShowFilters(false)
         setSearchParams({}, { replace: true })
       }
     }
@@ -2217,23 +2216,32 @@ export default function PlantSwipe() {
                   }`}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="plant-search-main" className="sr-only">
-                        {t("common.search")}
-                      </Label>
-                      <SearchInput
-                        id="plant-search-main"
-                        ref={searchInputRef}
-                        variant="lg"
-                        className="rounded-2xl"
-                        placeholder={t("plant.searchPlaceholder")}
-                        value={query}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setQuery(e.target.value)
-                        }}
-                        onClear={() => setQuery("")}
-                        shortcut={shortcutLabel}
-                      />
+                    <div className="flex flex-1 items-center gap-2">
+                      <button
+                        onClick={() => navigate("/search/categories")}
+                        className="shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        title={t("categories.title", { defaultValue: "Categories" })}
+                      >
+                        <LayoutGrid className="h-5 w-5" />
+                      </button>
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <SearchInput
+                          id="plant-search-main"
+                          ref={searchInputRef}
+                          variant="lg"
+                          className="rounded-2xl"
+                          placeholder={t("plant.searchPlaceholder")}
+                          value={query}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            setQuery(e.target.value)
+                          }}
+                          onClear={() => setQuery("")}
+                          shortcut={shortcutLabel}
+                        />
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button

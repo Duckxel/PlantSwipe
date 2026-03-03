@@ -15,9 +15,11 @@ import {
   Leaf,
   Droplets,
 } from "lucide-react"
+import React from "react"
 import { useTranslation } from "react-i18next"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { SearchInput } from "@/components/ui/search-input"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { LucideIcon } from "lucide-react"
@@ -51,11 +53,20 @@ const categories: Category[] = [
 export default function CategoriesPage() {
   const { t } = useTranslation("common")
   const navigate = useLanguageNavigate()
+  const [searchValue, setSearchValue] = React.useState("")
 
   usePageMetadata({
     title: t("categories.title", { defaultValue: "Categories" }),
     description: t("categories.subtitle", { defaultValue: "Browse plants by category" }),
   })
+
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value
+    setSearchValue(value)
+    if (value.trim()) {
+      navigate(`/search?q=${encodeURIComponent(value.trim())}`)
+    }
+  }
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
@@ -68,14 +79,21 @@ export default function CategoriesPage() {
         </p>
       </div>
 
+      <div className="mx-auto mb-6 max-w-md">
+        <SearchInput
+          placeholder={t("plant.searchPlaceholder", { defaultValue: "Search plants..." })}
+          value={searchValue}
+          onChange={handleSearchChange}
+        />
+      </div>
+
       <div className="mb-6 flex justify-center">
-        <Button
-          variant="outline"
-          size="lg"
+        <button
           onClick={() => navigate("/search")}
+          className="text-sm text-muted-foreground underline-offset-4 hover:underline"
         >
           {t("categories.viewAll", { defaultValue: "View All Plants" })}
-        </Button>
+        </button>
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
