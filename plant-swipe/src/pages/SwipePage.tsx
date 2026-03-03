@@ -70,6 +70,7 @@ import { Link } from "@/components/i18n/Link"
 import { isNewPlant, isPlantOfTheMonth, isPopularPlant, isDangerouslyToxic } from "@/lib/plantHighlights"
 import { getDiscoveryPageImageUrl } from "@/lib/photos"
 import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
+import { useAuth } from "@/context/AuthContext"
 import { resolveColorValue } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 
@@ -835,8 +836,10 @@ const PlantMetaRail: React.FC<{
   disableHoverActivation?: boolean
 }> = ({ plant, variant, disableHoverActivation = false }) => {
   const { t } = useTranslation("common")
+  const { profile } = useAuth()
+  const isParent = Boolean(profile?.parent)
   const [activeKey, setActiveKey] = React.useState<string | null>(null)
-  const items = React.useMemo(() => buildIndicatorItems(plant, t), [plant, t])
+  const items = React.useMemo(() => buildIndicatorItems(plant, t, isParent), [plant, t, isParent])
   const supportsHover = useSupportsHover()
 
   React.useEffect(() => {
@@ -1054,10 +1057,10 @@ const WATER_ACCENTS: Record<IndicatorLevel, string> = {
   low: "text-blue-100",
 }
 
-const buildIndicatorItems = (plant: Plant, t: TFunction<"common">): IndicatorItem[] => {
+const buildIndicatorItems = (plant: Plant, t: TFunction<"common">, isParent: boolean): IndicatorItem[] => {
   const items: IndicatorItem[] = []
 
-  if (isDangerouslyToxic(plant)) {
+  if (isParent && isDangerouslyToxic(plant)) {
     items.push({
       key: "toxic",
       label: t("discoveryPage.indicators.toxic", { defaultValue: "Toxic" }),
