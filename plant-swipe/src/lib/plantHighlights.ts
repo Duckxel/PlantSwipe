@@ -3,13 +3,6 @@ import { monthSlugToNumber } from "@/lib/months"
 
 const DAYS_IN_MS = 24 * 60 * 60 * 1000
 
-const parseDate = (value?: string): Date | null => {
-  if (!value) return null
-  const timestamp = Date.parse(value)
-  if (Number.isNaN(timestamp)) return null
-  return new Date(timestamp)
-}
-
 /**
  * Checks if a plant should be featured as "Plant of the Month"
  *
@@ -22,13 +15,15 @@ export const isPlantOfTheMonth = (plant?: Plant | null, referenceDate: Date = ne
   return plant.featuredMonth.some(slug => monthSlugToNumber(slug) === currentMonth)
 }
 
+// ⚡ Bolt: Optimize isNewPlant by avoiding `new Date()` allocations per call
+// by relying directly on `Date.parse()` timestamps for math operations.
 export const isNewPlant = (plant?: Plant | null, referenceDate: Date = new Date(), windowDays = 7): boolean => {
   const createdAtRaw = plant?.createdTime ?? plant?.meta?.createdAt as string | undefined
   if (!createdAtRaw) return false
-  const createdAt = parseDate(createdAtRaw)
-  if (!createdAt) return false
+  const createdAtTs = Date.parse(createdAtRaw)
+  if (Number.isNaN(createdAtTs)) return false
 
-  const diff = referenceDate.getTime() - createdAt.getTime()
+  const diff = referenceDate.getTime() - createdAtTs
   return diff >= 0 && diff <= windowDays * DAYS_IN_MS
 }
 

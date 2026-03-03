@@ -121,6 +121,9 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   const visiblePlants = plants.slice(0, visibleCount);
   const hasMore = visibleCount < plants.length;
 
+  // ⚡ Bolt: Cache reference date once for all plant highlight calculations
+  const referenceDate = React.useMemo(() => new Date(), []);
+
   return (
     <div className="max-w-6xl mx-auto mt-8 px-2 md:px-4 pb-16 space-y-6">
       {/* 2-column grid on mobile, 2-column on desktop */}
@@ -134,7 +137,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
           const showToxicSkull = isParent && isDangerouslyToxic(p)
 
           const highlightBadges: Array<{ key: string; label: string; className: string; icon: React.ReactNode }> = []
-          if (isPlantOfTheMonth(p)) {
+          if (isPlantOfTheMonth(p, referenceDate)) {
             highlightBadges.push({
               key: `${p.id}-promotion`,
               label: t("discoveryPage.tags.plantOfMonth"),
@@ -142,7 +145,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
               icon: <Sparkles className="h-4 w-4 mr-1" />,
             })
           }
-          if (isNewPlant(p)) {
+          if (isNewPlant(p, referenceDate)) {
             highlightBadges.push({
               key: `${p.id}-new`,
               label: t("discoveryPage.tags.new"),

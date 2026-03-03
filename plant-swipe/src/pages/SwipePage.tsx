@@ -281,10 +281,14 @@ export const SwipePage = React.memo<SwipePageProps>(({
   const seasons = (current?.season ?? current?.seasons ?? []) as PlantSeason[]
   const displayImage = React.useMemo(() => getDiscoveryPageImageUrl(current), [current])
   const shouldPrioritizeImage = Boolean(boostImagePriority && displayImage)
+
+  // ⚡ Bolt: Cache reference date once for all plant highlight calculations
+  const referenceDate = React.useMemo(() => new Date(), []);
+
   const highlightBadges = React.useMemo(() => {
     if (!current) return []
     const badges: Array<{ key: string; label: string; icon: React.ReactNode; className: string }> = []
-    if (isPlantOfTheMonth(current)) {
+    if (isPlantOfTheMonth(current, referenceDate)) {
       badges.push({
         key: "promotion",
         label: t("discoveryPage.tags.plantOfMonth"),
@@ -292,7 +296,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
         icon: <Sparkles className="h-4 w-4 mr-1" />,
       })
     }
-    if (isNewPlant(current)) {
+    if (isNewPlant(current, referenceDate)) {
       badges.push({
         key: "new",
         label: t("discoveryPage.tags.new"),
@@ -309,7 +313,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
       })
     }
     return badges
-  }, [current, t])
+  }, [current, t, referenceDate])
 
     // Card content WITH interactive buttons (for desktop)
     const cardContent = current ? (
