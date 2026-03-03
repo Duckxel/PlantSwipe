@@ -456,13 +456,13 @@ export default function PlantSwipe() {
 
       const urlType = searchParams.get("type")
       if (urlType) {
-        setTypeFilter(urlType.toLowerCase())
+        setTypeFilter(urlType)
         hasParams = true
       }
 
       const urlUsage = searchParams.get("usage")
       if (urlUsage) {
-        setUsageFilters(urlUsage.split(",").map(u => u.trim().toLowerCase()))
+        setUsageFilters(urlUsage.split(",").map(u => u.trim()))
         hasParams = true
       }
 
