@@ -738,6 +738,29 @@
       "climbing": "Climbing",
       "cereal": "Cereal",
       "spice": "Spice"
+    },
+    "lifeCycleLabel": "Life Cycle",
+    "plantHabitLabel": "Plant Habit",
+    "ediblePartLabel": "Edible Part",
+    "plantHabit": {
+      "upright": "Upright",
+      "spreading": "Spreading",
+      "clumping": "Clumping",
+      "shrubby": "Shrubby",
+      "erect": "Erect",
+      "bushy": "Bushy",
+      "climbing": "Climbing",
+      "creeping": "Creeping",
+      "trailing": "Trailing",
+      "rosette": "Rosette",
+      "arborescent": "Arborescent",
+      "carpeting": "Carpeting",
+      "ground_cover": "Ground Cover",
+      "rhizomatous": "Rhizomatous",
+      "liana": "Liana",
+      "succulent": "Succulent",
+      "suckering": "Suckering",
+      "ball_shaped": "Ball-Shaped"
     }
   },
   "requestPlant": {

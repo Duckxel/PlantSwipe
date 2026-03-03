@@ -99,6 +99,9 @@ type PreparedPlant = Plant & {
   _humanSafe: boolean
   _livingSpace: string
   _seasonsSet: Set<string>         // O(1) season lookups
+  _lifeCycleSet: Set<string>       // O(1) life cycle lookups
+  _plantHabitSet: Set<string>      // O(1) plant habit lookups
+  _ediblePartSet: Set<string>      // O(1) edible part lookups
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
@@ -171,8 +174,6 @@ export default function PlantSwipe() {
   const debouncedQuery = useDebounce(query, 100)
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string[]>([])
-  const [onlySeeds, setOnlySeeds] = useState(false)
-  const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
   const [habitatFilters, setHabitatFilters] = useState<string[]>([])
@@ -180,6 +181,9 @@ export default function PlantSwipe() {
   const [petSafe, setPetSafe] = useState(false)
   const [humanSafe, setHumanSafe] = useState(false)
   const [livingSpaceFilters, setLivingSpaceFilters] = useState<string[]>([])
+  const [lifeCycleFilters, setLifeCycleFilters] = useState<string[]>([])
+  const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
+  const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -193,9 +197,13 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (typeof window === "undefined") return
     const mq = window.matchMedia("(min-width: 1024px)")
-    const handleChange = (e: MediaQueryListEvent) => setIsLargeScreen(e.matches)
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsLargeScreen(e.matches)
+      setShowFilters(e.matches)
+    }
     mq.addEventListener("change", handleChange)
     setIsLargeScreen(mq.matches)
+    setShowFilters(mq.matches)
     return () => mq.removeEventListener("change", handleChange)
   }, [])
 
@@ -497,6 +505,24 @@ export default function PlantSwipe() {
 
       if (searchParams.get("humanSafe") === "true") {
         setHumanSafe(true)
+        hasParams = true
+      }
+
+      const urlLifeCycle = searchParams.get("lifeCycle")
+      if (urlLifeCycle) {
+        setLifeCycleFilters(urlLifeCycle.split(",").map(l => l.trim()))
+        hasParams = true
+      }
+
+      const urlPlantHabit = searchParams.get("plantHabit")
+      if (urlPlantHabit) {
+        setPlantHabitFilters(urlPlantHabit.split(",").map(h => h.trim()))
+        hasParams = true
+      }
+
+      const urlEdiblePart = searchParams.get("ediblePart")
+      if (urlEdiblePart) {
+        setEdiblePartFilters(urlEdiblePart.split(",").map(e => e.trim()))
         hasParams = true
       }
 
@@ -916,6 +942,9 @@ export default function PlantSwipe() {
       let _cachedHabitats: string[] | undefined
       let _cachedHabitatSet: Set<string> | undefined
       let _cachedSeasonsSet: Set<string> | undefined
+      let _cachedLifeCycleSet: Set<string> | undefined
+      let _cachedPlantHabitSet: Set<string> | undefined
+      let _cachedEdiblePartSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
       // Type — use plantType or classification fallback
@@ -1057,6 +1086,21 @@ export default function PlantSwipe() {
            _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
            return _cachedSeasonsSet
         },
+        get _lifeCycleSet() {
+           if (_cachedLifeCycleSet) return _cachedLifeCycleSet
+           _cachedLifeCycleSet = new Set((p.lifeCycle || []).map((l: string) => l.toLowerCase()))
+           return _cachedLifeCycleSet
+        },
+        get _plantHabitSet() {
+           if (_cachedPlantHabitSet) return _cachedPlantHabitSet
+           _cachedPlantHabitSet = new Set((p.plantHabit || []).map((h: string) => h.toLowerCase()))
+           return _cachedPlantHabitSet
+        },
+        get _ediblePartSet() {
+           if (_cachedEdiblePartSet) return _cachedEdiblePartSet
+           _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
+           return _cachedEdiblePartSet
+        },
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
         _hasImage: hasImage,
@@ -1135,8 +1179,11 @@ export default function PlantSwipe() {
     usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
     habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
+    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
+    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
+    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1144,7 +1191,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet } = normalizedFilters
     
     // Pre-compute living space matching logic
     const livingSpaceCount = livingSpaceSet.size
@@ -1157,9 +1204,6 @@ export default function PlantSwipe() {
       // Boolean checks are O(1) and fastest
       if (petSafe && !p._petSafe) return false
       if (humanSafe && !p._humanSafe) return false
-      if (onlySeeds && !p.seedsAvailable) return false
-      if (onlyFavorites && !likedSet.has(p.id)) return false
-      
       // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
       if (normalizedType) {
         if (normalizedType.includes(',')) {
@@ -1219,7 +1263,43 @@ export default function PlantSwipe() {
         }
         if (!hasMatchingHabitat) return false
       }
-      
+
+      // Life cycle filter - OR logic: match if plant has ANY selected life cycle
+      if (lifeCycleSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._lifeCycleSet
+        if (lifeCycleSet.size <= plantSet.size) {
+          for (const l of lifeCycleSet) { if (plantSet.has(l)) { hasMatch = true; break } }
+        } else {
+          for (const l of plantSet) { if (lifeCycleSet.has(l)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Plant habit filter - OR logic: match if plant has ANY selected habit
+      if (plantHabitSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._plantHabitSet
+        if (plantHabitSet.size <= plantSet.size) {
+          for (const h of plantHabitSet) { if (plantSet.has(h)) { hasMatch = true; break } }
+        } else {
+          for (const h of plantSet) { if (plantHabitSet.has(h)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Edible part filter - OR logic: match if plant has ANY selected edible part
+      if (ediblePartSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._ediblePartSet
+        if (ediblePartSet.size <= plantSet.size) {
+          for (const e of ediblePartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
+        } else {
+          for (const e of plantSet) { if (ediblePartSet.has(e)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
       // Color filter - using pre-computed color tokens for O(1) lookups
       // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
       // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
@@ -1253,7 +1333,7 @@ export default function PlantSwipe() {
       
       return true
     })
-  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, onlySeeds, onlyFavorites, petSafe, humanSafe, likedSet])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -2191,10 +2271,12 @@ export default function PlantSwipe() {
                     setHumanSafe={setHumanSafe}
                     livingSpaceFilters={livingSpaceFilters}
                     setLivingSpaceFilters={setLivingSpaceFilters}
-                    onlySeeds={onlySeeds}
-                    setOnlySeeds={setOnlySeeds}
-                    onlyFavorites={onlyFavorites}
-                    setOnlyFavorites={setOnlyFavorites}
+                    lifeCycleFilters={lifeCycleFilters}
+                    setLifeCycleFilters={setLifeCycleFilters}
+                    plantHabitFilters={plantHabitFilters}
+                    setPlantHabitFilters={setPlantHabitFilters}
+                    ediblePartFilters={ediblePartFilters}
+                    setEdiblePartFilters={setEdiblePartFilters}
                     colorOptions={colorOptions}
                     primaryColors={primaryColors}
                     advancedColors={advancedColors}
@@ -2310,10 +2392,12 @@ export default function PlantSwipe() {
                         setHumanSafe={setHumanSafe}
                         livingSpaceFilters={livingSpaceFilters}
                         setLivingSpaceFilters={setLivingSpaceFilters}
-                        onlySeeds={onlySeeds}
-                        setOnlySeeds={setOnlySeeds}
-                        onlyFavorites={onlyFavorites}
-                        setOnlyFavorites={setOnlyFavorites}
+                        lifeCycleFilters={lifeCycleFilters}
+                        setLifeCycleFilters={setLifeCycleFilters}
+                        plantHabitFilters={plantHabitFilters}
+                        setPlantHabitFilters={setPlantHabitFilters}
+                        ediblePartFilters={ediblePartFilters}
+                        setEdiblePartFilters={setEdiblePartFilters}
                         colorOptions={colorOptions}
                         primaryColors={primaryColors}
                         advancedColors={advancedColors}

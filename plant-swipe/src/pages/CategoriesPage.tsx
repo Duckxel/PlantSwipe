@@ -37,13 +37,13 @@ const categories: Category[] = [
   { key: "fruitTree", icon: Apple, params: "?type=Tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
   { key: "bamboo", icon: Sprout, params: "?type=Bambu", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
   { key: "cactusSucculent", icon: Flower, params: "?type=Cactus,Succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
-  { key: "herbaceous", icon: Flower2, params: "?q=herbaceous", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
+  { key: "herbaceous", icon: Flower2, params: "?plantHabit=shrubby,bushy,erect,upright", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
   { key: "fruitPlant", icon: Cherry, params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
   { key: "aromatic", icon: Wind, params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
   { key: "medicinal", icon: Cross, params: "?usage=Medicinal", defaultName: "Medicinal Plant", defaultDesc: "Plants with therapeutic properties" },
-  { key: "climbing", icon: ArrowUpRight, params: "?usage=Climbing", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
-  { key: "perennial", icon: Repeat, params: "?q=perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
-  { key: "bulb", icon: CircleDot, params: "?q=bulb", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
+  { key: "climbing", icon: ArrowUpRight, params: "?plantHabit=climbing,liana,trailing", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
+  { key: "perennial", icon: Repeat, params: "?lifeCycle=perennial,succulent_perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
+  { key: "bulb", icon: CircleDot, params: "?ediblePart=bulb", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
   { key: "indoor", icon: Home, params: "?livingSpace=indoor", defaultName: "Indoor Plant", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "fern", icon: Leaf, params: "?q=fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
   { key: "aquatic", icon: Droplets, params: "?q=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
@@ -59,11 +59,10 @@ export default function CategoriesPage() {
     description: t("categories.subtitle", { defaultValue: "Browse plants by category" }),
   })
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearchValue(value)
-    if (value.trim()) {
-      navigate(`/search?q=${encodeURIComponent(value.trim())}`)
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (searchValue.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchValue.trim())}`)
     }
   }
 
@@ -78,13 +77,13 @@ export default function CategoriesPage() {
         </p>
       </div>
 
-      <div className="mx-auto mb-6 max-w-md">
+      <form className="mx-auto mb-6 max-w-md" onSubmit={handleSearchSubmit}>
         <SearchInput
           placeholder={t("plant.searchPlaceholder", { defaultValue: "Search plants..." })}
           value={searchValue}
-          onChange={handleSearchChange}
+          onChange={(e) => setSearchValue(e.target.value)}
         />
-      </div>
+      </form>
 
       <div className="mb-6 flex justify-center">
         <button

@@ -35,10 +35,12 @@ interface FilterControlsProps {
   setHumanSafe: React.Dispatch<React.SetStateAction<boolean>>
   livingSpaceFilters: string[]
   setLivingSpaceFilters: React.Dispatch<React.SetStateAction<string[]>>
-  onlySeeds: boolean
-  setOnlySeeds: React.Dispatch<React.SetStateAction<boolean>>
-  onlyFavorites: boolean
-  setOnlyFavorites: React.Dispatch<React.SetStateAction<boolean>>
+  lifeCycleFilters: string[]
+  setLifeCycleFilters: React.Dispatch<React.SetStateAction<string[]>>
+  plantHabitFilters: string[]
+  setPlantHabitFilters: React.Dispatch<React.SetStateAction<string[]>>
+  ediblePartFilters: string[]
+  setEdiblePartFilters: React.Dispatch<React.SetStateAction<string[]>>
 
   // Data Options
   colorOptions: ColorOption[]
@@ -70,10 +72,12 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   setHumanSafe,
   livingSpaceFilters,
   setLivingSpaceFilters,
-  onlySeeds,
-  setOnlySeeds,
-  onlyFavorites,
-  setOnlyFavorites,
+  lifeCycleFilters,
+  setLifeCycleFilters,
+  plantHabitFilters,
+  setPlantHabitFilters,
+  ediblePartFilters,
+  setEdiblePartFilters,
   colorOptions,
   primaryColors,
   advancedColors,
@@ -91,6 +95,9 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   const [usageSectionOpen, setUsageSectionOpen] = useState(false)
   const [habitatSectionOpen, setHabitatSectionOpen] = useState(false)
   const [maintenanceSectionOpen, setMaintenanceSectionOpen] = useState(false)
+  const [lifeCycleSectionOpen, setLifeCycleSectionOpen] = useState(false)
+  const [plantHabitSectionOpen, setPlantHabitSectionOpen] = useState(false)
+  const [ediblePartSectionOpen, setEdiblePartSectionOpen] = useState(false)
 
   // Auto-expand advanced colors if selected
   useEffect(() => {
@@ -119,8 +126,9 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     petSafe ||
     humanSafe ||
     livingSpaceFilters.length > 0 ||
-    onlySeeds ||
-    onlyFavorites
+    lifeCycleFilters.length > 0 ||
+    plantHabitFilters.length > 0 ||
+    ediblePartFilters.length > 0
 
   const clearAllFilters = () => {
     setSeasonFilter(null)
@@ -132,8 +140,9 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     setPetSafe(false)
     setHumanSafe(false)
     setLivingSpaceFilters([])
-    setOnlySeeds(false)
-    setOnlyFavorites(false)
+    setLifeCycleFilters([])
+    setPlantHabitFilters([])
+    setEdiblePartFilters([])
   }
 
   const habitatOptions = [
@@ -493,28 +502,109 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         )}
       </div>
 
-      {/* Toggles */}
-      <div className="pt-2 space-y-2">
-        <button
-          type="button"
-          onClick={() => setOnlySeeds((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-            onlySeeds ? "bg-emerald-600 dark:bg-emerald-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlySeeds}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.seedsOnly")}
-        </button>
-        <button
-          type="button"
-          onClick={() => setOnlyFavorites((v) => !v)}
-          className={`w-full justify-center px-3 py-2 rounded-2xl text-sm shadow-sm border flex items-center gap-2 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-            onlyFavorites ? "bg-rose-600 dark:bg-rose-500 text-white" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
-          }`}
-          aria-pressed={onlyFavorites}
-        >
-          <span className="inline-block h-2 w-2 rounded-full bg-current" /> {t("plant.favoritesOnly")}
-        </button>
+      {/* Life Cycle */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.lifeCycleLabel", { defaultValue: "Life Cycle" })}
+          isOpen={lifeCycleSectionOpen}
+          onToggle={() => setLifeCycleSectionOpen((prev) => !prev)}
+        />
+        {lifeCycleSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["annual", "biennial", "perennial", "succulent_perennial", "monocarpic", "ephemeral"] as const).map((option) => {
+              const isSelected = lifeCycleFilters.includes(option)
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setLifeCycleFilters((current) =>
+                      isSelected ? current.filter((v) => v !== option) : [...current, option]
+                    )
+                  }
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    isSelected
+                      ? "bg-lime-600 dark:bg-lime-500 text-white"
+                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={isSelected}
+                >
+                  {t(`plantInfo:enums.lifeCycle.${option}`, { defaultValue: option })}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Plant Habit */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.plantHabitLabel", { defaultValue: "Plant Habit" })}
+          isOpen={plantHabitSectionOpen}
+          onToggle={() => setPlantHabitSectionOpen((prev) => !prev)}
+        />
+        {plantHabitSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["upright", "spreading", "clumping", "shrubby", "erect", "bushy", "climbing", "creeping", "trailing", "rosette", "arborescent", "carpeting", "ground_cover", "rhizomatous", "liana", "succulent", "suckering", "ball_shaped"] as const).map((option) => {
+              const isSelected = plantHabitFilters.includes(option)
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setPlantHabitFilters((current) =>
+                      isSelected ? current.filter((v) => v !== option) : [...current, option]
+                    )
+                  }
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    isSelected
+                      ? "bg-amber-600 dark:bg-amber-500 text-white"
+                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={isSelected}
+                >
+                  {t(`plant.plantHabit.${option}`, { defaultValue: option })}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Edible Part */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.ediblePartLabel", { defaultValue: "Edible Part" })}
+          isOpen={ediblePartSectionOpen}
+          onToggle={() => setEdiblePartSectionOpen((prev) => !prev)}
+        />
+        {ediblePartSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["fruit", "flower", "leaf", "stem", "seed", "rhizome", "bulb", "bark"] as const).map((option) => {
+              const isSelected = ediblePartFilters.includes(option)
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setEdiblePartFilters((current) =>
+                      isSelected ? current.filter((v) => v !== option) : [...current, option]
+                    )
+                  }
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    isSelected
+                      ? "bg-orange-600 dark:bg-orange-500 text-white"
+                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={isSelected}
+                >
+                  {t(`plantInfo:enums.ediblePart.${option}`, { defaultValue: option })}
+                </button>
+              )
+            })}
+          </div>
+        )}
       </div>
 
       {/* Active filters summary */}
@@ -538,9 +628,16 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
           {livingSpaceFilters.map((space) => (
             <Badge key={space} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.livingSpace.${space.toLowerCase()}`, { defaultValue: space })}</Badge>
           ))}
-          {onlySeeds && <Badge variant="secondary" className="rounded-xl">{t("plant.seedsOnly")}</Badge>}
-          {onlyFavorites && <Badge variant="secondary" className="rounded-xl">{t("plant.favoritesOnly")}</Badge>}
-          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && !onlySeeds && !onlyFavorites && (
+          {lifeCycleFilters.map((lc) => (
+            <Badge key={lc} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.lifeCycle.${lc}`, { defaultValue: lc })}</Badge>
+          ))}
+          {plantHabitFilters.map((ph) => (
+            <Badge key={ph} variant="secondary" className="rounded-xl">{t(`plant.plantHabit.${ph}`, { defaultValue: ph })}</Badge>
+          ))}
+          {ediblePartFilters.map((ep) => (
+            <Badge key={ep} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.ediblePart.${ep}`, { defaultValue: ep })}</Badge>
+          ))}
+          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && lifeCycleFilters.length === 0 && plantHabitFilters.length === 0 && ediblePartFilters.length === 0 && (
             <span className="opacity-50">{t("plant.none")}</span>
           )}
         </div>

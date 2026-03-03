@@ -738,6 +738,29 @@
       "climbing": "Grimpant",
       "cereal": "Céréale",
       "spice": "Épice"
+    },
+    "lifeCycleLabel": "Cycle de vie",
+    "plantHabitLabel": "Port de la plante",
+    "ediblePartLabel": "Partie comestible",
+    "plantHabit": {
+      "upright": "Dressé",
+      "spreading": "Étalé",
+      "clumping": "En touffe",
+      "shrubby": "Arbustif",
+      "erect": "Érigé",
+      "bushy": "Buissonnant",
+      "climbing": "Grimpant",
+      "creeping": "Rampant",
+      "trailing": "Retombant",
+      "rosette": "En rosette",
+      "arborescent": "Arborescent",
+      "carpeting": "Couvre-sol",
+      "ground_cover": "Tapissant",
+      "rhizomatous": "Rhizomateux",
+      "liana": "Liane",
+      "succulent": "Succulent",
+      "suckering": "Drageonnant",
+      "ball_shaped": "En boule"
     }
   },
   "requestPlant": {
