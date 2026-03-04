@@ -27,6 +27,7 @@ import type {
   PlantPlanting,
   PlantMeta,
   PlantClassification,
+  PlantTypeValue,
   PlantActivityValue,
   PlantSubActivityValue,
 } from "@/types/plant"
@@ -335,7 +336,7 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
   setMeta,
 }) => {
   const selectedType = classification?.type
-  const availableSubclassOptions = selectedType ? PLANT_SUBCLASS_OPTIONS[selectedType] || [] : []
+  const availableSubclassOptions = selectedType ? PLANT_SUBCLASS_OPTIONS[selectedType as PlantTypeValue] || [] : []
   const selectedSubclass = classification?.subclass
   const availableSubSubclassOptions = selectedSubclass ? PLANT_SUBSUBCLASS_OPTIONS[selectedSubclass] || [] : []
   const selectedActivities = classification?.activities || []

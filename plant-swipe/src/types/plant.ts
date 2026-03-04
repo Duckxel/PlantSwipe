@@ -429,8 +429,8 @@ export type PlantType = PlantTypeValue
 export type PlantComestiblePart = EdiblePart
 /** @deprecated */
 export type PlantFruitType = "nut" | "seed" | "stone"
-/** @deprecated */
-export type PlantTypeValue = string
+/** @deprecated PlantTypeValue is now defined in Section 1: Base */
+// Removed duplicate: export type PlantTypeValue = string
 /** @deprecated */
 export type PlantSubclassValue = string
 /** @deprecated */

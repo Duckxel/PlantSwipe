@@ -255,7 +255,7 @@ function mapDbRowToPlant(
     popularity,
 
     // Legacy aliases for backward compatibility
-    plantType: (basePlant.plant_type as string) || undefined,
+    // plantType already set in Section 1: Base above
     description: (translation.presentation as string) || '',
     scientificName: (basePlant.scientific_name_species as string) || '',
     givenNames: (translation.common_names as string[]) || [],
