@@ -20,8 +20,8 @@
 --   9) Meta: Status, notes, contributors, sources
 --
 -- NON-TRANSLATABLE FIELDS (stored in this table):
---   Section 1: id, name, scientific_name_species, family,
---              featured_month
+--   Section 1: id, name, plant_type, plant_part, habitat,
+--              scientific_name_species, family, featured_month
 --   Section 2: climate, season, utility, edible_part, thorny, toxicity_human, toxicity_pets,
 --              poisoning_method, life_cycle, average_lifespan, foliage_persistence,
 --              living_space, landscaping, plant_habit, multicolor, bicolor
@@ -57,7 +57,9 @@ create table if not exists public.plants (
   name text not null,
 
   -- Section 1: Base — Identity & naming
-  plant_type text check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')),
+  plant_type text check (plant_type is null or plant_type in ('herb','shrub','tree','climber','succulent','fern','moss','grass')),
+  plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','bulbs','stems','leaves','flowers','fruits','spores']),
+  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','terrestrial','epiphytic','lithophytic','parasitic']),
   scientific_name_species text,
   family text,
   featured_month text[] not null default '{}'::text[],
@@ -380,7 +382,8 @@ do $rename_cols$ declare
     array['tutoring', 'staking'],
     array['companions', 'companion_plants'],
     array['comestible_part', 'edible_part'],
-    array['habitat', 'climate'],
+    -- NOTE: 'habitat' is no longer renamed to 'climate' — habitat is now its own field
+    -- Legacy habitat data is migrated to climate via value-mapping in Phase 2
     array['composition', 'landscaping'],
     array['soil', 'substrate'],
     array['mulching', 'mulch_type'],
@@ -487,6 +490,8 @@ declare
   col_defs text[][] := array[
     -- Section 1: Base
     array['plant_type', 'text'],
+    array['plant_part', 'text[] not null default ''{}''::text[]'],
+    array['habitat', 'text[] not null default ''{}''::text[]'],
     array['scientific_name_species', 'text'],
     array['family', 'text'],
     array['featured_month', 'text[] not null default ''{}''::text[]'],
@@ -633,8 +638,9 @@ begin
       and (edible_part is null or array_length(edible_part, 1) is null);
   end if;
 
-  -- habitat → climate
-  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='habitat') then
+  -- habitat → climate (legacy migration only — skip if habitat already has new-schema values)
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='habitat')
+     and not exists (select 1 from pg_constraint where conrelid = 'public.plants'::regclass and conname = 'plants_habitat_check') then
     update public.plants set climate = case
       when habitat is not null and array_length(habitat, 1) > 0 then (
         select array_agg(case
@@ -1056,7 +1062,25 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_plant_type_check check (plant_type is null or plant_type in ('plant','flower','bamboo','shrub','tree','cactus','succulent')) not valid;
+    alter table public.plants add constraint plants_plant_type_check check (plant_type is null or plant_type in ('herb','shrub','tree','climber','succulent','fern','moss','grass')) not valid;
+  exception when duplicate_object then null; when check_violation then null;
+  end;
+
+  -- plant_part
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'plant_part') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','bulbs','stems','leaves','flowers','fruits','spores']) not valid;
+  exception when duplicate_object then null; when check_violation then null;
+  end;
+
+  -- habitat
+  for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'habitat') loop
+    execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
+  end loop;
+  begin
+    alter table public.plants add constraint plants_habitat_check check (habitat <@ array['aquatic','terrestrial','epiphytic','lithophytic','parasitic']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1390,6 +1414,8 @@ do $$ declare
     'name',
     -- Section 1: Base
     'plant_type',
+    'plant_part',
+    'habitat',
     'scientific_name_species',
     'family',
     'featured_month',
