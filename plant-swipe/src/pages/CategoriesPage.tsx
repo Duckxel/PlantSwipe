@@ -14,7 +14,8 @@ import {
   Home,
   Leaf,
   Droplets,
-  Search,
+  BookOpen,
+  ArrowRight,
   MessageSquarePlus,
   Plus,
 } from "lucide-react"
@@ -214,9 +215,14 @@ export default function CategoriesPage() {
         <h1 className="text-3xl font-bold tracking-tight">
           {t("categories.title", { defaultValue: "Categories" })}
         </h1>
-        <p className="mt-2 text-muted-foreground">
-          {t("categories.subtitle", { defaultValue: "Browse plants by category" })}
-        </p>
+        <button
+          type="button"
+          onClick={() => navigate("/search")}
+          className="mt-2 inline-flex items-center gap-1.5 text-primary hover:text-primary/80 underline underline-offset-4 decoration-primary/40 hover:decoration-primary transition-colors"
+        >
+          {t("categories.browseAll", { defaultValue: "Access our full encyclopedia" })}
+          <ArrowRight className="h-4 w-4" />
+        </button>
       </div>
 
       {/* Search bar — matches Search page backdrop style */}
@@ -230,7 +236,7 @@ export default function CategoriesPage() {
                 className="shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
                 title={t("categories.viewAll", { defaultValue: "View All Plants" })}
               >
-                <Search className="h-5 w-5" />
+                <BookOpen className="h-5 w-5" />
               </button>
               <div className="flex-1">
                 <SearchInput
