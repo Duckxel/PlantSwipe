@@ -212,12 +212,16 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 </div>
                 <div className="p-3 flex flex-col flex-1 min-w-0">
                   <div className="flex-1 min-w-0 space-y-0.5">
-                    <ScrollingTitle className="font-semibold text-sm">{p.name}</ScrollingTitle>
+                    <ScrollingTitle className="font-semibold text-sm">
+                      {p.name}
+                      {p.variety && (
+                        <span className="ml-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-[11px] font-extrabold tracking-tight">
+                          &lsquo;{p.variety}&rsquo;
+                        </span>
+                      )}
+                    </ScrollingTitle>
                     <ScrollingTitle className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
                     {p.family && <ScrollingTitle className="text-[10px] opacity-50">{p.family}</ScrollingTitle>}
-                    {p.variety && (
-                      <ScrollingTitle className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingTitle>
-                    )}
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
                     <button
@@ -285,12 +289,16 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                 <div className="p-4 flex flex-col h-full min-w-0">
                   <div className="flex items-start gap-2">
                     <div className="min-w-0 flex-1 space-y-0.5">
-                      <ScrollingTitle className="font-semibold text-lg">{p.name}</ScrollingTitle>
+                      <ScrollingTitle className="font-semibold text-lg">
+                        {p.name}
+                        {p.variety && (
+                          <span className="ml-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-sm font-extrabold tracking-tight">
+                            &lsquo;{p.variety}&rsquo;
+                          </span>
+                        )}
+                      </ScrollingTitle>
                       <ScrollingTitle className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
                       {p.family && <ScrollingTitle className="text-xs opacity-50">{p.family}</ScrollingTitle>}
-                      {p.variety && (
-                        <ScrollingTitle className="text-xs font-medium text-emerald-600 dark:text-emerald-400">{p.variety}</ScrollingTitle>
-                      )}
                     </div>
                     <div className="flex items-center gap-1 flex-shrink-0">
                       <button
