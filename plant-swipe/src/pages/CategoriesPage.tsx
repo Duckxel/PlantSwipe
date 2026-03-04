@@ -3,7 +3,7 @@ import {
   ArrowRight,
   MessageSquarePlus,
   Plus,
-  Leaf,
+  Sprout,
 } from "lucide-react"
 import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -262,7 +262,7 @@ export default function CategoriesPage() {
         </form>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         {categories.map(({ key, params, defaultName, defaultDesc }) => {
           const previews = categoryPreviews[key] || []
           const heroPlant = previews[0]
@@ -273,7 +273,7 @@ export default function CategoriesPage() {
               key={key}
               role="button"
               tabIndex={0}
-              className="flex cursor-pointer flex-col overflow-hidden transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className="group relative flex cursor-pointer flex-col overflow-hidden rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               onClick={() => navigate(`/search${params}`)}
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") {
@@ -282,37 +282,43 @@ export default function CategoriesPage() {
                 }
               }}
             >
-              {/* Hero image header */}
-              <div className="relative h-28 w-full bg-muted">
+              {/* Hero image */}
+              <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                 {heroPlant ? (
                   <img
                     src={heroPlant.imageUrl}
                     alt={heroPlant.name}
-                    className="h-full w-full object-cover"
+                    className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
                     loading="lazy"
+                    draggable={false}
                   />
                 ) : (
-                  <div className="flex h-full w-full items-center justify-center">
-                    <Leaf className="h-10 w-10 text-muted-foreground/40" />
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Sprout className="h-10 w-10 text-emerald-400/50 dark:text-emerald-500/40" />
                   </div>
                 )}
+                {/* Bottom gradient overlay for text readability */}
+                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/50 to-transparent" />
+                {/* Category name over the image */}
+                <div className="absolute inset-x-0 bottom-0 p-3">
+                  <span className="text-sm font-semibold text-white drop-shadow-md leading-tight">
+                    {t(`categories.${key}`, { defaultValue: defaultName })}
+                  </span>
+                </div>
               </div>
-              {/* Text + remaining previews */}
-              <div className="flex flex-col items-center gap-1.5 p-4">
-                <span className="text-sm font-medium text-center leading-tight">
-                  {t(`categories.${key}`, { defaultValue: defaultName })}
-                </span>
-                <span className="text-xs text-muted-foreground text-center leading-tight">
+              {/* Description + plant preview circles */}
+              <div className="flex flex-col items-start gap-2 p-3">
+                <span className="text-[11px] leading-snug text-muted-foreground line-clamp-2">
                   {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
                 </span>
                 {remainingPlants.length > 0 && (
-                  <div className="flex items-center justify-center gap-1.5 mt-1">
+                  <div className="flex items-center -space-x-1.5">
                     {remainingPlants.map((plant) => (
                       <button
                         key={plant.id}
                         type="button"
                         title={plant.name}
-                        className="h-7 w-7 rounded-full overflow-hidden ring-1 ring-border/50 hover:ring-2 hover:ring-primary hover:scale-110 transition-all flex-shrink-0"
+                        className="relative h-7 w-7 rounded-full overflow-hidden border-2 border-white dark:border-[#1f1f1f] hover:z-10 hover:scale-125 hover:border-emerald-400 transition-all duration-200 flex-shrink-0"
                         onClick={(e) => {
                           e.stopPropagation()
                           navigate(`/plants/${plant.id}`)
