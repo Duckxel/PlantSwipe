@@ -1,23 +1,9 @@
 import {
-  TreeDeciduous,
-  Shrub,
-  Apple,
-  Sprout,
-  Flower,
-  Flower2,
-  Cherry,
-  Wind,
-  Cross,
-  ArrowUpRight,
-  Repeat,
-  CircleDot,
-  Home,
-  Leaf,
-  Droplets,
   BookOpen,
   ArrowRight,
   MessageSquarePlus,
   Plus,
+  Leaf,
 } from "lucide-react"
 import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -30,32 +16,29 @@ import { useAuth } from "@/context/AuthContext"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog"
 import { supabase } from "@/lib/supabaseClient"
-import type { LucideIcon } from "lucide-react"
-
 interface Category {
   key: string
-  icon: LucideIcon
   params: string
   defaultName: string
   defaultDesc: string
 }
 
 const categories: Category[] = [
-  { key: "tree", icon: TreeDeciduous, params: "?type=Tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
-  { key: "shrub", icon: Shrub, params: "?type=Shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
-  { key: "fruitTree", icon: Apple, params: "?type=Tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
-  { key: "bamboo", icon: Sprout, params: "?type=Bambu", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
-  { key: "cactusSucculent", icon: Flower, params: "?type=Cactus,Succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
-  { key: "herbaceous", icon: Flower2, params: "?plantHabit=shrubby,bushy,erect,upright", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
-  { key: "fruitPlant", icon: Cherry, params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
-  { key: "aromatic", icon: Wind, params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
-  { key: "medicinal", icon: Cross, params: "?usage=Medicinal", defaultName: "Medicinal Plant", defaultDesc: "Plants with therapeutic properties" },
-  { key: "climbing", icon: ArrowUpRight, params: "?plantHabit=climbing,liana,trailing", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
-  { key: "perennial", icon: Repeat, params: "?lifeCycle=perennial,succulent_perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
-  { key: "bulb", icon: CircleDot, params: "?ediblePart=bulb", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
-  { key: "indoor", icon: Home, params: "?livingSpace=indoor", defaultName: "Indoor Plant", defaultDesc: "Plants suited for indoor living spaces" },
-  { key: "fern", icon: Leaf, params: "?q=fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
-  { key: "aquatic", icon: Droplets, params: "?q=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
+  { key: "tree", params: "?type=Tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
+  { key: "shrub", params: "?type=Shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
+  { key: "fruitTree", params: "?type=Tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
+  { key: "bamboo", params: "?type=Bambu", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
+  { key: "cactusSucculent", params: "?type=Cactus,Succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
+  { key: "herbaceous", params: "?plantHabit=shrubby,bushy,erect,upright", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
+  { key: "fruitPlant", params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
+  { key: "aromatic", params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
+  { key: "medicinal", params: "?usage=Medicinal", defaultName: "Medicinal Plant", defaultDesc: "Plants with therapeutic properties" },
+  { key: "climbing", params: "?plantHabit=climbing,liana,trailing", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
+  { key: "perennial", params: "?lifeCycle=perennial,succulent_perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
+  { key: "bulb", params: "?ediblePart=bulb", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
+  { key: "indoor", params: "?livingSpace=indoor", defaultName: "Indoor Plant", defaultDesc: "Plants suited for indoor living spaces" },
+  { key: "fern", params: "?q=fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
+  { key: "aquatic", params: "?q=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
 ]
 
 interface CategoryPlantPreview {
@@ -280,58 +263,80 @@ export default function CategoriesPage() {
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-        {categories.map(({ key, icon: Icon, params, defaultName, defaultDesc }) => (
-          <Card
-            key={key}
-            role="button"
-            tabIndex={0}
-            className="flex cursor-pointer flex-col items-center gap-2 p-5 transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            onClick={() => navigate(`/search${params}`)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault()
-                navigate(`/search${params}`)
-              }
-            }}
-          >
-            <Icon className="h-8 w-8 text-primary" />
-            <span className="text-sm font-medium text-center leading-tight">
-              {t(`categories.${key}`, { defaultValue: defaultName })}
-            </span>
-            <span className="text-xs text-muted-foreground text-center leading-tight">
-              {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
-            </span>
-            {categoryPreviews[key]?.length > 0 && (
-              <div className="flex items-center justify-center gap-1.5 mt-1">
-                {categoryPreviews[key].map((plant) => (
-                  <button
-                    key={plant.id}
-                    type="button"
-                    title={plant.name}
-                    className="h-7 w-7 rounded-full overflow-hidden ring-1 ring-border/50 hover:ring-2 hover:ring-primary hover:scale-110 transition-all flex-shrink-0"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      navigate(`/plants/${plant.id}`)
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" || e.key === " ") {
-                        e.stopPropagation()
-                        e.preventDefault()
-                        navigate(`/plants/${plant.id}`)
-                      }
-                    }}
-                  >
-                    <img
-                      src={plant.imageUrl}
-                      alt={plant.name}
-                      className="h-full w-full object-cover"
-                      loading="lazy"
-                    />
-                  </button>
-                ))}
+        {categories.map(({ key, params, defaultName, defaultDesc }) => {
+          const previews = categoryPreviews[key] || []
+          const heroPlant = previews[0]
+          const remainingPlants = previews.slice(1)
+
+          return (
+            <Card
+              key={key}
+              role="button"
+              tabIndex={0}
+              className="flex cursor-pointer flex-col overflow-hidden transition-colors hover:bg-accent/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              onClick={() => navigate(`/search${params}`)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  navigate(`/search${params}`)
+                }
+              }}
+            >
+              {/* Hero image header */}
+              <div className="relative h-28 w-full bg-muted">
+                {heroPlant ? (
+                  <img
+                    src={heroPlant.imageUrl}
+                    alt={heroPlant.name}
+                    className="h-full w-full object-cover"
+                    loading="lazy"
+                  />
+                ) : (
+                  <div className="flex h-full w-full items-center justify-center">
+                    <Leaf className="h-10 w-10 text-muted-foreground/40" />
+                  </div>
+                )}
               </div>
-            )}
-          </Card>
+              {/* Text + remaining previews */}
+              <div className="flex flex-col items-center gap-1.5 p-4">
+                <span className="text-sm font-medium text-center leading-tight">
+                  {t(`categories.${key}`, { defaultValue: defaultName })}
+                </span>
+                <span className="text-xs text-muted-foreground text-center leading-tight">
+                  {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
+                </span>
+                {remainingPlants.length > 0 && (
+                  <div className="flex items-center justify-center gap-1.5 mt-1">
+                    {remainingPlants.map((plant) => (
+                      <button
+                        key={plant.id}
+                        type="button"
+                        title={plant.name}
+                        className="h-7 w-7 rounded-full overflow-hidden ring-1 ring-border/50 hover:ring-2 hover:ring-primary hover:scale-110 transition-all flex-shrink-0"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          navigate(`/plants/${plant.id}`)
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter" || e.key === " ") {
+                            e.stopPropagation()
+                            e.preventDefault()
+                            navigate(`/plants/${plant.id}`)
+                          }
+                        }}
+                      >
+                        <img
+                          src={plant.imageUrl}
+                          alt={plant.name}
+                          className="h-full w-full object-cover"
+                          loading="lazy"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </Card>
         ))}
       </div>
 
