@@ -66,17 +66,18 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className={cn(
-          "inline-block whitespace-nowrap",
-          !isHovered && "overflow-hidden text-ellipsis"
-        )}
+        className="inline-block whitespace-nowrap max-w-full"
         style={
           isHovered && scrollDistance > 0
             ? {
+                maxWidth: "none",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
                 ["--scroll-dist" as string]: `-${scrollDistance}px`,
               }
-            : undefined
+            : {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }
         }
       >
         {children}
