@@ -339,7 +339,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               )}
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">{plant.name}</h1>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">
+                {plant.name}
+                {plant.variety && (
+                  <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight drop-shadow-sm">
+                    &lsquo;{plant.variety}&rsquo;
+                  </span>
+                )}
+              </h1>
               {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
                 <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
               )}
