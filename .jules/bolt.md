@@ -1,0 +1,3 @@
+## 2024-02-23 - Fast Object Checking and Array Mapping
+**Learning:** `Object.keys(obj).length === 0` allocates an array just to check if an object is empty, which becomes a major bottleneck when repeatedly deeply traversing nested arrays and objects inside translation mappers. Likewise, combining `map()` and `filter()` iterates the array twice. Using pre-compiled regexes (`/[0.,%\s]/g` -> `RE_STRIP_CHARS`) also skips regex parsing in a hot loop.
+**Action:** Use `for (const _k in obj) return false; return true;` for `isEmptyObject()`. Use traditional `for` loops combined with `push` directly into a new array. Store static regex objects outside function bodies.

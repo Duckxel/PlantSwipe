@@ -27,12 +27,15 @@ import {
   ecologicalImpactEnum,
 } from '@/lib/composition'
 
+// ⚡ Bolt: Pre-compile regex for faster string processing
+const RE_STRIP_CHARS = /[0.,%\s]/g
+
 const sanitizeStringValue = (value: string): string | undefined => {
   const trimmed = value.trim()
   if (!trimmed) return undefined
   const lower = trimmed.toLowerCase()
   if (lower === 'null' || lower === 'undefined') return undefined
-  const stripped = trimmed.replace(/[0.,%\s]/g, '')
+  const stripped = trimmed.replace(RE_STRIP_CHARS, '')
   if (stripped.length === 0) return undefined
   return trimmed
 }
@@ -42,30 +45,40 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
   (value.constructor === Object || Object.getPrototypeOf(value) === Object.prototype)
 
+// ⚡ Bolt: O(1) empty object check to avoid Object.keys() allocation
+const isEmptyObject = (obj: Record<string, unknown>): boolean => {
+  for (const _k in obj) return false
+  return true
+}
+
 const sanitizeDeep = <T>(value: T): T => {
   if (typeof value === 'string') {
     const sanitized = sanitizeStringValue(value)
     return (sanitized === undefined ? undefined : sanitized) as T
   }
   if (Array.isArray(value)) {
-    const sanitizedArray = value
-      .map((item) => sanitizeDeep(item))
-      .filter((item) => {
-        if (item === undefined || item === null) return false
-        if (Array.isArray(item) && item.length === 0) return false
-        if (isPlainObject(item) && Object.keys(item).length === 0) return false
-        return true
-      })
+    // ⚡ Bolt: Single-pass array processing (avoids intermediate .map array)
+    const sanitizedArray: unknown[] = []
+    for (let i = 0; i < value.length; i++) {
+      const item = sanitizeDeep(value[i])
+      if (item === undefined || item === null) continue
+      if (Array.isArray(item) && item.length === 0) continue
+      if (isPlainObject(item) && isEmptyObject(item)) continue
+      sanitizedArray.push(item)
+    }
     return sanitizedArray as unknown as T
   }
   if (isPlainObject(value)) {
     const result: Record<string, unknown> = {}
-    for (const [key, entry] of Object.entries(value)) {
-      const sanitized = sanitizeDeep(entry)
-      if (sanitized === undefined || sanitized === null) continue
-      if (Array.isArray(sanitized) && sanitized.length === 0) continue
-      if (isPlainObject(sanitized) && Object.keys(sanitized).length === 0) continue
-      result[key] = sanitized
+    // ⚡ Bolt: for...in loop avoids Object.entries() and tuple allocations
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const sanitized = sanitizeDeep(value[key])
+        if (sanitized === undefined || sanitized === null) continue
+        if (Array.isArray(sanitized) && sanitized.length === 0) continue
+        if (isPlainObject(sanitized) && isEmptyObject(sanitized)) continue
+        result[key] = sanitized
+      }
     }
     return result as T
   }
