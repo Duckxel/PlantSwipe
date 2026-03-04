@@ -265,6 +265,8 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
             size="icon"
             className="rounded-full h-11 w-11 min-w-11"
             onClick={onClose}
+            aria-label={t('common.back', { defaultValue: 'Back' })}
+            title={t('common.back', { defaultValue: 'Back' })}
           >
             <ArrowLeft className="h-5 w-5" />
           </Button>
@@ -398,6 +400,8 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                     e.stopPropagation()
                     setSelectedIndex(null)
                   }}
+                  aria-label={t('common.close', { defaultValue: 'Close' })}
+                  title={t('common.close', { defaultValue: 'Close' })}
                 >
                   <X className="h-6 w-6" />
                 </Button>
