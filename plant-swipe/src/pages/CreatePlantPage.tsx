@@ -2175,8 +2175,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     
     // First, get the English name of the plant (it might be in any language)
     let plantNameForAi = trimmedName
+    // Include variety in the AI prompt if available
+    const varietyForAi = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
+    if (varietyForAi) {
+      plantNameForAi = `${plantNameForAi} '${varietyForAi}'`
+    }
     try {
-      const nameResult = await getEnglishPlantName(trimmedName)
+      const nameResult = await getEnglishPlantName(plantNameForAi)
       plantNameForAi = nameResult.englishName
       if (nameResult.wasTranslated) {
         console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
