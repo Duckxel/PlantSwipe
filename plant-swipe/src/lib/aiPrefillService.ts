@@ -463,17 +463,19 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
-    // Stage 0: Get English plant name
+    // Stage 0: Get English plant name (and variety separately)
     // The plant name might be in any language, so we first ask AI for the English common name
     onProgress?.({ stage: 'translating_name', plantName: displayName })
-    
+
     let englishPlantName = formatPlantName(displayName)
+    let extractedVariety: string | null = null
     try {
       const nameResult = await getEnglishPlantName(plantName, signal)
       const rawEnglishName = String(nameResult.englishName || plantName || '').trim()
       englishPlantName = formatPlantName(rawEnglishName)
+      extractedVariety = nameResult.variety || null
       if (nameResult.wasTranslated) {
-        console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
+        console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
       }
     } catch (err) {
       console.warn(`[aiPrefillService] Failed to get English name for "${plantName}", using original:`, err)
@@ -559,10 +561,11 @@ export async function processPlantRequest(
     
     // Stage 1: AI Fill (using English name internally, but display original name)
     onProgress?.({ stage: 'filling', plantName: displayName })
-    
+
     const emptyPlant: Plant = {
       id: generateUUIDv4(),
       name: englishPlantName,
+      variety: extractedVariety || undefined,
       utility: [],
       ediblePart: [],
       images: [],
@@ -572,15 +575,20 @@ export async function processPlantRequest(
       sources: [],
       status: IN_PROGRESS_STATUS,
     }
-    
+
     let plant: Plant = { ...emptyPlant }
-    
+
+    // Build the AI prompt name: include variety for context but keep name/variety separate in plant data
+    const aiPromptName = extractedVariety
+      ? `${englishPlantName} (variety: '${extractedVariety}')`
+      : englishPlantName
+
     // Run AI Fill (using English name for better AI results)
     // Use continueOnFieldError: true to allow partial fills when some fields fail
     // This prevents a single field timeout from failing the entire plant
     const fieldErrors: Array<{ field: string; error: string }> = []
     const aiData = await fetchAiPlantFill({
-      plantName: englishPlantName,
+      plantName: aiPromptName,
       schema: plantSchema,
       existingData: plant,
       fields: aiFieldOrder,
@@ -628,8 +636,12 @@ export async function processPlantRequest(
       }
     }
     
-    // Ensure plant name is always the English name (AI might overwrite or corrupt it)
+    // Ensure plant name is always the base English name (without variety)
     plant.name = englishPlantName
+    // Ensure variety is set from the extracted value if AI didn't fill it
+    if (extractedVariety && !plant.variety) {
+      plant.variety = extractedVariety
+    }
     
     // Ensure required fields have defaults (use flat fields)
     plant = {

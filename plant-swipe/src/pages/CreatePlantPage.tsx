@@ -2174,27 +2174,31 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const currentImages = plant.images || []
     
     // First, get the English name of the plant (it might be in any language)
+    // The endpoint now returns name and variety separately
     let plantNameForAi = trimmedName
-    // Include variety in the AI prompt if available
-    const varietyForAi = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
-    if (varietyForAi) {
-      plantNameForAi = `${plantNameForAi} '${varietyForAi}'`
-    }
+    let extractedVariety: string | null = null
     try {
-      const nameResult = await getEnglishPlantName(plantNameForAi)
+      const nameResult = await getEnglishPlantName(trimmedName)
       plantNameForAi = nameResult.englishName
+      extractedVariety = nameResult.variety || null
       if (nameResult.wasTranslated) {
-        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
-        // Update the plant name to the English version
+        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
+        // Update the plant name to the English version (base name only, without variety)
         setPlant((prev) => ({
           ...prev,
           name: plantNameForAi,
+          // Set variety if AI extracted one and plant doesn't already have one
+          ...(extractedVariety && !prev.variety ? { variety: extractedVariety } : {}),
         }))
       }
     } catch (err) {
       console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
       // Continue with original name if translation fails
     }
+    // Include variety in the AI prompt so the AI knows the specific cultivar,
+    // but keep it separate from plantNameForAi so it doesn't contaminate the name field
+    const varietyForAi = extractedVariety || (plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : '') || ''
+    const aiPromptName = varietyForAi ? `${plantNameForAi} (variety: '${varietyForAi}')` : plantNameForAi
     
     setAiStatus('filling')
     
@@ -2217,7 +2221,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const fieldData = await fetchAiPlantFillField({
-            plantName: plantNameForAi,
+            plantName: aiPromptName,
             schema: plantSchema,
             fieldKey,
             existingField,
@@ -2267,7 +2271,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           aiData = await fetchAiPlantFill({
-            plantName: plantNameForAi,
+            plantName: aiPromptName,
             schema: plantSchema,
             existingData: plant,
             fields: aiFieldOrder,

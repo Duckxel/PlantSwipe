@@ -27,7 +27,7 @@ export const plantSchema = {
   },
   variety: {
     type: 'text',
-    description: 'Variety or cultivar name if applicable, e.g. "Variegata", "Spring Field"',
+    description: 'ONLY the cultivar/variety name (e.g. "Variegata", "Hidcote", "Iceberg"). Do NOT include the base species name — it belongs in the name field. Return null if no specific variety.',
   },
   family: {
     type: 'text',
@@ -35,7 +35,7 @@ export const plantSchema = {
   },
   commonNames: {
     type: 'tag[]',
-    description: 'Common names for this plant (multiple entries)',
+    description: 'Common names for the BASE species without variety suffix (e.g. ["Lavender", "English Lavender"] not ["Hidcote Lavender"])',
   },
   presentation: {
     type: 'longtext',
