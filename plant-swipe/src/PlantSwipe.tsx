@@ -954,9 +954,10 @@ export default function PlantSwipe() {
           const commonNames = (p.commonNames || p.identity?.commonNames as string[] || []).join(' ')
           const givenNames = (p.givenNames || p.identity?.givenNames as string[] || []).join(' ')
           const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
+          const tags = (p.plantTags || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {

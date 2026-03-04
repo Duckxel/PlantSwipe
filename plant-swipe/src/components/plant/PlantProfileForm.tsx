@@ -356,18 +356,43 @@ const CompanionSelector: React.FC<{
     if (language !== 'en') {
       let q = supabase
         .from('plant_translations')
-        .select('plant_id, name')
+        .select('plant_id, name, variety')
         .eq('language', language)
         .order('name')
         .limit(30)
-      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      if (query.trim()) q = q.or(`name.ilike.%${query.trim()}%,variety.ilike.%${query.trim()}%`)
       const { data } = await q
-      if (data) plantResults = data.map((t) => ({ id: t.plant_id as string, name: t.name as string }))
+      if (data) plantResults = data.map((t) => ({
+        id: t.plant_id as string,
+        name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+      }))
     } else {
+      // Search plants table by name, then also check translations for variety matches
       let q = supabase.from('plants').select('id,name').order('name').limit(30)
       if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
       const { data } = await q
       if (data) plantResults = data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))
+
+      // Also search English translations by variety
+      if (query.trim()) {
+        const { data: varietyData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .eq('language', 'en')
+          .ilike('variety', `%${query.trim()}%`)
+          .limit(20)
+        if (varietyData) {
+          const existingIds = new Set(plantResults.map(p => p.id))
+          for (const t of varietyData) {
+            if (!existingIds.has(t.plant_id as string)) {
+              plantResults.push({
+                id: t.plant_id as string,
+                name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+              })
+            }
+          }
+        }
+      }
     }
 
     // Fetch images for results

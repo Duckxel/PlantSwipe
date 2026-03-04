@@ -425,6 +425,7 @@ type PlantDashboardRow = {
   name: string;
   variety: string | null;
   givenNames: string[];
+  tags: string[];
   status: NormalizedPlantStatus;
   featuredMonths: FeaturedMonthSlug[];
   primaryImage: string | null;
@@ -2845,15 +2846,15 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by common_names in translations table
+      // Also search by variety or common_names in translations table
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, common_names, plants!inner(id, name, scientific_name_species, status)")
+        .select("plant_id, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
         .eq("language", "en")
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where common_names contains the search term
+      // Filter translation matches where variety or common_names contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
       const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
@@ -2861,9 +2862,10 @@ export const AdminPage: React.FC = () => {
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
         const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
+        const varietyStr = typeof r?.variety === 'string' ? r.variety : '';
         const matchesGivenName = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
-        );
+        ) || varietyStr.toLowerCase().includes(termLower);
         if (matchesGivenName && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
           const plants = r.plants as Record<string, unknown>;
           translationPlantIds.add(String(plants.id));
@@ -3175,7 +3177,7 @@ export const AdminPage: React.FC = () => {
         while (hasMore) {
           const { data, error: trError } = await supabase
             .from("plant_translations")
-            .select("plant_id, common_names, variety")
+            .select("plant_id, common_names, variety, plant_tags")
             .eq("language", "en")
             .range(offset, offset + pageSize - 1);
           if (trError) break;
@@ -3194,6 +3196,7 @@ export const AdminPage: React.FC = () => {
       // Build maps of plant_id -> common_names and plant_id -> variety
       const givenNamesMap = new Map<string, string[]>();
       const varietyMap = new Map<string, string>();
+      const tagsMap = new Map<string, string[]>();
       (translationsData || []).forEach((t: unknown) => {
         const tr = t as Record<string, unknown>;
         if (tr?.plant_id) {
@@ -3202,6 +3205,9 @@ export const AdminPage: React.FC = () => {
           }
           if (tr.variety && typeof tr.variety === "string") {
             varietyMap.set(String(tr.plant_id), tr.variety);
+          }
+          if (Array.isArray(tr.plant_tags)) {
+            tagsMap.set(String(tr.plant_id), (tr.plant_tags as unknown[]).map((tag: unknown) => String(tag || "")));
           }
         }
       });
@@ -3275,12 +3281,14 @@ export const AdminPage: React.FC = () => {
           // Get given_names from the map
           const plantId = String(r.id);
           const givenNames = givenNamesMap.get(plantId) || [];
+          const tags = tagsMap.get(plantId) || [];
 
             return {
               id: plantId,
               name: r?.name ? String(r.name) : "Unnamed plant",
               variety: varietyMap.get(plantId) || null,
               givenNames,
+              tags,
               status: normalizePlantStatus(r?.status),
               featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
@@ -3582,11 +3590,12 @@ export const AdminPage: React.FC = () => {
               ? plant.featuredMonths.length === 0
               : plant.featuredMonths.includes(selectedFeaturedMonth);
         if (!matchesFeaturedMonth) return false;
-        // Search by name, variety, OR givenNames (common names)
+        // Search by name, variety, common names, or tags
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
             (plant.variety && plant.variety.toLowerCase().includes(term)) ||
-            plant.givenNames.some((gn) => gn.toLowerCase().includes(term))
+            plant.givenNames.some((gn) => gn.toLowerCase().includes(term)) ||
+            plant.tags.some((tag) => tag.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })

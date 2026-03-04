@@ -1925,30 +1925,49 @@ export const GardenDashboardPage: React.FC = () => {
     const queryLower = query.toLowerCase().trim();
     if (!queryLower) return [];
 
-    // Search in base plants table
+    // Search in base plants table by name or scientific name
     const { data: basePlants, error: baseError } = await supabase
       .from("plants")
       .select("id")
-      .ilike("name", `%${queryLower}%`)
+      .or(`name.ilike.%${queryLower}%,scientific_name_species.ilike.%${queryLower}%`)
       .limit(20);
 
-    // Search in translations table for current language
+    // Search in translations table by name or variety
     const { data: translatedPlants, error: transError } = await supabase
       .from("plant_translations")
-      .select("plant_id")
+      .select("plant_id, common_names")
       .eq("language", currentLang)
-      .ilike("name", `%${queryLower}%`)
-      .limit(20);
+      .or(`name.ilike.%${queryLower}%,variety.ilike.%${queryLower}%`)
+      .limit(30);
+
+    // Also fetch translations that might match by common_names (JSONB array — needs client-side filter)
+    const { data: commonNameMatches } = await supabase
+      .from("plant_translations")
+      .select("plant_id, common_names")
+      .eq("language", currentLang)
+      .limit(200);
 
     if (baseError || transError) {
       console.error("Error searching plants:", baseError || transError);
       return [];
     }
 
+    // Collect IDs from direct matches
     const allPlantIds = new Set([
       ...(basePlants || []).map((p: { id: string }) => p.id),
       ...(translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
     ]);
+
+    // Add IDs from common_names matches (client-side filter on JSONB array)
+    if (commonNameMatches) {
+      for (const row of commonNameMatches) {
+        const names = Array.isArray(row.common_names) ? row.common_names : [];
+        if (names.some((n: unknown) => typeof n === 'string' && n.toLowerCase().includes(queryLower))) {
+          allPlantIds.add(row.plant_id as string);
+        }
+      }
+    }
+
     if (allPlantIds.size === 0) return [];
 
     const { data: fullPlants, error: fullError } = await supabase
@@ -1991,7 +2010,14 @@ export const GardenDashboardPage: React.FC = () => {
       const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl };
       const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
 
-      if (!mergedPlant.name.toLowerCase().includes(queryLower)) continue;
+      // Match on name, variety, scientific name, or common names
+      const nameMatch = mergedPlant.name.toLowerCase().includes(queryLower);
+      const varietyMatch = mergedPlant.variety?.toLowerCase().includes(queryLower);
+      const sciMatch = (mergedPlant.scientificNameSpecies || mergedPlant.scientificName || '').toLowerCase().includes(queryLower);
+      const commonMatch = (mergedPlant.commonNames || mergedPlant.givenNames || []).some(
+        (n: string) => n.toLowerCase().includes(queryLower)
+      );
+      if (!nameMatch && !varietyMatch && !sciMatch && !commonMatch) continue;
 
       // Cache the full Plant object for later retrieval on select
       plantCacheRef.current.set(String(mergedPlant.id), mergedPlant);
