@@ -1,12 +1,13 @@
 -- ========== Plants base table ==========
 -- ARCHITECTURE NOTE: As of 2025, ALL translatable content is stored ONLY in plant_translations.
 -- This table contains ONLY non-translatable base data. No translatable columns exist here
--- except for 'name' which is the canonical English name used for unique constraint.
+-- except for 'name' which is a canonical English fallback (NOT unique — varieties can share names).
 --
 -- NAME HANDLING:
---   plants.name = canonical English name (unique constraint)
+--   plants.name = canonical English name (non-unique fallback, kept for app compatibility)
 --   plant_translations.name = displayed name for each language (including English)
 --   When saving in English, BOTH plants.name AND plant_translations.name are updated
+--   Multiple plants can share the same name (e.g. different varieties of the same species)
 --
 -- SCHEMA SECTIONS:
 --   1) Base: Identity & naming, featured months, images
@@ -288,8 +289,9 @@ create table if not exists public.plants (
   updated_time timestamptz not null default now()
 );
 
--- Unique constraint on name — canonical English name for the plant
-create unique index if not exists plants_name_unique on public.plants (lower(name));
+-- Index on name — canonical English name (not unique: different varieties can share names)
+drop index if exists plants_name_unique;
+create index if not exists plants_name_idx on public.plants (lower(name));
 
 -- Drop the scientific_name unique constraint if it exists
 drop index if exists plants_scientific_name_unique;
@@ -343,7 +345,7 @@ begin
 
   -- 5. Recreate primary key and indexes
   alter table public.plants add primary key (id);
-  create unique index if not exists plants_name_unique on public.plants (lower(name));
+  create index if not exists plants_name_idx on public.plants (lower(name));
 
   -- 6. Recreate FK constraints from dependent tables
   alter table public.garden_inventory      add constraint garden_inventory_plant_id_fkey      foreign key (plant_id) references public.plants(id) on delete cascade;

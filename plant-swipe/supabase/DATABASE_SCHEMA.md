@@ -28,7 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
-- **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Updated sync_parts CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
+- **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Removed UNIQUE constraint on `plants.name` — multiple plants can now share the same name (different varieties). Name column kept as non-unique fallback for app compatibility.
 - **Feb 28, 2026:** Added 3 new email automation triggers: `ACCOUNT_DELETION`, `FRIEND_REQUEST_REMINDER`, `GARDEN_INVITE_REMINDER`. Added `reminder_email_sent` column to `friend_requests` and `garden_invites` tables. Added server-side cron job (every 3 hours) for reminder emails. Added detailed table definitions for `friend_requests`, `garden_invites`, `admin_email_triggers`, `admin_automatic_email_sends`.
 - **Feb 27, 2026:** Added `user_action_status` table to sync profile action completion/skip state across devices. Actions marked completed are never reverted (sticky). RPCs: `mark_action_completed`, `bulk_mark_actions_completed`, `skip_action`, `unskip_action`.
 - **Feb 26, 2026:** Added `plant_type` column (single-select, updated Mar 4 to: herb, shrub, tree, climber, succulent, fern, moss, grass) and `watering_mode` column (always | seasonal) to `plants` table. Updated sync_parts to include both columns in CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
@@ -459,7 +459,7 @@ Non-translatable base data for all plants. Organized into 9 sections matching th
 
 ```sql
 id                        TEXT PRIMARY KEY
-name                      TEXT NOT NULL UNIQUE   -- Canonical English name
+name                      TEXT NOT NULL           -- Canonical English name (non-unique, varieties can share names)
 
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
