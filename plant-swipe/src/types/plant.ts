@@ -4,6 +4,18 @@
 
 // -- Section 1: Base ----------------------------------------------------------
 
+export type PlantTypeValue =
+  | "herb" | "shrub" | "tree" | "climber"
+  | "succulent" | "fern" | "moss" | "grass"
+
+export type PlantPartValue =
+  | "roots" | "bulbs" | "stems" | "leaves"
+  | "flowers" | "fruits" | "spores"
+
+export type HabitatValue =
+  | "aquatic" | "terrestrial" | "epiphytic"
+  | "lithophytic" | "parasitic"
+
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
   | "july" | "august" | "september" | "october" | "november" | "december"
@@ -163,6 +175,9 @@ export interface Plant {
   name: string
 
   // -- Section 1: Base --------------------------------------------------------
+  plantType?: PlantTypeValue
+  plantPart?: PlantPartValue[]
+  habitat?: HabitatValue[]
   scientificNameSpecies?: string
   variety?: string
   family?: string
@@ -320,8 +335,7 @@ export interface Plant {
   // LEGACY fields — kept for backward compatibility during migration
   // These map to old nested structures; new code should use flat fields above
   // =========================================================================
-  /** @deprecated Use flat fields instead */
-  plantType?: string
+  // plantType is now in Section 1: Base (not deprecated)
   /** @deprecated Use commonNames */
   givenNames?: string[]
   /** @deprecated Use scientificNameSpecies */
@@ -409,8 +423,8 @@ export type ColorOption = {
 // Legacy type aliases — kept so existing imports don't break
 // ============================================================================
 
-/** @deprecated */
-export type PlantType = "plant" | "flower" | "bamboo" | "shrub" | "tree" | "cactus" | "succulent"
+/** @deprecated Use PlantTypeValue */
+export type PlantType = PlantTypeValue
 /** @deprecated Use EdiblePart */
 export type PlantComestiblePart = EdiblePart
 /** @deprecated */

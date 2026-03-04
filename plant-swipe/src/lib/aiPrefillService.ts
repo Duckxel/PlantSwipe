@@ -14,6 +14,9 @@ import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
 import type { Plant, PlantColor, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
+  plantTypeEnum,
+  plantPartEnum,
+  habitatEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -669,7 +672,9 @@ export async function processPlantRequest(
       id: plantId,
       name: trimmedName,
       // Section 1: Base
-      plant_type: plant.plantType || null,
+      plant_type: plantTypeEnum.toDb(plant.plantType) || null,
+      plant_part: plantPartEnum.toDbArray(plant.plantPart),
+      habitat: habitatEnum.toDbArray(plant.habitat),
       scientific_name_species: plant.scientificNameSpecies || null,
       family: plant.family || null,
       featured_month: plant.featuredMonth || [],

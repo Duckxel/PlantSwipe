@@ -1,6 +1,9 @@
 {
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
+    "- `plantType`: EXACTLY one of: \"herb\", \"shrub\", \"tree\", \"climber\", \"succulent\", \"fern\", \"moss\", \"grass\"",
+    "- `plantPart`: array from ONLY: [\"roots\",\"bulbs\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\"]. The main anatomical parts of this plant.",
+    "- `habitat`: array from ONLY: [\"aquatic\",\"terrestrial\",\"epiphytic\",\"lithophytic\",\"parasitic\"]. The natural habitat type(s).",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
     "- `variety`: variety/cultivar name if applicable, or null",
     "- `family`: plant family (e.g. \"Araceae\")",

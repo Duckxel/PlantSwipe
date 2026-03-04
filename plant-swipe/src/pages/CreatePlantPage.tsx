@@ -20,6 +20,9 @@ import { plantSchema } from "@/lib/plantSchema"
 import { monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
+  plantTypeEnum,
+  plantPartEnum,
+  habitatEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -45,7 +48,6 @@ import {
   comestiblePartEnum,
   fruitTypeEnum,
   maintenanceLevelEnum,
-  habitatEnum,
   levelSunEnum,
   soilEnum,
   mulchingEnum,
@@ -242,7 +244,7 @@ function parseSupabaseError(error: any, context?: string): string {
   // Handle check constraint violations
   if (code === '23514' || message.includes('check constraint') || message.includes('violates check constraint')) {
     if (message.includes('plant_type')) {
-      return 'Invalid plant type. Please select a valid plant type (plant, flower, bamboo, shrub, tree, cactus, or succulent).'
+      return 'Invalid plant type. Please select a valid plant type (herb, shrub, tree, climber, succulent, fern, moss, or grass).'
     }
     if (message.includes('utility')) {
       return 'Invalid utility value. Please check the selected utility options.'
@@ -834,7 +836,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       id: data.id,
       name: plantName,
       // Non-translatable fields from plants table
-      plantType: (data.plant_type as Plant["plantType"]) || undefined,
+      plantType: (plantTypeEnum.toUi(data.plant_type) ? data.plant_type : undefined) as Plant["plantType"],
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
       fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
@@ -871,7 +873,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Translatable fields from plant_translations only
       origin: translation?.origin || [],
       // Non-translatable fields from plants table
-      habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
+      habitat: climateEnum.toUiArray(data.climate) as PlantCareData["habitat"],
       temperatureMax: data.temperature_max || undefined,
       temperatureMin: data.temperature_min || undefined,
       temperatureIdeal: data.temperature_ideal || undefined,
@@ -1009,9 +1011,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.family = data.family || plant.identity?.family || undefined
   flat.presentation = translation?.presentation || plant.identity?.overview || plant.description || undefined
   flat.featuredMonth = data.featured_month || []
+  flat.plantType = (data.plant_type || plant.plantType || undefined) as Plant["plantType"]
+  flat.plantPart = plantPartEnum.toDbArray(data.plant_part) as Plant["plantPart"] || []
+  flat.habitat = habitatEnum.toDbArray(data.habitat) as Plant["habitat"] || []
 
   // Section 2: Identity (non-translatable enums from plants table)
-  flat.plantType = data.plant_type || plant.plantType || undefined
   flat.origin = translation?.origin || plant.plantCare?.origin || []
   flat.climate = climateEnum.toUiArray(data.climate) as string[]
   flat.season = seasonEnum.toUiArray(data.season) as string[]
@@ -1696,8 +1700,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || [],
+            // Section 1: Base (continued)
+            plant_type: plantTypeEnum.toDb(p.plantType) || null,
+            plant_part: plantPartEnum.toDbArray(p.plantPart),
+            habitat: habitatEnum.toDbArray(p.habitat),
             // Section 2: Identity
-            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -1792,8 +1799,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || [],
+            // Section 1: Base (continued)
+            plant_type: plantTypeEnum.toDb(p.plantType) || null,
+            plant_part: plantPartEnum.toDbArray(p.plantPart),
+            habitat: habitatEnum.toDbArray(p.habitat),
             // Section 2: Identity
-            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),

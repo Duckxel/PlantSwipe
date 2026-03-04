@@ -916,14 +916,17 @@ const baseFields: FieldConfig[] = [
   { key: "variety", label: "Variety", description: "Variety or cultivar name (e.g. Spring Field, Variegata)", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
   { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: [
-    { label: "Plant", value: "plant" },
-    { label: "Flower", value: "flower" },
-    { label: "Bamboo", value: "bamboo" },
+    { label: "Herb", value: "herb" },
     { label: "Shrub", value: "shrub" },
     { label: "Tree", value: "tree" },
-    { label: "Cactus", value: "cactus" },
+    { label: "Climber", value: "climber" },
     { label: "Succulent", value: "succulent" },
+    { label: "Fern", value: "fern" },
+    { label: "Moss", value: "moss" },
+    { label: "Grass", value: "grass" },
   ] },
+  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
+  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Terrestrial","Epiphytic","Lithophytic","Parasitic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
 ]
@@ -2541,6 +2544,10 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
           </p>
         </div>
         {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'plantPart')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'habitat')!, t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />

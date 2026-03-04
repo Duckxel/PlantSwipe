@@ -8,8 +8,18 @@ export const plantSchema = {
   // -- Section 1: Base --------------------------------------------------------
   plantType: {
     type: 'enum',
-    options: ['plant','flower','bamboo','shrub','tree','cactus','succulent'],
+    options: ['herb','shrub','tree','climber','succulent','fern','moss','grass'],
     description: 'Primary plant type classification',
+  },
+  plantPart: {
+    type: 'enum[]',
+    options: ['roots','bulbs','stems','leaves','flowers','fruits','spores'],
+    description: 'Main anatomical parts of the plant',
+  },
+  habitat: {
+    type: 'enum[]',
+    options: ['aquatic','terrestrial','epiphytic','lithophytic','parasitic'],
+    description: 'Natural habitat type(s) where the plant grows',
   },
   scientificNameSpecies: {
     type: 'text',
