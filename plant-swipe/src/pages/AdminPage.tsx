@@ -2614,7 +2614,10 @@ export const AdminPage: React.FC = () => {
     try {
       // Use AI to get the English common name (auto-detects source language)
       const result = await getEnglishPlantName(req.plant_name);
-      const translatedName = result.englishName;
+      // Combine name + variety for display in the request list (requested_plants only has plant_name)
+      const translatedName = result.variety
+        ? `${result.englishName} '${result.variety}'`
+        : result.englishName;
       
       // If translation is different, update the database
       if (translatedName && translatedName.toLowerCase() !== req.plant_name.toLowerCase()) {
