@@ -3588,39 +3588,48 @@ export const AdminPage: React.FC = () => {
         return matchesSearch;
       })
       .sort((a, b) => {
+        // Compare by name, then variety (no variety first, then alphabetical)
+        const cmpNameVariety = (x: PlantDashboardRow, y: PlantDashboardRow) => {
+          const n = x.name.localeCompare(y.name);
+          if (n !== 0) return n;
+          if (!x.variety && y.variety) return -1;
+          if (x.variety && !y.variety) return 1;
+          if (x.variety && y.variety) return x.variety.localeCompare(y.variety);
+          return 0;
+        };
         switch (plantSortOption) {
           case "updated": {
             const updatedA = a.updatedAt ?? 0;
             const updatedB = b.updatedAt ?? 0;
             if (updatedB !== updatedA) return updatedB - updatedA;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
           case "created": {
             const createdA = a.createdAt ?? 0;
             const createdB = b.createdAt ?? 0;
             if (createdB !== createdA) return createdB - createdA;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
           case "name":
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "gardens":
             if (b.gardensCount !== a.gardensCount) return b.gardensCount - a.gardensCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "likes":
             if (b.likesCount !== a.likesCount) return b.likesCount - a.likesCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "views":
             if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "images":
             if (a.imagesCount !== b.imagesCount) return a.imagesCount - b.imagesCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "status":
           default: {
             const statusDiff =
               getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
             if (statusDiff !== 0) return statusDiff;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
         }
       });
