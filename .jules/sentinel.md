@@ -1,0 +1,4 @@
+## 2024-05-24 - Hardcoded Sentry DSNs across codebase
+**Vulnerability:** Hardcoded `SENTRY_DSN` values containing sensitive identifiers and URLs were found in multiple files (`admin_api/app.py`, `plant-swipe/server.js`, `plant-swipe/scripts/generate-sitemap.js`, `plant-swipe/src/lib/sentry.ts`).
+**Learning:** Hardcoding credentials, identifiers, or URLs belonging to third-party services in version control exposes internal infrastructure and can lead to unauthorized data ingestion, quota exhaustion, or information disclosure.
+**Prevention:** Always use environment variables (e.g., `process.env.SENTRY_DSN`, `os.environ.get("SENTRY_DSN")`, `import.meta.env.VITE_SENTRY_DSN`) for sensitive service URLs and identifiers. Include fallback logic to gracefully handle missing variables (e.g., skipping initialization if the DSN is not provided).
