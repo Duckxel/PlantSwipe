@@ -18,16 +18,17 @@ import {
   MessageSquarePlus,
   Plus,
 } from "lucide-react"
-import React from "react"
+import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { SearchInput } from "@/components/ui/search-input"
-import { useLanguageNavigate } from "@/lib/i18nRouting"
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog"
+import { supabase } from "@/lib/supabaseClient"
 import type { LucideIcon } from "lucide-react"
 
 interface Category {
@@ -56,12 +57,144 @@ const categories: Category[] = [
   { key: "aquatic", icon: Droplets, params: "?q=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
 ]
 
+interface CategoryPlantPreview {
+  id: string
+  name: string
+  imageUrl: string
+}
+
+type PlantRow = {
+  id: string
+  name: string
+  plant_type: string | null
+  utility: string[] | null
+  plant_habit: string[] | null
+  life_cycle: string[] | null
+  edible_part: string[] | null
+  living_space: string[] | null
+  scientific_name_species: string | null
+  plant_images: { link: string }[]
+}
+
+function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
+  const sp = new URLSearchParams(params.replace("?", ""))
+
+  const type = sp.get("type")
+  if (type) {
+    const types = type.split(",").map((t) => t.trim().toLowerCase())
+    if (!types.includes((plant.plant_type || "").toLowerCase())) return false
+  }
+
+  const usage = sp.get("usage")
+  if (usage) {
+    const usages = usage.split(",").map((u) => u.trim().toLowerCase())
+    const plantUtility = (plant.utility || []).map((u) => u.toLowerCase())
+    if (!usages.some((u) => plantUtility.includes(u))) return false
+  }
+
+  const plantHabit = sp.get("plantHabit")
+  if (plantHabit) {
+    const habits = plantHabit.split(",").map((h) => h.trim().toLowerCase())
+    const plantHabits = (plant.plant_habit || []).map((h) => h.toLowerCase())
+    if (!habits.some((h) => plantHabits.includes(h))) return false
+  }
+
+  const lifeCycle = sp.get("lifeCycle")
+  if (lifeCycle) {
+    const cycles = lifeCycle.split(",").map((l) => l.trim().toLowerCase())
+    const plantCycles = (plant.life_cycle || []).map((l) => l.toLowerCase())
+    if (!cycles.some((c) => plantCycles.includes(c))) return false
+  }
+
+  const ediblePart = sp.get("ediblePart")
+  if (ediblePart) {
+    const parts = ediblePart.split(",").map((e) => e.trim().toLowerCase())
+    const plantParts = (plant.edible_part || []).map((e) => e.toLowerCase())
+    if (!parts.some((p) => plantParts.includes(p))) return false
+  }
+
+  const livingSpace = sp.get("livingSpace")
+  if (livingSpace) {
+    const spaces = livingSpace.split(",").map((s) => s.trim().toLowerCase())
+    const plantSpaces = (plant.living_space || []).map((s) => s.toLowerCase())
+    if (!spaces.some((s) => plantSpaces.includes(s))) return false
+  }
+
+  const q = sp.get("q")
+  if (q) {
+    const query = q.toLowerCase()
+    const name = (plant.name || "").toLowerCase()
+    const scientific = (plant.scientific_name_species || "").toLowerCase()
+    if (!name.includes(query) && !scientific.includes(query)) return false
+  }
+
+  return true
+}
+
 export default function CategoriesPage() {
   const { t } = useTranslation("common")
   const navigate = useLanguageNavigate()
+  const language = useLanguage()
   const { user, profile } = useAuth()
   const [searchValue, setSearchValue] = React.useState("")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
+  const [categoryPreviews, setCategoryPreviews] = useState<Record<string, CategoryPlantPreview[]>>({})
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function fetchPreviews() {
+      const { data: plants } = await supabase
+        .from("plants")
+        .select(
+          "id, name, plant_type, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
+        )
+        .eq("plant_images.use", "primary")
+
+      if (cancelled || !plants) return
+
+      const typedPlants = plants as unknown as PlantRow[]
+
+      // Fetch translations for non-English languages
+      let translationMap = new Map<string, string>()
+      if (language !== "en") {
+        const { data: translations } = await supabase
+          .from("plant_translations")
+          .select("plant_id, name")
+          .eq("language", language)
+
+        if (translations) {
+          for (const t of translations) {
+            if (t.name) translationMap.set(t.plant_id as string, t.name as string)
+          }
+        }
+      }
+
+      if (cancelled) return
+
+      const previews: Record<string, CategoryPlantPreview[]> = {}
+      for (const cat of categories) {
+        const matching = typedPlants.filter((p) => matchesCategoryFilter(p, cat.params))
+        // Fisher-Yates shuffle
+        for (let i = matching.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1))
+          ;[matching[i], matching[j]] = [matching[j], matching[i]]
+        }
+        previews[cat.key] = matching.slice(0, 5).map((p) => ({
+          id: p.id,
+          name: translationMap.get(p.id) || p.name,
+          imageUrl: p.plant_images?.[0]?.link || "",
+        }))
+      }
+
+      setCategoryPreviews(previews)
+    }
+
+    fetchPreviews()
+    return () => {
+      cancelled = true
+    }
+  }, [language])
 
   usePageMetadata({
     title: t("categories.title", { defaultValue: "Categories" }),
@@ -162,6 +295,36 @@ export default function CategoriesPage() {
             <span className="text-xs text-muted-foreground text-center leading-tight">
               {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
             </span>
+            {categoryPreviews[key]?.length > 0 && (
+              <div className="flex items-center justify-center gap-1.5 mt-1">
+                {categoryPreviews[key].map((plant) => (
+                  <button
+                    key={plant.id}
+                    type="button"
+                    title={plant.name}
+                    className="h-7 w-7 rounded-full overflow-hidden ring-1 ring-border/50 hover:ring-2 hover:ring-primary hover:scale-110 transition-all flex-shrink-0"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      navigate(`/plants/${plant.id}`)
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.stopPropagation()
+                        e.preventDefault()
+                        navigate(`/plants/${plant.id}`)
+                      }
+                    }}
+                  >
+                    <img
+                      src={plant.imageUrl}
+                      alt={plant.name}
+                      className="h-full w-full object-cover"
+                      loading="lazy"
+                    />
+                  </button>
+                ))}
+              </div>
+            )}
           </Card>
         ))}
       </div>
