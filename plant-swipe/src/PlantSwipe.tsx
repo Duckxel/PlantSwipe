@@ -457,77 +457,38 @@ export default function PlantSwipe() {
       let hasParams = false
 
       const urlQuery = searchParams.get("q")
-      if (urlQuery && urlQuery !== query) {
-        setQuery(urlQuery)
-        hasParams = true
-      }
-
       const urlType = searchParams.get("type")
-      if (urlType) {
-        setTypeFilter(urlType)
-        hasParams = true
-      }
-
       const urlUsage = searchParams.get("usage")
-      if (urlUsage) {
-        setUsageFilters(urlUsage.split(",").map(u => u.trim()))
-        hasParams = true
-      }
-
       const urlLivingSpace = searchParams.get("livingSpace")
-      if (urlLivingSpace) {
-        setLivingSpaceFilters(urlLivingSpace.split(",").map(s => s.trim().toLowerCase()))
-        hasParams = true
-      }
-
       const urlSeason = searchParams.get("season")
-      if (urlSeason) {
-        setSeasonFilter(urlSeason.toLowerCase())
-        hasParams = true
-      }
-
       const urlMaintenance = searchParams.get("maintenance")
-      if (urlMaintenance) {
-        setMaintenanceFilter(urlMaintenance.toLowerCase())
-        hasParams = true
-      }
-
       const urlHabitat = searchParams.get("habitat")
-      if (urlHabitat) {
-        setHabitatFilters(urlHabitat.split(",").map(h => h.trim().toLowerCase()))
-        hasParams = true
-      }
-
-      if (searchParams.get("petSafe") === "true") {
-        setPetSafe(true)
-        hasParams = true
-      }
-
-      if (searchParams.get("humanSafe") === "true") {
-        setHumanSafe(true)
-        hasParams = true
-      }
-
+      const urlPetSafe = searchParams.get("petSafe")
+      const urlHumanSafe = searchParams.get("humanSafe")
       const urlLifeCycle = searchParams.get("lifeCycle")
-      if (urlLifeCycle) {
-        setLifeCycleFilters(urlLifeCycle.split(",").map(l => l.trim()))
-        hasParams = true
-      }
-
       const urlPlantHabit = searchParams.get("plantHabit")
-      if (urlPlantHabit) {
-        setPlantHabitFilters(urlPlantHabit.split(",").map(h => h.trim()))
-        hasParams = true
-      }
-
       const urlEdiblePart = searchParams.get("ediblePart")
-      if (urlEdiblePart) {
-        setEdiblePartFilters(urlEdiblePart.split(",").map(e => e.trim()))
-        hasParams = true
-      }
 
-      // Clear URL parameters after applying to keep URL clean
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart)
+
       if (hasParams) {
+        // Reset all filters before applying URL params so previous
+        // filters don't accumulate across navigations
+        setQuery(urlQuery || "")
+        setTypeFilter(urlType || null)
+        setUsageFilters(urlUsage ? urlUsage.split(",").map(u => u.trim()) : [])
+        setLivingSpaceFilters(urlLivingSpace ? urlLivingSpace.split(",").map(s => s.trim().toLowerCase()) : [])
+        setSeasonFilter(urlSeason ? urlSeason.toLowerCase() : null)
+        setMaintenanceFilter(urlMaintenance ? urlMaintenance.toLowerCase() : null)
+        setHabitatFilters(urlHabitat ? urlHabitat.split(",").map(h => h.trim().toLowerCase()) : [])
+        setPetSafe(urlPetSafe === "true")
+        setHumanSafe(urlHumanSafe === "true")
+        setLifeCycleFilters(urlLifeCycle ? urlLifeCycle.split(",").map(l => l.trim()) : [])
+        setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
+        setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
+        setColorFilter([])
+
+        // Clear URL parameters after applying to keep URL clean
         setSearchParams({}, { replace: true })
       }
     }
