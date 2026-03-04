@@ -423,6 +423,7 @@ const FEATURED_MONTH_LABELS: Record<FeaturedMonthSlug, string> = {
 type PlantDashboardRow = {
   id: string;
   name: string;
+  variety: string | null;
   givenNames: string[];
   status: NormalizedPlantStatus;
   featuredMonths: FeaturedMonthSlug[];
@@ -3171,7 +3172,7 @@ export const AdminPage: React.FC = () => {
         while (hasMore) {
           const { data, error: trError } = await supabase
             .from("plant_translations")
-            .select("plant_id, common_names")
+            .select("plant_id, common_names, variety")
             .eq("language", "en")
             .range(offset, offset + pageSize - 1);
           if (trError) break;
@@ -3187,12 +3188,18 @@ export const AdminPage: React.FC = () => {
         return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
       });
 
-      // Build a map of plant_id -> common_names
+      // Build maps of plant_id -> common_names and plant_id -> variety
       const givenNamesMap = new Map<string, string[]>();
+      const varietyMap = new Map<string, string>();
       (translationsData || []).forEach((t: unknown) => {
         const tr = t as Record<string, unknown>;
-        if (tr?.plant_id && Array.isArray(tr.common_names)) {
-          givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+        if (tr?.plant_id) {
+          if (Array.isArray(tr.common_names)) {
+            givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+          }
+          if (tr.variety && typeof tr.variety === "string") {
+            varietyMap.set(String(tr.plant_id), tr.variety);
+          }
         }
       });
 
@@ -3269,6 +3276,7 @@ export const AdminPage: React.FC = () => {
             return {
               id: plantId,
               name: r?.name ? String(r.name) : "Unnamed plant",
+              variety: varietyMap.get(plantId) || null,
               givenNames,
               status: normalizePlantStatus(r?.status),
               featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
@@ -3571,9 +3579,10 @@ export const AdminPage: React.FC = () => {
               ? plant.featuredMonths.length === 0
               : plant.featuredMonths.includes(selectedFeaturedMonth);
         if (!matchesFeaturedMonth) return false;
-        // Search by name OR givenNames (common names)
+        // Search by name, variety, OR givenNames (common names)
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
+            (plant.variety && plant.variety.toLowerCase().includes(term)) ||
             plant.givenNames.some((gn) => gn.toLowerCase().includes(term))
           : true;
         return matchesSearch;
@@ -9101,6 +9110,11 @@ export const AdminPage: React.FC = () => {
                                         <div className="flex items-center gap-2">
                                           <span className="font-medium text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                                             {plant.name}
+                                            {plant.variety && (
+                                              <span className="ml-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xs sm:text-sm font-extrabold tracking-tight">
+                                                &lsquo;{plant.variety}&rsquo;
+                                              </span>
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">
