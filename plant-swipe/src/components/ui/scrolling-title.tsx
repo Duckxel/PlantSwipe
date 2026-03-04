@@ -97,7 +97,7 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
         style={
           isHovered && scrollDistance > 0
             ? {
-                maxWidth: "none",
+                overflow: "visible",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
                 ["--scroll-dist" as string]: `-${scrollDistance}px`,
               }
