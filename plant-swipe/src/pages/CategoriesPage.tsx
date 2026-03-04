@@ -337,7 +337,8 @@ export default function CategoriesPage() {
                 )}
               </div>
             </Card>
-        ))}
+          )
+        })}
       </div>
 
       <RequestPlantDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />
