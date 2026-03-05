@@ -8,7 +8,7 @@ import dotenv from 'dotenv'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
 // Sentry error monitoring for sitemap generation
-const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520'
+const SENTRY_DSN = process.env.SENTRY_DSN || process.env.VITE_SENTRY_DSN || '';
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 const SERVER_NAME = process.env.PLANTSWIPE_SERVER_NAME || process.env.SERVER_NAME || 'unknown'
@@ -19,26 +19,30 @@ try {
   const sentryModule = await import('@sentry/node').catch(() => null)
   if (sentryModule) {
     Sentry = sentryModule
-    Sentry.init({
-      dsn: SENTRY_DSN,
-      environment: process.env.NODE_ENV || 'production',
-      // Server identification
-      serverName: SERVER_NAME,
-      // Send structured logs to Sentry
-      _experiments: {
-        enableLogs: true,
-      },
-      // Tracing - capture 100% of transactions
-      tracesSampleRate: 1.0,
-      // Add server tag to all events
-      initialScope: {
-        tags: {
-          server: SERVER_NAME,
-          app: 'plant-swipe-sitemap',
+    if (!SENTRY_DSN) {
+      console.warn('[sitemap] SENTRY_DSN not configured - error monitoring disabled');
+    } else {
+      Sentry.init({
+        dsn: SENTRY_DSN,
+        environment: process.env.NODE_ENV || 'production',
+        // Server identification
+        serverName: SERVER_NAME,
+        // Send structured logs to Sentry
+        _experiments: {
+          enableLogs: true,
         },
-      },
-    })
-    console.log(`[sitemap] Sentry initialized for server: ${SERVER_NAME}`)
+        // Tracing - capture 100% of transactions
+        tracesSampleRate: 1.0,
+        // Add server tag to all events
+        initialScope: {
+          tags: {
+            server: SERVER_NAME,
+            app: 'plant-swipe-sitemap',
+          },
+        },
+      })
+      console.log(`[sitemap] Sentry initialized for server: ${SERVER_NAME}`)
+    }
   }
 } catch {
   // Sentry not available, continue without it

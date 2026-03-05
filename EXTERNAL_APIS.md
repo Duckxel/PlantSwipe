@@ -324,7 +324,7 @@ https://region1.google-analytics.com
 
 ### 9. Sentry
 
-**DSN:** `https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520`
+**DSN:** `[REDACTED_SENTRY_DSN]`
 
 **Region:** Germany (de.sentry.io)
 
@@ -555,7 +555,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-key
 # Analytics & Monitoring (public keys - configured in code)
 # GA_MEASUREMENT_ID=G-LDSYW5QNK5
 # RECAPTCHA_SITE_KEY=6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd
-# SENTRY_DSN=https://758053551e0396eab52314bdbcf57924@...
+# SENTRY_DSN=[REDACTED]
 ```
 
 ---
