@@ -42,20 +42,31 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
   (value.constructor === Object || Object.getPrototypeOf(value) === Object.prototype)
 
+// ⚡ Bolt: Fast O(1) empty object check avoiding Object.keys() allocation
+const isEmptyObject = (obj: Record<string, unknown>): boolean => {
+  for (const _ in obj) return false
+  return true
+}
+
 const sanitizeDeep = <T>(value: T): T => {
   if (typeof value === 'string') {
     const sanitized = sanitizeStringValue(value)
     return (sanitized === undefined ? undefined : sanitized) as T
   }
   if (Array.isArray(value)) {
-    const sanitizedArray = value
-      .map((item) => sanitizeDeep(item))
-      .filter((item) => {
-        if (item === undefined || item === null) return false
-        if (Array.isArray(item) && item.length === 0) return false
-        if (isPlainObject(item) && Object.keys(item).length === 0) return false
-        return true
-      })
+    // ⚡ Bolt: Single-pass array processing combining map & filter
+    // Avoids intermediate array allocations and multiple iterations
+    const sanitizedArray: unknown[] = []
+    for (let i = 0; i < value.length; i++) {
+      const item = sanitizeDeep(value[i])
+      if (item !== undefined && item !== null) {
+        if (Array.isArray(item) && item.length === 0) continue
+        if (isPlainObject(item) && isEmptyObject(item)) continue
+
+        sanitizedArray.push(item)
+      }
+    }
+
     return sanitizedArray as unknown as T
   }
   if (isPlainObject(value)) {
@@ -64,7 +75,7 @@ const sanitizeDeep = <T>(value: T): T => {
       const sanitized = sanitizeDeep(entry)
       if (sanitized === undefined || sanitized === null) continue
       if (Array.isArray(sanitized) && sanitized.length === 0) continue
-      if (isPlainObject(sanitized) && Object.keys(sanitized).length === 0) continue
+      if (isPlainObject(sanitized) && isEmptyObject(sanitized)) continue
       result[key] = sanitized
     }
     return result as T
