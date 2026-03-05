@@ -14,6 +14,9 @@ import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
 import type { Plant, PlantColor, PlantRecipe, PlantSource, PlantWateringSchedule } from "@/types/plant"
 import {
+  plantTypeEnum,
+  plantPartEnum,
+  habitatEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -460,17 +463,19 @@ export async function processPlantRequest(
       throw new DOMException('Operation cancelled', 'AbortError')
     }
     
-    // Stage 0: Get English plant name
+    // Stage 0: Get English plant name (and variety separately)
     // The plant name might be in any language, so we first ask AI for the English common name
     onProgress?.({ stage: 'translating_name', plantName: displayName })
-    
+
     let englishPlantName = formatPlantName(displayName)
+    let extractedVariety: string | null = null
     try {
       const nameResult = await getEnglishPlantName(plantName, signal)
       const rawEnglishName = String(nameResult.englishName || plantName || '').trim()
       englishPlantName = formatPlantName(rawEnglishName)
+      extractedVariety = nameResult.variety || null
       if (nameResult.wasTranslated) {
-        console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"`)
+        console.log(`[aiPrefillService] Translated plant name: "${plantName}" -> "${englishPlantName}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
       }
     } catch (err) {
       console.warn(`[aiPrefillService] Failed to get English name for "${plantName}", using original:`, err)
@@ -489,7 +494,7 @@ export async function processPlantRequest(
     // Check if a plant with this English name already exists in the database
     // Check against: name, scientific_name_species, and common_names from plant_translations
     // This prevents creating duplicate plants when the requested name is a common name of an existing plant
-    
+
     // First, check by name or scientific_name in plants table
     const { data: existingByName } = await supabase
       .from('plants')
@@ -497,69 +502,74 @@ export async function processPlantRequest(
       .or(`name.ilike.${englishPlantName},scientific_name_species.ilike.${englishPlantName}`)
       .limit(1)
       .maybeSingle()
-    
+
     if (existingByName) {
-      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as "${existingByName.name}" (id: ${existingByName.id}), skipping and marking request as complete`)
-      
-      // Delete the request since the plant already exists
-      const { error: deleteError } = await supabase
-        .from('requested_plants')
-        .delete()
-        .eq('id', requestId)
-      
-      if (deleteError) {
-        console.error('Failed to delete plant request:', deleteError)
+      // If we have a variety, only skip if the existing plant also has the same variety
+      // (otherwise "Lavender" existing shouldn't block creating "Lavender 'Hidcote'")
+      if (extractedVariety) {
+        const { data: existingTranslation } = await supabase
+          .from('plant_translations')
+          .select('variety')
+          .eq('plant_id', existingByName.id)
+          .eq('language', 'en')
+          .maybeSingle()
+        const existingVariety = existingTranslation?.variety?.trim()?.toLowerCase() || ''
+        if (existingVariety === extractedVariety.toLowerCase()) {
+          console.log(`[aiPrefillService] Plant "${englishPlantName}" variety "${extractedVariety}" already exists (id: ${existingByName.id}), skipping`)
+          const { error: deleteError } = await supabase.from('requested_plants').delete().eq('id', requestId)
+          if (deleteError) console.error('Failed to delete plant request:', deleteError)
+          return { success: true, plantId: existingByName.id }
+        }
+        // Different variety or no variety on existing — continue creating
+        console.log(`[aiPrefillService] Plant "${englishPlantName}" exists but with different variety, creating new plant for variety "${extractedVariety}"`)
+      } else {
+        console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as "${existingByName.name}" (id: ${existingByName.id}), skipping and marking request as complete`)
+        const { error: deleteError } = await supabase.from('requested_plants').delete().eq('id', requestId)
+        if (deleteError) console.error('Failed to delete plant request:', deleteError)
+        return { success: true, plantId: existingByName.id }
       }
-      
-      return { success: true, plantId: existingByName.id }
     }
-    
+
     // Also check by common_names in plant_translations table
     // Search in English translations for any plant that has this name as a common name
-    const searchTermLower = englishPlantName.toLowerCase()
-    const { data: translationMatches } = await supabase
-      .from('plant_translations')
-      .select('plant_id, common_names, plants!inner(id, name)')
-      .eq('language', 'en')
-      .limit(100)
-    
-    // Check if any plant has this name as a given_name (common name)
-    let existingByCommonName: { id: string; name: string } | null = null
-    if (translationMatches) {
-      for (const row of translationMatches as any[]) {
-        const commonNames = Array.isArray(row?.common_names) ? row.common_names : []
-        const matchesGivenName = commonNames.some(
-          (gn: unknown) => typeof gn === 'string' && gn.toLowerCase() === searchTermLower
-        )
-        if (matchesGivenName && row?.plants?.id) {
-          existingByCommonName = { id: String(row.plants.id), name: String(row.plants.name || '') }
-          break
+    // Only skip if there's no variety (varieties are distinct plants even with same common name)
+    if (!extractedVariety) {
+      const searchTermLower = englishPlantName.toLowerCase()
+      const { data: translationMatches } = await supabase
+        .from('plant_translations')
+        .select('plant_id, common_names, plants!inner(id, name)')
+        .eq('language', 'en')
+        .limit(100)
+
+      let existingByCommonName: { id: string; name: string } | null = null
+      if (translationMatches) {
+        for (const row of translationMatches as any[]) {
+          const commonNames = Array.isArray(row?.common_names) ? row.common_names : []
+          const matchesGivenName = commonNames.some(
+            (gn: unknown) => typeof gn === 'string' && gn.toLowerCase() === searchTermLower
+          )
+          if (matchesGivenName && row?.plants?.id) {
+            existingByCommonName = { id: String(row.plants.id), name: String(row.plants.name || '') }
+            break
+          }
         }
       }
-    }
-    
-    if (existingByCommonName) {
-      console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as common name for "${existingByCommonName.name}" (id: ${existingByCommonName.id}), skipping and marking request as complete`)
-      
-      // Delete the request since the plant already exists
-      const { error: deleteError } = await supabase
-        .from('requested_plants')
-        .delete()
-        .eq('id', requestId)
-      
-      if (deleteError) {
-        console.error('Failed to delete plant request:', deleteError)
+
+      if (existingByCommonName) {
+        console.log(`[aiPrefillService] Plant "${englishPlantName}" already exists as common name for "${existingByCommonName.name}" (id: ${existingByCommonName.id}), skipping and marking request as complete`)
+        const { error: deleteError } = await supabase.from('requested_plants').delete().eq('id', requestId)
+        if (deleteError) console.error('Failed to delete plant request:', deleteError)
+        return { success: true, plantId: existingByCommonName.id }
       }
-      
-      return { success: true, plantId: existingByCommonName.id }
     }
     
     // Stage 1: AI Fill (using English name internally, but display original name)
     onProgress?.({ stage: 'filling', plantName: displayName })
-    
+
     const emptyPlant: Plant = {
       id: generateUUIDv4(),
       name: englishPlantName,
+      variety: extractedVariety || undefined,
       utility: [],
       ediblePart: [],
       images: [],
@@ -569,15 +579,20 @@ export async function processPlantRequest(
       sources: [],
       status: IN_PROGRESS_STATUS,
     }
-    
+
     let plant: Plant = { ...emptyPlant }
-    
+
+    // Build the AI prompt name: include variety for context but keep name/variety separate in plant data
+    const aiPromptName = extractedVariety
+      ? `${englishPlantName} (variety: '${extractedVariety}')`
+      : englishPlantName
+
     // Run AI Fill (using English name for better AI results)
     // Use continueOnFieldError: true to allow partial fills when some fields fail
     // This prevents a single field timeout from failing the entire plant
     const fieldErrors: Array<{ field: string; error: string }> = []
     const aiData = await fetchAiPlantFill({
-      plantName: englishPlantName,
+      plantName: aiPromptName,
       schema: plantSchema,
       existingData: plant,
       fields: aiFieldOrder,
@@ -625,8 +640,12 @@ export async function processPlantRequest(
       }
     }
     
-    // Ensure plant name is always the English name (AI might overwrite or corrupt it)
+    // Ensure plant name is always the base English name (without variety)
     plant.name = englishPlantName
+    // Ensure variety is set from the extracted value if AI didn't fill it
+    if (extractedVariety && !plant.variety) {
+      plant.variety = extractedVariety
+    }
     
     // Ensure required fields have defaults (use flat fields)
     plant = {
@@ -669,7 +688,9 @@ export async function processPlantRequest(
       id: plantId,
       name: trimmedName,
       // Section 1: Base
-      plant_type: plant.plantType || null,
+      plant_type: plantTypeEnum.toDb(plant.plantType) || null,
+      plant_part: plantPartEnum.toDbArray(plant.plantPart),
+      habitat: habitatEnum.toDbArray(plant.habitat),
       scientific_name_species: plant.scientificNameSpecies || null,
       family: plant.family || null,
       featured_month: plant.featuredMonth || [],

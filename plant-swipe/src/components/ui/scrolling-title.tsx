@@ -10,6 +10,31 @@ interface ScrollingTitleProps {
   speed?: number
 }
 
+// Classes that must live on the inner (scrolling) element so they
+// travel with the text — e.g. gradient text, font weight, colors.
+const INNER_CLASS_PREFIXES = [
+  "text-", "font-", "bg-gradient", "bg-clip", "from-", "to-", "via-",
+  "tracking-", "leading-", "italic", "underline", "line-through",
+  "decoration-", "opacity-",
+]
+
+function splitClasses(className?: string): { outer: string; inner: string } {
+  if (!className) return { outer: "", inner: "" }
+  const tokens = className.split(/\s+/)
+  const outer: string[] = []
+  const inner: string[] = []
+  for (const t of tokens) {
+    // Strip any Tailwind prefix like "dark:" or "hover:" for matching
+    const bare = t.replace(/^[a-z-]+:/, "")
+    if (INNER_CLASS_PREFIXES.some((p) => bare.startsWith(p))) {
+      inner.push(t)
+    } else {
+      outer.push(t)
+    }
+  }
+  return { outer: outer.join(" "), inner: inner.join(" ") }
+}
+
 /**
  * A title component that scrolls horizontally on hover when the text overflows.
  * Uses the scroll-text-left keyframe: scrolls left slowly, pauses, returns
@@ -26,6 +51,8 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   const [isOverflowing, setIsOverflowing] = useState(false)
   const [isHovered, setIsHovered] = useState(false)
   const [scrollDistance, setScrollDistance] = useState(0)
+
+  const { outer: outerClasses, inner: innerClasses } = splitClasses(className)
 
   useEffect(() => {
     const check = () => {
@@ -60,23 +87,24 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   return (
     <div
       ref={containerRef}
-      className={cn("overflow-hidden min-w-0", className)}
+      className={cn("overflow-hidden min-w-0", outerClasses)}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className={cn(
-          "inline-block whitespace-nowrap",
-          !isHovered && "overflow-hidden text-ellipsis"
-        )}
+        className={cn("block whitespace-nowrap max-w-full", innerClasses)}
         style={
           isHovered && scrollDistance > 0
             ? {
+                overflow: "visible",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
                 ["--scroll-dist" as string]: `-${scrollDistance}px`,
               }
-            : undefined
+            : {
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+              }
         }
       >
         {children}

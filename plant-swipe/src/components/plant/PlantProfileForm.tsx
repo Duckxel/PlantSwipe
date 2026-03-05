@@ -356,18 +356,43 @@ const CompanionSelector: React.FC<{
     if (language !== 'en') {
       let q = supabase
         .from('plant_translations')
-        .select('plant_id, name')
+        .select('plant_id, name, variety')
         .eq('language', language)
         .order('name')
         .limit(30)
-      if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
+      if (query.trim()) q = q.or(`name.ilike.%${query.trim()}%,variety.ilike.%${query.trim()}%`)
       const { data } = await q
-      if (data) plantResults = data.map((t) => ({ id: t.plant_id as string, name: t.name as string }))
+      if (data) plantResults = data.map((t) => ({
+        id: t.plant_id as string,
+        name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+      }))
     } else {
+      // Search plants table by name, then also check translations for variety matches
       let q = supabase.from('plants').select('id,name').order('name').limit(30)
       if (query.trim()) q = q.ilike('name', `%${query.trim()}%`)
       const { data } = await q
       if (data) plantResults = data.map((p) => ({ id: p.id as string, name: (p as any).name as string }))
+
+      // Also search English translations by variety
+      if (query.trim()) {
+        const { data: varietyData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .eq('language', 'en')
+          .ilike('variety', `%${query.trim()}%`)
+          .limit(20)
+        if (varietyData) {
+          const existingIds = new Set(plantResults.map(p => p.id))
+          for (const t of varietyData) {
+            if (!existingIds.has(t.plant_id as string)) {
+              plantResults.push({
+                id: t.plant_id as string,
+                name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+              })
+            }
+          }
+        }
+      }
     }
 
     // Fetch images for results
@@ -916,14 +941,17 @@ const baseFields: FieldConfig[] = [
   { key: "variety", label: "Variety", description: "Variety or cultivar name (e.g. Spring Field, Variegata)", type: "text" },
   { key: "family", label: "Family", description: "Botanical family (e.g. Araceae)", type: "text" },
   { key: "plantType", label: "Plant Type", description: "Primary botanical type of the plant", type: "select", options: [
-    { label: "Plant", value: "plant" },
-    { label: "Flower", value: "flower" },
-    { label: "Bamboo", value: "bamboo" },
+    { label: "Herb", value: "herb" },
     { label: "Shrub", value: "shrub" },
     { label: "Tree", value: "tree" },
-    { label: "Cactus", value: "cactus" },
+    { label: "Climber", value: "climber" },
     { label: "Succulent", value: "succulent" },
+    { label: "Fern", value: "fern" },
+    { label: "Moss", value: "moss" },
+    { label: "Grass", value: "grass" },
   ] },
+  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
+  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Terrestrial","Epiphytic","Lithophytic","Parasitic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
 ]
@@ -2541,6 +2569,10 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
           </p>
         </div>
         {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
+      </div>
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, baseFields.find(f => f.key === 'plantPart')!, t)}
+        {renderField(value, setPath, baseFields.find(f => f.key === 'habitat')!, t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />

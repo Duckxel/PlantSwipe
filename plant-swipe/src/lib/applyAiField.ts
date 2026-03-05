@@ -276,9 +276,25 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   if (fieldKey === 'plantType') {
     if (typeof data === 'string') {
       const lower = data.toLowerCase().trim()
-      const valid = ['plant', 'flower', 'bamboo', 'shrub', 'tree', 'cactus', 'succulent']
-      if (valid.includes(lower)) next.plantType = lower
+      const valid = ['herb', 'shrub', 'tree', 'climber', 'succulent', 'fern', 'moss', 'grass']
+      if (valid.includes(lower)) next.plantType = lower as Plant['plantType']
     }
+    return next
+  }
+
+  // plantPart multi-select
+  if (fieldKey === 'plantPart') {
+    const valid = new Set(['roots', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
+    const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
+    next.plantPart = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['plantPart']
+    return next
+  }
+
+  // habitat multi-select
+  if (fieldKey === 'habitat') {
+    const valid = new Set(['aquatic', 'terrestrial', 'epiphytic', 'lithophytic', 'parasitic'])
+    const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
+    next.habitat = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['habitat']
     return next
   }
 

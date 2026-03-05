@@ -954,9 +954,10 @@ export default function PlantSwipe() {
           const commonNames = (p.commonNames || p.identity?.commonNames as string[] || []).join(' ')
           const givenNames = (p.givenNames || p.identity?.givenNames as string[] || []).join(' ')
           const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
+          const tags = (p.plantTags || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -1270,6 +1271,17 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
+    // Compare by name, then by variety (no variety first, then alphabetical)
+    const compareNameVariety = (a: Plant, b: Plant) => {
+      const nameCmp = a.name.localeCompare(b.name)
+      if (nameCmp !== 0) return nameCmp
+      // Same name: no variety comes first
+      if (!a.variety && b.variety) return -1
+      if (a.variety && !b.variety) return 1
+      if (a.variety && b.variety) return a.variety.localeCompare(b.variety)
+      return 0
+    }
+
     // For default sort:
     // 1. Featured Month plants first (featured for current month)
     // 2. Regular plants in the middle
@@ -1282,13 +1294,13 @@ export default function PlantSwipe() {
         const aPromoted = a._isPromoted ? -1 : 0
         const bPromoted = b._isPromoted ? -1 : 0
         if (aPromoted !== bPromoted) return aPromoted - bPromoted
-        
+
         const aInProgress = a._isInProgress ? 1 : 0
         const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
-        
-        // Maintain alphabetical order within same priority
-        return a.name.localeCompare(b.name)
+
+        // Maintain alphabetical order within same priority, then by variety
+        return compareNameVariety(a, b)
       })
       return arr
     }
@@ -1301,21 +1313,21 @@ export default function PlantSwipe() {
       arr.sort((a, b) => {
         const diff = b._createdAtTs - a._createdAtTs
         if (diff !== 0) return diff
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "favorites") {
       arr.sort((a, b) => {
         const la = likedSet.has(a.id) ? 1 : 0
         const lb = likedSet.has(b.id) ? 1 : 0
         if (la !== lb) return lb - la
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "popular") {
       // Use pre-computed popularity - no property access chain on each comparison
       arr.sort((a, b) => {
         const diff = b._popularityLikes - a._popularityLikes
         if (diff !== 0) return diff
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "impressions" && plantImpressions) {
       // Admin-only: sort by page view impressions (highest first)
@@ -1323,7 +1335,7 @@ export default function PlantSwipe() {
         const ia = plantImpressions[a.id] ?? 0
         const ib = plantImpressions[b.id] ?? 0
         if (ia !== ib) return ib - ia
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     }
     return arr

@@ -283,7 +283,9 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     family: data.family || undefined,
     featuredMonth: data.featured_month || [],
 
-    plantType: data.plant_type || undefined,
+    plantType: (data.plant_type as Plant['plantType']) || undefined,
+    plantPart: (data.plant_part as Plant['plantPart']) || [],
+    habitat: (data.habitat as Plant['habitat']) || [],
     // Section 2: Identity (non-translatable)
     climate: climateEnum.toUiArray(data.climate) as Plant['climate'],
     season: seasonEnum.toUiArray(data.season) as Plant['season'],

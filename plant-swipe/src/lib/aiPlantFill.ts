@@ -469,6 +469,8 @@ export async function verifyPlantNameIsPlant(
 interface EnglishPlantNameResult {
   originalName: string
   englishName: string
+  /** Variety/cultivar extracted separately from the name, or null */
+  variety: string | null
   wasTranslated: boolean
 }
 
@@ -501,6 +503,7 @@ export async function getEnglishPlantName(
   return {
     originalName: typeof payload?.originalName === 'string' ? payload.originalName : plantName,
     englishName: typeof payload?.englishName === 'string' ? payload.englishName : plantName,
+    variety: typeof payload?.variety === 'string' && payload.variety.trim() ? payload.variety.trim() : null,
     wasTranslated: Boolean(payload?.wasTranslated),
   }
 }

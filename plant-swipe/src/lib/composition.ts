@@ -89,6 +89,37 @@ function createEnumTools(configs: readonly EnumConfig[]): EnumTools {
   }
 }
 
+// -- Section 1: Base ----------------------------------------------------------
+
+export const plantTypeEnum = createEnumTools([
+  { dbValue: 'herb', uiValue: 'Herb', aliases: ['herbs', 'herbaceous'] },
+  { dbValue: 'shrub', uiValue: 'Shrub', aliases: ['shrubs', 'bush'] },
+  { dbValue: 'tree', uiValue: 'Tree', aliases: ['trees'] },
+  { dbValue: 'climber', uiValue: 'Climber', aliases: ['climbers', 'climbing', 'vine', 'vines'] },
+  { dbValue: 'succulent', uiValue: 'Succulent', aliases: ['succulents', 'cactus', 'cacti'] },
+  { dbValue: 'fern', uiValue: 'Fern', aliases: ['ferns'] },
+  { dbValue: 'moss', uiValue: 'Moss', aliases: ['mosses', 'bryophyte'] },
+  { dbValue: 'grass', uiValue: 'Grass', aliases: ['grasses', 'graminoid', 'bamboo'] },
+])
+
+export const plantPartEnum = createEnumTools([
+  { dbValue: 'roots', uiValue: 'Roots', aliases: ['root'] },
+  { dbValue: 'bulbs', uiValue: 'Bulbs', aliases: ['bulb'] },
+  { dbValue: 'stems', uiValue: 'Stems', aliases: ['stem'] },
+  { dbValue: 'leaves', uiValue: 'Leaves', aliases: ['leaf', 'foliage'] },
+  { dbValue: 'flowers', uiValue: 'Flowers', aliases: ['flower', 'blossom'] },
+  { dbValue: 'fruits', uiValue: 'Fruits', aliases: ['fruit'] },
+  { dbValue: 'spores', uiValue: 'Spores', aliases: ['spore'] },
+])
+
+export const habitatEnum = createEnumTools([
+  { dbValue: 'aquatic', uiValue: 'Aquatic', aliases: ['water', 'aquatique'] },
+  { dbValue: 'terrestrial', uiValue: 'Terrestrial', aliases: ['land', 'terrestre'] },
+  { dbValue: 'epiphytic', uiValue: 'Epiphytic', aliases: ['epiphyte', 'air plant'] },
+  { dbValue: 'lithophytic', uiValue: 'Lithophytic', aliases: ['lithophyte', 'rock'] },
+  { dbValue: 'parasitic', uiValue: 'Parasitic', aliases: ['parasite'] },
+])
+
 // -- Section 2: Identity ------------------------------------------------------
 
 export const utilityEnum = createEnumTools([
@@ -313,8 +344,8 @@ export const fruitTypeEnum = createEnumTools([
   { dbValue: 'seed', uiValue: 'seed' },
   { dbValue: 'stone', uiValue: 'stone' },
 ])
-/** @deprecated Use climateEnum */
-export const habitatEnum = climateEnum
+// Note: habitatEnum is now a proper enum in Section 1 (aquatic, terrestrial, etc.)
+// The old habitatEnum used to alias climateEnum — code that needs climate data should use climateEnum directly
 /** @deprecated Use sunlightEnum */
 export const levelSunEnum = sunlightEnum
 /** @deprecated Use careLevelEnum */

@@ -7,16 +7,17 @@ import type {
   PlantTypeValue,
 } from "@/types/plant"
 
-export const PLANT_TYPE_OPTIONS: PlantTypeValue[] = ["plant", "bambu", "shrub", "tree", "cactus", "succulent", "other"]
+export const PLANT_TYPE_OPTIONS: PlantTypeValue[] = ["herb", "shrub", "tree", "climber", "succulent", "fern", "moss", "grass"]
 
 export const PLANT_SUBCLASS_OPTIONS: Record<PlantTypeValue, PlantSubclassValue[]> = {
-  plant: ["flower", "vegetable", "cereal", "spice"],
-  bambu: [],
+  herb: ["flower", "vegetable", "cereal", "spice"],
   shrub: [],
   tree: [],
-  cactus: [],
+  climber: [],
   succulent: [],
-  other: [],
+  fern: [],
+  moss: [],
+  grass: [],
 }
 
 export const PLANT_SUBSUBCLASS_OPTIONS: Record<PlantSubclassValue, PlantSubSubclassValue[]> = {
