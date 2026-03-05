@@ -263,6 +263,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
           <Button
             variant="ghost"
             size="icon"
+            aria-label={t('common.close', { defaultValue: 'Close' })}
             className="rounded-full h-11 w-11 min-w-11"
             onClick={onClose}
           >
@@ -393,6 +394,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label={t('common.closeFullscreen', { defaultValue: 'Close fullscreen' })}
                   className="rounded-full h-11 w-11 text-white hover:bg-white/20 active:bg-white/30"
                   onClick={(e) => {
                     e.stopPropagation()
