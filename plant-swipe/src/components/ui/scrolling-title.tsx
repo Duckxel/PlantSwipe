@@ -93,7 +93,7 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className={cn("inline-block whitespace-nowrap max-w-full", innerClasses)}
+        className={cn("block whitespace-nowrap max-w-full", innerClasses)}
         style={
           isHovered && scrollDistance > 0
             ? {
