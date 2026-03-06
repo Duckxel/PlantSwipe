@@ -1172,28 +1172,45 @@ async function fetchProfilePreview(username: string): Promise<InternalLinkPrevie
   try {
     const { data: profile, error } = await supabase
       .from('profiles')
-      .select('id, display_name, avatar_url, bio, liked_plant_ids')
+      .select('id, display_name, avatar_url, bio')
       .eq('display_name', username)
       .single()
-    
+
     if (error || !profile) return null
-    
+
+    // Get liked count from likes bookmark
+    let likedCount = 0
+    try {
+      const { data: likesBookmark } = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('user_id', profile.id)
+        .eq('is_like', true)
+        .maybeSingle()
+      if (likesBookmark) {
+        const { count } = await supabase
+          .from('bookmark_items')
+          .select('*', { count: 'exact', head: true })
+          .eq('bookmark_id', likesBookmark.id)
+        likedCount = count || 0
+      }
+    } catch {}
+
     // Get friend count (friends where this user is either user_id or friend_id with status accepted)
     const { count: friendCount } = await supabase
       .from('friends')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', profile.id)
       .eq('status', 'accepted')
-    
+
     // Get garden count
     const { count: gardenCount } = await supabase
       .from('garden_members')
       .select('*', { count: 'exact', head: true })
       .eq('user_id', profile.id)
-    
+
     // Build subtitle with counts
     const parts: string[] = []
-    const likedCount = Array.isArray(profile.liked_plant_ids) ? profile.liked_plant_ids.length : 0
     if (likedCount > 0) {
       parts.push(`❤️ ${likedCount} favorite${likedCount !== 1 ? 's' : ''}`)
     }

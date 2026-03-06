@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, liked_plant_ids, is_admin, roles, username, country, city, bio, favorite_plant, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified, parent')
+      .select('id, display_name, is_admin, roles, username, country, city, bio, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified, parent')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -287,7 +287,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const { error: perr } = await supabase.from('profiles').insert({
       id: uid,
       display_name: originalDisplayName,
-      liked_plant_ids: [],
       timezone: detectedTimezone,
       language: detectedLanguage,
       accent_key: 'emerald',
@@ -302,6 +301,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       marketing_consent_date: marketingConsent ? consentTimestamp : null,
     })
     if (perr) return { error: perr.message }
+
+    // Create the default "Likes" bookmark (private, is_like=true)
+    // This is the only bookmark created on account creation
+    await supabase.from('bookmarks').insert({
+      user_id: uid,
+      name: 'Likes',
+      visibility: 'private',
+      is_like: true,
+    })
 
     // Update local session immediately; profile fetch runs in background
     await loadSession()

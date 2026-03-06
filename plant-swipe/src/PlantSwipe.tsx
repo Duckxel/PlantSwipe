@@ -29,6 +29,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
+import { getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import { checkEditorAccess } from "@/constants/userRoles";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
@@ -436,11 +437,16 @@ export default function PlantSwipe() {
   
   const likedSet = React.useMemo(() => new Set(likedIds), [likedIds])
 
-  // Hydrate liked ids from profile when available
+  // Hydrate liked ids from likes bookmark when user is available
   React.useEffect(() => {
-    const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
-    setLikedIds(arr)
-  }, [profile])
+    if (!user?.id) {
+      setLikedIds([])
+      return
+    }
+    getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
+      setLikedIds(plantIds)
+    }).catch(() => {})
+  }, [user?.id])
 
   // Read search query from URL parameters when on search page
   React.useEffect(() => {
@@ -1514,31 +1520,18 @@ export default function PlantSwipe() {
   }, [user])
 
   const toggleLiked = React.useCallback(async (plantId: string) => {
-    if (!ensureLoggedIn()) return
-    setLikedIds((prev) => {
-      const has = prev.includes(plantId)
-      const next = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
-      // fire-and-forget sync to Supabase
-      ;(async () => {
-        try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({ liked_plant_ids: next })
-            .eq('id', user!.id)
-          if (error) {
-            // revert on error
-            setLikedIds(prev)
-          } else {
-            // keep server in sync in context eventually
-            refreshProfile().catch(() => {})
-          }
-        } catch {
-          setLikedIds(prev)
-        }
-      })()
-      return next
-    })
-  }, [ensureLoggedIn, user, refreshProfile])
+    if (!ensureLoggedIn() || !user?.id) return
+    const prev = [...likedIds]
+    const has = prev.includes(plantId)
+    const optimistic = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+    setLikedIds(optimistic)
+    try {
+      const { plantIds } = await togglePlantInLikesBookmark(user.id, plantId)
+      setLikedIds(plantIds)
+    } catch {
+      setLikedIds(prev)
+    }
+  }, [ensureLoggedIn, user, likedIds])
 
   const handleToggleLike = React.useCallback(() => {
     if (current) toggleLiked(current.id)

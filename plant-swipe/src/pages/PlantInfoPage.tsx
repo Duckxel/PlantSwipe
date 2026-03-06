@@ -15,7 +15,7 @@ import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { ReportPlantDialog } from '@/components/plant/ReportPlantDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { trackImpression, fetchImpression, formatCount } from '@/lib/impressions'
-import { getUserBookmarks } from '@/lib/bookmarks'
+import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
@@ -437,7 +437,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile } = useAuth()
   const { openLogin } = useAuthActions()
   const { t } = useTranslation(['common', 'plantInfo'])
   const currentLang = useLanguage()
@@ -551,12 +551,14 @@ const PlantInfoPage: React.FC = () => {
   })
 
   React.useEffect(() => {
-    const arr = Array.isArray((profile as any)?.liked_plant_ids)
-      ? ((profile as any).liked_plant_ids as any[]).map(String)
-      : []
-    setLikedIds(arr)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.liked_plant_ids])
+    if (!user?.id) {
+      setLikedIds([])
+      return
+    }
+    getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
+      setLikedIds(plantIds)
+    }).catch(() => {})
+  }, [user?.id])
 
   React.useEffect(() => {
     let ignore = false
@@ -661,20 +663,16 @@ const PlantInfoPage: React.FC = () => {
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
-    setLikedIds((prev) => {
-      const has = prev.includes(id)
-      const next = has ? prev.filter((x) => x !== id) : [...prev, id]
-      ;(async () => {
-        try {
-          const { error } = await supabase.from('profiles').update({ liked_plant_ids: next }).eq('id', user.id)
-          if (error) setLikedIds(prev)
-          else refreshProfile().catch(() => {})
-        } catch {
-          setLikedIds(prev)
-        }
-      })()
-      return next
-    })
+    const prev = [...likedIds]
+    const has = prev.includes(id)
+    const optimistic = has ? prev.filter((x) => x !== id) : [...prev, id]
+    setLikedIds(optimistic)
+    try {
+      const { plantIds } = await togglePlantInLikesBookmark(user.id, id)
+      setLikedIds(plantIds)
+    } catch {
+      setLikedIds(prev)
+    }
   }
 
   const handleGoBack = React.useCallback(() => {

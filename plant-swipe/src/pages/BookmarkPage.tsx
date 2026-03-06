@@ -37,22 +37,31 @@ export const BookmarkPage = () => {
     setLoading(true)
     try {
       const data = await getBookmarkDetails(id, currentLang)
-      setBookmark(data)
+      // Block access to likes bookmarks for non-owners
+      if (data.is_like && data.user_id !== user?.id) {
+        setError(t('bookmarks.notFound', { defaultValue: 'Bookmark not found' }))
+        setBookmark(null)
+      } else {
+        setBookmark(data)
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : t('common.error')
       setError(message)
     } finally {
       setLoading(false)
     }
-  }, [id, t, currentLang])
+  }, [id, t, currentLang, user?.id])
 
   React.useEffect(() => {
     fetchBookmark()
   }, [fetchBookmark])
 
-  usePageMetadata({ 
-    title: bookmark ? `${bookmark.name} | Bookmarks` : 'Bookmark',
-    description: `View plants in ${bookmark?.name}`
+  const metaPlantCount = bookmark?.plant_count || bookmark?.items?.length || 0
+  usePageMetadata({
+    title: bookmark ? `${bookmark.name} | ${t('bookmarks.title', { defaultValue: 'Bookmarks' })} | Aphylia` : 'Bookmark',
+    description: bookmark
+      ? `${bookmark.name} - ${metaPlantCount} ${t('bookmarks.plants', { defaultValue: 'plants' })} | ${t('bookmarks.collection', { defaultValue: 'Plant Collection on Aphylia' })}`
+      : `View plants in bookmark`
   })
 
   const handleDelete = async () => {
@@ -188,8 +197,12 @@ export const BookmarkPage = () => {
             >
               {/* Title with Icon */}
               <div className="flex items-center gap-3">
-                <div className="flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-lg shadow-emerald-500/25">
-                  <Sparkles className="h-7 w-7 text-white" />
+                <div className={`flex items-center justify-center w-14 h-14 rounded-2xl shadow-lg ${
+                  bookmark.is_like
+                    ? 'bg-gradient-to-br from-rose-400 to-rose-600 shadow-rose-500/25'
+                    : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25'
+                }`}>
+                  {bookmark.is_like ? <Heart className="h-7 w-7 text-white" /> : <Sparkles className="h-7 w-7 text-white" />}
                 </div>
                 <div>
                   <h1 className="text-3xl md:text-4xl font-bold text-stone-900 dark:text-white">
@@ -234,26 +247,30 @@ export const BookmarkPage = () => {
               </Button>
               {isOwner && (
                 <>
-                  <Button 
-                    onClick={() => setAddPlantOpen(true)} 
+                  <Button
+                    onClick={() => setAddPlantOpen(true)}
                     className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25"
                   >
                     <Plus className="h-4 w-4 mr-2" /> {t('bookmarks.addPlant', { defaultValue: 'Add Plant' })}
                   </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={() => setEditOpen(true)} 
-                    className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
-                  >
-                    <Edit2 className="h-4 w-4" />
-                  </Button>
-                  <Button 
-                    variant="ghost" 
-                    onClick={handleDelete} 
-                    className="rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
+                  {!bookmark.is_like && (
+                    <>
+                      <Button
+                        variant="outline"
+                        onClick={() => setEditOpen(true)}
+                        className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
+                      >
+                        <Edit2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={handleDelete}
+                        className="rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  )}
                 </>
               )}
             </motion.div>

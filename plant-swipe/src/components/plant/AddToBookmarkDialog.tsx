@@ -1,6 +1,6 @@
 import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Plus, Lock, Globe, Check } from 'lucide-react'
+import { Plus, Lock, Globe, Check, Heart } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getUserBookmarks, addPlantToBookmark, removePlantFromBookmark } from '@/lib/bookmarks'
 import type { Bookmark } from '@/types/bookmark'
@@ -26,7 +26,13 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
     setLoading(true)
     try {
       const data = await getUserBookmarks(userId)
-      setBookmarks(data)
+      // Sort so Likes bookmark appears first
+      const sorted = [...data].sort((a, b) => {
+        if (a.is_like && !b.is_like) return -1
+        if (!a.is_like && b.is_like) return 1
+        return 0
+      })
+      setBookmarks(sorted)
     } catch (e) {
       console.error(e)
     } finally {
@@ -43,9 +49,9 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
   const handleAddToBookmark = async (bookmark: Bookmark) => {
     if (addingToId) return
     setAddingToId(bookmark.id)
-    
+
     const hasPlant = bookmark.items?.some(i => String(i.plant_id) === String(plantId))
-    
+
     try {
       if (hasPlant) {
         // Remove from bookmark if already saved
@@ -74,41 +80,42 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
         <DialogHeader>
           <DialogTitle>{t('bookmarks.saveTo', { defaultValue: 'Save to Collection' })}</DialogTitle>
         </DialogHeader>
-        
+
         <div className="py-4 space-y-2 max-h-[60vh] overflow-y-auto">
           {loading ? (
              <div className="flex justify-center py-8"><Loader2 className="animate-spin h-6 w-6 text-stone-400" /></div>
           ) : (
             <>
-              <button
-                onClick={() => setCreateOpen(true)}
-                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] transition-colors text-left"
-              >
-                 <div className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-[#3e3e42] flex items-center justify-center text-stone-500">
-                   <Plus className="h-6 w-6" />
-                 </div>
-                 <span className="font-medium">{t('bookmarks.createNew', { defaultValue: 'New Collection' })}</span>
-              </button>
-
               {bookmarks.map(b => {
                  const preview = b.preview_images?.[0]
                  const isAdding = addingToId === b.id
                  const hasPlant = b.items?.some(i => String(i.plant_id) === String(plantId))
-                 
+                 const isLike = b.is_like
+
                  return (
                   <button
                     key={b.id}
                     onClick={() => handleAddToBookmark(b)}
                     disabled={isAdding}
                     className={`w-full flex items-center justify-between p-2 rounded-xl transition-colors text-left group ${
-                      hasPlant 
-                        ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' 
+                      hasPlant
+                        ? isLike
+                          ? 'bg-rose-50 dark:bg-rose-900/20 hover:bg-rose-100 dark:hover:bg-rose-900/30'
+                          : 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
                         : 'hover:bg-stone-50 dark:hover:bg-[#2d2d30]'
                     }`}
                   >
                     <div className="flex items-center gap-3 overflow-hidden">
-                       <div className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-[#3e3e42] overflow-hidden flex-shrink-0">
-                         {preview ? (
+                       <div className={`h-12 w-12 rounded-lg overflow-hidden flex-shrink-0 flex items-center justify-center ${
+                         isLike
+                           ? hasPlant
+                             ? 'bg-rose-100 dark:bg-rose-900/40'
+                             : 'bg-rose-50 dark:bg-rose-900/20'
+                           : 'bg-stone-200 dark:bg-[#3e3e42]'
+                       }`}>
+                         {isLike ? (
+                           <Heart className={`h-5 w-5 ${hasPlant ? 'text-rose-500 fill-current' : 'text-rose-400'}`} />
+                         ) : preview ? (
                            <img src={preview} alt="" className="h-full w-full object-cover" />
                          ) : (
                            <div className="h-full w-full flex items-center justify-center text-stone-400">
@@ -117,7 +124,10 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
                          )}
                        </div>
                        <div className="min-w-0">
-                         <div className="font-medium truncate">{b.name}</div>
+                         <div className="font-medium truncate flex items-center gap-1.5">
+                           {isLike && <Heart className="h-3.5 w-3.5 text-rose-500 flex-shrink-0" />}
+                           {b.name}
+                         </div>
                          <div className="text-xs text-stone-500 flex items-center gap-1">
                            {b.visibility === 'private' && <Lock className="h-3 w-3" />}
                            <span>{b.plant_count || 0} {t('bookmarks.plants', { defaultValue: 'plants' })}</span>
@@ -127,27 +137,40 @@ export const AddToBookmarkDialog: React.FC<AddToBookmarkDialogProps> = ({ open, 
                     {isAdding ? (
                       <Loader2 className="h-5 w-5 animate-spin text-stone-400" />
                     ) : hasPlant ? (
-                       <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40 px-2 py-1 rounded-full text-xs font-medium">
+                       <div className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                         isLike
+                           ? 'text-rose-600 dark:text-rose-500 bg-rose-100 dark:bg-rose-900/40'
+                           : 'text-emerald-600 dark:text-emerald-500 bg-emerald-100 dark:bg-emerald-900/40'
+                       }`}>
                          <Check className="h-3 w-3" />
-                         <span>{t('bookmarks.saved', { defaultValue: 'Saved' })}</span>
+                         <span>{isLike ? t('bookmarks.liked', { defaultValue: 'Liked' }) : t('bookmarks.saved', { defaultValue: 'Saved' })}</span>
                        </div>
                     ) : null}
                   </button>
                  )
               })}
+
+              <button
+                onClick={() => setCreateOpen(true)}
+                className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-100 dark:hover:bg-[#2d2d30] transition-colors text-left"
+              >
+                 <div className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-[#3e3e42] flex items-center justify-center text-stone-500">
+                   <Plus className="h-6 w-6" />
+                 </div>
+                 <span className="font-medium">{t('bookmarks.createNew', { defaultValue: 'New Collection' })}</span>
+              </button>
             </>
           )}
         </div>
       </DialogContent>
     </Dialog>
-    
-    <CreateBookmarkDialog 
-        open={createOpen} 
-        onOpenChange={setCreateOpen} 
+
+    <CreateBookmarkDialog
+        open={createOpen}
+        onOpenChange={setCreateOpen}
         userId={userId}
         onSaved={() => {
           fetchBookmarks()
-          // After creating a new bookmark, the dialog will close and user can add plant to it
         }}
     />
     </>
