@@ -7,6 +7,7 @@ export interface Bookmark {
   user_id: string
   name: string
   visibility: BookmarkVisibility
+  is_like: boolean
   created_at: string
   updated_at: string
   // Populated fields

@@ -171,6 +171,7 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
       user_id: b.user_id,
       name: b.name,
       visibility: b.visibility,
+      is_like: b.is_like ?? false,
       created_at: b.created_at,
       updated_at: b.updated_at,
       items: allItems, // Return all items
@@ -180,30 +181,106 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   })
 }
 
+export async function getUserLikesBookmark(userId: string): Promise<Bookmark | null> {
+  const { data, error } = await supabase
+    .from('bookmarks')
+    .select('id, user_id, name, visibility, is_like, created_at, updated_at')
+    .eq('user_id', userId)
+    .eq('is_like', true)
+    .maybeSingle()
+
+  if (error || !data) return null
+  return { ...data, is_like: true, items: [], plant_count: 0, preview_images: [] }
+}
+
+export async function getLikesBookmarkPlantIds(userId: string): Promise<{ bookmarkId: string; plantIds: string[] }> {
+  const { data: bookmark } = await supabase
+    .from('bookmarks')
+    .select('id')
+    .eq('user_id', userId)
+    .eq('is_like', true)
+    .maybeSingle()
+
+  if (!bookmark) return { bookmarkId: '', plantIds: [] }
+
+  const { data: items } = await supabase
+    .from('bookmark_items')
+    .select('plant_id')
+    .eq('bookmark_id', bookmark.id)
+
+  return {
+    bookmarkId: bookmark.id,
+    plantIds: (items || []).map((i: any) => String(i.plant_id))
+  }
+}
+
+export async function togglePlantInLikesBookmark(userId: string, plantId: string): Promise<{ liked: boolean; plantIds: string[] }> {
+  const { bookmarkId, plantIds } = await getLikesBookmarkPlantIds(userId)
+  if (!bookmarkId) throw new Error('Likes bookmark not found')
+
+  const validPlantId = String(plantId).trim()
+  const isLiked = plantIds.includes(validPlantId)
+
+  if (isLiked) {
+    await removePlantFromBookmark(bookmarkId, validPlantId)
+    return { liked: false, plantIds: plantIds.filter(id => id !== validPlantId) }
+  } else {
+    await addPlantToBookmark(bookmarkId, validPlantId)
+    return { liked: true, plantIds: [...plantIds, validPlantId] }
+  }
+}
+
 export async function createBookmark(userId: string, name: string, visibility: BookmarkVisibility = 'public'): Promise<Bookmark> {
   const { data, error } = await supabase
     .from('bookmarks')
-    .insert({ user_id: userId, name, visibility })
+    .insert({ user_id: userId, name, visibility, is_like: false })
     .select()
     .single()
 
   if (error) throw new Error(error.message)
-  return data
+  return { ...data, is_like: false }
 }
 
 export async function updateBookmark(bookmarkId: string, updates: Partial<Pick<Bookmark, 'name' | 'visibility'>>): Promise<Bookmark> {
+  // Check if this is a likes bookmark - prevent changing visibility
+  const { data: existing } = await supabase
+    .from('bookmarks')
+    .select('is_like')
+    .eq('id', bookmarkId)
+    .maybeSingle()
+
+  if (existing?.is_like && updates.visibility && updates.visibility !== 'private') {
+    throw new Error('Likes bookmark must remain private')
+  }
+
+  // For likes bookmark, force visibility to private
+  const safeUpdates = existing?.is_like
+    ? { ...updates, visibility: 'private' as BookmarkVisibility }
+    : updates
+
   const { data, error } = await supabase
     .from('bookmarks')
-    .update(updates)
+    .update(safeUpdates)
     .eq('id', bookmarkId)
     .select()
     .single()
 
   if (error) throw new Error(error.message)
-  return data
+  return { ...data, is_like: data.is_like ?? false }
 }
 
 export async function deleteBookmark(bookmarkId: string): Promise<void> {
+  // Prevent deleting likes bookmark
+  const { data: existing } = await supabase
+    .from('bookmarks')
+    .select('is_like')
+    .eq('id', bookmarkId)
+    .maybeSingle()
+
+  if (existing?.is_like) {
+    throw new Error('Cannot delete Likes bookmark')
+  }
+
   const { error } = await supabase
     .from('bookmarks')
     .delete()
@@ -316,6 +393,7 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
     user_id: data.user_id,
     name: data.name,
     visibility: data.visibility,
+    is_like: data.is_like ?? false,
     created_at: data.created_at,
     updated_at: data.updated_at,
     items,

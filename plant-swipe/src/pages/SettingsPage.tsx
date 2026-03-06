@@ -1244,16 +1244,6 @@ export default function SettingsPage() {
                   </div>
                 )}
 
-                {/* Favorite Plant */}
-                {profile?.favorite_plant && (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-stone-50/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
-                    <span className="text-base">🌱</span>
-                    <div className="flex-1">
-                      <p className="text-xs text-stone-500 dark:text-stone-400">{t('settings.account.favoritePlant', { defaultValue: 'Favorite Plant' })}</p>
-                      <p className="text-sm font-medium">{profile.favorite_plant}</p>
-                    </div>
-                  </div>
-                )}
               </div>
 
               <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">

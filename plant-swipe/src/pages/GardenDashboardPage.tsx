@@ -28,7 +28,7 @@ import {
 import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
-import { getUserBookmarks, getBookmarkDetails } from "@/lib/bookmarks";
+import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import type { Bookmark as BookmarkType } from "@/types/bookmark";
 import { motion } from "framer-motion";
 import type { Garden, GardenPrivacy } from "@/types/garden";
@@ -311,13 +311,14 @@ export const GardenDashboardPage: React.FC = () => {
   // Favorites (liked plants)
   const [_likedIds, setLikedIds] = React.useState<string[]>([]);
   React.useEffect(() => {
-    const profileData = profile as { liked_plant_ids?: unknown[] } | undefined;
-    const arr = Array.isArray(profileData?.liked_plant_ids)
-      ? profileData.liked_plant_ids.map(String)
-      : [];
-    setLikedIds(arr);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.liked_plant_ids]);
+    if (!user?.id) {
+      setLikedIds([]);
+      return;
+    }
+    getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
+      setLikedIds(plantIds);
+    }).catch(() => {});
+  }, [user?.id]);
 
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
@@ -2580,31 +2581,19 @@ export const GardenDashboardPage: React.FC = () => {
     }
   };
 
-  // Toggle like for a plant and sync to profile
+  // Toggle like for a plant using likes bookmark
   const _toggleLiked = async (plantId: string) => {
     if (!user?.id) return;
-    setLikedIds((prev) => {
-      const has = prev.includes(plantId);
-      const next = has
-        ? prev.filter((id) => id !== plantId)
-        : [...prev, plantId];
-      (async () => {
-        try {
-          const { error } = await supabase
-            .from("profiles")
-            .update({ liked_plant_ids: next })
-            .eq("id", user.id);
-          if (error) {
-            setLikedIds(prev);
-          } else {
-            refreshProfile().catch(() => {});
-          }
-        } catch {
-          setLikedIds(prev);
-        }
-      })();
-      return next;
-    });
+    const prev = [..._likedIds];
+    const has = prev.includes(plantId);
+    const optimistic = has ? prev.filter((id) => id !== plantId) : [...prev, plantId];
+    setLikedIds(optimistic);
+    try {
+      const { plantIds } = await togglePlantInLikesBookmark(user.id, plantId);
+      setLikedIds(plantIds);
+    } catch {
+      setLikedIds(prev);
+    }
   };
 
   // invite by email only (implemented in submitInvite)
