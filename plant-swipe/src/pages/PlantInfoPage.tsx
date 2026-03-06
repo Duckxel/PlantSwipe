@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import { RecipeBox } from '@/components/plant/RecipeBox'
+import { PlantVarietyCircles } from '@/components/plant/PlantVarietyCircles'
 import type { Plant, PlantImage, PlantRecipe, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -1526,6 +1527,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
           <div className="relative space-y-3 sm:space-y-4">
+            <PlantVarietyCircles plantId={plant.id} plantName={plant.name} />
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
               <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:timeline.title')}</span>
