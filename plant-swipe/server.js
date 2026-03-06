@@ -351,17 +351,18 @@ try {
   console.warn('[server] Failed to read domain.json:', err?.message || err)
 }
 
-// Detect if aphylia.fr (French domain) is configured in domain.json
-// When a request comes from this domain, the app defaults to French
+// Detect if any .fr domain (including subdomains like dev.aphylia.fr) is configured in domain.json
+// When a request comes from such a domain, the app defaults to French
 let FRENCH_DOMAIN_ENABLED = false
 try {
   const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
   if (fsSync.existsSync(domainJsonPath)) {
     const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
     const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
-    if (domains.includes('aphylia.fr')) {
+    const frDomain = domains.find(d => typeof d === 'string' && d.toLowerCase().endsWith('.fr'))
+    if (frDomain) {
       FRENCH_DOMAIN_ENABLED = true
-      console.log('[server] French domain (aphylia.fr) detected in domain.json')
+      console.log(`[server] French domain (${frDomain}) detected in domain.json`)
     }
   }
 } catch (err) {
