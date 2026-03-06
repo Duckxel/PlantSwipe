@@ -2,6 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(python3:*)",
+      "Bash(node:*)",
       "mcp__Supabase__list_tables",
       "mcp__Supabase__execute_sql"
     ]

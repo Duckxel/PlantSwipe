@@ -30065,6 +30065,27 @@ async function generateCrawlerHtml(req, pagePath) {
         aboutGarden: 'Garden management and tracking',
         aboutReminders: 'Smart care reminders',
         aboutCommunity: 'Community of plant lovers',
+        // Categories
+        categoriesTitle: 'Plant Categories - Browse by Type',
+        categoriesDesc: 'Explore our plant encyclopedia by category. Find trees, shrubs, cacti, indoor plants, medicinal herbs, and more.',
+        categoriesHeading: 'Plant Categories',
+        categoriesIntro: 'Browse our encyclopedia by category to find exactly the plants you\'re looking for.',
+        categoriesEncyclopedia: 'Access our full encyclopedia',
+        catTree: 'Trees', catTreeDesc: 'Large woody plants with a single trunk',
+        catShrub: 'Shrubs', catShrubDesc: 'Multi-stemmed woody plants',
+        catFruitTree: 'Fruit Trees', catFruitTreeDesc: 'Trees that bear edible fruits',
+        catBamboo: 'Bamboo', catBambooDesc: 'Fast-growing grass family members',
+        catCactus: 'Cacti & Succulents', catCactusDesc: 'Drought-tolerant water-storing plants',
+        catHerbaceous: 'Herbaceous Plants', catHerbaceousDesc: 'Non-woody flowering plants',
+        catFruit: 'Fruit Plants', catFruitDesc: 'Plants grown for edible produce',
+        catAromatic: 'Aromatic Plants', catAromaticDesc: 'Fragrant herbs and spice plants',
+        catMedicinal: 'Medicinal Plants', catMedicinalDesc: 'Plants with therapeutic properties',
+        catClimbing: 'Climbing Plants', catClimbingDesc: 'Vines and climbers for vertical spaces',
+        catPerennial: 'Perennial Plants', catPerennialDesc: 'Plants that return year after year',
+        catBulb: 'Bulb Plants', catBulbDesc: 'Plants that grow from bulbs or tubers',
+        catIndoor: 'Indoor Plants', catIndoorDesc: 'Plants suited for indoor living spaces',
+        catFern: 'Ferns', catFernDesc: 'Shade-loving non-flowering plants',
+        catAquatic: 'Aquatic Plants', catAquaticDesc: 'Plants that thrive in or near water',
         // Search
         searchTitle: 'Find Your Perfect Plants',
         searchDesc: 'Search plants by name, care level, light needs, or growing conditions. Find the perfect plants for YOUR space!',
@@ -30247,6 +30268,27 @@ async function generateCrawlerHtml(req, pagePath) {
         aboutGarden: 'Gestion et suivi de jardin',
         aboutReminders: 'Rappels d\'entretien intelligents',
         aboutCommunity: 'Communauté de passionnés de plantes',
+        // Categories
+        categoriesTitle: 'Catégories de Plantes - Parcourir par Type',
+        categoriesDesc: 'Explorez notre encyclopédie végétale par catégorie. Arbres, arbustes, cactus, plantes d\'intérieur, plantes médicinales et plus.',
+        categoriesHeading: 'Catégories de Plantes',
+        categoriesIntro: 'Parcourez notre encyclopédie par catégorie pour trouver exactement les plantes que vous cherchez.',
+        categoriesEncyclopedia: 'Accéder à l\'encyclopédie complète',
+        catTree: 'Arbres', catTreeDesc: 'Grandes plantes ligneuses à tronc unique',
+        catShrub: 'Arbustes', catShrubDesc: 'Plantes ligneuses à tiges multiples',
+        catFruitTree: 'Arbres Fruitiers', catFruitTreeDesc: 'Arbres produisant des fruits comestibles',
+        catBamboo: 'Bambous', catBambooDesc: 'Membres à croissance rapide de la famille des graminées',
+        catCactus: 'Cactus & Succulentes', catCactusDesc: 'Plantes résistantes à la sécheresse stockant l\'eau',
+        catHerbaceous: 'Plantes Herbacées', catHerbaceousDesc: 'Plantes à fleurs non ligneuses',
+        catFruit: 'Plantes Fruitières', catFruitDesc: 'Plantes cultivées pour la production comestible',
+        catAromatic: 'Plantes Aromatiques', catAromaticDesc: 'Herbes parfumées et plantes à épices',
+        catMedicinal: 'Plantes Médicinales', catMedicinalDesc: 'Plantes aux propriétés thérapeutiques',
+        catClimbing: 'Plantes Grimpantes', catClimbingDesc: 'Vignes et grimpantes pour espaces verticaux',
+        catPerennial: 'Plantes Vivaces', catPerennialDesc: 'Plantes qui reviennent année après année',
+        catBulb: 'Plantes à Bulbes', catBulbDesc: 'Plantes qui poussent à partir de bulbes ou tubercules',
+        catIndoor: 'Plantes d\'Intérieur', catIndoorDesc: 'Plantes adaptées aux espaces intérieurs',
+        catFern: 'Fougères', catFernDesc: 'Plantes d\'ombre sans fleurs',
+        catAquatic: 'Plantes Aquatiques', catAquaticDesc: 'Plantes qui prospèrent dans ou près de l\'eau',
         searchTitle: 'Trouvez Vos Plantes Parfaites',
         searchDesc: 'Recherchez des plantes par nom, niveau d\'entretien ou conditions de culture. Trouvez les plantes parfaites pour VOTRE espace !',
         searchPlant: 'Recherche de Plantes',
@@ -31640,6 +31682,57 @@ async function generateCrawlerHtml(req, pagePath) {
             <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
             <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
             <a href="/contact">💬 Contact</a>
+          </nav>
+        </article>
+      `
+    }
+
+    else if (effectivePath[0] === 'search' && effectivePath[1] === 'categories') {
+      // Categories page — distinct from the search page
+      title = `📚 ${tr.categoriesTitle} | Aphylia`
+      description = tr.categoriesDesc
+
+      const categoryItems = [
+        { name: tr.catTree, desc: tr.catTreeDesc, params: '?type=tree', icon: '🌳' },
+        { name: tr.catShrub, desc: tr.catShrubDesc, params: '?type=shrub', icon: '🌿' },
+        { name: tr.catFruitTree, desc: tr.catFruitTreeDesc, params: '?type=tree&usage=Comestible', icon: '🍎' },
+        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?q=bamboo', icon: '🎋' },
+        { name: tr.catCactus, desc: tr.catCactusDesc, params: '?type=succulent', icon: '🌵' },
+        { name: tr.catHerbaceous, desc: tr.catHerbaceousDesc, params: '?type=herb,grass', icon: '🌸' },
+        { name: tr.catFruit, desc: tr.catFruitDesc, params: '?usage=Comestible', icon: '🍒' },
+        { name: tr.catAromatic, desc: tr.catAromaticDesc, params: '?usage=Aromatic', icon: '🌬️' },
+        { name: tr.catMedicinal, desc: tr.catMedicinalDesc, params: '?usage=Medicinal', icon: '⚕️' },
+        { name: tr.catClimbing, desc: tr.catClimbingDesc, params: '?type=climber', icon: '🧗' },
+        { name: tr.catPerennial, desc: tr.catPerennialDesc, params: '?lifeCycle=perennial,succulent_perennial', icon: '🔄' },
+        { name: tr.catBulb, desc: tr.catBulbDesc, params: '?plantPart=bulbs', icon: '🧅' },
+        { name: tr.catIndoor, desc: tr.catIndoorDesc, params: '?livingSpace=indoor', icon: '🏠' },
+        { name: tr.catFern, desc: tr.catFernDesc, params: '?type=fern', icon: '🌿' },
+        { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?habitat=aquatic', icon: '💧' },
+      ]
+
+      pageContent = `
+        <article>
+          <h1>📚 ${tr.categoriesHeading}</h1>
+          <p>${tr.categoriesIntro}</p>
+          <p><a href="/search">➡️ ${tr.categoriesEncyclopedia}</a></p>
+          <h2>${detectedLang === 'fr' ? 'Toutes les Catégories' : 'All Categories'}</h2>
+          <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px;">
+            ${categoryItems.map(cat => `
+              <li style="background: #f0fdf4; border-radius: 12px; padding: 12px 16px;">
+                <a href="/search${escapeHtml(cat.params)}" style="text-decoration: none; color: inherit;">
+                  <strong>${cat.icon} ${escapeHtml(cat.name)}</strong><br>
+                  <small style="color: #666;">${escapeHtml(cat.desc)}</small>
+                </a>
+              </li>
+            `).join('')}
+          </ul>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Encyclopédie' : 'Encyclopedia'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
           </nav>
         </article>
       `

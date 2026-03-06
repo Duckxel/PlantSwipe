@@ -5,7 +5,7 @@ import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { useMotionValue, animate } from "framer-motion";
-import { ChevronDown, ChevronUp, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronUp, LayoutGrid, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useGlobalNavigationTracker } from "@/hooks/useNavigationHistory";
@@ -73,6 +73,7 @@ const PricingPageLazy = lazy(() => import("@/pages/PricingPage"))
 const TermsPageLazy = lazy(() => import("@/pages/TermsPage"))
 const PrivacyPageLazy = lazy(() => import("@/pages/PrivacyPage"))
 const ErrorPageLazy = lazy(() => import("@/pages/ErrorPage").then(module => ({ default: module.ErrorPage })))
+const CategoriesPageLazy = lazy(() => import("@/pages/CategoriesPage"))
 const BlogPageLazy = lazy(() => import("@/pages/BlogPage"))
 const BlogPostPageLazy = lazy(() => import("@/pages/BlogPostPage"))
 const BlogComposerPageLazy = lazy(() => import("@/pages/BlogComposerPage"))
@@ -99,6 +100,10 @@ type PreparedPlant = Plant & {
   _humanSafe: boolean
   _livingSpace: string
   _seasonsSet: Set<string>         // O(1) season lookups
+  _lifeCycleSet: Set<string>       // O(1) life cycle lookups
+  _plantHabitSet: Set<string>      // O(1) plant habit lookups
+  _ediblePartSet: Set<string>      // O(1) edible part lookups
+  _plantPartSet: Set<string>       // O(1) plant part lookups
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
@@ -171,8 +176,6 @@ export default function PlantSwipe() {
   const debouncedQuery = useDebounce(query, 100)
   const [seasonFilter, setSeasonFilter] = useState<string | null>(null)
   const [colorFilter, setColorFilter] = useState<string[]>([])
-  const [onlySeeds, setOnlySeeds] = useState(false)
-  const [onlyFavorites, setOnlyFavorites] = useState(false)
   const [typeFilter, setTypeFilter] = useState<string | null>(null)
   const [usageFilters, setUsageFilters] = useState<string[]>([])
   const [habitatFilters, setHabitatFilters] = useState<string[]>([])
@@ -180,6 +183,10 @@ export default function PlantSwipe() {
   const [petSafe, setPetSafe] = useState(false)
   const [humanSafe, setHumanSafe] = useState(false)
   const [livingSpaceFilters, setLivingSpaceFilters] = useState<string[]>([])
+  const [lifeCycleFilters, setLifeCycleFilters] = useState<string[]>([])
+  const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
+  const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
+  const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -193,9 +200,13 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (typeof window === "undefined") return
     const mq = window.matchMedia("(min-width: 1024px)")
-    const handleChange = (e: MediaQueryListEvent) => setIsLargeScreen(e.matches)
+    const handleChange = (e: MediaQueryListEvent) => {
+      setIsLargeScreen(e.matches)
+      setShowFilters(e.matches)
+    }
     mq.addEventListener("change", handleChange)
     setIsLargeScreen(mq.matches)
+    setShowFilters(mq.matches)
     return () => mq.removeEventListener("change", handleChange)
   }, [])
 
@@ -251,7 +262,7 @@ export default function PlantSwipe() {
     pathWithoutLang === "/" ? "landing" :
     pathWithoutLang === "/discovery" || pathWithoutLang.startsWith("/discovery/") ? "discovery" :
     pathWithoutLang.startsWith("/gardens") || pathWithoutLang.startsWith('/garden/') ? "gardens" :
-    pathWithoutLang.startsWith("/search") ? "search" :
+    pathWithoutLang === "/search" ? "search" :
     pathWithoutLang.startsWith("/profile") ? "profile" :
     pathWithoutLang.startsWith("/create") ? "create" : "discovery"
   
@@ -458,13 +469,46 @@ export default function PlantSwipe() {
     }).catch(() => {})
   }, [user?.id])
 
-  // Read search query from URL parameters when on search page
+  // Read search query and filter params from URL when on search page
   React.useEffect(() => {
     if (pathWithoutLang.startsWith("/search")) {
+      let hasParams = false
+
       const urlQuery = searchParams.get("q")
-      if (urlQuery && urlQuery !== query) {
-        setQuery(urlQuery)
-        // Clear the URL parameter after setting the query to keep URL clean
+      const urlType = searchParams.get("type")
+      const urlUsage = searchParams.get("usage")
+      const urlLivingSpace = searchParams.get("livingSpace")
+      const urlSeason = searchParams.get("season")
+      const urlMaintenance = searchParams.get("maintenance")
+      const urlHabitat = searchParams.get("habitat")
+      const urlPetSafe = searchParams.get("petSafe")
+      const urlHumanSafe = searchParams.get("humanSafe")
+      const urlLifeCycle = searchParams.get("lifeCycle")
+      const urlPlantHabit = searchParams.get("plantHabit")
+      const urlEdiblePart = searchParams.get("ediblePart")
+      const urlPlantPart = searchParams.get("plantPart")
+
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
+
+      if (hasParams) {
+        // Reset all filters before applying URL params so previous
+        // filters don't accumulate across navigations
+        setQuery(urlQuery || "")
+        setTypeFilter(urlType || null)
+        setUsageFilters(urlUsage ? urlUsage.split(",").map(u => u.trim()) : [])
+        setLivingSpaceFilters(urlLivingSpace ? urlLivingSpace.split(",").map(s => s.trim().toLowerCase()) : [])
+        setSeasonFilter(urlSeason ? urlSeason.toLowerCase() : null)
+        setMaintenanceFilter(urlMaintenance ? urlMaintenance.toLowerCase() : null)
+        setHabitatFilters(urlHabitat ? urlHabitat.split(",").map(h => h.trim().toLowerCase()) : [])
+        setPetSafe(urlPetSafe === "true")
+        setHumanSafe(urlHumanSafe === "true")
+        setLifeCycleFilters(urlLifeCycle ? urlLifeCycle.split(",").map(l => l.trim()) : [])
+        setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
+        setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
+        setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
+        setColorFilter([])
+
+        // Clear URL parameters after applying to keep URL clean
         setSearchParams({}, { replace: true })
       }
     }
@@ -879,6 +923,10 @@ export default function PlantSwipe() {
       let _cachedHabitats: string[] | undefined
       let _cachedHabitatSet: Set<string> | undefined
       let _cachedSeasonsSet: Set<string> | undefined
+      let _cachedLifeCycleSet: Set<string> | undefined
+      let _cachedPlantHabitSet: Set<string> | undefined
+      let _cachedEdiblePartSet: Set<string> | undefined
+      let _cachedPlantPartSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
       // Type — use plantType or classification fallback
@@ -955,6 +1003,13 @@ export default function PlantSwipe() {
 
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
+        // Prefer new habitat field (aquatic, terrestrial, epiphytic, etc.)
+        const habitatArr = Array.isArray(p.habitat) ? p.habitat : []
+        if (habitatArr.length > 0) {
+          _cachedHabitats = habitatArr.filter(h => typeof h === 'string').map(h => (h as string).toLowerCase())
+          return _cachedHabitats
+        }
+        // Fallback to legacy climate/habitat fields
         const climateArr = Array.isArray(p.climate) ? p.climate : []
         const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
         const combined = climateArr.length > 0 ? climateArr : legacyHabitat
@@ -973,7 +1028,7 @@ export default function PlantSwipe() {
           const tags = (p.plantTags || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags} ${typeLabel || ''} ${usageLabelsLower.join(' ')} ${(p.lifeCycle || []).join(' ')} ${p.family || ''} ${(p.plantHabit || []).join(' ')}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -1020,6 +1075,26 @@ export default function PlantSwipe() {
              : []
            _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
            return _cachedSeasonsSet
+        },
+        get _lifeCycleSet() {
+           if (_cachedLifeCycleSet) return _cachedLifeCycleSet
+           _cachedLifeCycleSet = new Set((p.lifeCycle || []).map((l: string) => l.toLowerCase()))
+           return _cachedLifeCycleSet
+        },
+        get _plantHabitSet() {
+           if (_cachedPlantHabitSet) return _cachedPlantHabitSet
+           _cachedPlantHabitSet = new Set((p.plantHabit || []).map((h: string) => h.toLowerCase()))
+           return _cachedPlantHabitSet
+        },
+        get _ediblePartSet() {
+           if (_cachedEdiblePartSet) return _cachedEdiblePartSet
+           _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
+           return _cachedEdiblePartSet
+        },
+        get _plantPartSet() {
+           if (_cachedPlantPartSet) return _cachedPlantPartSet
+           _cachedPlantPartSet = new Set((p.plantPart || []).map((e: string) => e.toLowerCase()))
+           return _cachedPlantPartSet
         },
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
@@ -1099,8 +1174,12 @@ export default function PlantSwipe() {
     usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
     habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase()))
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters])
+    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
+    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
+    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
+    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
+    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1108,7 +1187,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
     
     // Pre-compute living space matching logic
     const livingSpaceCount = livingSpaceSet.size
@@ -1121,11 +1200,14 @@ export default function PlantSwipe() {
       // Boolean checks are O(1) and fastest
       if (petSafe && !p._petSafe) return false
       if (humanSafe && !p._humanSafe) return false
-      if (onlySeeds && !p.seedsAvailable) return false
-      if (onlyFavorites && !likedSet.has(p.id)) return false
-      
-      // String equality checks - still O(1)
-      if (normalizedType && p._typeLabel !== normalizedType) return false
+      // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
+      if (normalizedType) {
+        if (normalizedType.includes(',')) {
+          if (!normalizedType.split(',').some(t => p._typeLabel === t.trim())) return false
+        } else {
+          if (p._typeLabel !== normalizedType) return false
+        }
+      }
       if (normalizedMaintenanceFilter && p._maintenance !== normalizedMaintenanceFilter) return false
       
       // Season filter - O(1) Set lookup
@@ -1177,7 +1259,55 @@ export default function PlantSwipe() {
         }
         if (!hasMatchingHabitat) return false
       }
-      
+
+      // Life cycle filter - OR logic: match if plant has ANY selected life cycle
+      if (lifeCycleSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._lifeCycleSet
+        if (lifeCycleSet.size <= plantSet.size) {
+          for (const l of lifeCycleSet) { if (plantSet.has(l)) { hasMatch = true; break } }
+        } else {
+          for (const l of plantSet) { if (lifeCycleSet.has(l)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Plant habit filter - OR logic: match if plant has ANY selected habit
+      if (plantHabitSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._plantHabitSet
+        if (plantHabitSet.size <= plantSet.size) {
+          for (const h of plantHabitSet) { if (plantSet.has(h)) { hasMatch = true; break } }
+        } else {
+          for (const h of plantSet) { if (plantHabitSet.has(h)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Edible part filter - OR logic: match if plant has ANY selected edible part
+      if (ediblePartSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._ediblePartSet
+        if (ediblePartSet.size <= plantSet.size) {
+          for (const e of ediblePartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
+        } else {
+          for (const e of plantSet) { if (ediblePartSet.has(e)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Plant part filter - OR logic: match if plant has ANY selected plant part (roots, bulbs, stems, etc.)
+      if (plantPartSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._plantPartSet
+        if (plantPartSet.size <= plantSet.size) {
+          for (const e of plantPartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
+        } else {
+          for (const e of plantSet) { if (plantPartSet.has(e)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
       // Color filter - using pre-computed color tokens for O(1) lookups
       // Optimized: Iterate over plant tokens (smaller set) instead of filter set (larger set)
       // Note: _colorTokens includes both full color strings (e.g. "red-orange") and split tokens (e.g. "red", "orange")
@@ -1211,7 +1341,7 @@ export default function PlantSwipe() {
       
       return true
     })
-  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, onlySeeds, onlyFavorites, petSafe, humanSafe, likedSet])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe, likedSet])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -2151,10 +2281,12 @@ export default function PlantSwipe() {
                     setHumanSafe={setHumanSafe}
                     livingSpaceFilters={livingSpaceFilters}
                     setLivingSpaceFilters={setLivingSpaceFilters}
-                    onlySeeds={onlySeeds}
-                    setOnlySeeds={setOnlySeeds}
-                    onlyFavorites={onlyFavorites}
-                    setOnlyFavorites={setOnlyFavorites}
+                    lifeCycleFilters={lifeCycleFilters}
+                    setLifeCycleFilters={setLifeCycleFilters}
+                    plantHabitFilters={plantHabitFilters}
+                    setPlantHabitFilters={setPlantHabitFilters}
+                    ediblePartFilters={ediblePartFilters}
+                    setEdiblePartFilters={setEdiblePartFilters}
                     colorOptions={colorOptions}
                     primaryColors={primaryColors}
                     advancedColors={advancedColors}
@@ -2176,23 +2308,32 @@ export default function PlantSwipe() {
                   }`}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                    <div className="flex-1">
-                      <Label htmlFor="plant-search-main" className="sr-only">
-                        {t("common.search")}
-                      </Label>
-                      <SearchInput
-                        id="plant-search-main"
-                        ref={searchInputRef}
-                        variant="lg"
-                        className="rounded-2xl"
-                        placeholder={t("plant.searchPlaceholder")}
-                        value={query}
-                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                          setQuery(e.target.value)
-                        }}
-                        onClear={() => setQuery("")}
-                        shortcut={shortcutLabel}
-                      />
+                    <div className="flex flex-1 items-center gap-2">
+                      <button
+                        onClick={() => navigate("/search/categories")}
+                        className="shrink-0 rounded-xl p-2 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        title={t("categories.title", { defaultValue: "Categories" })}
+                      >
+                        <LayoutGrid className="h-5 w-5" />
+                      </button>
+                      <div className="flex-1">
+                        <Label htmlFor="plant-search-main" className="sr-only">
+                          {t("common.search")}
+                        </Label>
+                        <SearchInput
+                          id="plant-search-main"
+                          ref={searchInputRef}
+                          variant="lg"
+                          className="rounded-2xl"
+                          placeholder={t("plant.searchPlaceholder")}
+                          value={query}
+                          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                            setQuery(e.target.value)
+                          }}
+                          onClear={() => setQuery("")}
+                          shortcut={shortcutLabel}
+                        />
+                      </div>
                     </div>
                     <div className="flex flex-col gap-2 sm:flex-row lg:flex-row lg:items-end lg:gap-2 w-full lg:w-auto">
                       <Button
@@ -2261,10 +2402,12 @@ export default function PlantSwipe() {
                         setHumanSafe={setHumanSafe}
                         livingSpaceFilters={livingSpaceFilters}
                         setLivingSpaceFilters={setLivingSpaceFilters}
-                        onlySeeds={onlySeeds}
-                        setOnlySeeds={setOnlySeeds}
-                        onlyFavorites={onlyFavorites}
-                        setOnlyFavorites={setOnlyFavorites}
+                        lifeCycleFilters={lifeCycleFilters}
+                        setLifeCycleFilters={setLifeCycleFilters}
+                        plantHabitFilters={plantHabitFilters}
+                        setPlantHabitFilters={setPlantHabitFilters}
+                        ediblePartFilters={ediblePartFilters}
+                        setEdiblePartFilters={setEdiblePartFilters}
                         colorOptions={colorOptions}
                         primaryColors={primaryColors}
                         advancedColors={advancedColors}
@@ -2290,6 +2433,14 @@ export default function PlantSwipe() {
               element={
                 <Suspense fallback={routeLoadingFallback}>
                   <GardenDashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/search/categories"
+              element={
+                <Suspense fallback={routeLoadingFallback}>
+                  <CategoriesPageLazy />
                 </Suspense>
               }
             />
