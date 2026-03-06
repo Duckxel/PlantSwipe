@@ -32,7 +32,7 @@
     "title": "Tout ce dont votre jardin a besoin, dans une seule application.",
     "subtitle": "Du suivi des arrosages à l'identification d'espèces inconnues, Aphylia vous accompagne.",
     "smartLibrary": {
-      "title": "Bibliothèque de plantes intelligente",
+      "title": "Encyclopédie de plantes intelligente",
       "description": "Accédez à une base de données complète avec des informations détaillées sur les soins — besoins en lumière, calendriers d'arrosage, préférences de sol et avertissements de toxicité."
     },
     "careReminders": {
@@ -67,7 +67,7 @@
     "subtitle": "Commencer est simple. Configurez une fois, et Aphylia s'occupe du reste.",
     "step1": {
       "title": "Ajoutez vos plantes",
-      "description": "Parcourez notre bibliothèque ou prenez une photo pour identifier et ajouter des plantes à votre collection."
+      "description": "Parcourez notre encyclopédie ou prenez une photo pour identifier et ajouter des plantes à votre collection."
     },
     "step2": {
       "title": "Définissez vos conditions",
@@ -160,14 +160,14 @@
   "beginner": {
     "badge": "Parfait pour les débutants",
     "title": "Vous n'y connaissez rien en jardinage ?",
-    "titleHighlight": "C'est exactement pour ça que nous avons créé cette app",
+    "titleHighlight": "C'est exactement pour ça que nous avons créé cette application",
     "subtitle": "Tout le monde commence quelque part. Aphylia transforme les débutants complets en parents de plantes confiants avec des conseils doux, des rappels intelligents et un assistant qui parle votre langue — pas de botanique compliquée.",
     "feature1Title": "Apprenez en grandissant",
     "feature1Desc": "Pas d'expérience en jardinage ? Pas de problème ! Notre appli vous apprend tout étape par étape.",
     "feature2Title": "Votre assistant végétal",
     "feature2Desc": "Vous ne savez pas ce qui ne va pas ? Demandez simplement à Aphylia - votre assistant amical qui explique les soins des plantes en termes simples.",
     "feature3Title": "N'oubliez plus jamais d'arroser",
-    "feature3Desc": "Recevez des rappels doux exactement quand vos plantes ont besoin d'attention. Nous vous aiderons à prendre l'habitude.",
+    "feature3Desc": "Recevez des rappels exactement quand vos plantes en ont besoin. Nous vous aiderons à prendre l'habitude.",
     "ctaTitle": "Rejoignez des milliers de nouveaux parents de plantes",
     "ctaSubtitle": "Commencez votre aventure verte aujourd'hui — nous vous guiderons à chaque étape",
     "ctaButton": "Commencer gratuitement",
@@ -189,7 +189,7 @@
         "Jusqu'à 5 jardins",
         "Plantes illimitées par jardin",
         "Rappels d'entretien basiques",
-        "Accès à la bibliothèque",
+        "Accès à l'encyclopédie",
         "Support communautaire"
       ],
       "cta": "Commencer gratuitement"
