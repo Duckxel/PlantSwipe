@@ -504,8 +504,8 @@ const PlantInfoPage: React.FC = () => {
     }
     try {
       const bookmarks = await getUserBookmarks(user.id)
-      const isInAnyBookmark = bookmarks.some(b => 
-        b.items?.some(item => item.plant_id === plant.id)
+      const isInAnyBookmark = bookmarks.some(b =>
+        !b.is_like && b.items?.some(item => item.plant_id === plant.id)
       )
       setIsBookmarked(isInAnyBookmark)
     } catch (e) {
@@ -1004,6 +1004,8 @@ const PlantInfoPage: React.FC = () => {
           >
             <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
           </Button>
+          {/* Separator between Like and Bookmark */}
+          <div className="w-px h-6 bg-stone-200 dark:bg-[#3e3e42] mx-0.5" />
           {/* Save/Bookmark Button */}
           <Button
             type="button"
