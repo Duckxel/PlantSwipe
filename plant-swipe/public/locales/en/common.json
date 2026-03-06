@@ -721,11 +721,16 @@
     "reset": "Reset",
     "classificationType": {
       "plant": "Plant",
+      "herb": "Herb",
       "bambu": "Bamboo",
       "shrub": "Shrub",
       "tree": "Tree",
+      "climber": "Climber",
       "cactus": "Cactus",
       "succulent": "Succulent",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass",
       "other": "Other"
     },
     "utility": {
@@ -1139,12 +1144,17 @@
     },
     "plantType": {
       "plant": "Plant",
+      "herb": "Herb",
       "flower": "Flower",
       "bamboo": "Bamboo",
       "shrub": "Shrub",
       "tree": "Tree",
+      "climber": "Climber",
       "cactus": "Cactus",
-      "succulent": "Succulent"
+      "succulent": "Succulent",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass"
     },
     "utility": {
       "comestible": "Edible",
