@@ -1000,7 +1000,7 @@ export default function PlantSwipe() {
           const tags = (p.plantTags || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags} ${typeLabel || ''} ${usageLabelsLower.join(' ')} ${(p.lifeCycle || []).join(' ')} ${p.family || ''} ${(p.plantHabit || []).join(' ')}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
