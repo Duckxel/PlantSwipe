@@ -6550,9 +6550,34 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
   }
 }
 
+// Throttle map: avoids updating last_active_at on every single request.
+// Only writes to profiles once every 5 minutes per user.
+const _lastActiveThrottle = new Map()
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000
+
+async function updateLastActiveAt(userId) {
+  if (!sql || !userId) return
+  const now = Date.now()
+  const prev = _lastActiveThrottle.get(userId)
+  if (prev && now - prev < LAST_ACTIVE_THROTTLE_MS) return
+  _lastActiveThrottle.set(userId, now)
+  // Evict stale entries periodically (prevent memory leak)
+  if (_lastActiveThrottle.size > 10000) {
+    for (const [k, v] of _lastActiveThrottle) {
+      if (now - v > LAST_ACTIVE_THROTTLE_MS * 2) _lastActiveThrottle.delete(k)
+    }
+  }
+  try {
+    await sql`update public.profiles set last_active_at = now() where id = ${userId}::uuid`
+  } catch { /* best-effort */ }
+}
+
 async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, visitNum }, req) {
   // Always record into in-memory analytics, regardless of DB availability
   try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch { }
+
+  // Update last_active_at on profiles (throttled, best-effort)
+  if (userId) updateLastActiveAt(userId).catch(() => {})
 
   // Prepare common fields
   const parsedUtm = null
@@ -8549,6 +8574,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -9153,6 +9179,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
           and coalesce(
+            p.last_active_at,
             (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
             u.last_sign_in_at,
             u.created_at,
@@ -9659,6 +9686,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -10046,6 +10074,7 @@ async function runAutomation(automation) {
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
         and coalesce(
+          p.last_active_at,
           (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
           u.last_sign_in_at,
           u.created_at,
@@ -28785,6 +28814,7 @@ async function processDueAutomations() {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
