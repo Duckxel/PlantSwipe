@@ -53,6 +53,9 @@ COMMENT ON COLUMN public.profiles.shadow_ban_backup IS 'Stores pre-shadow-ban se
 -- Parent mode: when true, surfaces child-safety warnings (e.g. toxicity) more prominently
 alter table if exists public.profiles add column if not exists parent boolean not null default false;
 COMMENT ON COLUMN public.profiles.parent IS 'When true the user is a parent; used to surface child-safety warnings more prominently.';
+-- Last activity timestamp: updated on every visit/heartbeat for reliable inactivity detection
+alter table if exists public.profiles add column if not exists last_active_at timestamptz;
+create index if not exists idx_profiles_last_active_at on public.profiles (last_active_at) where last_active_at is not null;
 
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
