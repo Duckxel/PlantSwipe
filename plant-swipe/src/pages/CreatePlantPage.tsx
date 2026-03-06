@@ -103,15 +103,13 @@ const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
-  const map: Record<string, PlantMeta['status']> = {
-    'in progres': 'In Progres',
-    rework: 'Rework',
-    review: 'Review',
-    approved: 'Approved',
-  }
   if (!value) return IN_PROGRESS_STATUS
-  const lower = value.toLowerCase()
-  return map[lower] || IN_PROGRESS_STATUS
+  const lower = value.toLowerCase().replace(/\s+/g, '_')
+  if (lower === 'in_progres' || lower === 'in_progress') return 'in_progress'
+  if (lower === 'rework') return 'rework'
+  if (lower === 'review') return 'review'
+  if (lower === 'approved') return 'approved'
+  return IN_PROGRESS_STATUS
 }
 
 const getFieldValueForKey = (plant: Plant, fieldKey: string): unknown => {
@@ -1115,6 +1113,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.edibleOil = data.edible_oil || undefined
   flat.spiceMixes = translation?.spice_mixes || plant.usage?.spiceMixes || []
   flat.infusionMixes = infusionMix || undefined
+  flat.recipes = plant.usage?.recipes || []
 
   // Section 8: Misc
   flat.companionPlants = data.companion_plants || plant.miscellaneous?.companions || []

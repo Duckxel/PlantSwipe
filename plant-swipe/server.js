@@ -351,6 +351,24 @@ try {
   console.warn('[server] Failed to read domain.json:', err?.message || err)
 }
 
+// Detect if any .fr domain (including subdomains like dev.aphylia.fr) is configured in domain.json
+// When a request comes from such a domain, the app defaults to French
+let FRENCH_DOMAIN_ENABLED = false
+try {
+  const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
+  if (fsSync.existsSync(domainJsonPath)) {
+    const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
+    const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
+    const frDomain = domains.find(d => typeof d === 'string' && d.toLowerCase().endsWith('.fr'))
+    if (frDomain) {
+      FRENCH_DOMAIN_ENABLED = true
+      console.log(`[server] French domain (${frDomain}) detected in domain.json`)
+    }
+  }
+} catch (err) {
+  console.warn('[server] Failed to check French domain in domain.json:', err?.message || err)
+}
+
 let aiFieldPromptsTemplate = {}
 try {
   const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
@@ -5945,9 +5963,21 @@ app.get('/api/health/db', async (_req, res) => {
 // Runtime environment injector for client (exposes safe VITE_* only)
 // Serve on both /api/env.js and /env.js to be resilient to proxy rules.
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
-app.get(['/api/env.js', '/env.js'], (_req, res) => {
+app.get(['/api/env.js', '/env.js'], (req, res) => {
   try {
     const disablePwaEnv = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim()
+    // Detect domain-based default language from nginx X-Default-Language header or hostname
+    let domainDefaultLang = ''
+    const xDefaultLang = req.headers['x-default-language']
+    if (xDefaultLang && typeof xDefaultLang === 'string' && xDefaultLang.trim()) {
+      domainDefaultLang = xDefaultLang.trim()
+    } else if (FRENCH_DOMAIN_ENABLED) {
+      // Fallback: check hostname directly (for dev/non-nginx setups)
+      const host = (req.hostname || req.headers.host || '').toLowerCase()
+      if (host.endsWith('.fr') || host === 'aphylia.fr') {
+        domainDefaultLang = 'fr'
+      }
+    }
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
@@ -5955,6 +5985,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
       VITE_VAPID_PUBLIC_KEY: process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '',
+      VITE_DOMAIN_DEFAULT_LANGUAGE: domainDefaultLang,
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -6550,9 +6581,34 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
   }
 }
 
+// Throttle map: avoids updating last_active_at on every single request.
+// Only writes to profiles once every 5 minutes per user.
+const _lastActiveThrottle = new Map()
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000
+
+async function updateLastActiveAt(userId) {
+  if (!sql || !userId) return
+  const now = Date.now()
+  const prev = _lastActiveThrottle.get(userId)
+  if (prev && now - prev < LAST_ACTIVE_THROTTLE_MS) return
+  _lastActiveThrottle.set(userId, now)
+  // Evict stale entries periodically (prevent memory leak)
+  if (_lastActiveThrottle.size > 10000) {
+    for (const [k, v] of _lastActiveThrottle) {
+      if (now - v > LAST_ACTIVE_THROTTLE_MS * 2) _lastActiveThrottle.delete(k)
+    }
+  }
+  try {
+    await sql`update public.profiles set last_active_at = now() where id = ${userId}::uuid`
+  } catch { /* best-effort */ }
+}
+
 async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, visitNum }, req) {
   // Always record into in-memory analytics, regardless of DB availability
   try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch { }
+
+  // Update last_active_at on profiles (throttled, best-effort)
+  if (userId) updateLastActiveAt(userId).catch(() => {})
 
   // Prepare common fields
   const parsedUtm = null
@@ -8549,6 +8605,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -9153,6 +9210,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
           and coalesce(
+            p.last_active_at,
             (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
             u.last_sign_in_at,
             u.created_at,
@@ -9659,6 +9717,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -10046,6 +10105,7 @@ async function runAutomation(automation) {
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
         and coalesce(
+          p.last_active_at,
           (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
           u.last_sign_in_at,
           u.created_at,
@@ -12716,7 +12776,8 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    // Admin check disabled to ensure member lookup works universally
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
     if (!rawParam) {
       res.status(400).json({ error: 'Missing query' })
@@ -28785,6 +28846,7 @@ async function processDueAutomations() {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -29891,12 +29953,17 @@ async function generateCrawlerHtml(req, pagePath) {
   const supportedLangs = ['en', 'fr']
   // All recognized 2-letter language codes (strip from path, default to 'en' if not fully supported)
   const allLangPrefixes = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh', 'ar', 'hi', 'tr', 'vi', 'th', 'sv', 'da', 'no', 'fi', 'cs', 'hu', 'ro', 'uk', 'el', 'he', 'id', 'ms', 'tl']
-  let detectedLang = 'en' // Default to English
+  // Default language: use domain-based language if on a French domain, otherwise English
+  const xDefaultLang = req.headers['x-default-language']
+  const domainDefaultLang = (typeof xDefaultLang === 'string' && xDefaultLang.trim() && supportedLangs.includes(xDefaultLang.trim()))
+    ? xDefaultLang.trim()
+    : (FRENCH_DOMAIN_ENABLED && (req.hostname || req.headers.host || '').toLowerCase().endsWith('.fr') ? 'fr' : 'en')
+  let detectedLang = domainDefaultLang
   let effectivePath = pathParts
   if (pathParts.length > 0 && allLangPrefixes.includes(pathParts[0].toLowerCase())) {
     const langPrefix = pathParts[0].toLowerCase()
-    // Use the language if fully supported, otherwise default to English
-    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : 'en'
+    // Use the language if fully supported, otherwise use domain default
+    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : domainDefaultLang
     effectivePath = pathParts.slice(1)
   }
 

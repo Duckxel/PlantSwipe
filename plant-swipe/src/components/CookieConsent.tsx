@@ -205,10 +205,10 @@ export function CookieConsent() {
             </div>
             <div className="flex-1">
               <h3 className="font-semibold text-stone-900 dark:text-stone-100 text-lg">
-                {t('cookieConsent.title', 'Cookie Preferences')}
+                {t('moderation.cookieConsent.title', 'Cookie Preferences')}
               </h3>
               <p className="text-sm text-stone-600 dark:text-stone-400 mt-1">
-                {t('cookieConsent.description', 'We use cookies to improve your experience. You can choose which cookies to accept.')}
+                {t('moderation.cookieConsent.description', 'We use cookies to improve your experience. You can choose which cookies to accept.')}
               </p>
             </div>
           </div>
@@ -220,10 +220,10 @@ export function CookieConsent() {
                 <Shield className="w-5 h-5 text-blue-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-stone-800 dark:text-stone-200 text-sm">
-                    {t('cookieConsent.essentialTitle', 'Essential Cookies')}
+                    {t('moderation.cookieConsent.essentialTitle', 'Essential Cookies')}
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-                    {t('cookieConsent.essentialDesc', 'Required for basic site functionality like authentication and preferences. These cannot be disabled.')}
+                    {t('moderation.cookieConsent.essentialDesc', 'Required for basic site functionality like authentication and preferences. These cannot be disabled.')}
                   </p>
                 </div>
               </div>
@@ -231,10 +231,10 @@ export function CookieConsent() {
                 <Lock className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-stone-800 dark:text-stone-200 text-sm">
-                    {t('cookieConsent.securityTitle', 'Security (reCAPTCHA)')}
+                    {t('moderation.cookieConsent.securityTitle', 'Security (reCAPTCHA)')}
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-                    {t('cookieConsent.securityDesc', 'Google reCAPTCHA protects against spam and abuse. Loaded only when you accept cookies.')}
+                    {t('moderation.cookieConsent.securityDesc', 'Google reCAPTCHA protects against spam and abuse. Loaded only when you accept cookies.')}
                   </p>
                 </div>
               </div>
@@ -242,10 +242,10 @@ export function CookieConsent() {
                 <BarChart3 className="w-5 h-5 text-purple-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="font-medium text-stone-800 dark:text-stone-200 text-sm">
-                    {t('cookieConsent.analyticsTitle', 'Analytics (Google Analytics)')}
+                    {t('moderation.cookieConsent.analyticsTitle', 'Analytics (Google Analytics)')}
                   </p>
                   <p className="text-xs text-stone-600 dark:text-stone-400 mt-0.5">
-                    {t('cookieConsent.analyticsDesc', 'Help us understand how visitors interact with our website. Your IP is anonymized.')}
+                    {t('moderation.cookieConsent.analyticsDesc', 'Help us understand how visitors interact with our website. Your IP is anonymized.')}
                   </p>
                 </div>
               </div>
@@ -261,7 +261,7 @@ export function CookieConsent() {
               onClick={() => handleAccept('rejected')}
             >
               <X className="w-4 h-4 mr-2" />
-              {t('cookieConsent.rejectAll', 'Reject All')}
+              {t('moderation.cookieConsent.rejectAll', 'Reject All')}
             </Button>
 
             {/* Essential Only */}
@@ -270,7 +270,7 @@ export function CookieConsent() {
               className="rounded-xl flex-1 sm:flex-none order-2 sm:order-2"
               onClick={() => handleAccept('essential')}
             >
-              {t('cookieConsent.essentialOnly', 'Essential Only')}
+              {t('moderation.cookieConsent.essentialOnly', 'Essential Only')}
             </Button>
 
             {/* Accept All */}
@@ -278,7 +278,7 @@ export function CookieConsent() {
               className="rounded-xl flex-1 sm:flex-none order-1 sm:order-3 bg-emerald-600 hover:bg-emerald-700 text-white"
               onClick={() => handleAccept('all')}
             >
-              {t('cookieConsent.acceptAll', 'Accept All')}
+              {t('moderation.cookieConsent.acceptAll', 'Accept All')}
             </Button>
           </div>
 
@@ -289,8 +289,8 @@ export function CookieConsent() {
               className="underline hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
             >
               {showDetails 
-                ? t('cookieConsent.hideDetails', 'Hide details') 
-                : t('cookieConsent.showDetails', 'Show details')
+                ? t('moderation.cookieConsent.hideDetails', 'Hide details') 
+                : t('moderation.cookieConsent.showDetails', 'Show details')
               }
             </button>
             <div className="flex gap-3">
@@ -298,7 +298,7 @@ export function CookieConsent() {
                 to="/privacy"
                 className="underline hover:text-stone-700 dark:hover:text-stone-300 transition-colors"
               >
-                {t('cookieConsent.privacyPolicy', 'Privacy Policy')}
+                {t('moderation.cookieConsent.privacyPolicy', 'Privacy Policy')}
               </Link>
             </div>
           </div>

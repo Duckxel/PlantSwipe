@@ -1152,7 +1152,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   })
 
   const body = (() => {
-    if (field.key === "meta.status") {
+    if (field.key === "status") {
       const statusColors: Record<string, string> = FORM_STATUS_COLORS
       const statusOptions = (field.options || []).map((opt) => (typeof opt === "string" ? opt : String(opt.value)))
       return (
