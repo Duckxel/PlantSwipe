@@ -27,7 +27,7 @@ const categories: Category[] = [
   { key: "tree", params: "?type=tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
   { key: "shrub", params: "?type=shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
   { key: "fruitTree", params: "?type=tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
-  { key: "bamboo", params: "?type=grass", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
+  { key: "bamboo", params: "?q=bamboo", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
   { key: "cactusSucculent", params: "?type=succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
   { key: "herbaceous", params: "?type=herb,grass", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
   { key: "fruitPlant", params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
@@ -64,6 +64,13 @@ type PlantRow = {
 
 function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
   const sp = new URLSearchParams(params.replace("?", ""))
+
+  const q = sp.get("q")
+  if (q) {
+    const query = q.toLowerCase()
+    const searchStr = `${plant.name || ""} ${plant.scientific_name_species || ""}`.toLowerCase()
+    if (!searchStr.includes(query)) return false
+  }
 
   const type = sp.get("type")
   if (type) {

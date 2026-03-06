@@ -470,8 +470,9 @@ export default function PlantSwipe() {
       const urlLifeCycle = searchParams.get("lifeCycle")
       const urlPlantHabit = searchParams.get("plantHabit")
       const urlEdiblePart = searchParams.get("ediblePart")
+      const urlPlantPart = searchParams.get("plantPart")
 
-      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart)
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
 
       if (hasParams) {
         // Reset all filters before applying URL params so previous
@@ -989,7 +990,7 @@ export default function PlantSwipe() {
         // Prefer new habitat field (aquatic, terrestrial, epiphytic, etc.)
         const habitatArr = Array.isArray(p.habitat) ? p.habitat : []
         if (habitatArr.length > 0) {
-          _cachedHabitats = habitatArr.filter((h): h is string => typeof h === 'string').map(h => h.toLowerCase())
+          _cachedHabitats = habitatArr.filter(h => typeof h === 'string').map(h => (h as string).toLowerCase())
           return _cachedHabitats
         }
         // Fallback to legacy climate/habitat fields

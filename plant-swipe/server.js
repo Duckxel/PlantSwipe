@@ -31641,7 +31641,7 @@ async function generateCrawlerHtml(req, pagePath) {
         { name: tr.catTree, desc: tr.catTreeDesc, params: '?type=tree', icon: '🌳' },
         { name: tr.catShrub, desc: tr.catShrubDesc, params: '?type=shrub', icon: '🌿' },
         { name: tr.catFruitTree, desc: tr.catFruitTreeDesc, params: '?type=tree&usage=Comestible', icon: '🍎' },
-        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?type=grass', icon: '🎋' },
+        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?q=bamboo', icon: '🎋' },
         { name: tr.catCactus, desc: tr.catCactusDesc, params: '?type=succulent', icon: '🌵' },
         { name: tr.catHerbaceous, desc: tr.catHerbaceousDesc, params: '?type=herb,grass', icon: '🌸' },
         { name: tr.catFruit, desc: tr.catFruitDesc, params: '?usage=Comestible', icon: '🍒' },
