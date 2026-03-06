@@ -1521,13 +1521,15 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           </p>
         </div>
       
+        {/* Variety circles — above the timeline card */}
+        <PlantVarietyCircles plantId={plant.id} plantName={plant.name} />
+
         {/* Seasonal Timeline — full width Gantt-style, first element */}
         <section
           className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
         >
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
           <div className="relative space-y-3 sm:space-y-4">
-            <PlantVarietyCircles plantId={plant.id} plantName={plant.name} />
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
               <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
               <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:timeline.title')}</span>

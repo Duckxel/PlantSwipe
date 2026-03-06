@@ -7,6 +7,7 @@ interface SiblingPlant {
   id: string
   name: string
   variety: string | null
+  imageUrl: string | null
 }
 
 interface PlantVarietyCirclesProps {
@@ -36,17 +37,27 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
 
       const ids = plants.map((p) => p.id)
 
-      // 2. Fetch translations (variety + localized name) for all siblings
-      const { data: translations } = await supabase
-        .from('plant_translations')
-        .select('plant_id, name, variety')
-        .in('plant_id', ids)
-        .eq('language', currentLang)
+      // 2. Fetch translations and primary images in parallel
+      const [{ data: translations }, { data: images }] = await Promise.all([
+        supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .in('plant_id', ids)
+          .eq('language', currentLang),
+        supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', ids)
+          .eq('use', 'primary'),
+      ])
 
       if (ignore) return
 
       const translationMap = new Map(
         (translations || []).map((t) => [t.plant_id, t])
+      )
+      const imageMap = new Map(
+        (images || []).map((img) => [img.plant_id, img.link])
       )
 
       const result: SiblingPlant[] = plants.map((p) => {
@@ -55,6 +66,7 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
           id: p.id,
           name: tr?.name || p.name,
           variety: tr?.variety || null,
+          imageUrl: imageMap.get(p.id) || null,
         }
       })
 
@@ -75,10 +87,9 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
   if (siblings.length < 2) return null
 
   return (
-    <div className="flex items-center justify-center gap-3 sm:gap-4 py-2">
+    <div className="flex items-center justify-center gap-4 sm:gap-6 py-3">
       {siblings.map((sibling) => {
         const isCurrent = sibling.id === plantId
-        const isNoVariety = !sibling.variety
         const tooltipLabel = sibling.variety || sibling.name
 
         return (
@@ -88,19 +99,29 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
               onClick={() => {
                 if (!isCurrent) navigate(`/plants/${sibling.id}`)
               }}
-              className="flex flex-col items-center gap-1.5 group"
+              className="flex flex-col items-center gap-2 group"
               aria-label={tooltipLabel}
             >
               <div
-                className={`rounded-full transition-all ${
+                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden transition-all ${
                   isCurrent
-                    ? 'bg-emerald-500 dark:bg-emerald-400 ring-2 ring-emerald-500/30 dark:ring-emerald-400/30'
-                    : 'bg-stone-300 dark:bg-stone-600 group-hover:bg-emerald-400 dark:group-hover:bg-emerald-500'
-                } ${isNoVariety ? 'w-5 h-5 sm:w-6 sm:h-6' : 'w-3.5 h-3.5 sm:w-4 sm:h-4'}`}
-              />
+                    ? 'ring-[3px] ring-emerald-500 dark:ring-emerald-400 ring-offset-2 ring-offset-white dark:ring-offset-[#1a1a1a]'
+                    : 'ring-2 ring-stone-200 dark:ring-stone-600 group-hover:ring-emerald-400 dark:group-hover:ring-emerald-500'
+                }`}
+              >
+                {sibling.imageUrl ? (
+                  <img
+                    src={sibling.imageUrl}
+                    alt={tooltipLabel}
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-stone-200 dark:bg-stone-700" />
+                )}
+              </div>
               {/* Indicator dot below current plant */}
               <div
-                className={`w-1 h-1 rounded-full transition-opacity ${
+                className={`w-1.5 h-1.5 rounded-full transition-opacity ${
                   isCurrent
                     ? 'bg-emerald-500 dark:bg-emerald-400 opacity-100'
                     : 'opacity-0'
