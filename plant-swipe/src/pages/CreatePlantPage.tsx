@@ -1115,6 +1115,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.edibleOil = data.edible_oil || undefined
   flat.spiceMixes = translation?.spice_mixes || plant.usage?.spiceMixes || []
   flat.infusionMixes = infusionMix || undefined
+  flat.recipes = plant.usage?.recipes || []
 
   // Section 8: Misc
   flat.companionPlants = data.companion_plants || plant.miscellaneous?.companions || []
