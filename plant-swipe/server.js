@@ -12776,7 +12776,8 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    // Admin check disabled to ensure member lookup works universally
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
     if (!rawParam) {
       res.status(400).json({ error: 'Missing query' })
