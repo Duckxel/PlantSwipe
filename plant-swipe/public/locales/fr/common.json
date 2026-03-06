@@ -68,7 +68,7 @@
       "features": [
         "Jusqu'à 5 jardins",
         "Plantes illimitées par jardin",
-        "Bibliothèque complète et encyclopédie",
+        "Encyclopédie complète",
         "Rappels d'entretien et suivi des tâches",
         "Collections de favoris",
         "Partage de jardins avec des amis",
@@ -121,7 +121,7 @@
         "plantsPerGarden": "Plantes par jardin",
         "plantId": "Identification de plantes",
         "bookmarks": "Collections de favoris",
-        "plantLibrary": "Bibliothèque et encyclopédie",
+        "plantLibrary": "Encyclopédie des plantes",
         "careReminders": "Rappels d'entretien et tâches",
         "taskTracking": "Suivi de progression des tâches",
         "gardenSharing": "Partage et collaboration de jardins",
