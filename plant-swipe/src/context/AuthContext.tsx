@@ -303,6 +303,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     })
     if (perr) return { error: perr.message }
 
+    // Create the default "Likes" bookmark (private, is_like=true)
+    // This is the only bookmark created on account creation
+    await supabase.from('bookmarks').insert({
+      user_id: uid,
+      name: 'Likes',
+      visibility: 'private',
+      is_like: true,
+    })
+
     // Update local session immediately; profile fetch runs in background
     await loadSession()
     refreshProfile().catch(() => {})

@@ -7763,9 +7763,10 @@ app.get('/api/plants/:id/likes-count', async (req, res) => {
     if (!plantId) return res.status(400).json({ error: 'Missing plant id' })
 
     const rows = await sql`
-      SELECT count(*)::integer AS likes
-      FROM public.profiles
-      WHERE ${plantId} = ANY(liked_plant_ids)
+      SELECT count(DISTINCT b.user_id)::integer AS likes
+      FROM public.bookmarks b
+      JOIN public.bookmark_items bi ON bi.bookmark_id = b.id
+      WHERE b.is_like = true AND bi.plant_id = ${plantId}
     `
     res.json({ likes: rows[0]?.likes ?? 0 })
   } catch (err) {
@@ -29263,6 +29264,7 @@ ${alternateLinks(path)}
 
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
+      // Exclude is_like bookmarks (always private, not SEO-relevant)
       // Fetch in batches to get all bookmarks
       const allBookmarks = []
       const bookmarkBatchSize = 1000
@@ -29272,7 +29274,8 @@ ${alternateLinks(path)}
       while (allBookmarks.length < maxBookmarks) {
         const { data: bookmarkBatch, error: bookmarkError } = await sitemapDb
           .from('bookmarks')
-          .select('id, created_at, visibility')
+          .select('id, created_at, visibility, is_like')
+          .eq('is_like', false)
           .order('created_at', { ascending: false })
           .range(bookmarkOffset, bookmarkOffset + bookmarkBatchSize - 1)
 
@@ -29566,8 +29569,9 @@ app.get('/llms-full.txt', async (req, res) => {
 
     const { data: bookmarks } = await db
       .from('bookmarks')
-      .select('id, name, user_id, created_at, visibility')
+      .select('id, name, user_id, created_at, visibility, is_like')
       .eq('visibility', 'public')
+      .eq('is_like', false)
       .order('created_at', { ascending: false })
       .limit(300)
 
@@ -31958,12 +31962,14 @@ async function generateCrawlerHtml(req, pagePath) {
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
       // Try to get the bookmark list info (using correct table name 'bookmarks')
+      // Exclude is_like bookmarks from public SSR - they are always private
       const { data: bookmarkList, error: bookmarkError } = await ssrQuery(
         supabaseServer
           .from('bookmarks')
-          .select('id, name, user_id, visibility, created_at')
+          .select('id, name, user_id, visibility, is_like, created_at')
           .eq('id', listId)
           .eq('visibility', 'public')
+          .eq('is_like', false)
           .maybeSingle(),
         'bookmark_lookup'
       )
@@ -32060,17 +32066,25 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch { }
 
-        // Title: "🔖 FAV_MTP - Plant Bookmark | Aphylia"
-        title = `🔖 ${bookmarkList.name || tr.bookmarksCollection} - ${tr.bookmarkTitle} | Aphylia`
-
-        // Description: "📌 Bookmark "FAV_MTP" made by Username 🌿 4 plants saved 🌱"
+        // Title includes owner name for SEO uniqueness: "🔖 FAV_MTP by Username - Plant Bookmark | Aphylia"
         const bookmarkName = bookmarkList.name || tr.bookmarksCollection
         const plantWord = plantCount === 1 ? tr.bookmarkPlant : tr.bookmarkPlants
 
         if (ownerName) {
+          title = `🔖 ${bookmarkName} ${detectedLang === 'fr' ? 'par' : 'by'} ${ownerName} - ${tr.bookmarkTitle} | Aphylia`
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" ${tr.bookmarkMadeBy} ${ownerName} 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         } else {
+          title = `🔖 ${bookmarkName} - ${tr.bookmarkTitle} | Aphylia`
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+        }
+
+        // Add plant names to description for extra SEO uniqueness
+        if (bookmarkPlantDetails.length > 0) {
+          const plantNames = bookmarkPlantDetails.slice(0, 5).map(p => p.name).join(', ')
+          const moreText = bookmarkPlantDetails.length > 5
+            ? (detectedLang === 'fr' ? ` et ${bookmarkPlantDetails.length - 5} de plus` : ` and ${bookmarkPlantDetails.length - 5} more`)
+            : ''
+          description += ` | ${plantNames}${moreText}`
         }
 
         // Use plant image if found, otherwise no image
@@ -32107,12 +32121,12 @@ async function generateCrawlerHtml(req, pagePath) {
             <p itemprop="description">${tr.bookmarksCarefully} 🌱</p>
             
             ${bookmarkPlantDetails.length > 0 ? `
-              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'}</h2>
-              <div style="display: grid; gap: 12px; margin: 20px 0;">
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'} (${plantCount})</h2>
+              <ul style="list-style: none; padding: 0; margin: 20px 0;">
                 ${bookmarkPlantDetails.map(plant => {
                   const emoji = plantTypeEmojis[plant.plant_type?.toLowerCase()] || '🌱'
                   return `
-                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+                    <li style="padding: 12px; margin-bottom: 8px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
                       <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 20px;">${emoji}</span>
                         <div>
@@ -32120,11 +32134,17 @@ async function generateCrawlerHtml(req, pagePath) {
                           ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; font-weight: normal;">${escapeHtml(plant.scientific_name)}</div>` : ''}
                         </div>
                       </a>
-                    </div>
+                    </li>
                   `
                 }).join('')}
+              </ul>
+            ` : `
+              <div style="padding: 24px; background: #fafafa; border-radius: 12px; text-align: center; margin: 20px 0;">
+                <p style="color: #6b7280; margin-bottom: 8px;">${detectedLang === 'fr' ? 'Cette collection est vide pour le moment.' : 'This collection is empty for now.'}</p>
+                ${ownerName ? `<p style="color: #9ca3af; font-size: 14px;">${detectedLang === 'fr' ? `Collection créée par` : `Collection created by`} <a href="/u/${encodeURIComponent(ownerName)}" style="color: #059669;">${escapeHtml(ownerName)}</a></p>` : ''}
+                <p style="color: #9ca3af; font-size: 13px;">${detectedLang === 'fr' ? 'Découvrez des plantes et créez vos propres collections sur Aphylia' : 'Discover plants and create your own collections on Aphylia'}</p>
               </div>
-            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Cette collection est vide.' : 'This collection is empty.'}</p>`}
+            `}
             
             <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
               <strong>🔖 ${detectedLang === 'fr' ? 'Voir la collection complète' : 'View Full Collection'}</strong><br>
