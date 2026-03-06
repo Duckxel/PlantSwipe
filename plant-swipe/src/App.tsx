@@ -5,7 +5,7 @@ import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
-import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES } from '@/lib/i18n'
+import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, getDomainDefaultLanguage } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
 
 function AppShell() {
@@ -46,9 +46,16 @@ function AppShell() {
   React.useEffect(() => {
     // Only redirect if we're at root path and language is not default
     if (location.pathname === '/' || location.pathname === '') {
+      // If the domain already sets a default language (e.g., aphylia.fr -> French),
+      // don't redirect to /fr — the app already serves French content on /
+      const domainLang = getDomainDefaultLanguage()
+      if (domainLang) {
+        // Domain dictates the language, no redirect needed
+        return
+      }
       const savedLang = getSavedLanguagePreference()
       const preferredLang = savedLang || detectBrowserLanguage()
-      
+
       if (preferredLang !== DEFAULT_LANGUAGE) {
         const newPath = addLanguagePrefix('/', preferredLang)
         navigate(newPath, { replace: true })

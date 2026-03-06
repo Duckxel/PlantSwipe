@@ -351,6 +351,23 @@ try {
   console.warn('[server] Failed to read domain.json:', err?.message || err)
 }
 
+// Detect if aphylia.fr (French domain) is configured in domain.json
+// When a request comes from this domain, the app defaults to French
+let FRENCH_DOMAIN_ENABLED = false
+try {
+  const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
+  if (fsSync.existsSync(domainJsonPath)) {
+    const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
+    const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
+    if (domains.includes('aphylia.fr')) {
+      FRENCH_DOMAIN_ENABLED = true
+      console.log('[server] French domain (aphylia.fr) detected in domain.json')
+    }
+  }
+} catch (err) {
+  console.warn('[server] Failed to check French domain in domain.json:', err?.message || err)
+}
+
 let aiFieldPromptsTemplate = {}
 try {
   const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
@@ -5945,9 +5962,21 @@ app.get('/api/health/db', async (_req, res) => {
 // Runtime environment injector for client (exposes safe VITE_* only)
 // Serve on both /api/env.js and /env.js to be resilient to proxy rules.
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
-app.get(['/api/env.js', '/env.js'], (_req, res) => {
+app.get(['/api/env.js', '/env.js'], (req, res) => {
   try {
     const disablePwaEnv = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim()
+    // Detect domain-based default language from nginx X-Default-Language header or hostname
+    let domainDefaultLang = ''
+    const xDefaultLang = req.headers['x-default-language']
+    if (xDefaultLang && typeof xDefaultLang === 'string' && xDefaultLang.trim()) {
+      domainDefaultLang = xDefaultLang.trim()
+    } else if (FRENCH_DOMAIN_ENABLED) {
+      // Fallback: check hostname directly (for dev/non-nginx setups)
+      const host = (req.hostname || req.headers.host || '').toLowerCase()
+      if (host.endsWith('.fr') || host === 'aphylia.fr') {
+        domainDefaultLang = 'fr'
+      }
+    }
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
@@ -5955,6 +5984,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
       VITE_VAPID_PUBLIC_KEY: process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '',
+      VITE_DOMAIN_DEFAULT_LANGUAGE: domainDefaultLang,
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
