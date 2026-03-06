@@ -281,7 +281,17 @@ export default function PlantSwipe() {
     const level = getConsentLevel()
     return !level || level === 'rejected'
   })
-  
+
+  // Sync authNeedsCookies when user accepts cookies via the main CookieConsent banner
+  React.useEffect(() => {
+    const handler = () => {
+      setAuthNeedsCookies(false)
+      setAuthError(null)
+    }
+    window.addEventListener('cookie_consent_granted', handler)
+    return () => window.removeEventListener('cookie_consent_granted', handler)
+  }, [])
+
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   // ── Debounced field validation for signup ──────────────────────────
@@ -1694,6 +1704,10 @@ export default function PlantSwipe() {
       emailValidation.reset()
       passwordValidation.reset()
       confirmPasswordValidation.reset()
+    } else {
+      // Re-check cookie consent when dialog opens (may have been accepted via main banner)
+      const level = getConsentLevel()
+      setAuthNeedsCookies(!level || level === 'rejected')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen])
@@ -2834,8 +2848,8 @@ function getPlantTypeLabel(plant: Plant): string | null {
 
 function getPlantUsageLabels(plant: Plant): string[] {
   const labels: string[] = []
-  
-  // Get usage labels from utility field
+
+  // Get usage labels from utility field (DB stores canonical keys like "aromatic", "edible", etc.)
   if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
     plant.utility.forEach((util) => {
       if (util) {
@@ -2846,7 +2860,7 @@ function getPlantUsageLabels(plant: Plant): string[] {
       }
     })
   }
-  
+
   // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
   const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
     ? plant.ediblePart
@@ -2856,16 +2870,13 @@ function getPlantUsageLabels(plant: Plant): string[] {
   if (edibleParts) {
     const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
-      const edibleLabel = formatClassificationLabel('comestible')
+      const edibleLabel = formatClassificationLabel('edible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
         labels.push(edibleLabel)
       }
     }
   }
-  
-  // Aromatic and medicinal are now derived from the utility array (handled above)
-  // No additional boolean-based checks needed
-  
+
   return labels
 }
 

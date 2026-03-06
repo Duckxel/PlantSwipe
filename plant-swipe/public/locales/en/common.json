@@ -721,23 +721,29 @@
     "reset": "Reset",
     "classificationType": {
       "plant": "Plant",
+      "herb": "Herb",
       "bambu": "Bamboo",
       "shrub": "Shrub",
       "tree": "Tree",
+      "climber": "Climber",
       "cactus": "Cactus",
       "succulent": "Succulent",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass",
       "other": "Other"
     },
     "utility": {
-      "ornemental": "Ornamental",
-      "comestible": "Edible",
+      "ornamental": "Ornamental",
+      "edible": "Edible",
       "produce_fruit": "Fruit Producing",
       "aromatic": "Aromatic",
       "medicinal": "Medicinal",
-      "odorous": "Odorous",
+      "fragrant": "Fragrant",
       "climbing": "Climbing",
       "cereal": "Cereal",
-      "spice": "Spice"
+      "spice": "Spice",
+      "infusion": "Infusion"
     }
   },
   "requestPlant": {
@@ -1139,23 +1145,32 @@
     },
     "plantType": {
       "plant": "Plant",
+      "herb": "Herb",
       "flower": "Flower",
       "bamboo": "Bamboo",
       "shrub": "Shrub",
       "tree": "Tree",
+      "climber": "Climber",
       "cactus": "Cactus",
-      "succulent": "Succulent"
+      "succulent": "Succulent",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass"
     },
     "utility": {
+      "edible": "Edible",
       "comestible": "Edible",
+      "ornamental": "Ornamental",
       "ornemental": "Ornamental",
       "producefruit": "Fruit Producing",
       "aromatic": "Aromatic",
       "medicinal": "Medicinal",
+      "fragrant": "Fragrant",
       "odorous": "Fragrant",
       "climbing": "Climbing",
       "cereal": "Cereal",
-      "spice": "Spice"
+      "spice": "Spice",
+      "infusion": "Infusion"
     },
     "seasons": {
       "spring": "Spring",

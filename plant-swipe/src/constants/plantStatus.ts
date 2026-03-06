@@ -15,12 +15,12 @@ export const ADMIN_STATUS_COLORS = {
   "other": STATUS_COLORS_HEX.other,
 };
 
-// Mapping for PlantProfileForm (Capitalized keys as strings)
+// Mapping for PlantProfileForm (lowercase keys matching form option values)
 export const FORM_STATUS_COLORS: Record<string, string> = {
-  "In Progres": STATUS_COLORS_HEX.inProgress,
-  "Rework": STATUS_COLORS_HEX.rework,
-  "Review": STATUS_COLORS_HEX.review,
-  "Approved": STATUS_COLORS_HEX.approved,
+  "in_progress": STATUS_COLORS_HEX.inProgress,
+  "rework": STATUS_COLORS_HEX.rework,
+  "review": STATUS_COLORS_HEX.review,
+  "approved": STATUS_COLORS_HEX.approved,
 };
 
 export const ADMIN_STATUS_BADGE_CLASSES = {
