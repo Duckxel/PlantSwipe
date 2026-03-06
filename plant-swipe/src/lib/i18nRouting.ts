@@ -1,6 +1,6 @@
 import { useCallback, useRef } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, type SupportedLanguage } from './i18n'
+import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE, getDomainDefaultLanguage, type SupportedLanguage } from './i18n'
 import i18n from './i18n'
 
 /**
@@ -41,16 +41,23 @@ export function detectBrowserLanguage(): SupportedLanguage {
 
 /**
  * Get the current language from the URL path
- * Returns the language code if present in URL (e.g., '/fr/...'), otherwise returns default
+ * Returns the language code if present in URL (e.g., '/fr/...'), otherwise returns the
+ * domain-based default language (e.g., 'fr' for aphylia.fr), or the global default ('en')
  */
 export function getLanguageFromPath(pathname: string): SupportedLanguage {
   const segments = pathname.split('/').filter(Boolean)
   const firstSegment = segments[0]
-  
+
   if (SUPPORTED_LANGUAGES.includes(firstSegment as SupportedLanguage)) {
     return firstSegment as SupportedLanguage
   }
-  
+
+  // If no language prefix in URL, check domain-based default language
+  const domainLang = getDomainDefaultLanguage()
+  if (domainLang) {
+    return domainLang
+  }
+
   return DEFAULT_LANGUAGE
 }
 
@@ -74,16 +81,25 @@ export function removeLanguagePrefix(pathname: string): string {
  * Add language prefix to a path
  * '/gardens', 'fr' -> '/fr/gardens'
  * '/gardens', 'en' -> '/gardens' (default language has no prefix)
+ *
+ * On domain-based language sites (e.g., aphylia.fr), if the domain's default language
+ * matches the requested language, the prefix is omitted for cleaner URLs.
  */
 export function addLanguagePrefix(path: string, lang: SupportedLanguage): string {
   // Remove leading slash if present
   const cleanPath = path.startsWith('/') ? path.slice(1) : path
-  
+
   // For default language, omit the prefix for cleaner URLs
   if (lang === DEFAULT_LANGUAGE) {
     return path === '/' ? '/' : `/${cleanPath}`
   }
-  
+
+  // If the domain already defaults to this language, omit the prefix
+  const domainLang = getDomainDefaultLanguage()
+  if (domainLang === lang) {
+    return path === '/' ? '/' : `/${cleanPath}`
+  }
+
   return path === '/' ? `/${lang}` : `/${lang}/${cleanPath}`
 }
 

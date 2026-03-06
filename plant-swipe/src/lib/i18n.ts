@@ -9,10 +9,33 @@ export type SupportedLanguage = typeof SUPPORTED_LANGUAGES[number]
 export const DEFAULT_LANGUAGE: SupportedLanguage = 'en'
 
 /**
+ * Get domain-based default language.
+ * Checks runtime env (set by server) first, then falls back to hostname detection.
+ * e.g., aphylia.fr -> 'fr', aphylia.app -> null (no override)
+ */
+export function getDomainDefaultLanguage(): SupportedLanguage | null {
+  try {
+    // Check server-provided domain language from runtime env
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const domainLang = (window as any).__ENV__?.VITE_DOMAIN_DEFAULT_LANGUAGE
+    if (domainLang && SUPPORTED_LANGUAGES.includes(domainLang as SupportedLanguage)) {
+      return domainLang as SupportedLanguage
+    }
+    // Fallback: detect from hostname directly (available synchronously, no env.js needed)
+    const hostname = window.location.hostname.toLowerCase()
+    if (hostname.endsWith('.fr') || hostname === 'aphylia.fr') {
+      return 'fr'
+    }
+  } catch {}
+  return null
+}
+
+/**
  * Detect initial language preference:
  * 1. Check localStorage for saved preference
- * 2. Check browser language (if French, default to French)
- * 3. Fallback to default (English)
+ * 2. Check domain-based default language (e.g., aphylia.fr -> French)
+ * 3. Check browser language (if French, default to French)
+ * 4. Fallback to default (English)
  */
 function detectInitialLanguage(): SupportedLanguage {
   // Check localStorage first
@@ -22,6 +45,12 @@ function detectInitialLanguage(): SupportedLanguage {
       return saved as SupportedLanguage
     }
   } catch {}
+
+  // Check domain-based default language (e.g., aphylia.fr -> French)
+  const domainLang = getDomainDefaultLanguage()
+  if (domainLang) {
+    return domainLang
+  }
 
   // Check browser language - if French, default to French
   try {

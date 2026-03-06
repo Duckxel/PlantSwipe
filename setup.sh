@@ -1073,6 +1073,7 @@ prepare_nginx_config() {
   local dst_config="$2"
   local primary_domain=""
   local has_media_domain="false"
+  local has_french_domain="false"
   
   # Get primary domain from domain.json if it exists
   if [[ -f "$REPO_DIR/domain.json" ]]; then
@@ -1092,6 +1093,14 @@ prepare_nginx_config() {
       log "media.aphylia.app found in domain.json - including media server block"
     else
       log "media.aphylia.app not found in domain.json - excluding media server block"
+    fi
+
+    # Check if aphylia.fr is in domain.json (French domain support)
+    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "aphylia.fr")" == "true" ]]; then
+      has_french_domain="true"
+      log "aphylia.fr found in domain.json - including French domain in nginx config"
+    else
+      log "aphylia.fr not found in domain.json - excluding French domain from nginx config"
     fi
   else
     # No domain.json - try to find existing certificate
@@ -1116,7 +1125,18 @@ prepare_nginx_config() {
   
   # Replace __PRIMARY_DOMAIN__ placeholder with actual domain
   sed -i "s|__PRIMARY_DOMAIN__|$primary_domain|g" "$tmp_config"
-  
+
+  # Conditionally include/exclude French domain (aphylia.fr) in server_name and CSP
+  if [[ "$has_french_domain" == "true" ]]; then
+    log "Adding aphylia.fr and *.aphylia.fr to nginx server_name and CSP"
+    sed -i "s|__FRENCH_DOMAIN_SERVER_NAMES__|aphylia.fr *.aphylia.fr|g" "$tmp_config"
+    sed -i "s|__FRENCH_DOMAIN_CSP__|aphylia.fr *.aphylia.fr|g" "$tmp_config"
+  else
+    log "Removing French domain placeholders from nginx config"
+    sed -i "s|__FRENCH_DOMAIN_SERVER_NAMES__||g" "$tmp_config"
+    sed -i "s|__FRENCH_DOMAIN_CSP__||g" "$tmp_config"
+  fi
+
   # Conditionally include/exclude media server block
   if [[ "$has_media_domain" != "true" ]]; then
     log "Removing media server block (media.aphylia.app not in domain.json)"
