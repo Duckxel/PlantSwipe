@@ -392,7 +392,14 @@ export const SwipePage = React.memo<SwipePageProps>(({
               )
             })}
           </div>
-          <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+          <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">
+            {current.name}
+            {current.variety && (
+              <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-lg font-extrabold tracking-tight drop-shadow-sm">
+                &lsquo;{current.variety}&rsquo;
+              </span>
+            )}
+          </h2>
           {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
           <div className="mt-5 flex justify-center">
             <Button
@@ -430,6 +437,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                 </div>
                 <div className="space-y-0.5 max-w-[180px]">
                   <p className="text-base font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
+                  {current.variety && (
+                    <p className="text-xs font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
+                      &lsquo;{current.variety}&rsquo;
+                    </p>
+                  )}
                   {(current.scientificNameSpecies || current.scientificName) && (
                     <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
                   )}
@@ -572,7 +584,14 @@ export const SwipePage = React.memo<SwipePageProps>(({
                         )
                       })}
                     </div>
-                    <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">{current.name}</h2>
+                    <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">
+                      {current.name}
+                      {current.variety && (
+                        <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-lg font-extrabold tracking-tight drop-shadow-sm">
+                          &lsquo;{current.variety}&rsquo;
+                        </span>
+                      )}
+                    </h2>
                     {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
                     
                     {/* Info button - inside card so it moves with swipe */}
@@ -656,6 +675,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     </div>
                     <div className="space-y-1 max-w-[250px]">
                       <p className="text-lg font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
+                      {current.variety && (
+                        <p className="text-sm font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
+                          &lsquo;{current.variety}&rsquo;
+                        </p>
+                      )}
                       {(current.scientificNameSpecies || current.scientificName) && (
                         <p className="text-sm italic text-stone-500 dark:text-stone-400 truncate">{current.scientificNameSpecies || current.scientificName}</p>
                       )}
