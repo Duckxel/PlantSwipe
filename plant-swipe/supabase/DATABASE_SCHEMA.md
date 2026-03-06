@@ -258,7 +258,6 @@ username                    TEXT (optional)
 country                     TEXT
 city                        TEXT
 bio                         TEXT
-favorite_plant              TEXT
 avatar_url                  TEXT
 timezone                    TEXT
 experience_years            INTEGER

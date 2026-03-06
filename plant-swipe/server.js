@@ -18229,8 +18229,8 @@ app.get('/api/account/export', async (req, res) => {
       // 1. Profile data
       if (sql) {
         const profiles = await sql`
-          SELECT id, display_name, username, bio, country, timezone, language, 
-                 favorite_plant, avatar_url, is_private, disable_friend_requests,
+          SELECT id, display_name, username, bio, country, timezone, language,
+                 avatar_url, is_private, disable_friend_requests,
                  notify_push, notify_email, experience_years, accent_key, roles,
                  marketing_consent, marketing_consent_date, terms_accepted_date, 
                  privacy_policy_accepted_date, created_at
@@ -18239,7 +18239,7 @@ app.get('/api/account/export', async (req, res) => {
         exportData.profile = profiles?.[0] || null
       } else {
         const { data } = await supabaseServiceClient.from('profiles')
-          .select('id, display_name, username, bio, country, timezone, language, favorite_plant, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
+          .select('id, display_name, username, bio, country, timezone, language, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
           .eq('id', userId)
           .maybeSingle()
         exportData.profile = data
@@ -29532,7 +29532,7 @@ app.get('/llms-full.txt', async (req, res) => {
 
     const { data: profiles } = await db
       .from('profiles')
-      .select('display_name, username, bio, country, favorite_plant, experience_level, is_private')
+      .select('display_name, username, bio, country, experience_level, is_private')
       .or('is_private.is.null,is_private.eq.false')
       .not('display_name', 'is', null)
       .order('display_name', { ascending: true })
@@ -29548,7 +29548,6 @@ app.get('/llms-full.txt', async (req, res) => {
         if (p.bio) lines.push(`- Bio: ${p.bio.replace(/\n/g, ' ').slice(0, 150)}`)
         if (p.country) lines.push(`- Country: ${p.country}`)
         if (p.experience_level) lines.push(`- Experience: ${p.experience_level}`)
-        if (p.favorite_plant) lines.push(`- Favorite plant: ${p.favorite_plant}`)
         lines.push('')
       }
     } else {
@@ -30974,20 +30973,6 @@ async function generateCrawlerHtml(req, pagePath) {
       if (rpcResult) {
         // RPC returns array or single object
         profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
-        // RPC doesn't return favorite_plant - fetch it separately
-        if (profile?.id) {
-          const { data: extraProfile } = await ssrQuery(
-            supabaseServer
-              .from('profiles')
-              .select('favorite_plant')
-              .eq('id', profile.id)
-              .maybeSingle(),
-            'profile_favorite_plant'
-          )
-          if (extraProfile) {
-            profile.favorite_plant = extraProfile.favorite_plant
-          }
-        }
       }
 
       // Fallback: direct query if RPC fails or doesn't exist
@@ -30996,7 +30981,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -31009,7 +30994,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -31245,7 +31230,6 @@ async function generateCrawlerHtml(req, pagePath) {
                 ` : ''}
               </div>
               
-              ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
               ${profile.profile_link ? `<p>🔗 <a href="${escapeHtml(profile.profile_link)}" rel="nofollow noopener" target="_blank">${escapeHtml(profile.profile_link)}</a></p>` : ''}
               
               ${userGardens.length > 0 ? `

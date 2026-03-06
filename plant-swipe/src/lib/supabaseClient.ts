@@ -62,7 +62,6 @@ export type ProfileRow = {
   country?: string | null
   city?: string | null
   bio?: string | null
-  favorite_plant?: string | null
   avatar_url?: string | null
   timezone?: string | null
   language?: string | null

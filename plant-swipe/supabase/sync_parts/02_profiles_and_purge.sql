@@ -13,7 +13,8 @@ alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
 alter table if exists public.profiles add column if not exists city text;
 alter table if exists public.profiles add column if not exists bio text;
-alter table if exists public.profiles add column if not exists favorite_plant text;
+-- Remove deprecated favorite_plant column (no longer used)
+alter table if exists public.profiles drop column if exists favorite_plant;
 alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
