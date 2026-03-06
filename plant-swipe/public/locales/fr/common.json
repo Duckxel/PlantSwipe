@@ -734,12 +734,12 @@
       "other": "Autre"
     },
     "utility": {
-      "ornemental": "Ornemental",
-      "comestible": "Comestible",
+      "ornamental": "Ornemental",
+      "edible": "Comestible",
       "produce_fruit": "Fruitier",
       "aromatic": "Aromatique",
       "medicinal": "Médicinal",
-      "odorous": "Odorant",
+      "fragrant": "Odorant",
       "climbing": "Grimpant",
       "cereal": "Céréale",
       "spice": "Épice",
@@ -1158,15 +1158,19 @@
       "grass": "Graminée"
     },
     "utility": {
+      "edible": "Comestible",
       "comestible": "Comestible",
+      "ornamental": "Ornementale",
       "ornemental": "Ornementale",
       "producefruit": "Fruitière",
       "aromatic": "Aromatique",
       "medicinal": "Médicinale",
+      "fragrant": "Odorante",
       "odorous": "Odorante",
       "climbing": "Grimpante",
       "cereal": "Céréale",
-      "spice": "Épice"
+      "spice": "Épice",
+      "infusion": "Infusion"
     },
     "seasons": {
       "spring": "Printemps",

@@ -2846,49 +2846,17 @@ function getPlantTypeLabel(plant: Plant): string | null {
   return null
 }
 
-// Normalize mixed EN/FR utility values from the database to canonical English keys.
-// The DB contains inconsistent values (e.g. "aromatique" and "aromatic" for the same thing).
-const UTILITY_ALIAS_MAP: Record<string, string> = {
-  // FR → canonical EN
-  aromatique: 'aromatic',
-  comestible: 'comestible',
-  médicinal: 'medicinal',
-  medicinal: 'medicinal',
-  ornemental: 'ornemental',
-  ornamental: 'ornemental',
-  céréale: 'cereal',
-  cereal: 'cereal',
-  épice: 'spice',
-  spice: 'spice',
-  grimpant: 'climbing',
-  climbing: 'climbing',
-  odorant: 'odorous',
-  odorous: 'odorous',
-  fragrant: 'odorous',
-  // EN synonyms
-  edible: 'comestible',
-  aromatic: 'aromatic',
-  infusion: 'infusion',
-  produce_fruit: 'produce_fruit',
-  'produce fruit': 'produce_fruit',
-  fruitier: 'produce_fruit',
-  fruitière: 'produce_fruit',
-}
-
-function normalizeUtilityKey(raw: string): string {
-  const lower = raw.toLowerCase().trim()
-  return UTILITY_ALIAS_MAP[lower] || lower
-}
-
 function getPlantUsageLabels(plant: Plant): string[] {
-  const keys = new Set<string>()
+  const labels: string[] = []
 
-  // Get usage labels from utility field
+  // Get usage labels from utility field (DB stores canonical keys like "aromatic", "edible", etc.)
   if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
     plant.utility.forEach((util) => {
       if (util) {
-        const key = normalizeUtilityKey(util)
-        if (key) keys.add(key)
+        const formatted = formatClassificationLabel(util)
+        if (formatted && !labels.includes(formatted)) {
+          labels.push(formatted)
+        }
       }
     })
   }
@@ -2902,10 +2870,13 @@ function getPlantUsageLabels(plant: Plant): string[] {
   if (edibleParts) {
     const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
-      keys.add('comestible')
+      const edibleLabel = formatClassificationLabel('edible')
+      if (edibleLabel && !labels.includes(edibleLabel)) {
+        labels.push(edibleLabel)
+      }
     }
   }
 
-  return Array.from(keys).map(k => formatClassificationLabel(k))
+  return labels
 }
 
