@@ -748,6 +748,7 @@
     "lifeCycleLabel": "Cycle de vie",
     "plantHabitLabel": "Port de la plante",
     "ediblePartLabel": "Partie comestible",
+    "plantPartLabel": "Parties de la plante",
     "plantHabit": {
       "upright": "Dressé",
       "spreading": "Étalé",

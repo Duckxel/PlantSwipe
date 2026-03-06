@@ -255,6 +255,15 @@
       "bark": "Bark",
       "wood": "Wood"
     },
+    "plantPart": {
+      "roots": "Roots",
+      "bulbs": "Bulbs",
+      "stems": "Stems",
+      "leaves": "Leaves",
+      "flowers": "Flowers",
+      "fruits": "Fruits",
+      "spores": "Spores"
+    },
     "toxicity": {
       "non_toxic": "Non-Toxic",
       "slightly_toxic": "Slightly Toxic",

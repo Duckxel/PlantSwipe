@@ -255,6 +255,15 @@
       "bark": "Écorce",
       "wood": "Bois"
     },
+    "plantPart": {
+      "roots": "Racines",
+      "bulbs": "Bulbes",
+      "stems": "Tiges",
+      "leaves": "Feuilles",
+      "flowers": "Fleurs",
+      "fruits": "Fruits",
+      "spores": "Spores"
+    },
     "toxicity": {
       "non_toxic": "Non toxique",
       "slightly_toxic": "Légèrement toxique",

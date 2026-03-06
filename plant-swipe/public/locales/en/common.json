@@ -748,6 +748,7 @@
     "lifeCycleLabel": "Life Cycle",
     "plantHabitLabel": "Plant Habit",
     "ediblePartLabel": "Edible Part",
+    "plantPartLabel": "Plant Parts",
     "plantHabit": {
       "upright": "Upright",
       "spreading": "Spreading",
