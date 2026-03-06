@@ -2287,6 +2287,8 @@ export default function PlantSwipe() {
                     setPlantHabitFilters={setPlantHabitFilters}
                     ediblePartFilters={ediblePartFilters}
                     setEdiblePartFilters={setEdiblePartFilters}
+                    plantPartFilters={plantPartFilters}
+                    setPlantPartFilters={setPlantPartFilters}
                     colorOptions={colorOptions}
                     primaryColors={primaryColors}
                     advancedColors={advancedColors}
@@ -2408,6 +2410,8 @@ export default function PlantSwipe() {
                         setPlantHabitFilters={setPlantHabitFilters}
                         ediblePartFilters={ediblePartFilters}
                         setEdiblePartFilters={setEdiblePartFilters}
+                        plantPartFilters={plantPartFilters}
+                        setPlantPartFilters={setPlantPartFilters}
                         colorOptions={colorOptions}
                         primaryColors={primaryColors}
                         advancedColors={advancedColors}

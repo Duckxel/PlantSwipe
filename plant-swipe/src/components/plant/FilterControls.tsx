@@ -41,6 +41,8 @@ interface FilterControlsProps {
   setPlantHabitFilters: React.Dispatch<React.SetStateAction<string[]>>
   ediblePartFilters: string[]
   setEdiblePartFilters: React.Dispatch<React.SetStateAction<string[]>>
+  plantPartFilters: string[]
+  setPlantPartFilters: React.Dispatch<React.SetStateAction<string[]>>
 
   // Data Options
   colorOptions: ColorOption[]
@@ -78,6 +80,8 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   setPlantHabitFilters,
   ediblePartFilters,
   setEdiblePartFilters,
+  plantPartFilters,
+  setPlantPartFilters,
   colorOptions,
   primaryColors,
   advancedColors,
@@ -98,6 +102,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   const [lifeCycleSectionOpen, setLifeCycleSectionOpen] = useState(false)
   const [plantHabitSectionOpen, setPlantHabitSectionOpen] = useState(false)
   const [ediblePartSectionOpen, setEdiblePartSectionOpen] = useState(false)
+  const [plantPartSectionOpen, setPlantPartSectionOpen] = useState(false)
 
   const hasEdibleUsage = usageFilters.some(u => u.toLowerCase() === 'comestible')
 
@@ -137,7 +142,8 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     livingSpaceFilters.length > 0 ||
     lifeCycleFilters.length > 0 ||
     plantHabitFilters.length > 0 ||
-    ediblePartFilters.length > 0
+    ediblePartFilters.length > 0 ||
+    plantPartFilters.length > 0
 
   const clearAllFilters = () => {
     setSeasonFilter(null)
@@ -152,6 +158,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     setLifeCycleFilters([])
     setPlantHabitFilters([])
     setEdiblePartFilters([])
+    setPlantPartFilters([])
   }
 
   const habitatOptions = [
@@ -581,6 +588,41 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         )}
       </div>
 
+      {/* Plant Parts */}
+      <div>
+        <FilterSectionHeader
+          label={t("plant.plantPartLabel", { defaultValue: "Plant Parts" })}
+          isOpen={plantPartSectionOpen}
+          onToggle={() => setPlantPartSectionOpen((prev) => !prev)}
+        />
+        {plantPartSectionOpen && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(["roots", "bulbs", "stems", "leaves", "flowers", "fruits", "spores"] as const).map((option) => {
+              const isSelected = plantPartFilters.includes(option)
+              return (
+                <button
+                  key={option}
+                  type="button"
+                  onClick={() =>
+                    setPlantPartFilters((current) =>
+                      isSelected ? current.filter((v) => v !== option) : [...current, option]
+                    )
+                  }
+                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    isSelected
+                      ? "bg-green-600 dark:bg-green-500 text-white"
+                      : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
+                  }`}
+                  aria-pressed={isSelected}
+                >
+                  {t(`plantInfo:enums.plantPart.${option}`, { defaultValue: option })}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Edible Part — only visible when Usage: Edible (Comestible) is active */}
       {hasEdibleUsage && (
         <div>
@@ -648,7 +690,10 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
           {ediblePartFilters.map((ep) => (
             <Badge key={ep} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.ediblePart.${ep}`, { defaultValue: ep })}</Badge>
           ))}
-          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && lifeCycleFilters.length === 0 && plantHabitFilters.length === 0 && ediblePartFilters.length === 0 && (
+          {plantPartFilters.map((pp) => (
+            <Badge key={pp} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.plantPart.${pp}`, { defaultValue: pp })}</Badge>
+          ))}
+          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && lifeCycleFilters.length === 0 && plantHabitFilters.length === 0 && ediblePartFilters.length === 0 && plantPartFilters.length === 0 && (
             <span className="opacity-50">{t("plant.none")}</span>
           )}
         </div>

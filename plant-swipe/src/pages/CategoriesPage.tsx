@@ -30,7 +30,7 @@ const categories: Category[] = [
   { key: "bamboo", params: "?q=bamboo", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
   { key: "cactusSucculent", params: "?type=succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
   { key: "herbaceous", params: "?type=herb,grass", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
-  { key: "fruitPlant", params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
+  { key: "fruitPlant", params: "?plantPart=fruits&usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible fruits" },
   { key: "aromatic", params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
   { key: "medicinal", params: "?usage=Medicinal", defaultName: "Medicinal Plant", defaultDesc: "Plants with therapeutic properties" },
   { key: "climbing", params: "?type=climber", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
