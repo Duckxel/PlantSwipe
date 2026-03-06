@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import { RecipeBox } from '@/components/plant/RecipeBox'
+import { PlantVarietyCircles } from '@/components/plant/PlantVarietyCircles'
 import type { Plant, PlantImage, PlantRecipe, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -1520,6 +1521,9 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           </p>
         </div>
       
+        {/* Variety circles — above the timeline card */}
+        <PlantVarietyCircles plantId={plant.id} plantName={plant.name} />
+
         {/* Seasonal Timeline — full width Gantt-style, first element */}
         <section
           className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"
