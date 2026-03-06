@@ -281,7 +281,17 @@ export default function PlantSwipe() {
     const level = getConsentLevel()
     return !level || level === 'rejected'
   })
-  
+
+  // Sync authNeedsCookies when user accepts cookies via the main CookieConsent banner
+  React.useEffect(() => {
+    const handler = () => {
+      setAuthNeedsCookies(false)
+      setAuthError(null)
+    }
+    window.addEventListener('cookie_consent_granted', handler)
+    return () => window.removeEventListener('cookie_consent_granted', handler)
+  }, [])
+
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   // ── Debounced field validation for signup ──────────────────────────
@@ -1694,6 +1704,10 @@ export default function PlantSwipe() {
       emailValidation.reset()
       passwordValidation.reset()
       confirmPasswordValidation.reset()
+    } else {
+      // Re-check cookie consent when dialog opens (may have been accepted via main banner)
+      const level = getConsentLevel()
+      setAuthNeedsCookies(!level || level === 'rejected')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen])
