@@ -395,7 +395,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
           <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">
             {current.name}
             {current.variety && (
-              <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-lg font-extrabold tracking-tight drop-shadow-sm">
+              <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-2xl font-extrabold tracking-tight drop-shadow-sm">
                 &lsquo;{current.variety}&rsquo;
               </span>
             )}
@@ -438,7 +438,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                 <div className="space-y-0.5 max-w-[180px]">
                   <p className="text-base font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
                   {current.variety && (
-                    <p className="text-xs font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
+                    <p className="text-sm font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
                       &lsquo;{current.variety}&rsquo;
                     </p>
                   )}
@@ -587,7 +587,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <h2 className="text-3xl font-semibold tracking-tight drop-shadow-sm">
                       {current.name}
                       {current.variety && (
-                        <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-lg font-extrabold tracking-tight drop-shadow-sm">
+                        <span className="ml-2 inline-block bg-gradient-to-r from-violet-400 to-fuchsia-400 bg-clip-text text-transparent text-2xl font-extrabold tracking-tight drop-shadow-sm">
                           &lsquo;{current.variety}&rsquo;
                         </span>
                       )}
@@ -676,7 +676,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <div className="space-y-1 max-w-[250px]">
                       <p className="text-lg font-semibold text-stone-800 dark:text-stone-100 truncate">{current.name}</p>
                       {current.variety && (
-                        <p className="text-sm font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
+                        <p className="text-base font-semibold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent truncate">
                           &lsquo;{current.variety}&rsquo;
                         </p>
                       )}
