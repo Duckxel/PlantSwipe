@@ -437,7 +437,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile } = useAuth()
   const { openLogin } = useAuthActions()
   const { t } = useTranslation(['common', 'plantInfo'])
   const currentLang = useLanguage()
