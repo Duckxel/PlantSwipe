@@ -31,7 +31,7 @@
     "title": "Everything your garden needs, in one app.",
     "subtitle": "From tracking watering schedules to identifying unknown species, Aphylia has you covered.",
     "smartLibrary": {
-      "title": "Smart Plant Library",
+      "title": "Smart Plant Encyclopedia",
       "description": "Access a comprehensive database with detailed care info—sunlight needs, watering schedules, soil preferences, and toxicity warnings."
     },
     "careReminders": {
@@ -66,7 +66,7 @@
     "subtitle": "Three simple steps to happier, healthier plants.",
     "step1": {
       "title": "Discover Plants",
-      "description": "Browse our library of 10,000+ species or scan any plant to identify it instantly and learn how to care for it."
+      "description": "Browse our encyclopedia of 10,000+ species or scan any plant to identify it instantly and learn how to care for it."
     },
     "step2": {
       "title": "Build Your Garden",
@@ -169,7 +169,7 @@
         "Up to 5 gardens",
         "Unlimited plants per garden",
         "Basic care reminders",
-        "Plant library access",
+        "Plant encyclopedia access",
         "Community support"
       ],
       "cta": "Get started free"
