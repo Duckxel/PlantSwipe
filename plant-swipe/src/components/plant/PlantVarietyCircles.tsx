@@ -90,7 +90,11 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
     <div className="flex items-center justify-center gap-4 sm:gap-6 py-3">
       {siblings.map((sibling) => {
         const isCurrent = sibling.id === plantId
+        const isBase = !sibling.variety
         const tooltipLabel = sibling.variety || sibling.name
+        const sizeClass = isBase
+          ? 'w-[4.5rem] h-[4.5rem] sm:w-20 sm:h-20'
+          : 'w-14 h-14 sm:w-16 sm:h-16'
 
         return (
           <Tooltip key={sibling.id} content={tooltipLabel} side="top">
@@ -103,7 +107,7 @@ export const PlantVarietyCircles: React.FC<PlantVarietyCirclesProps> = ({ plantI
               aria-label={tooltipLabel}
             >
               <div
-                className={`w-14 h-14 sm:w-16 sm:h-16 rounded-full overflow-hidden transition-all ${
+                className={`${sizeClass} rounded-full overflow-hidden transition-all ${
                   isCurrent
                     ? 'ring-[3px] ring-emerald-500 dark:ring-emerald-400 ring-offset-2 ring-offset-white dark:ring-offset-[#1a1a1a]'
                     : 'ring-2 ring-stone-200 dark:ring-stone-600 group-hover:ring-emerald-400 dark:group-hover:ring-emerald-500'
