@@ -96,6 +96,9 @@ function mapDbRowToPlant(
     name: (translation.name as string) || (basePlant.name as string) || '',
 
     // Section 1: Base
+    plantType: (basePlant.plant_type as Plant['plantType']) || undefined,
+    plantPart: (basePlant.plant_part as Plant['plantPart']) || [],
+    habitat: (basePlant.habitat as Plant['habitat']) || [],
     scientificNameSpecies: (basePlant.scientific_name_species as string) || undefined,
     variety: (translation.variety as string) || undefined,
     family: (basePlant.family as string) || undefined,
@@ -252,7 +255,7 @@ function mapDbRowToPlant(
     popularity,
 
     // Legacy aliases for backward compatibility
-    plantType: (basePlant.plant_type as string) || undefined,
+    // plantType already set in Section 1: Base above
     description: (translation.presentation as string) || '',
     scientificName: (basePlant.scientific_name_species as string) || '',
     givenNames: (translation.common_names as string[]) || [],
@@ -389,7 +392,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
 
     const plantColumns = [
       'id', 'name',
-      'plant_type',
+      'plant_type', 'plant_part', 'habitat',
       'scientific_name_species', 'family',
       'featured_month',
       'climate', 'season', 'utility', 'edible_part',

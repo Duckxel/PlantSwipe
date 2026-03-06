@@ -3329,6 +3329,7 @@ async function generateFieldData(options) {
     'Respond strictly with valid JSON containing the requested field and nothing else.',
     'Populate every possible sub-value; if data is missing, return an empty string or array instead of null.',
     'Reuse suitable existing data and never fabricate meta/status/image information.',
+    'CRITICAL: The "name" field stores ONLY the base species common name (e.g. "Lavender", "Rose", "Tomato"). The "variety" field stores ONLY the cultivar/variety name (e.g. "Hidcote", "Iceberg", "Cherry"). NEVER combine name and variety into a single field. If the plant name includes a variety like Rosa \'Iceberg\', the name is "Rosa" and the variety is "Iceberg". The "commonNames" array should contain common names for the BASE species without the variety suffix.',
   ].join('\n')
 
   const promptSections = [
@@ -4681,53 +4682,69 @@ app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
       return
     }
     
-    // Ask AI to identify the English common name of the plant
-    // IMPORTANT: Preserve cultivar names, subspecies, and variety information
-    const instructions = `You are a botanist expert. Your task is to identify plants and provide their English name while PRESERVING all botanical specificity.
-
-Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
-return the ENGLISH name for that plant, keeping ALL specific details like cultivar names, subspecies, and varieties.
+    // Ask AI to identify the English common name AND variety separately
+    const instructions = `You are a botanist expert. Given a plant name in ANY language, return a JSON object with "name" and "variety" SEPARATED.
 
 Rules:
-1. PRESERVE cultivar names (e.g., 'Monstera deliciosa Thai Constellation' stays as 'Monstera Thai Constellation', NOT simplified to 'Monstera')
-2. PRESERVE subspecies and variety names (e.g., 'Rosa gallica var. officinalis' becomes 'Apothecary Rose' or 'Rosa gallica officinalis', NOT just 'Rose')
-3. If the input is already a specific English name with cultivar/variety, return it as-is (possibly corrected for spelling)
-4. If the input is a scientific/Latin name with subspecies/cultivar, translate to English equivalent BUT KEEP the specific cultivar/variety name
-5. If the input is a name in another language, translate/identify the English equivalent while keeping specificity
-6. DO NOT simplify to the most common/generic name - keep the EXACT variety/cultivar specified
-7. If you cannot identify the specific variety, return the original name unchanged
-8. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON
+1. "name" = the BASE species common English name (e.g. "Lavender", "Rose", "Monstera", "Tomato")
+2. "variety" = ONLY the cultivar/variety/subspecies name if present, or null if none (e.g. "Hidcote", "Iceberg", "Thai Constellation")
+3. NEVER combine name and variety into a single string
+4. If the input has no specific variety, set "variety" to null
+5. If the input is in another language, translate to English
+6. Respond with ONLY a JSON object: {"name": "...", "variety": "..." or null}
 
 Examples:
-- "Monstera deliciosa Thai Constellation" → "Monstera Thai Constellation" (NOT "Monstera" or "Swiss Cheese Plant")
-- "Philodendron Pink Princess" → "Philodendron Pink Princess" (NOT "Philodendron")
-- "Rosa 'Peace'" → "Peace Rose" (NOT "Rose")
-- "Lavandula angustifolia 'Hidcote'" → "Hidcote Lavender" (NOT "Lavender")
-- "Tomate cerise" → "Cherry Tomato" (translating but not simplifying)`
+- "Monstera deliciosa Thai Constellation" → {"name": "Monstera", "variety": "Thai Constellation"}
+- "Philodendron Pink Princess" → {"name": "Philodendron", "variety": "Pink Princess"}
+- "Rosa 'Peace'" → {"name": "Rose", "variety": "Peace"}
+- "Lavandula angustifolia 'Hidcote'" → {"name": "Lavender", "variety": "Hidcote"}
+- "Tomate cerise" → {"name": "Cherry Tomato", "variety": null}
+- "Monstera deliciosa" → {"name": "Monstera", "variety": null}
+- "Lavande" → {"name": "Lavender", "variety": null}
+- "Rosa" → {"name": "Rose", "variety": null}`
 
-    const prompt = `What is the English name for this plant, preserving any cultivar or variety specificity: "${plantName}"?`
-    
+    const prompt = `Identify this plant and return the English name and variety separately as JSON: "${plantName}"`
+
     const response = await openaiClient.responses.create({
       model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
     })
-    
-    const englishName = (response.output_text || plantName).trim()
-    
-    // Clean up the response - remove quotes, periods, etc.
-    const cleanedName = englishName
-      .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
-      .replace(/\.$/, '')           // Remove trailing period
-      .trim()
-    
-    console.log(`[server] English name lookup: "${plantName}" -> "${cleanedName}"`)
-    
-    res.json({ 
-      success: true, 
+
+    const outputText = (response.output_text || '').trim()
+
+    // Parse JSON response
+    let parsedName = plantName
+    let parsedVariety = null
+    try {
+      const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        if (parsed.name && typeof parsed.name === 'string') {
+          parsedName = parsed.name.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim()
+        }
+        if (parsed.variety && typeof parsed.variety === 'string' && parsed.variety.trim()) {
+          parsedVariety = parsed.variety.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim()
+        }
+      } else {
+        // Fallback: treat entire output as name (backwards compatibility)
+        parsedName = outputText.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim() || plantName
+      }
+    } catch {
+      parsedName = outputText.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim() || plantName
+    }
+
+    // Build englishName for backwards compatibility (name only, without variety)
+    const cleanedName = parsedName
+
+    console.log(`[server] English name lookup: "${plantName}" -> name="${cleanedName}", variety="${parsedVariety || '(none)'}"`)
+
+    res.json({
+      success: true,
       originalName: plantName,
       englishName: cleanedName,
+      variety: parsedVariety,
       wasTranslated: plantName.toLowerCase() !== cleanedName.toLowerCase()
     })
   } catch (err) {

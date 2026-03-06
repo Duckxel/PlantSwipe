@@ -1,10 +1,13 @@
 {
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
+    "- `plantType`: EXACTLY one of: \"herb\", \"shrub\", \"tree\", \"climber\", \"succulent\", \"fern\", \"moss\", \"grass\"",
+    "- `plantPart`: array from ONLY: [\"roots\",\"bulbs\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\"]. The main anatomical parts of this plant.",
+    "- `habitat`: array from ONLY: [\"aquatic\",\"terrestrial\",\"epiphytic\",\"lithophytic\",\"parasitic\"]. The natural habitat type(s).",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
-    "- `variety`: variety/cultivar name if applicable, or null",
+    "- `variety`: ONLY the cultivar/variety name if applicable (e.g. \"Hidcote\", \"Iceberg\", \"Thai Constellation\"), or null if no specific variety. NEVER include the base species name here.",
     "- `family`: plant family (e.g. \"Araceae\")",
-    "- `commonNames`: array of common names (e.g. [\"Swiss Cheese Plant\", \"Fruit Salad Plant\"])",
+    "- `commonNames`: array of common names for the BASE species WITHOUT variety suffix (e.g. for Lavender 'Hidcote', use [\"Lavender\", \"English Lavender\"] NOT [\"Hidcote Lavender\"])",
     "- `presentation`: encyclopedia-style description. Factual prose, no bullets. MAX 150 characters.",
     "- `featuredMonth`: array of month slugs when plant should be highlighted (e.g. [\"june\",\"july\"])",
     "- `colors`: array of color objects. IMPORTANT: Use the color database provided. Each entry: {\"name\": \"...\", \"hexCode\": \"#......\"}",

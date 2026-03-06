@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { SearchInput } from "@/components/ui/search-input";
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import {
   Dialog,
   DialogContent,
@@ -1916,112 +1917,126 @@ export const GardenDashboardPage: React.FC = () => {
     return opt ? `hsl(${opt.hsl})` : null;
   }, [members, profile?.id, user?.id]);
 
-  React.useEffect(() => {
-    let ignore = false;
-    if (!plantQuery.trim()) {
-      setPlantResults([]);
-      return;
+  // Cache of full Plant objects keyed by id, for looking up after SearchItem selection
+  const plantCacheRef = React.useRef<Map<string, Plant>>(new Map());
+
+  // Async search for the SearchItem component: returns SearchItemOption[] with plant images
+  const searchPlantsForGarden = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
+    const queryLower = query.toLowerCase().trim();
+    if (!queryLower) return [];
+
+    // Search in base plants table by name or scientific name
+    const { data: basePlants, error: baseError } = await supabase
+      .from("plants")
+      .select("id")
+      .or(`name.ilike.%${queryLower}%,scientific_name_species.ilike.%${queryLower}%`)
+      .limit(20);
+
+    // Search in translations table by name or variety
+    const { data: translatedPlants, error: transError } = await supabase
+      .from("plant_translations")
+      .select("plant_id, common_names")
+      .eq("language", currentLang)
+      .or(`name.ilike.%${queryLower}%,variety.ilike.%${queryLower}%`)
+      .limit(30);
+
+    // Also fetch translations that might match by common_names (JSONB array — needs client-side filter)
+    const { data: commonNameMatches } = await supabase
+      .from("plant_translations")
+      .select("plant_id, common_names")
+      .eq("language", currentLang)
+      .limit(200);
+
+    if (baseError || transError) {
+      console.error("Error searching plants:", baseError || transError);
+      return [];
     }
-    (async () => {
-      const queryLower = plantQuery.toLowerCase().trim();
 
-      // Search in base plants table
-        const { data: basePlants, error: baseError } = await supabase
-          .from("plants")
-          .select("id")
-        .ilike("name", `%${queryLower}%`)
-        .limit(20);
+    // Collect IDs from direct matches
+    const allPlantIds = new Set([
+      ...(basePlants || []).map((p: { id: string }) => p.id),
+      ...(translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
+    ]);
 
-      // Search in translations table for current language
-        const { data: translatedPlants, error: transError } = await supabase
-          .from("plant_translations")
-          .select("plant_id")
-        .eq("language", currentLang)
-        .ilike("name", `%${queryLower}%`)
-        .limit(20);
-
-      if (baseError || transError) {
-        console.error("Error searching plants:", baseError || transError);
-        if (!ignore) setPlantResults([]);
-        return;
+    // Add IDs from common_names matches (client-side filter on JSONB array)
+    if (commonNameMatches) {
+      for (const row of commonNameMatches) {
+        const names = Array.isArray(row.common_names) ? row.common_names : [];
+        if (names.some((n: unknown) => typeof n === 'string' && n.toLowerCase().includes(queryLower))) {
+          allPlantIds.add(row.plant_id as string);
+        }
       }
+    }
 
-      // Get unique plant IDs from both searches
-      const basePlantIds = new Set((basePlants || []).map((p: { id: string }) => p.id));
-      const translatedPlantIds = new Set(
-        (translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
+    if (allPlantIds.size === 0) return [];
+
+    const { data: fullPlants, error: fullError } = await supabase
+      .from("plants")
+      .select("*, plant_images (id,link,use)")
+      .in("id", Array.from(allPlantIds))
+      .limit(20);
+
+    if (fullError || !fullPlants) return [];
+
+    const plantIds = fullPlants.map((p: { id: string }) => p.id);
+    const { data: translations } = await supabase
+      .from("plant_translations")
+      .select("*")
+      .eq("language", currentLang)
+      .in("plant_id", plantIds);
+
+    const translationMap = new Map<string, { plant_id: string }>();
+    if (translations) {
+      translations.forEach((t: { plant_id: string }) => {
+        translationMap.set(t.plant_id, t);
+      });
+    }
+
+    const results: SearchItemOption[] = [];
+    for (const p of fullPlants) {
+      const translation = translationMap.get(p.id) || null;
+      const images = Array.isArray(p.plant_images) ? p.plant_images : [];
+      const photos = images.map((img: { link?: string; use?: string }) => ({
+        url: img.link || '',
+        isPrimary: img.use === 'primary',
+        isVertical: false,
+      }));
+      const primaryImageUrl =
+        images.find((img: { use?: string }) => img.use === 'primary')?.link ||
+        images.find((img: { use?: string }) => img.use === 'discovery')?.link ||
+        images[0]?.link ||
+        p.image_url ||
+        p.image;
+      const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl };
+      const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
+
+      // Match on name, variety, scientific name, or common names
+      const nameMatch = mergedPlant.name.toLowerCase().includes(queryLower);
+      const varietyMatch = mergedPlant.variety?.toLowerCase().includes(queryLower);
+      const sciMatch = (mergedPlant.scientificNameSpecies || mergedPlant.scientificName || '').toLowerCase().includes(queryLower);
+      const commonMatch = (mergedPlant.commonNames || mergedPlant.givenNames || []).some(
+        (n: string) => n.toLowerCase().includes(queryLower)
       );
-      const allPlantIds = new Set([...basePlantIds, ...translatedPlantIds]);
+      if (!nameMatch && !varietyMatch && !sciMatch && !commonMatch) continue;
 
-      if (allPlantIds.size === 0) {
-        if (!ignore) setPlantResults([]);
-        return;
-      }
+      // Cache the full Plant object for later retrieval on select
+      plantCacheRef.current.set(String(mergedPlant.id), mergedPlant);
 
-      // Load full plant data with images for all matching IDs
-        const { data: fullPlants, error: fullError } = await supabase
-          .from("plants")
-          .select("*, plant_images (id,link,use)")
-        .in("id", Array.from(allPlantIds))
-        .limit(20);
-
-      if (fullError || !fullPlants) {
-        console.error("Error loading full plants:", fullError);
-        if (!ignore) setPlantResults([]);
-        return;
-      }
-
-      // Load translations for ALL languages (including English)
-      const plantIds = fullPlants.map((p: { id: string }) => p.id);
-      const { data: translations } = await supabase
-        .from("plant_translations")
-        .select("*")
-        .eq("language", currentLang)
-        .in("plant_id", plantIds);
-
-      const translationMap = new Map<string, { plant_id: string }>();
-      if (translations) {
-        translations.forEach((t: { plant_id: string }) => {
-          translationMap.set(t.plant_id, t);
-        });
-      }
-
-      // Merge translations with base plants and filter by search query
-      const merged: Plant[] = fullPlants
-        .map((p: { id: string; plant_images?: Array<{ link?: string; use?: string }>; image_url?: string; image?: string }) => {
-          const translation = translationMap.get(p.id) || null;
-          // Convert plant_images to photos format expected by mergePlantWithTranslation
-          const images = Array.isArray(p.plant_images) ? p.plant_images : []
-          const photos = images.map((img: { link?: string; use?: string }) => ({
-            url: img.link || '',
-            isPrimary: img.use === 'primary',
-            isVertical: false
-          }))
-          // Find primary image or use first image as fallback
-          const primaryImageUrl = images.find((img: { use?: string }) => img.use === 'primary')?.link 
-            || images.find((img: { use?: string }) => img.use === 'discovery')?.link 
-            || images[0]?.link 
-            || p.image_url 
-            || p.image
-          const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl }
-          const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
-          return mergedPlant;
-        })
-        .filter((p: Plant) => {
-          // Filter by translated name or base name
-          const nameMatch = p.name.toLowerCase().includes(queryLower);
-          return nameMatch;
-        })
-        .slice(0, 10); // Limit to 10 results
-
-      if (!ignore) {
-        setPlantResults(merged);
-      }
-    })();
-    return () => {
-      ignore = true;
-    };
-  }, [plantQuery, currentLang]);
+      const varietyLabel = mergedPlant.variety ? ` '${mergedPlant.variety}'` : '';
+      results.push({
+        id: String(mergedPlant.id),
+        label: mergedPlant.name + varietyLabel,
+        description: mergedPlant.identifiers?.scientificName || mergedPlant.scientificName || null,
+        icon: primaryImageUrl ? (
+          <img src={primaryImageUrl} alt="" className="w-full h-full object-cover rounded-lg" />
+        ) : (
+          <Sprout className="h-5 w-5 text-emerald-400/60" />
+        ),
+      });
+      if (results.length >= 10) break;
+    }
+    return results;
+  }, [currentLang]);
 
   const loadFriends = React.useCallback(async () => {
     if (!user?.id) return;
@@ -2947,7 +2962,7 @@ export const GardenDashboardPage: React.FC = () => {
                             </div>
                             <div className="col-span-2 p-3">
                               <div className="flex items-center justify-between">
-                                <div className="font-medium">
+                                <div className="font-medium truncate">
                                   {gp.nickname || gp.plant?.name || 'Unknown Plant'}
                                 </div>
                                 {/* Health Status Badge */}
@@ -2961,6 +2976,11 @@ export const GardenDashboardPage: React.FC = () => {
                                   ) : null;
                                 })()}
                               </div>
+                              {gp.plant?.variety && (
+                                <div className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">
+                                  &lsquo;{gp.plant.variety}&rsquo;
+                                </div>
+                              )}
                               {gp.nickname && gp.plant?.name && (
                                 <div className="text-xs opacity-60">
                                   {gp.plant.name}
@@ -3260,33 +3280,25 @@ export const GardenDashboardPage: React.FC = () => {
                   </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
-                <SearchInput
+                <SearchItem
+                  value={selectedPlant?.id || null}
+                  onSelect={(option) => {
+                    const plant = plantCacheRef.current.get(option.id) || null;
+                    setSelectedPlant(plant);
+                  }}
+                  onClear={() => setSelectedPlant(null)}
+                  onSearch={searchPlantsForGarden}
                   placeholder={t("gardenDashboard.plantsSection.searchPlants")}
-                  value={plantQuery}
-                  onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                    setPlantQuery(e.target.value)
-                  }
-                  onClear={() => setPlantQuery("")}
+                  title={t("gardenDashboard.plantsSection.searchPlants")}
+                  searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
+                  emptyMessage={t("gardenDashboard.plantsSection.noResults")}
+                  priorityZIndex={60}
+                  initialOption={selectedPlant ? {
+                    id: selectedPlant.id,
+                    label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
+                    description: selectedPlant.identifiers?.scientificName || selectedPlant.scientificName || null,
+                  } : null}
                 />
-                <div className="max-h-60 overflow-auto rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526]">
-                  {plantResults.map((p) => (
-                    <button
-                      key={p.id}
-                      onClick={() => setSelectedPlant(p)}
-                      className={`w-full text-left px-3 py-2 hover:bg-stone-50 dark:hover:bg-[#2d2d30] ${selectedPlant?.id === p.id ? "bg-stone-100 dark:bg-[#2d2d30]" : ""}`}
-                    >
-                      <div className="font-medium">{p.name}</div>
-                      <div className="text-xs opacity-60">
-                        {p.identifiers?.scientificName || p.scientificName || ''}
-                      </div>
-                    </button>
-                  ))}
-                  {plantQuery && plantResults.length === 0 && (
-                    <div className="px-3 py-6 text-sm opacity-60">
-                      {t("gardenDashboard.plantsSection.noResults")}
-                    </div>
-                  )}
-                </div>
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
                     variant="secondary"
@@ -3992,9 +4004,14 @@ function RoutineSection({
               <Card key={gp.id} className={routineCardSurface}>
                 <div className="flex items-center justify-between mb-2">
                   <div>
-                    <div className="font-medium">
+                    <div className="font-medium truncate">
                       {gp.nickname || gp.plant?.name}
                     </div>
+                    {gp.plant?.variety && (
+                      <div className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight">
+                        &lsquo;{gp.plant.variety}&rsquo;
+                      </div>
+                    )}
                     {gp.nickname && (
                       <div className="text-xs opacity-60">{gp.plant?.name}</div>
                     )}
@@ -4121,7 +4138,12 @@ function RoutineSection({
           )
           .map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string }) => (
             <Card key={gp.id} className={routineCardSurface}>
-              <div className="font-medium">{gp.nickname || gp.plant?.name}</div>
+              <div className="font-medium truncate">{gp.nickname || gp.plant?.name}</div>
+              {gp.plant?.variety && (
+                <div className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight">
+                  &lsquo;{gp.plant.variety}&rsquo;
+                </div>
+              )}
               {gp.nickname && (
                 <div className="text-xs opacity-60">{gp.plant?.name}</div>
               )}
@@ -4379,6 +4401,7 @@ function OverviewSection({
       return {
         id: gp.id,
         name: gp.nickname || gp.plant?.name || "Plant",
+        variety: gp.plant?.variety || null,
         imageUrl: primaryImageUrl,
         plantId: gp.plant?.id,
         plantsOnHand: Number(gp.plantsOnHand || 0),
@@ -4807,9 +4830,14 @@ function OverviewSection({
                 
                 {/* Bottom info: name and task count */}
                 <div className="absolute bottom-0 left-0 right-0 p-3">
-                  <div className="text-white text-sm font-semibold truncate drop-shadow-lg mb-1">
+                  <div className="text-white text-sm font-semibold truncate drop-shadow-lg">
                     {plant.name}
                   </div>
+                  {plant.variety && (
+                    <div className="text-xs font-extrabold bg-gradient-to-r from-violet-300 to-fuchsia-300 bg-clip-text text-transparent tracking-tight truncate drop-shadow-lg mb-0.5">
+                      &lsquo;{plant.variety}&rsquo;
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 flex-wrap">
                     {plant.taskCount > 0 ? (
                       <span className="text-white/80 text-xs">
