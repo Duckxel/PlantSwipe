@@ -2,17 +2,19 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null check (length(trim(both from display_name)) >= 1 and length(trim(both from display_name)) <= 64),
-  liked_plant_ids text[] not null default '{}',
   is_admin boolean not null default false
 );
 -- Remove legacy avatar_url column if present
 alter table if exists public.profiles drop column if exists avatar_url;
+-- Remove deprecated liked_plant_ids column (likes now stored in bookmarks with is_like=true)
+alter table if exists public.profiles drop column if exists liked_plant_ids;
 -- New public profile fields
 alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
 alter table if exists public.profiles add column if not exists city text;
 alter table if exists public.profiles add column if not exists bio text;
-alter table if exists public.profiles add column if not exists favorite_plant text;
+-- Remove deprecated favorite_plant column (no longer used)
+alter table if exists public.profiles drop column if exists favorite_plant;
 alter table if exists public.profiles add column if not exists avatar_url text;
 alter table if exists public.profiles add column if not exists timezone text;
 alter table if exists public.profiles add column if not exists experience_years integer;
@@ -51,6 +53,9 @@ COMMENT ON COLUMN public.profiles.shadow_ban_backup IS 'Stores pre-shadow-ban se
 -- Parent mode: when true, surfaces child-safety warnings (e.g. toxicity) more prominently
 alter table if exists public.profiles add column if not exists parent boolean not null default false;
 COMMENT ON COLUMN public.profiles.parent IS 'When true the user is a parent; used to surface child-safety warnings more prominently.';
+-- Last activity timestamp: updated on every visit/heartbeat for reliable inactivity detection
+alter table if exists public.profiles add column if not exists last_active_at timestamptz;
+create index if not exists idx_profiles_last_active_at on public.profiles (last_active_at) where last_active_at is not null;
 
 -- Create GIN index for efficient role queries
 create index if not exists idx_profiles_roles on public.profiles using GIN (roles);
@@ -192,19 +197,18 @@ end $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
 GRANT SELECT ON public.profiles TO anon;
 
--- Aggregated like counts (security definer to bypass profiles RLS)
+-- Aggregated like counts from bookmarks (security definer to bypass RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
 returns table (plant_id text, likes bigint)
 language sql
 security definer
 set search_path = public
 as $$
-  select liked_id as plant_id, count(*)::bigint as likes
-  from public.profiles p
-  cross join lateral unnest(p.liked_plant_ids) as liked_id
-  where coalesce(trim(liked_id), '') <> ''
-  group by liked_id
-  order by count(*) desc, liked_id asc
+  select bi.plant_id, count(*)::bigint as likes
+  from public.bookmark_items bi
+  join public.bookmarks b on b.id = bi.bookmark_id and b.is_like = true
+  group by bi.plant_id
+  order by count(*) desc, bi.plant_id asc
   limit greatest(coalesce(limit_count, 5), 0);
 $$;
 grant execute on function public.top_liked_plants(integer) to anon, authenticated;

@@ -374,21 +374,29 @@ self.addEventListener('notificationclick', (event) => {
   event.waitUntil(
     (async () => {
       const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
-      
-      // First, try to find an existing window to focus and navigate
+
+      // Try to find an existing window to focus and navigate
       for (const client of allClients) {
         if ('focus' in client && 'navigate' in client) {
-          const windowClient = client as WindowClient
-          // Focus the first window and navigate to the target
-          await windowClient.focus()
-          await windowClient.navigate(target)
-          return
+          try {
+            const windowClient = client as WindowClient
+            await windowClient.focus()
+            await windowClient.navigate(target)
+            return
+          } catch {
+            // focus() or navigate() can fail on some browsers/PWAs —
+            // fall through to openWindow() below
+          }
         }
       }
-      
-      // No existing window found, open a new one
-      if (self.clients.openWindow) {
-        await self.clients.openWindow(target)
+
+      // No usable existing window — open a new one
+      try {
+        if (self.clients.openWindow) {
+          await self.clients.openWindow(target)
+        }
+      } catch {
+        // Last resort: ignore — notification was already closed
       }
     })(),
   )

@@ -423,7 +423,9 @@ const FEATURED_MONTH_LABELS: Record<FeaturedMonthSlug, string> = {
 type PlantDashboardRow = {
   id: string;
   name: string;
+  variety: string | null;
   givenNames: string[];
+  tags: string[];
   status: NormalizedPlantStatus;
   featuredMonths: FeaturedMonthSlug[];
   primaryImage: string | null;
@@ -2613,7 +2615,10 @@ export const AdminPage: React.FC = () => {
     try {
       // Use AI to get the English common name (auto-detects source language)
       const result = await getEnglishPlantName(req.plant_name);
-      const translatedName = result.englishName;
+      // Combine name + variety for display in the request list (requested_plants only has plant_name)
+      const translatedName = result.variety
+        ? `${result.englishName} '${result.variety}'`
+        : result.englishName;
       
       // If translation is different, update the database
       if (translatedName && translatedName.toLowerCase() !== req.plant_name.toLowerCase()) {
@@ -2841,15 +2846,15 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by common_names in translations table
+      // Also search by variety or common_names in translations table
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, common_names, plants!inner(id, name, scientific_name_species, status)")
+        .select("plant_id, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
         .eq("language", "en")
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where common_names contains the search term
+      // Filter translation matches where variety or common_names contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
       const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
@@ -2857,9 +2862,10 @@ export const AdminPage: React.FC = () => {
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
         const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
+        const varietyStr = typeof r?.variety === 'string' ? r.variety : '';
         const matchesGivenName = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
-        );
+        ) || varietyStr.toLowerCase().includes(termLower);
         if (matchesGivenName && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
           const plants = r.plants as Record<string, unknown>;
           translationPlantIds.add(String(plants.id));
@@ -3171,7 +3177,7 @@ export const AdminPage: React.FC = () => {
         while (hasMore) {
           const { data, error: trError } = await supabase
             .from("plant_translations")
-            .select("plant_id, common_names")
+            .select("plant_id, common_names, variety, plant_tags")
             .eq("language", "en")
             .range(offset, offset + pageSize - 1);
           if (trError) break;
@@ -3187,12 +3193,22 @@ export const AdminPage: React.FC = () => {
         return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
       });
 
-      // Build a map of plant_id -> common_names
+      // Build maps of plant_id -> common_names and plant_id -> variety
       const givenNamesMap = new Map<string, string[]>();
+      const varietyMap = new Map<string, string>();
+      const tagsMap = new Map<string, string[]>();
       (translationsData || []).forEach((t: unknown) => {
         const tr = t as Record<string, unknown>;
-        if (tr?.plant_id && Array.isArray(tr.common_names)) {
-          givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+        if (tr?.plant_id) {
+          if (Array.isArray(tr.common_names)) {
+            givenNamesMap.set(String(tr.plant_id), (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+          }
+          if (tr.variety && typeof tr.variety === "string") {
+            varietyMap.set(String(tr.plant_id), tr.variety);
+          }
+          if (Array.isArray(tr.plant_tags)) {
+            tagsMap.set(String(tr.plant_id), (tr.plant_tags as unknown[]).map((tag: unknown) => String(tag || "")));
+          }
         }
       });
 
@@ -3265,11 +3281,14 @@ export const AdminPage: React.FC = () => {
           // Get given_names from the map
           const plantId = String(r.id);
           const givenNames = givenNamesMap.get(plantId) || [];
+          const tags = tagsMap.get(plantId) || [];
 
             return {
               id: plantId,
               name: r?.name ? String(r.name) : "Unnamed plant",
+              variety: varietyMap.get(plantId) || null,
               givenNames,
+              tags,
               status: normalizePlantStatus(r?.status),
               featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
@@ -3571,47 +3590,58 @@ export const AdminPage: React.FC = () => {
               ? plant.featuredMonths.length === 0
               : plant.featuredMonths.includes(selectedFeaturedMonth);
         if (!matchesFeaturedMonth) return false;
-        // Search by name OR givenNames (common names)
+        // Search by name, variety, common names, or tags
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
-            plant.givenNames.some((gn) => gn.toLowerCase().includes(term))
+            (plant.variety && plant.variety.toLowerCase().includes(term)) ||
+            plant.givenNames.some((gn) => gn.toLowerCase().includes(term)) ||
+            plant.tags.some((tag) => tag.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })
       .sort((a, b) => {
+        // Compare by name, then variety (no variety first, then alphabetical)
+        const cmpNameVariety = (x: PlantDashboardRow, y: PlantDashboardRow) => {
+          const n = x.name.localeCompare(y.name);
+          if (n !== 0) return n;
+          if (!x.variety && y.variety) return -1;
+          if (x.variety && !y.variety) return 1;
+          if (x.variety && y.variety) return x.variety.localeCompare(y.variety);
+          return 0;
+        };
         switch (plantSortOption) {
           case "updated": {
             const updatedA = a.updatedAt ?? 0;
             const updatedB = b.updatedAt ?? 0;
             if (updatedB !== updatedA) return updatedB - updatedA;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
           case "created": {
             const createdA = a.createdAt ?? 0;
             const createdB = b.createdAt ?? 0;
             if (createdB !== createdA) return createdB - createdA;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
           case "name":
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "gardens":
             if (b.gardensCount !== a.gardensCount) return b.gardensCount - a.gardensCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "likes":
             if (b.likesCount !== a.likesCount) return b.likesCount - a.likesCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "views":
             if (b.viewsCount !== a.viewsCount) return b.viewsCount - a.viewsCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "images":
             if (a.imagesCount !== b.imagesCount) return a.imagesCount - b.imagesCount;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           case "status":
           default: {
             const statusDiff =
               getStatusSortPriority(a.status) - getStatusSortPriority(b.status);
             if (statusDiff !== 0) return statusDiff;
-            return a.name.localeCompare(b.name);
+            return cmpNameVariety(a, b);
           }
         }
       });
@@ -9101,6 +9131,11 @@ export const AdminPage: React.FC = () => {
                                         <div className="flex items-center gap-2">
                                           <span className="font-medium text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                                             {plant.name}
+                                            {plant.variety && (
+                                              <span className="ml-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xs sm:text-sm font-extrabold tracking-tight">
+                                                &lsquo;{plant.variety}&rsquo;
+                                              </span>
+                                            )}
                                           </span>
                                         </div>
                                         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-0.5">

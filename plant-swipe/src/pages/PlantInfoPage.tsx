@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
 import { RecipeBox } from '@/components/plant/RecipeBox'
+import { PlantVarietyCircles } from '@/components/plant/PlantVarietyCircles'
 import type { Plant, PlantImage, PlantRecipe, PlantWateringSchedule, PlantColor, PlantSource } from '@/types/plant'
 import { useAuth } from '@/context/AuthContext'
 import { useAuthActions } from '@/context/AuthActionsContext'
@@ -15,7 +16,7 @@ import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { ReportPlantDialog } from '@/components/plant/ReportPlantDialog'
 import { supabase } from '@/lib/supabaseClient'
 import { trackImpression, fetchImpression, formatCount } from '@/lib/impressions'
-import { getUserBookmarks } from '@/lib/bookmarks'
+import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from '@/lib/bookmarks'
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
@@ -283,7 +284,9 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     family: data.family || undefined,
     featuredMonth: data.featured_month || [],
 
-    plantType: data.plant_type || undefined,
+    plantType: (data.plant_type as Plant['plantType']) || undefined,
+    plantPart: (data.plant_part as Plant['plantPart']) || [],
+    habitat: (data.habitat as Plant['habitat']) || [],
     // Section 2: Identity (non-translatable)
     climate: climateEnum.toUiArray(data.climate) as Plant['climate'],
     season: seasonEnum.toUiArray(data.season) as Plant['season'],
@@ -435,7 +438,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 const PlantInfoPage: React.FC = () => {
   const { id } = useParams<{ id: string }>()
   const navigate = useLanguageNavigate()
-  const { user, profile, refreshProfile } = useAuth()
+  const { user, profile } = useAuth()
   const { openLogin } = useAuthActions()
   const { t } = useTranslation(['common', 'plantInfo'])
   const currentLang = useLanguage()
@@ -502,8 +505,8 @@ const PlantInfoPage: React.FC = () => {
     }
     try {
       const bookmarks = await getUserBookmarks(user.id)
-      const isInAnyBookmark = bookmarks.some(b => 
-        b.items?.some(item => item.plant_id === plant.id)
+      const isInAnyBookmark = bookmarks.some(b =>
+        !b.is_like && b.items?.some(item => item.plant_id === plant.id)
       )
       setIsBookmarked(isInAnyBookmark)
     } catch (e) {
@@ -549,12 +552,14 @@ const PlantInfoPage: React.FC = () => {
   })
 
   React.useEffect(() => {
-    const arr = Array.isArray((profile as any)?.liked_plant_ids)
-      ? ((profile as any).liked_plant_ids as any[]).map(String)
-      : []
-    setLikedIds(arr)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [profile?.liked_plant_ids])
+    if (!user?.id) {
+      setLikedIds([])
+      return
+    }
+    getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
+      setLikedIds(plantIds)
+    }).catch(() => {})
+  }, [user?.id])
 
   React.useEffect(() => {
     let ignore = false
@@ -659,20 +664,16 @@ const PlantInfoPage: React.FC = () => {
 
   const toggleLiked = async () => {
     if (!user?.id || !id) return
-    setLikedIds((prev) => {
-      const has = prev.includes(id)
-      const next = has ? prev.filter((x) => x !== id) : [...prev, id]
-      ;(async () => {
-        try {
-          const { error } = await supabase.from('profiles').update({ liked_plant_ids: next }).eq('id', user.id)
-          if (error) setLikedIds(prev)
-          else refreshProfile().catch(() => {})
-        } catch {
-          setLikedIds(prev)
-        }
-      })()
-      return next
-    })
+    const prev = [...likedIds]
+    const has = prev.includes(id)
+    const optimistic = has ? prev.filter((x) => x !== id) : [...prev, id]
+    setLikedIds(optimistic)
+    try {
+      const { plantIds } = await togglePlantInLikesBookmark(user.id, id)
+      setLikedIds(plantIds)
+    } catch {
+      setLikedIds(prev)
+    }
   }
 
   const handleGoBack = React.useCallback(() => {
@@ -1004,6 +1005,8 @@ const PlantInfoPage: React.FC = () => {
           >
             <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
           </Button>
+          {/* Separator between Like and Bookmark */}
+          <div className="w-px h-6 bg-stone-200 dark:bg-[#3e3e42] mx-0.5" />
           {/* Save/Bookmark Button */}
           <Button
             type="button"
@@ -1518,6 +1521,9 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           </p>
         </div>
       
+        {/* Variety circles — above the timeline card */}
+        <PlantVarietyCircles plantId={plant.id} plantName={plant.name} />
+
         {/* Seasonal Timeline — full width Gantt-style, first element */}
         <section
           className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6"

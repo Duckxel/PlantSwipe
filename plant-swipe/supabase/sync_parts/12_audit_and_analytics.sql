@@ -107,10 +107,17 @@ create table if not exists public.bookmarks (
   user_id uuid not null references auth.users(id) on delete cascade,
   name text not null,
   visibility text not null check (visibility in ('public', 'private')) default 'public',
+  is_like boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint bookmarks_pkey primary key (id)
 );
+
+-- Ensure each user can only have one likes bookmark
+create unique index if not exists bookmarks_user_likes_unique on public.bookmarks (user_id) where is_like = true;
+
+-- Add is_like column if table already exists (idempotent)
+alter table if exists public.bookmarks add column if not exists is_like boolean not null default false;
 
 -- Create bookmark_items table
 create table if not exists public.bookmark_items (
@@ -195,12 +202,12 @@ create policy "Users can delete items from their own bookmarks"
     )
   );
 
--- Function to handle new user creation
+-- Function to handle new user creation — creates a single private Likes bookmark
 create or replace function public.handle_new_user_bookmark()
 returns trigger as $$
 begin
-  insert into public.bookmarks (user_id, name, visibility)
-  values (new.id, 'Default', 'public');
+  insert into public.bookmarks (user_id, name, visibility, is_like)
+  values (new.id, 'Likes', 'private', true);
   return new;
 end;
 $$ language plpgsql security definer set search_path = public;
@@ -212,10 +219,10 @@ create trigger on_auth_user_created_bookmark
   after insert on auth.users
   for each row execute procedure public.handle_new_user_bookmark();
 
--- Optional: Backfill for existing users (careful with large user bases)
--- insert into public.bookmarks (user_id, name, visibility)
--- select id, 'Default', 'public' from auth.users
--- where not exists (select 1 from public.bookmarks where user_id = auth.users.id);
+-- Optional: Backfill Likes bookmark for existing users (careful with large user bases)
+-- insert into public.bookmarks (user_id, name, visibility, is_like)
+-- select id, 'Likes', 'private', true from auth.users
+-- where not exists (select 1 from public.bookmarks where user_id = auth.users.id and is_like = true);
 
 -- ========== Garden Analytics & AI Advice ==========
 

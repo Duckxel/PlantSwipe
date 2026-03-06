@@ -20,6 +20,9 @@ import { plantSchema } from "@/lib/plantSchema"
 import { monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
 import {
   normalizeCompositionForDb,
+  plantTypeEnum,
+  plantPartEnum,
+  habitatEnum,
   utilityEnum,
   ediblePartEnum,
   toxicityEnum,
@@ -45,7 +48,6 @@ import {
   comestiblePartEnum,
   fruitTypeEnum,
   maintenanceLevelEnum,
-  habitatEnum,
   levelSunEnum,
   soilEnum,
   mulchingEnum,
@@ -101,15 +103,13 @@ const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
 
 const formatStatusForUi = (value?: string | null): PlantMeta['status'] => {
-  const map: Record<string, PlantMeta['status']> = {
-    'in progres': 'In Progres',
-    rework: 'Rework',
-    review: 'Review',
-    approved: 'Approved',
-  }
   if (!value) return IN_PROGRESS_STATUS
-  const lower = value.toLowerCase()
-  return map[lower] || IN_PROGRESS_STATUS
+  const lower = value.toLowerCase().replace(/\s+/g, '_')
+  if (lower === 'in_progres' || lower === 'in_progress') return 'in_progress'
+  if (lower === 'rework') return 'rework'
+  if (lower === 'review') return 'review'
+  if (lower === 'approved') return 'approved'
+  return IN_PROGRESS_STATUS
 }
 
 const getFieldValueForKey = (plant: Plant, fieldKey: string): unknown => {
@@ -242,7 +242,7 @@ function parseSupabaseError(error: any, context?: string): string {
   // Handle check constraint violations
   if (code === '23514' || message.includes('check constraint') || message.includes('violates check constraint')) {
     if (message.includes('plant_type')) {
-      return 'Invalid plant type. Please select a valid plant type (plant, flower, bamboo, shrub, tree, cactus, or succulent).'
+      return 'Invalid plant type. Please select a valid plant type (herb, shrub, tree, climber, succulent, fern, moss, or grass).'
     }
     if (message.includes('utility')) {
       return 'Invalid utility value. Please check the selected utility options.'
@@ -834,7 +834,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       id: data.id,
       name: plantName,
       // Non-translatable fields from plants table
-      plantType: (data.plant_type as Plant["plantType"]) || undefined,
+      plantType: (plantTypeEnum.toUi(data.plant_type) ? data.plant_type : undefined) as Plant["plantType"],
       utility: utilityEnum.toUiArray(data.utility) as Plant["utility"],
       comestiblePart: comestiblePartEnum.toUiArray(data.comestible_part) as Plant["comestiblePart"],
       fruitType: fruitTypeEnum.toUiArray(data.fruit_type) as Plant["fruitType"],
@@ -871,7 +871,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       // Translatable fields from plant_translations only
       origin: translation?.origin || [],
       // Non-translatable fields from plants table
-      habitat: habitatEnum.toUiArray(data.habitat) as PlantCareData["habitat"],
+      habitat: climateEnum.toUiArray(data.climate) as PlantCareData["habitat"],
       temperatureMax: data.temperature_max || undefined,
       temperatureMin: data.temperature_min || undefined,
       temperatureIdeal: data.temperature_ideal || undefined,
@@ -1009,9 +1009,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.family = data.family || plant.identity?.family || undefined
   flat.presentation = translation?.presentation || plant.identity?.overview || plant.description || undefined
   flat.featuredMonth = data.featured_month || []
+  flat.plantType = (data.plant_type || plant.plantType || undefined) as Plant["plantType"]
+  flat.plantPart = plantPartEnum.toDbArray(data.plant_part) as Plant["plantPart"] || []
+  flat.habitat = habitatEnum.toDbArray(data.habitat) as Plant["habitat"] || []
 
   // Section 2: Identity (non-translatable enums from plants table)
-  flat.plantType = data.plant_type || plant.plantType || undefined
   flat.origin = translation?.origin || plant.plantCare?.origin || []
   flat.climate = climateEnum.toUiArray(data.climate) as string[]
   flat.season = seasonEnum.toUiArray(data.season) as string[]
@@ -1111,6 +1113,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.edibleOil = data.edible_oil || undefined
   flat.spiceMixes = translation?.spice_mixes || plant.usage?.spiceMixes || []
   flat.infusionMixes = infusionMix || undefined
+  flat.recipes = plant.usage?.recipes || []
 
   // Section 8: Misc
   flat.companionPlants = data.companion_plants || plant.miscellaneous?.companions || []
@@ -1696,8 +1699,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || [],
+            // Section 1: Base (continued)
+            plant_type: plantTypeEnum.toDb(p.plantType) || null,
+            plant_part: plantPartEnum.toDbArray(p.plantPart),
+            habitat: habitatEnum.toDbArray(p.habitat),
             // Section 2: Identity
-            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -1792,8 +1798,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             scientific_name_species: p.scientificNameSpecies || p.identity?.scientificName || null,
             family: p.family || p.identity?.family || null,
             featured_month: p.featuredMonth || [],
+            // Section 1: Base (continued)
+            plant_type: plantTypeEnum.toDb(p.plantType) || null,
+            plant_part: plantPartEnum.toDbArray(p.plantPart),
+            habitat: habitatEnum.toDbArray(p.habitat),
             // Section 2: Identity
-            plant_type: p.plantType || null,
             climate: climateEnum.toDbArray(p.climate).length ? climateEnum.toDbArray(p.climate) : [],
             season: seasonEnum.toDbArray(p.season || p.identity?.season),
             utility: utilityEnum.toDbArray(p.utility),
@@ -2164,22 +2173,31 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const currentImages = plant.images || []
     
     // First, get the English name of the plant (it might be in any language)
+    // The endpoint now returns name and variety separately
     let plantNameForAi = trimmedName
+    let extractedVariety: string | null = null
     try {
       const nameResult = await getEnglishPlantName(trimmedName)
       plantNameForAi = nameResult.englishName
+      extractedVariety = nameResult.variety || null
       if (nameResult.wasTranslated) {
-        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"`)
-        // Update the plant name to the English version
+        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
+        // Update the plant name to the English version (base name only, without variety)
         setPlant((prev) => ({
           ...prev,
           name: plantNameForAi,
+          // Set variety if AI extracted one and plant doesn't already have one
+          ...(extractedVariety && !prev.variety ? { variety: extractedVariety } : {}),
         }))
       }
     } catch (err) {
       console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
       // Continue with original name if translation fails
     }
+    // Include variety in the AI prompt so the AI knows the specific cultivar,
+    // but keep it separate from plantNameForAi so it doesn't contaminate the name field
+    const varietyForAi = extractedVariety || (plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : '') || ''
+    const aiPromptName = varietyForAi ? `${plantNameForAi} (variety: '${varietyForAi}')` : plantNameForAi
     
     setAiStatus('filling')
     
@@ -2202,7 +2220,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           const fieldData = await fetchAiPlantFillField({
-            plantName: plantNameForAi,
+            plantName: aiPromptName,
             schema: plantSchema,
             fieldKey,
             existingField,
@@ -2252,7 +2270,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       for (let attempt = 1; attempt <= 3; attempt += 1) {
         try {
           aiData = await fetchAiPlantFill({
-            plantName: plantNameForAi,
+            plantName: aiPromptName,
             schema: plantSchema,
             existingData: plant,
             fields: aiFieldOrder,

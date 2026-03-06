@@ -603,12 +603,12 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const targetLanguage = language || 'en'
   const { data: translations } = await supabase
     .from('plant_translations')
-    .select('plant_id, name')
+    .select('plant_id, name, variety')
     .eq('language', targetLanguage)
     .in('plant_id', plantIds)
   if (translations) {
     translations.forEach(t => {
-      translationMap.set(t.plant_id, { name: t.name })
+      translationMap.set(t.plant_id, { name: t.name, variety: t.variety })
     })
   }
   

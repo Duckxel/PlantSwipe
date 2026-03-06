@@ -351,6 +351,24 @@ try {
   console.warn('[server] Failed to read domain.json:', err?.message || err)
 }
 
+// Detect if any .fr domain (including subdomains like dev.aphylia.fr) is configured in domain.json
+// When a request comes from such a domain, the app defaults to French
+let FRENCH_DOMAIN_ENABLED = false
+try {
+  const domainJsonPath = path.resolve(__dirname, '..', 'domain.json')
+  if (fsSync.existsSync(domainJsonPath)) {
+    const domainData = JSON.parse(fsSync.readFileSync(domainJsonPath, 'utf-8'))
+    const domains = Array.isArray(domainData?.domains) ? domainData.domains : (Array.isArray(domainData) ? domainData : [])
+    const frDomain = domains.find(d => typeof d === 'string' && d.toLowerCase().endsWith('.fr'))
+    if (frDomain) {
+      FRENCH_DOMAIN_ENABLED = true
+      console.log(`[server] French domain (${frDomain}) detected in domain.json`)
+    }
+  }
+} catch (err) {
+  console.warn('[server] Failed to check French domain in domain.json:', err?.message || err)
+}
+
 let aiFieldPromptsTemplate = {}
 try {
   const promptPath = path.join(__dirname, 'src', 'lib', 'aiFieldPrompts.json')
@@ -3329,6 +3347,7 @@ async function generateFieldData(options) {
     'Respond strictly with valid JSON containing the requested field and nothing else.',
     'Populate every possible sub-value; if data is missing, return an empty string or array instead of null.',
     'Reuse suitable existing data and never fabricate meta/status/image information.',
+    'CRITICAL: The "name" field stores ONLY the base species common name (e.g. "Lavender", "Rose", "Tomato"). The "variety" field stores ONLY the cultivar/variety name (e.g. "Hidcote", "Iceberg", "Cherry"). NEVER combine name and variety into a single field. If the plant name includes a variety like Rosa \'Iceberg\', the name is "Rosa" and the variety is "Iceberg". The "commonNames" array should contain common names for the BASE species without the variety suffix.',
   ].join('\n')
 
   const promptSections = [
@@ -4681,53 +4700,69 @@ app.post('/api/admin/ai/plant-fill/english-name', async (req, res) => {
       return
     }
     
-    // Ask AI to identify the English common name of the plant
-    // IMPORTANT: Preserve cultivar names, subspecies, and variety information
-    const instructions = `You are a botanist expert. Your task is to identify plants and provide their English name while PRESERVING all botanical specificity.
-
-Given a plant name in ANY language (scientific name, common name in French, Spanish, German, etc.), 
-return the ENGLISH name for that plant, keeping ALL specific details like cultivar names, subspecies, and varieties.
+    // Ask AI to identify the English common name AND variety separately
+    const instructions = `You are a botanist expert. Given a plant name in ANY language, return a JSON object with "name" and "variety" SEPARATED.
 
 Rules:
-1. PRESERVE cultivar names (e.g., 'Monstera deliciosa Thai Constellation' stays as 'Monstera Thai Constellation', NOT simplified to 'Monstera')
-2. PRESERVE subspecies and variety names (e.g., 'Rosa gallica var. officinalis' becomes 'Apothecary Rose' or 'Rosa gallica officinalis', NOT just 'Rose')
-3. If the input is already a specific English name with cultivar/variety, return it as-is (possibly corrected for spelling)
-4. If the input is a scientific/Latin name with subspecies/cultivar, translate to English equivalent BUT KEEP the specific cultivar/variety name
-5. If the input is a name in another language, translate/identify the English equivalent while keeping specificity
-6. DO NOT simplify to the most common/generic name - keep the EXACT variety/cultivar specified
-7. If you cannot identify the specific variety, return the original name unchanged
-8. Return ONLY the plant name, nothing else - no explanations, no quotes, no JSON
+1. "name" = the BASE species common English name (e.g. "Lavender", "Rose", "Monstera", "Tomato")
+2. "variety" = ONLY the cultivar/variety/subspecies name if present, or null if none (e.g. "Hidcote", "Iceberg", "Thai Constellation")
+3. NEVER combine name and variety into a single string
+4. If the input has no specific variety, set "variety" to null
+5. If the input is in another language, translate to English
+6. Respond with ONLY a JSON object: {"name": "...", "variety": "..." or null}
 
 Examples:
-- "Monstera deliciosa Thai Constellation" → "Monstera Thai Constellation" (NOT "Monstera" or "Swiss Cheese Plant")
-- "Philodendron Pink Princess" → "Philodendron Pink Princess" (NOT "Philodendron")
-- "Rosa 'Peace'" → "Peace Rose" (NOT "Rose")
-- "Lavandula angustifolia 'Hidcote'" → "Hidcote Lavender" (NOT "Lavender")
-- "Tomate cerise" → "Cherry Tomato" (translating but not simplifying)`
+- "Monstera deliciosa Thai Constellation" → {"name": "Monstera", "variety": "Thai Constellation"}
+- "Philodendron Pink Princess" → {"name": "Philodendron", "variety": "Pink Princess"}
+- "Rosa 'Peace'" → {"name": "Rose", "variety": "Peace"}
+- "Lavandula angustifolia 'Hidcote'" → {"name": "Lavender", "variety": "Hidcote"}
+- "Tomate cerise" → {"name": "Cherry Tomato", "variety": null}
+- "Monstera deliciosa" → {"name": "Monstera", "variety": null}
+- "Lavande" → {"name": "Lavender", "variety": null}
+- "Rosa" → {"name": "Rose", "variety": null}`
 
-    const prompt = `What is the English name for this plant, preserving any cultivar or variety specificity: "${plantName}"?`
-    
+    const prompt = `Identify this plant and return the English name and variety separately as JSON: "${plantName}"`
+
     const response = await openaiClient.responses.create({
       model: openaiModelNano,
       reasoning: { effort: 'low' },
       instructions,
       input: prompt,
     })
-    
-    const englishName = (response.output_text || plantName).trim()
-    
-    // Clean up the response - remove quotes, periods, etc.
-    const cleanedName = englishName
-      .replace(/^["']|["']$/g, '')  // Remove surrounding quotes
-      .replace(/\.$/, '')           // Remove trailing period
-      .trim()
-    
-    console.log(`[server] English name lookup: "${plantName}" -> "${cleanedName}"`)
-    
-    res.json({ 
-      success: true, 
+
+    const outputText = (response.output_text || '').trim()
+
+    // Parse JSON response
+    let parsedName = plantName
+    let parsedVariety = null
+    try {
+      const jsonMatch = outputText.match(/\{[\s\S]*\}/)
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0])
+        if (parsed.name && typeof parsed.name === 'string') {
+          parsedName = parsed.name.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim()
+        }
+        if (parsed.variety && typeof parsed.variety === 'string' && parsed.variety.trim()) {
+          parsedVariety = parsed.variety.trim().replace(/^["']|["']$/g, '').replace(/\.$/, '').trim()
+        }
+      } else {
+        // Fallback: treat entire output as name (backwards compatibility)
+        parsedName = outputText.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim() || plantName
+      }
+    } catch {
+      parsedName = outputText.replace(/^["']|["']$/g, '').replace(/\.$/, '').trim() || plantName
+    }
+
+    // Build englishName for backwards compatibility (name only, without variety)
+    const cleanedName = parsedName
+
+    console.log(`[server] English name lookup: "${plantName}" -> name="${cleanedName}", variety="${parsedVariety || '(none)'}"`)
+
+    res.json({
+      success: true,
       originalName: plantName,
       englishName: cleanedName,
+      variety: parsedVariety,
       wasTranslated: plantName.toLowerCase() !== cleanedName.toLowerCase()
     })
   } catch (err) {
@@ -5928,9 +5963,21 @@ app.get('/api/health/db', async (_req, res) => {
 // Runtime environment injector for client (exposes safe VITE_* only)
 // Serve on both /api/env.js and /env.js to be resilient to proxy rules.
 // Some static hosts might hijack /env.js and serve index.html; prefer /api/env.js in index.html.
-app.get(['/api/env.js', '/env.js'], (_req, res) => {
+app.get(['/api/env.js', '/env.js'], (req, res) => {
   try {
     const disablePwaEnv = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim()
+    // Detect domain-based default language from nginx X-Default-Language header or hostname
+    let domainDefaultLang = ''
+    const xDefaultLang = req.headers['x-default-language']
+    if (xDefaultLang && typeof xDefaultLang === 'string' && xDefaultLang.trim()) {
+      domainDefaultLang = xDefaultLang.trim()
+    } else if (FRENCH_DOMAIN_ENABLED) {
+      // Fallback: check hostname directly (for dev/non-nginx setups)
+      const host = (req.hostname || req.headers.host || '').toLowerCase()
+      if (host.endsWith('.fr') || host === 'aphylia.fr') {
+        domainDefaultLang = 'fr'
+      }
+    }
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
@@ -5938,6 +5985,7 @@ app.get(['/api/env.js', '/env.js'], (_req, res) => {
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
       VITE_VAPID_PUBLIC_KEY: process.env.VITE_VAPID_PUBLIC_KEY || process.env.VAPID_PUBLIC_KEY || '',
+      VITE_DOMAIN_DEFAULT_LANGUAGE: domainDefaultLang,
     }
     const js = `window.__ENV__ = ${JSON.stringify(env).replace(/</g, '\\u003c')};\n`
     res.setHeader('Content-Type', 'application/javascript; charset=utf-8')
@@ -6533,9 +6581,34 @@ async function insertWebVisitViaSupabaseRest(payload, req) {
   }
 }
 
+// Throttle map: avoids updating last_active_at on every single request.
+// Only writes to profiles once every 5 minutes per user.
+const _lastActiveThrottle = new Map()
+const LAST_ACTIVE_THROTTLE_MS = 5 * 60 * 1000
+
+async function updateLastActiveAt(userId) {
+  if (!sql || !userId) return
+  const now = Date.now()
+  const prev = _lastActiveThrottle.get(userId)
+  if (prev && now - prev < LAST_ACTIVE_THROTTLE_MS) return
+  _lastActiveThrottle.set(userId, now)
+  // Evict stale entries periodically (prevent memory leak)
+  if (_lastActiveThrottle.size > 10000) {
+    for (const [k, v] of _lastActiveThrottle) {
+      if (now - v > LAST_ACTIVE_THROTTLE_MS * 2) _lastActiveThrottle.delete(k)
+    }
+  }
+  try {
+    await sql`update public.profiles set last_active_at = now() where id = ${userId}::uuid`
+  } catch { /* best-effort */ }
+}
+
 async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent, ipAddress, geo, extra, pageTitle, language, visitNum }, req) {
   // Always record into in-memory analytics, regardless of DB availability
   try { memAnalytics.recordVisit(String(ipAddress || ''), Date.now()) } catch { }
+
+  // Update last_active_at on profiles (throttled, best-effort)
+  if (userId) updateLastActiveAt(userId).catch(() => {})
 
   // Prepare common fields
   const parsedUtm = null
@@ -7746,9 +7819,10 @@ app.get('/api/plants/:id/likes-count', async (req, res) => {
     if (!plantId) return res.status(400).json({ error: 'Missing plant id' })
 
     const rows = await sql`
-      SELECT count(*)::integer AS likes
-      FROM public.profiles
-      WHERE ${plantId} = ANY(liked_plant_ids)
+      SELECT count(DISTINCT b.user_id)::integer AS likes
+      FROM public.bookmarks b
+      JOIN public.bookmark_items bi ON bi.bookmark_id = b.id
+      WHERE b.is_like = true AND bi.plant_id = ${plantId}
     `
     res.json({ likes: rows[0]?.likes ?? 0 })
   } catch (err) {
@@ -8531,6 +8605,7 @@ app.get('/api/admin/notifications', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -9135,6 +9210,7 @@ app.get('/api/admin/notifications/recipient-count', async (req, res) => {
         left join auth.users u on u.id = p.id
         where (p.notify_push is null or p.notify_push = true)
           and coalesce(
+            p.last_active_at,
             (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
             u.last_sign_in_at,
             u.created_at,
@@ -9641,6 +9717,7 @@ app.get('/api/admin/notification-automations', async (req, res) => {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -10028,6 +10105,7 @@ async function runAutomation(automation) {
       left join auth.users u on u.id = p.id
       where (p.notify_push is null or p.notify_push = true)
         and coalesce(
+          p.last_active_at,
           (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
           u.last_sign_in_at,
           u.created_at,
@@ -12698,7 +12776,8 @@ app.get('/api/admin/stats', async (req, res) => {
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
-    // Admin check disabled to ensure member lookup works universally
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const rawParam = (req.query.q || req.query.email || req.query.username || req.query.name || '').toString().trim()
     if (!rawParam) {
       res.status(400).json({ error: 'Missing query' })
@@ -18211,8 +18290,8 @@ app.get('/api/account/export', async (req, res) => {
       // 1. Profile data
       if (sql) {
         const profiles = await sql`
-          SELECT id, display_name, username, bio, country, timezone, language, 
-                 favorite_plant, avatar_url, is_private, disable_friend_requests,
+          SELECT id, display_name, username, bio, country, timezone, language,
+                 avatar_url, is_private, disable_friend_requests,
                  notify_push, notify_email, experience_years, accent_key, roles,
                  marketing_consent, marketing_consent_date, terms_accepted_date, 
                  privacy_policy_accepted_date, created_at
@@ -18221,7 +18300,7 @@ app.get('/api/account/export', async (req, res) => {
         exportData.profile = profiles?.[0] || null
       } else {
         const { data } = await supabaseServiceClient.from('profiles')
-          .select('id, display_name, username, bio, country, timezone, language, favorite_plant, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
+          .select('id, display_name, username, bio, country, timezone, language, avatar_url, is_private, disable_friend_requests, notify_push, notify_email, experience_years, accent_key, roles, marketing_consent, marketing_consent_date, terms_accepted_date, privacy_policy_accepted_date')
           .eq('id', userId)
           .maybeSingle()
         exportData.profile = data
@@ -28767,6 +28846,7 @@ async function processDueAutomations() {
             left join auth.users u on u.id = p.id
             where (p.notify_push is null or p.notify_push = true)
               and coalesce(
+                p.last_active_at,
                 (select max(wv.occurred_at) from public.web_visits wv where wv.user_id = p.id),
                 u.last_sign_in_at,
                 u.created_at,
@@ -29246,6 +29326,7 @@ ${alternateLinks(path)}
 
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
+      // Exclude is_like bookmarks (always private, not SEO-relevant)
       // Fetch in batches to get all bookmarks
       const allBookmarks = []
       const bookmarkBatchSize = 1000
@@ -29255,7 +29336,8 @@ ${alternateLinks(path)}
       while (allBookmarks.length < maxBookmarks) {
         const { data: bookmarkBatch, error: bookmarkError } = await sitemapDb
           .from('bookmarks')
-          .select('id, created_at, visibility')
+          .select('id, created_at, visibility, is_like')
+          .eq('is_like', false)
           .order('created_at', { ascending: false })
           .range(bookmarkOffset, bookmarkOffset + bookmarkBatchSize - 1)
 
@@ -29512,7 +29594,7 @@ app.get('/llms-full.txt', async (req, res) => {
 
     const { data: profiles } = await db
       .from('profiles')
-      .select('display_name, username, bio, country, favorite_plant, experience_level, is_private')
+      .select('display_name, username, bio, country, experience_level, is_private')
       .or('is_private.is.null,is_private.eq.false')
       .not('display_name', 'is', null)
       .order('display_name', { ascending: true })
@@ -29528,7 +29610,6 @@ app.get('/llms-full.txt', async (req, res) => {
         if (p.bio) lines.push(`- Bio: ${p.bio.replace(/\n/g, ' ').slice(0, 150)}`)
         if (p.country) lines.push(`- Country: ${p.country}`)
         if (p.experience_level) lines.push(`- Experience: ${p.experience_level}`)
-        if (p.favorite_plant) lines.push(`- Favorite plant: ${p.favorite_plant}`)
         lines.push('')
       }
     } else {
@@ -29549,8 +29630,9 @@ app.get('/llms-full.txt', async (req, res) => {
 
     const { data: bookmarks } = await db
       .from('bookmarks')
-      .select('id, name, user_id, created_at, visibility')
+      .select('id, name, user_id, created_at, visibility, is_like')
       .eq('visibility', 'public')
+      .eq('is_like', false)
       .order('created_at', { ascending: false })
       .limit(300)
 
@@ -29871,12 +29953,17 @@ async function generateCrawlerHtml(req, pagePath) {
   const supportedLangs = ['en', 'fr']
   // All recognized 2-letter language codes (strip from path, default to 'en' if not fully supported)
   const allLangPrefixes = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh', 'ar', 'hi', 'tr', 'vi', 'th', 'sv', 'da', 'no', 'fi', 'cs', 'hu', 'ro', 'uk', 'el', 'he', 'id', 'ms', 'tl']
-  let detectedLang = 'en' // Default to English
+  // Default language: use domain-based language if on a French domain, otherwise English
+  const xDefaultLang = req.headers['x-default-language']
+  const domainDefaultLang = (typeof xDefaultLang === 'string' && xDefaultLang.trim() && supportedLangs.includes(xDefaultLang.trim()))
+    ? xDefaultLang.trim()
+    : (FRENCH_DOMAIN_ENABLED && (req.hostname || req.headers.host || '').toLowerCase().endsWith('.fr') ? 'fr' : 'en')
+  let detectedLang = domainDefaultLang
   let effectivePath = pathParts
   if (pathParts.length > 0 && allLangPrefixes.includes(pathParts[0].toLowerCase())) {
     const langPrefix = pathParts[0].toLowerCase()
-    // Use the language if fully supported, otherwise default to English
-    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : 'en'
+    // Use the language if fully supported, otherwise use domain default
+    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : domainDefaultLang
     effectivePath = pathParts.slice(1)
   }
 
@@ -29978,6 +30065,27 @@ async function generateCrawlerHtml(req, pagePath) {
         aboutGarden: 'Garden management and tracking',
         aboutReminders: 'Smart care reminders',
         aboutCommunity: 'Community of plant lovers',
+        // Categories
+        categoriesTitle: 'Plant Categories - Browse by Type',
+        categoriesDesc: 'Explore our plant encyclopedia by category. Find trees, shrubs, cacti, indoor plants, medicinal herbs, and more.',
+        categoriesHeading: 'Plant Categories',
+        categoriesIntro: 'Browse our encyclopedia by category to find exactly the plants you\'re looking for.',
+        categoriesEncyclopedia: 'Access our full encyclopedia',
+        catTree: 'Trees', catTreeDesc: 'Large woody plants with a single trunk',
+        catShrub: 'Shrubs', catShrubDesc: 'Multi-stemmed woody plants',
+        catFruitTree: 'Fruit Trees', catFruitTreeDesc: 'Trees that bear edible fruits',
+        catBamboo: 'Bamboo', catBambooDesc: 'Fast-growing grass family members',
+        catCactus: 'Cacti & Succulents', catCactusDesc: 'Drought-tolerant water-storing plants',
+        catHerbaceous: 'Herbaceous Plants', catHerbaceousDesc: 'Non-woody flowering plants',
+        catFruit: 'Fruit Plants', catFruitDesc: 'Plants grown for edible produce',
+        catAromatic: 'Aromatic Plants', catAromaticDesc: 'Fragrant herbs and spice plants',
+        catMedicinal: 'Medicinal Plants', catMedicinalDesc: 'Plants with therapeutic properties',
+        catClimbing: 'Climbing Plants', catClimbingDesc: 'Vines and climbers for vertical spaces',
+        catPerennial: 'Perennial Plants', catPerennialDesc: 'Plants that return year after year',
+        catBulb: 'Bulb Plants', catBulbDesc: 'Plants that grow from bulbs or tubers',
+        catIndoor: 'Indoor Plants', catIndoorDesc: 'Plants suited for indoor living spaces',
+        catFern: 'Ferns', catFernDesc: 'Shade-loving non-flowering plants',
+        catAquatic: 'Aquatic Plants', catAquaticDesc: 'Plants that thrive in or near water',
         // Search
         searchTitle: 'Find Your Perfect Plants',
         searchDesc: 'Search plants by name, care level, light needs, or growing conditions. Find the perfect plants for YOUR space!',
@@ -30160,6 +30268,27 @@ async function generateCrawlerHtml(req, pagePath) {
         aboutGarden: 'Gestion et suivi de jardin',
         aboutReminders: 'Rappels d\'entretien intelligents',
         aboutCommunity: 'Communauté de passionnés de plantes',
+        // Categories
+        categoriesTitle: 'Catégories de Plantes - Parcourir par Type',
+        categoriesDesc: 'Explorez notre encyclopédie végétale par catégorie. Arbres, arbustes, cactus, plantes d\'intérieur, plantes médicinales et plus.',
+        categoriesHeading: 'Catégories de Plantes',
+        categoriesIntro: 'Parcourez notre encyclopédie par catégorie pour trouver exactement les plantes que vous cherchez.',
+        categoriesEncyclopedia: 'Accéder à l\'encyclopédie complète',
+        catTree: 'Arbres', catTreeDesc: 'Grandes plantes ligneuses à tronc unique',
+        catShrub: 'Arbustes', catShrubDesc: 'Plantes ligneuses à tiges multiples',
+        catFruitTree: 'Arbres Fruitiers', catFruitTreeDesc: 'Arbres produisant des fruits comestibles',
+        catBamboo: 'Bambous', catBambooDesc: 'Membres à croissance rapide de la famille des graminées',
+        catCactus: 'Cactus & Succulentes', catCactusDesc: 'Plantes résistantes à la sécheresse stockant l\'eau',
+        catHerbaceous: 'Plantes Herbacées', catHerbaceousDesc: 'Plantes à fleurs non ligneuses',
+        catFruit: 'Plantes Fruitières', catFruitDesc: 'Plantes cultivées pour la production comestible',
+        catAromatic: 'Plantes Aromatiques', catAromaticDesc: 'Herbes parfumées et plantes à épices',
+        catMedicinal: 'Plantes Médicinales', catMedicinalDesc: 'Plantes aux propriétés thérapeutiques',
+        catClimbing: 'Plantes Grimpantes', catClimbingDesc: 'Vignes et grimpantes pour espaces verticaux',
+        catPerennial: 'Plantes Vivaces', catPerennialDesc: 'Plantes qui reviennent année après année',
+        catBulb: 'Plantes à Bulbes', catBulbDesc: 'Plantes qui poussent à partir de bulbes ou tubercules',
+        catIndoor: 'Plantes d\'Intérieur', catIndoorDesc: 'Plantes adaptées aux espaces intérieurs',
+        catFern: 'Fougères', catFernDesc: 'Plantes d\'ombre sans fleurs',
+        catAquatic: 'Plantes Aquatiques', catAquaticDesc: 'Plantes qui prospèrent dans ou près de l\'eau',
         searchTitle: 'Trouvez Vos Plantes Parfaites',
         searchDesc: 'Recherchez des plantes par nom, niveau d\'entretien ou conditions de culture. Trouvez les plantes parfaites pour VOTRE espace !',
         searchPlant: 'Recherche de Plantes',
@@ -30953,20 +31082,6 @@ async function generateCrawlerHtml(req, pagePath) {
       if (rpcResult) {
         // RPC returns array or single object
         profile = Array.isArray(rpcResult) ? rpcResult[0] : rpcResult
-        // RPC doesn't return favorite_plant - fetch it separately
-        if (profile?.id) {
-          const { data: extraProfile } = await ssrQuery(
-            supabaseServer
-              .from('profiles')
-              .select('favorite_plant')
-              .eq('id', profile.id)
-              .maybeSingle(),
-            'profile_favorite_plant'
-          )
-          if (extraProfile) {
-            profile.favorite_plant = extraProfile.favorite_plant
-          }
-        }
       }
 
       // Fallback: direct query if RPC fails or doesn't exist
@@ -30975,7 +31090,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -30988,7 +31103,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, favorite_plant, roles, is_admin')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -31224,7 +31339,6 @@ async function generateCrawlerHtml(req, pagePath) {
                 ` : ''}
               </div>
               
-              ${profile.favorite_plant ? `<p>❤️ ${detectedLang === 'fr' ? 'Plante préférée' : 'Favorite plant'}: ${escapeHtml(profile.favorite_plant)}</p>` : ''}
               ${profile.profile_link ? `<p>🔗 <a href="${escapeHtml(profile.profile_link)}" rel="nofollow noopener" target="_blank">${escapeHtml(profile.profile_link)}</a></p>` : ''}
               
               ${userGardens.length > 0 ? `
@@ -31568,6 +31682,57 @@ async function generateCrawlerHtml(req, pagePath) {
             <a href="/pricing">💎 ${detectedLang === 'fr' ? 'Tarifs' : 'Pricing'}</a>
             <a href="/download">📲 ${detectedLang === 'fr' ? 'Télécharger' : 'Download'}</a>
             <a href="/contact">💬 Contact</a>
+          </nav>
+        </article>
+      `
+    }
+
+    else if (effectivePath[0] === 'search' && effectivePath[1] === 'categories') {
+      // Categories page — distinct from the search page
+      title = `📚 ${tr.categoriesTitle} | Aphylia`
+      description = tr.categoriesDesc
+
+      const categoryItems = [
+        { name: tr.catTree, desc: tr.catTreeDesc, params: '?type=tree', icon: '🌳' },
+        { name: tr.catShrub, desc: tr.catShrubDesc, params: '?type=shrub', icon: '🌿' },
+        { name: tr.catFruitTree, desc: tr.catFruitTreeDesc, params: '?type=tree&usage=Comestible', icon: '🍎' },
+        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?q=bamboo', icon: '🎋' },
+        { name: tr.catCactus, desc: tr.catCactusDesc, params: '?type=succulent', icon: '🌵' },
+        { name: tr.catHerbaceous, desc: tr.catHerbaceousDesc, params: '?type=herb,grass', icon: '🌸' },
+        { name: tr.catFruit, desc: tr.catFruitDesc, params: '?usage=Comestible', icon: '🍒' },
+        { name: tr.catAromatic, desc: tr.catAromaticDesc, params: '?usage=Aromatic', icon: '🌬️' },
+        { name: tr.catMedicinal, desc: tr.catMedicinalDesc, params: '?usage=Medicinal', icon: '⚕️' },
+        { name: tr.catClimbing, desc: tr.catClimbingDesc, params: '?type=climber', icon: '🧗' },
+        { name: tr.catPerennial, desc: tr.catPerennialDesc, params: '?lifeCycle=perennial,succulent_perennial', icon: '🔄' },
+        { name: tr.catBulb, desc: tr.catBulbDesc, params: '?plantPart=bulbs', icon: '🧅' },
+        { name: tr.catIndoor, desc: tr.catIndoorDesc, params: '?livingSpace=indoor', icon: '🏠' },
+        { name: tr.catFern, desc: tr.catFernDesc, params: '?type=fern', icon: '🌿' },
+        { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?habitat=aquatic', icon: '💧' },
+      ]
+
+      pageContent = `
+        <article>
+          <h1>📚 ${tr.categoriesHeading}</h1>
+          <p>${tr.categoriesIntro}</p>
+          <p><a href="/search">➡️ ${tr.categoriesEncyclopedia}</a></p>
+          <h2>${detectedLang === 'fr' ? 'Toutes les Catégories' : 'All Categories'}</h2>
+          <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px;">
+            ${categoryItems.map(cat => `
+              <li style="background: #f0fdf4; border-radius: 12px; padding: 12px 16px;">
+                <a href="/search${escapeHtml(cat.params)}" style="text-decoration: none; color: inherit;">
+                  <strong>${cat.icon} ${escapeHtml(cat.name)}</strong><br>
+                  <small style="color: #666;">${escapeHtml(cat.desc)}</small>
+                </a>
+              </li>
+            `).join('')}
+          </ul>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/search">🔍 ${detectedLang === 'fr' ? 'Encyclopédie' : 'Encyclopedia'}</a>
+            <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
+            <a href="/gardens">🏡 ${detectedLang === 'fr' ? 'Jardins' : 'Gardens'}</a>
+            <a href="/blog">📚 Blog</a>
           </nav>
         </article>
       `
@@ -31941,12 +32106,14 @@ async function generateCrawlerHtml(req, pagePath) {
       console.log(`[ssr] Looking up bookmark list: ${listId}`)
 
       // Try to get the bookmark list info (using correct table name 'bookmarks')
+      // Exclude is_like bookmarks from public SSR - they are always private
       const { data: bookmarkList, error: bookmarkError } = await ssrQuery(
         supabaseServer
           .from('bookmarks')
-          .select('id, name, user_id, visibility, created_at')
+          .select('id, name, user_id, visibility, is_like, created_at')
           .eq('id', listId)
           .eq('visibility', 'public')
+          .eq('is_like', false)
           .maybeSingle(),
         'bookmark_lookup'
       )
@@ -32043,17 +32210,25 @@ async function generateCrawlerHtml(req, pagePath) {
           }
         } catch { }
 
-        // Title: "🔖 FAV_MTP - Plant Bookmark | Aphylia"
-        title = `🔖 ${bookmarkList.name || tr.bookmarksCollection} - ${tr.bookmarkTitle} | Aphylia`
-
-        // Description: "📌 Bookmark "FAV_MTP" made by Username 🌿 4 plants saved 🌱"
+        // Title includes owner name for SEO uniqueness: "🔖 FAV_MTP by Username - Plant Bookmark | Aphylia"
         const bookmarkName = bookmarkList.name || tr.bookmarksCollection
         const plantWord = plantCount === 1 ? tr.bookmarkPlant : tr.bookmarkPlants
 
         if (ownerName) {
+          title = `🔖 ${bookmarkName} ${detectedLang === 'fr' ? 'par' : 'by'} ${ownerName} - ${tr.bookmarkTitle} | Aphylia`
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" ${tr.bookmarkMadeBy} ${ownerName} 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
         } else {
+          title = `🔖 ${bookmarkName} - ${tr.bookmarkTitle} | Aphylia`
           description = `📌 ${tr.bookmarkDesc} "${bookmarkName}" 🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved} 🌱`
+        }
+
+        // Add plant names to description for extra SEO uniqueness
+        if (bookmarkPlantDetails.length > 0) {
+          const plantNames = bookmarkPlantDetails.slice(0, 5).map(p => p.name).join(', ')
+          const moreText = bookmarkPlantDetails.length > 5
+            ? (detectedLang === 'fr' ? ` et ${bookmarkPlantDetails.length - 5} de plus` : ` and ${bookmarkPlantDetails.length - 5} more`)
+            : ''
+          description += ` | ${plantNames}${moreText}`
         }
 
         // Use plant image if found, otherwise no image
@@ -32090,12 +32265,12 @@ async function generateCrawlerHtml(req, pagePath) {
             <p itemprop="description">${tr.bookmarksCarefully} 🌱</p>
             
             ${bookmarkPlantDetails.length > 0 ? `
-              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'}</h2>
-              <div style="display: grid; gap: 12px; margin: 20px 0;">
+              <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'} (${plantCount})</h2>
+              <ul style="list-style: none; padding: 0; margin: 20px 0;">
                 ${bookmarkPlantDetails.map(plant => {
                   const emoji = plantTypeEmojis[plant.plant_type?.toLowerCase()] || '🌱'
                   return `
-                    <div style="padding: 12px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
+                    <li style="padding: 12px; margin-bottom: 8px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
                       <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 20px;">${emoji}</span>
                         <div>
@@ -32103,11 +32278,17 @@ async function generateCrawlerHtml(req, pagePath) {
                           ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; font-weight: normal;">${escapeHtml(plant.scientific_name)}</div>` : ''}
                         </div>
                       </a>
-                    </div>
+                    </li>
                   `
                 }).join('')}
+              </ul>
+            ` : `
+              <div style="padding: 24px; background: #fafafa; border-radius: 12px; text-align: center; margin: 20px 0;">
+                <p style="color: #6b7280; margin-bottom: 8px;">${detectedLang === 'fr' ? 'Cette collection est vide pour le moment.' : 'This collection is empty for now.'}</p>
+                ${ownerName ? `<p style="color: #9ca3af; font-size: 14px;">${detectedLang === 'fr' ? `Collection créée par` : `Collection created by`} <a href="/u/${encodeURIComponent(ownerName)}" style="color: #059669;">${escapeHtml(ownerName)}</a></p>` : ''}
+                <p style="color: #9ca3af; font-size: 13px;">${detectedLang === 'fr' ? 'Découvrez des plantes et créez vos propres collections sur Aphylia' : 'Discover plants and create your own collections on Aphylia'}</p>
               </div>
-            ` : `<p style="color: #6b7280;">${detectedLang === 'fr' ? 'Cette collection est vide.' : 'This collection is empty.'}</p>`}
+            `}
             
             <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
               <strong>🔖 ${detectedLang === 'fr' ? 'Voir la collection complète' : 'View Full Collection'}</strong><br>

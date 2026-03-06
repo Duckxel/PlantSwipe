@@ -31,13 +31,13 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
       const data = await getUserBookmarks(userId)
       // Filter based on viewer relationship:
       // - Owner sees all bookmarks
-      // - Friends see public + private bookmarks
-      // - Others see only public bookmarks
-      const filteredData = isOwner 
-        ? data 
-        : isFriend 
-          ? data // Friends can see all (including private)
-          : data.filter(b => b.visibility === 'public')
+      // - Friends see public + private bookmarks (but NOT likes - likes are always private)
+      // - Others see only public bookmarks (never likes)
+      const filteredData = isOwner
+        ? data
+        : isFriend
+          ? data.filter(b => !b.is_like) // Friends can see all except likes
+          : data.filter(b => b.visibility === 'public' && !b.is_like)
       
       // Sort by most recently updated first
       const sortedData = filteredData.sort((a, b) => {

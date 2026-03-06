@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** February 28, 2026
+> **Last Updated:** March 6, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,9 +28,11 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
+- **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Removed UNIQUE constraint on `plants.name` — multiple plants can now share the same name (different varieties). Name column kept as non-unique fallback for app compatibility.
 - **Feb 28, 2026:** Added 3 new email automation triggers: `ACCOUNT_DELETION`, `FRIEND_REQUEST_REMINDER`, `GARDEN_INVITE_REMINDER`. Added `reminder_email_sent` column to `friend_requests` and `garden_invites` tables. Added server-side cron job (every 3 hours) for reminder emails. Added detailed table definitions for `friend_requests`, `garden_invites`, `admin_email_triggers`, `admin_automatic_email_sends`.
 - **Feb 27, 2026:** Added `user_action_status` table to sync profile action completion/skip state across devices. Actions marked completed are never reverted (sticky). RPCs: `mark_action_completed`, `bulk_mark_actions_completed`, `skip_action`, `unskip_action`.
-- **Feb 26, 2026:** Added `plant_type` column (single-select: plant, flower, bamboo, shrub, tree, cactus, succulent) and `watering_mode` column (always | seasonal) to `plants` table. Updated sync_parts to include both columns in CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
+- **Feb 26, 2026:** Added `plant_type` column (single-select, updated Mar 4 to: herb, shrub, tree, climber, succulent, fern, moss, grass) and `watering_mode` column (always | seasonal) to `plants` table. Updated sync_parts to include both columns in CREATE TABLE, Phase 1 add-columns, Phase 3 constraints, and Phase 4 whitelist.
 - **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
@@ -147,8 +149,8 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `friends` | Friend relationships |
 | `friend_requests` | Pending friend requests |
 | `garden_invites` | Garden invitation tokens |
-| `bookmarks` | Bookmark collections |
-| `bookmark_items` | Individual bookmarks |
+| `bookmarks` | Bookmark collections (includes special Likes bookmark per user with `is_like = true`) |
+| `bookmark_items` | Plants saved to bookmark collections |
 | `user_action_status` | Profile action completion & skip state (synced across devices) |
 
 ### Messaging
@@ -256,7 +258,6 @@ username                    TEXT (optional)
 country                     TEXT
 city                        TEXT
 bio                         TEXT
-favorite_plant              TEXT
 avatar_url                  TEXT
 timezone                    TEXT
 experience_years            INTEGER
@@ -273,8 +274,8 @@ bug_points                  INTEGER DEFAULT 0
 job                         TEXT                    -- Optional job/occupation displayed on public profile
 profile_link                TEXT                    -- Optional external URL displayed on public profile
 show_country                BOOLEAN DEFAULT true    -- Whether to display country on public profile
-liked_plant_ids             TEXT[] DEFAULT '{}'
 is_admin                    BOOLEAN DEFAULT false
+-- NOTE: liked_plant_ids column has been DROPPED — likes are now stored via bookmarks with is_like=true
 -- GDPR fields
 marketing_consent           BOOLEAN DEFAULT false
 marketing_consent_date      TIMESTAMPTZ
@@ -458,10 +459,12 @@ Non-translatable base data for all plants. Organized into 9 sections matching th
 
 ```sql
 id                        TEXT PRIMARY KEY
-name                      TEXT NOT NULL UNIQUE   -- Canonical English name
+name                      TEXT NOT NULL           -- Canonical English name (non-unique, varieties can share names)
 
 -- Section 1: Base — Identity & naming
-plant_type                TEXT                   -- CHECK: plant, flower, bamboo, shrub, tree, cactus, succulent
+plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
+plant_part                TEXT[]                 -- CHECK: roots, bulbs, stems, leaves, flowers, fruits, spores
+habitat                   TEXT[]                 -- CHECK: aquatic, terrestrial, epiphytic, lithophytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
 featured_month            TEXT[]                 -- Multi-select months for promotion
@@ -724,6 +727,39 @@ CHECK (inviter_id <> invitee_id)
 ```
 
 **RLS:** Users can SELECT invites where they are inviter or invitee. INSERT only as inviter who is a garden member (cannot target shadow-banned users). UPDATE as invitee or inviter. DELETE as either party or admin.
+
+### `bookmarks`
+
+Bookmark collections for saving plants. Each user gets one special "Likes" bookmark (`is_like = true`) created automatically on account signup. The Likes bookmark is always private and cannot be deleted or duplicated.
+
+```sql
+id              UUID PRIMARY KEY
+user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+name            TEXT NOT NULL
+visibility      TEXT NOT NULL DEFAULT 'public' CHECK (visibility IN ('public', 'private'))
+is_like         BOOLEAN NOT NULL DEFAULT false  -- True for the special Likes bookmark (one per user, always private)
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE INDEX bookmarks_user_likes_unique (user_id) WHERE is_like = true
+```
+
+**RLS:** Public bookmarks visible to everyone. Users can SELECT/INSERT/UPDATE/DELETE their own bookmarks.
+
+**Trigger:** `on_auth_user_created_bookmark` — automatically creates a private Likes bookmark for new users via `handle_new_user_bookmark()`.
+
+### `bookmark_items`
+
+Plants saved to bookmark collections.
+
+```sql
+id              UUID PRIMARY KEY
+bookmark_id     UUID NOT NULL REFERENCES bookmarks(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE (bookmark_id, plant_id)
+```
+
+**RLS:** Viewable if parent bookmark is public or owned by viewer. INSERT/DELETE only by bookmark owner.
 
 ### `admin_email_templates`
 

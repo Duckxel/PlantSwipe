@@ -29,6 +29,7 @@ import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
 import { supabase } from "@/lib/supabaseClient";
+import { getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import { checkEditorAccess } from "@/constants/userRoles";
 import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
@@ -102,6 +103,7 @@ type PreparedPlant = Plant & {
   _lifeCycleSet: Set<string>       // O(1) life cycle lookups
   _plantHabitSet: Set<string>      // O(1) plant habit lookups
   _ediblePartSet: Set<string>      // O(1) edible part lookups
+  _plantPartSet: Set<string>       // O(1) plant part lookups
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
@@ -184,6 +186,7 @@ export default function PlantSwipe() {
   const [lifeCycleFilters, setLifeCycleFilters] = useState<string[]>([])
   const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
   const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
+  const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -289,7 +292,17 @@ export default function PlantSwipe() {
     const level = getConsentLevel()
     return !level || level === 'rejected'
   })
-  
+
+  // Sync authNeedsCookies when user accepts cookies via the main CookieConsent banner
+  React.useEffect(() => {
+    const handler = () => {
+      setAuthNeedsCookies(false)
+      setAuthError(null)
+    }
+    window.addEventListener('cookie_consent_granted', handler)
+    return () => window.removeEventListener('cookie_consent_granted', handler)
+  }, [])
+
   const [authSubmitting, setAuthSubmitting] = useState(false)
 
   // ── Debounced field validation for signup ──────────────────────────
@@ -445,11 +458,16 @@ export default function PlantSwipe() {
   
   const likedSet = React.useMemo(() => new Set(likedIds), [likedIds])
 
-  // Hydrate liked ids from profile when available
+  // Hydrate liked ids from likes bookmark when user is available
   React.useEffect(() => {
-    const arr = Array.isArray(profile?.liked_plant_ids) ? profile.liked_plant_ids.map(String) : []
-    setLikedIds(arr)
-  }, [profile])
+    if (!user?.id) {
+      setLikedIds([])
+      return
+    }
+    getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
+      setLikedIds(plantIds)
+    }).catch(() => {})
+  }, [user?.id])
 
   // Read search query and filter params from URL when on search page
   React.useEffect(() => {
@@ -457,77 +475,40 @@ export default function PlantSwipe() {
       let hasParams = false
 
       const urlQuery = searchParams.get("q")
-      if (urlQuery && urlQuery !== query) {
-        setQuery(urlQuery)
-        hasParams = true
-      }
-
       const urlType = searchParams.get("type")
-      if (urlType) {
-        setTypeFilter(urlType)
-        hasParams = true
-      }
-
       const urlUsage = searchParams.get("usage")
-      if (urlUsage) {
-        setUsageFilters(urlUsage.split(",").map(u => u.trim()))
-        hasParams = true
-      }
-
       const urlLivingSpace = searchParams.get("livingSpace")
-      if (urlLivingSpace) {
-        setLivingSpaceFilters(urlLivingSpace.split(",").map(s => s.trim().toLowerCase()))
-        hasParams = true
-      }
-
       const urlSeason = searchParams.get("season")
-      if (urlSeason) {
-        setSeasonFilter(urlSeason.toLowerCase())
-        hasParams = true
-      }
-
       const urlMaintenance = searchParams.get("maintenance")
-      if (urlMaintenance) {
-        setMaintenanceFilter(urlMaintenance.toLowerCase())
-        hasParams = true
-      }
-
       const urlHabitat = searchParams.get("habitat")
-      if (urlHabitat) {
-        setHabitatFilters(urlHabitat.split(",").map(h => h.trim().toLowerCase()))
-        hasParams = true
-      }
-
-      if (searchParams.get("petSafe") === "true") {
-        setPetSafe(true)
-        hasParams = true
-      }
-
-      if (searchParams.get("humanSafe") === "true") {
-        setHumanSafe(true)
-        hasParams = true
-      }
-
+      const urlPetSafe = searchParams.get("petSafe")
+      const urlHumanSafe = searchParams.get("humanSafe")
       const urlLifeCycle = searchParams.get("lifeCycle")
-      if (urlLifeCycle) {
-        setLifeCycleFilters(urlLifeCycle.split(",").map(l => l.trim()))
-        hasParams = true
-      }
-
       const urlPlantHabit = searchParams.get("plantHabit")
-      if (urlPlantHabit) {
-        setPlantHabitFilters(urlPlantHabit.split(",").map(h => h.trim()))
-        hasParams = true
-      }
-
       const urlEdiblePart = searchParams.get("ediblePart")
-      if (urlEdiblePart) {
-        setEdiblePartFilters(urlEdiblePart.split(",").map(e => e.trim()))
-        hasParams = true
-      }
+      const urlPlantPart = searchParams.get("plantPart")
 
-      // Clear URL parameters after applying to keep URL clean
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
+
       if (hasParams) {
+        // Reset all filters before applying URL params so previous
+        // filters don't accumulate across navigations
+        setQuery(urlQuery || "")
+        setTypeFilter(urlType || null)
+        setUsageFilters(urlUsage ? urlUsage.split(",").map(u => u.trim()) : [])
+        setLivingSpaceFilters(urlLivingSpace ? urlLivingSpace.split(",").map(s => s.trim().toLowerCase()) : [])
+        setSeasonFilter(urlSeason ? urlSeason.toLowerCase() : null)
+        setMaintenanceFilter(urlMaintenance ? urlMaintenance.toLowerCase() : null)
+        setHabitatFilters(urlHabitat ? urlHabitat.split(",").map(h => h.trim().toLowerCase()) : [])
+        setPetSafe(urlPetSafe === "true")
+        setHumanSafe(urlHumanSafe === "true")
+        setLifeCycleFilters(urlLifeCycle ? urlLifeCycle.split(",").map(l => l.trim()) : [])
+        setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
+        setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
+        setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
+        setColorFilter([])
+
+        // Clear URL parameters after applying to keep URL clean
         setSearchParams({}, { replace: true })
       }
     }
@@ -945,6 +926,7 @@ export default function PlantSwipe() {
       let _cachedLifeCycleSet: Set<string> | undefined
       let _cachedPlantHabitSet: Set<string> | undefined
       let _cachedEdiblePartSet: Set<string> | undefined
+      let _cachedPlantPartSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
       // Type — use plantType or classification fallback
@@ -1021,6 +1003,13 @@ export default function PlantSwipe() {
 
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
+        // Prefer new habitat field (aquatic, terrestrial, epiphytic, etc.)
+        const habitatArr = Array.isArray(p.habitat) ? p.habitat : []
+        if (habitatArr.length > 0) {
+          _cachedHabitats = habitatArr.filter(h => typeof h === 'string').map(h => (h as string).toLowerCase())
+          return _cachedHabitats
+        }
+        // Fallback to legacy climate/habitat fields
         const climateArr = Array.isArray(p.climate) ? p.climate : []
         const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
         const combined = climateArr.length > 0 ? climateArr : legacyHabitat
@@ -1036,9 +1025,10 @@ export default function PlantSwipe() {
           const commonNames = (p.commonNames || p.identity?.commonNames as string[] || []).join(' ')
           const givenNames = (p.givenNames || p.identity?.givenNames as string[] || []).join(' ')
           const synonyms = (p.identity?.synonyms as string[] || []).join(' ')
+          const tags = (p.plantTags || []).join(' ')
           const colors = getColors()
 
-          _cachedSearchString = `${p.name} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${typeLabel || ''} ${usageLabelsLower.join(' ')} ${(p.lifeCycle || []).join(' ')} ${p.family || ''} ${p.variety || ''} ${(p.plantHabit || []).join(' ')}`.toLowerCase()
+          _cachedSearchString = `${p.name} ${p.variety || ''} ${p.scientificNameSpecies || p.scientificName || ''} ${p.meaning || ''} ${colors.join(" ")} ${commonNames} ${synonyms} ${givenNames} ${tags} ${typeLabel || ''} ${usageLabelsLower.join(' ')} ${(p.lifeCycle || []).join(' ')} ${p.family || ''} ${(p.plantHabit || []).join(' ')}`.toLowerCase()
           return _cachedSearchString
         },
         get _normalizedColors() {
@@ -1100,6 +1090,11 @@ export default function PlantSwipe() {
            if (_cachedEdiblePartSet) return _cachedEdiblePartSet
            _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
            return _cachedEdiblePartSet
+        },
+        get _plantPartSet() {
+           if (_cachedPlantPartSet) return _cachedPlantPartSet
+           _cachedPlantPartSet = new Set((p.plantPart || []).map((e: string) => e.toLowerCase()))
+           return _cachedPlantPartSet
         },
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
@@ -1183,7 +1178,8 @@ export default function PlantSwipe() {
     lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
     plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
     ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters])
+    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1191,7 +1187,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
     
     // Pre-compute living space matching logic
     const livingSpaceCount = livingSpaceSet.size
@@ -1296,6 +1292,18 @@ export default function PlantSwipe() {
           for (const e of ediblePartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
         } else {
           for (const e of plantSet) { if (ediblePartSet.has(e)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Plant part filter - OR logic: match if plant has ANY selected plant part (roots, bulbs, stems, etc.)
+      if (plantPartSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._plantPartSet
+        if (plantPartSet.size <= plantSet.size) {
+          for (const e of plantPartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
+        } else {
+          for (const e of plantSet) { if (plantPartSet.has(e)) { hasMatch = true; break } }
         }
         if (!hasMatch) return false
       }
@@ -1409,6 +1417,17 @@ export default function PlantSwipe() {
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
+    // Compare by name, then by variety (no variety first, then alphabetical)
+    const compareNameVariety = (a: Plant, b: Plant) => {
+      const nameCmp = a.name.localeCompare(b.name)
+      if (nameCmp !== 0) return nameCmp
+      // Same name: no variety comes first
+      if (!a.variety && b.variety) return -1
+      if (a.variety && !b.variety) return 1
+      if (a.variety && b.variety) return a.variety.localeCompare(b.variety)
+      return 0
+    }
+
     // For default sort:
     // 1. Featured Month plants first (featured for current month)
     // 2. Regular plants in the middle
@@ -1421,13 +1440,13 @@ export default function PlantSwipe() {
         const aPromoted = a._isPromoted ? -1 : 0
         const bPromoted = b._isPromoted ? -1 : 0
         if (aPromoted !== bPromoted) return aPromoted - bPromoted
-        
+
         const aInProgress = a._isInProgress ? 1 : 0
         const bInProgress = b._isInProgress ? 1 : 0
         if (aInProgress !== bInProgress) return aInProgress - bInProgress
-        
-        // Maintain alphabetical order within same priority
-        return a.name.localeCompare(b.name)
+
+        // Maintain alphabetical order within same priority, then by variety
+        return compareNameVariety(a, b)
       })
       return arr
     }
@@ -1440,21 +1459,21 @@ export default function PlantSwipe() {
       arr.sort((a, b) => {
         const diff = b._createdAtTs - a._createdAtTs
         if (diff !== 0) return diff
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "favorites") {
       arr.sort((a, b) => {
         const la = likedSet.has(a.id) ? 1 : 0
         const lb = likedSet.has(b.id) ? 1 : 0
         if (la !== lb) return lb - la
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "popular") {
       // Use pre-computed popularity - no property access chain on each comparison
       arr.sort((a, b) => {
         const diff = b._popularityLikes - a._popularityLikes
         if (diff !== 0) return diff
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     } else if (searchSort === "impressions" && plantImpressions) {
       // Admin-only: sort by page view impressions (highest first)
@@ -1462,7 +1481,7 @@ export default function PlantSwipe() {
         const ia = plantImpressions[a.id] ?? 0
         const ib = plantImpressions[b.id] ?? 0
         if (ia !== ib) return ib - ia
-        return a.name.localeCompare(b.name)
+        return compareNameVariety(a, b)
       })
     }
     return arr
@@ -1641,31 +1660,18 @@ export default function PlantSwipe() {
   }, [user])
 
   const toggleLiked = React.useCallback(async (plantId: string) => {
-    if (!ensureLoggedIn()) return
-    setLikedIds((prev) => {
-      const has = prev.includes(plantId)
-      const next = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
-      // fire-and-forget sync to Supabase
-      ;(async () => {
-        try {
-          const { error } = await supabase
-            .from('profiles')
-            .update({ liked_plant_ids: next })
-            .eq('id', user!.id)
-          if (error) {
-            // revert on error
-            setLikedIds(prev)
-          } else {
-            // keep server in sync in context eventually
-            refreshProfile().catch(() => {})
-          }
-        } catch {
-          setLikedIds(prev)
-        }
-      })()
-      return next
-    })
-  }, [ensureLoggedIn, user, refreshProfile])
+    if (!ensureLoggedIn() || !user?.id) return
+    const prev = [...likedIds]
+    const has = prev.includes(plantId)
+    const optimistic = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]
+    setLikedIds(optimistic)
+    try {
+      const { plantIds } = await togglePlantInLikesBookmark(user.id, plantId)
+      setLikedIds(plantIds)
+    } catch {
+      setLikedIds(prev)
+    }
+  }, [ensureLoggedIn, user, likedIds])
 
   const handleToggleLike = React.useCallback(() => {
     if (current) toggleLiked(current.id)
@@ -1828,6 +1834,10 @@ export default function PlantSwipe() {
       emailValidation.reset()
       passwordValidation.reset()
       confirmPasswordValidation.reset()
+    } else {
+      // Re-check cookie consent when dialog opens (may have been accepted via main banner)
+      const level = getConsentLevel()
+      setAuthNeedsCookies(!level || level === 'rejected')
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen])
@@ -2989,8 +2999,8 @@ function getPlantTypeLabel(plant: Plant): string | null {
 
 function getPlantUsageLabels(plant: Plant): string[] {
   const labels: string[] = []
-  
-  // Get usage labels from utility field
+
+  // Get usage labels from utility field (DB stores canonical keys like "aromatic", "edible", etc.)
   if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
     plant.utility.forEach((util) => {
       if (util) {
@@ -3001,7 +3011,7 @@ function getPlantUsageLabels(plant: Plant): string[] {
       }
     })
   }
-  
+
   // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
   const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
     ? plant.ediblePart
@@ -3011,16 +3021,13 @@ function getPlantUsageLabels(plant: Plant): string[] {
   if (edibleParts) {
     const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
-      const edibleLabel = formatClassificationLabel('comestible')
+      const edibleLabel = formatClassificationLabel('edible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
         labels.push(edibleLabel)
       }
     }
   }
-  
-  // Aromatic and medicinal are now derived from the utility array (handled above)
-  // No additional boolean-based checks needed
-  
+
   return labels
 }
 

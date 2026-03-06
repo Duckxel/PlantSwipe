@@ -1,5 +1,5 @@
 import React from 'react'
-import { Lock, Globe, Trash2, Edit2, Leaf } from 'lucide-react'
+import { Lock, Globe, Trash2, Edit2, Leaf, Heart } from 'lucide-react'
 import type { Bookmark } from '@/types/bookmark'
 import { useTranslation } from 'react-i18next'
 import { Link } from '@/components/i18n/Link'
@@ -90,10 +90,22 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
         <div className="relative aspect-square mb-3">
           {displayImages.length === 0 ? (
             // Empty state
-            <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-stone-100 via-stone-50 to-white dark:from-stone-800 dark:via-stone-850 dark:to-stone-900 border border-stone-200/60 dark:border-stone-700/40 flex items-center justify-center transition-all duration-300 group-hover:border-stone-300 dark:group-hover:border-stone-600">
+            <div className={`absolute inset-0 rounded-2xl bg-gradient-to-br ${
+              bookmark.is_like
+                ? 'from-rose-50 via-rose-25 to-white dark:from-rose-950/30 dark:via-rose-900/10 dark:to-stone-900 border border-rose-200/60 dark:border-rose-800/40'
+                : 'from-stone-100 via-stone-50 to-white dark:from-stone-800 dark:via-stone-850 dark:to-stone-900 border border-stone-200/60 dark:border-stone-700/40'
+            } flex items-center justify-center transition-all duration-300 group-hover:border-stone-300 dark:group-hover:border-stone-600`}>
               <div className="text-center">
-                <div className="w-14 h-14 rounded-2xl bg-stone-200/50 dark:bg-stone-700/50 flex items-center justify-center mx-auto mb-2 transition-colors group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30">
-                  <Leaf className="h-7 w-7 text-stone-300 dark:text-stone-600 transition-colors group-hover:text-emerald-500 dark:group-hover:text-emerald-400" />
+                <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-2 transition-colors ${
+                  bookmark.is_like
+                    ? 'bg-rose-100/50 dark:bg-rose-900/30 group-hover:bg-rose-200 dark:group-hover:bg-rose-800/40'
+                    : 'bg-stone-200/50 dark:bg-stone-700/50 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30'
+                }`}>
+                  {bookmark.is_like ? (
+                    <Heart className="h-7 w-7 text-rose-400 dark:text-rose-500 transition-colors group-hover:text-rose-500 dark:group-hover:text-rose-400" />
+                  ) : (
+                    <Leaf className="h-7 w-7 text-stone-300 dark:text-stone-600 transition-colors group-hover:text-emerald-500 dark:group-hover:text-emerald-400" />
+                  )}
                 </div>
                 <span className="text-xs text-stone-400 dark:text-stone-500">
                   {hasItems ? `${bookmark.plant_count} plants` : t('bookmarks.empty', { defaultValue: 'No plants' })}
@@ -171,7 +183,8 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
 
         {/* Info Section */}
         <div className="px-0.5">
-          <h3 className="font-semibold text-stone-900 dark:text-stone-100 truncate text-sm leading-tight">
+          <h3 className="font-semibold text-stone-900 dark:text-stone-100 truncate text-sm leading-tight flex items-center gap-1.5">
+            {bookmark.is_like && <Heart className="h-3.5 w-3.5 text-rose-500 flex-shrink-0" />}
             {bookmark.name}
           </h3>
           <div className="flex items-center gap-1.5 mt-0.5 text-[11px] text-stone-500 dark:text-stone-400">
@@ -186,17 +199,17 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
           </div>
         </div>
 
-        {/* Owner Actions */}
-        {isOwner && (
-          <div 
+        {/* Owner Actions - Not shown for Likes bookmark (cannot edit/delete) */}
+        {isOwner && !bookmark.is_like && (
+          <div
             className="absolute top-2 right-2 flex gap-1 transition-all duration-200"
-            style={{ 
+            style={{
               zIndex: 20,
               opacity: isHovered ? 1 : 0,
               transform: isHovered ? 'translateY(0)' : 'translateY(-4px)',
             }}
           >
-            <button 
+            <button
               type="button"
               onClick={handleEdit}
               className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-white dark:hover:bg-black text-stone-600 dark:text-stone-300 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
@@ -204,7 +217,7 @@ export const BookmarkCard: React.FC<BookmarkCardProps> = ({ bookmark, isOwner, o
             >
               <Edit2 className="h-3 w-3" />
             </button>
-            <button 
+            <button
               type="button"
               onClick={handleDelete}
               className="p-1.5 rounded-full bg-white/95 dark:bg-black/80 hover:bg-red-50 dark:hover:bg-red-900/50 text-red-500 dark:text-red-400 shadow-md backdrop-blur-sm transition-colors ring-1 ring-black/5 dark:ring-white/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"

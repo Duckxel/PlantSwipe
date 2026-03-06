@@ -5,7 +5,8 @@
       "Bash(xargs grep:*)",
       "Bash(python3:*)",
       "Bash(node:*)",
-      "mcp__claude_ai_Supabase__execute_sql"
+      "mcp__Supabase__list_tables",
+      "mcp__Supabase__execute_sql"
     ]
   }
 }
