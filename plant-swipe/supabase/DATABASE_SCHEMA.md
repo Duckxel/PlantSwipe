@@ -275,8 +275,8 @@ bug_points                  INTEGER DEFAULT 0
 job                         TEXT                    -- Optional job/occupation displayed on public profile
 profile_link                TEXT                    -- Optional external URL displayed on public profile
 show_country                BOOLEAN DEFAULT true    -- Whether to display country on public profile
-liked_plant_ids             TEXT[] DEFAULT '{}'     -- DEPRECATED: Likes now stored via bookmarks with is_like=true
 is_admin                    BOOLEAN DEFAULT false
+-- NOTE: liked_plant_ids column has been DROPPED — likes are now stored via bookmarks with is_like=true
 -- GDPR fields
 marketing_consent           BOOLEAN DEFAULT false
 marketing_consent_date      TIMESTAMPTZ

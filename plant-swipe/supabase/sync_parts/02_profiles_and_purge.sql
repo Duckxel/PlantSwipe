@@ -2,11 +2,12 @@
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   display_name text not null check (length(trim(both from display_name)) >= 1 and length(trim(both from display_name)) <= 64),
-  liked_plant_ids text[] not null default '{}',
   is_admin boolean not null default false
 );
 -- Remove legacy avatar_url column if present
 alter table if exists public.profiles drop column if exists avatar_url;
+-- Remove deprecated liked_plant_ids column (likes now stored in bookmarks with is_like=true)
+alter table if exists public.profiles drop column if exists liked_plant_ids;
 -- New public profile fields
 alter table if exists public.profiles add column if not exists username text;
 alter table if exists public.profiles add column if not exists country text;
@@ -192,19 +193,18 @@ end $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
 GRANT SELECT ON public.profiles TO anon;
 
--- Aggregated like counts (security definer to bypass profiles RLS)
+-- Aggregated like counts from bookmarks (security definer to bypass RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
 returns table (plant_id text, likes bigint)
 language sql
 security definer
 set search_path = public
 as $$
-  select liked_id as plant_id, count(*)::bigint as likes
-  from public.profiles p
-  cross join lateral unnest(p.liked_plant_ids) as liked_id
-  where coalesce(trim(liked_id), '') <> ''
-  group by liked_id
-  order by count(*) desc, liked_id asc
+  select bi.plant_id, count(*)::bigint as likes
+  from public.bookmark_items bi
+  join public.bookmarks b on b.id = bi.bookmark_id and b.is_like = true
+  group by bi.plant_id
+  order by count(*) desc, bi.plant_id asc
   limit greatest(coalesce(limit_count, 5), 0);
 $$;
 grant execute on function public.top_liked_plants(integer) to anon, authenticated;
