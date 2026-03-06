@@ -424,7 +424,6 @@ User profile information.
 | `bio` | TEXT | Profile biography |
 | `avatar_url` | TEXT | Avatar image URL |
 | `is_admin` | BOOLEAN | Admin flag |
-| `liked_plant_ids` | UUID[] | Array of liked plant IDs |
 | `accent_key` | TEXT | UI accent color preference |
 | `is_private` | BOOLEAN | Privacy setting |
 | `disable_friend_requests` | BOOLEAN | Friend request control |
@@ -519,27 +518,28 @@ Friend request management.
 
 ### `bookmarks`
 
-User bookmark collections.
+User bookmark collections. Each user gets one special "Likes" bookmark (`is_like = true`) on signup — always private, cannot be deleted or duplicated.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | Primary key |
-| `user_id` | UUID | Foreign key to `profiles` |
+| `user_id` | UUID | Foreign key to `auth.users` |
 | `name` | TEXT | Bookmark collection name |
-| `description` | TEXT | Collection description |
-| `is_public` | BOOLEAN | Public visibility |
+| `visibility` | TEXT | `public` or `private` |
+| `is_like` | BOOLEAN | True for the special Likes bookmark (one per user) |
 | `created_at` | TIMESTAMP | Creation timestamp |
+| `updated_at` | TIMESTAMP | Last update timestamp |
 
-### `bookmark_plants`
+### `bookmark_items`
 
-Plants in bookmark collections.
+Plants saved to bookmark collections.
 
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | Primary key |
 | `bookmark_id` | UUID | Foreign key to `bookmarks` |
-| `plant_id` | UUID | Foreign key to `plants` |
-| `added_at` | TIMESTAMP | When added |
+| `plant_id` | TEXT | Plant identifier |
+| `created_at` | TIMESTAMP | When added |
 
 </details>
 
