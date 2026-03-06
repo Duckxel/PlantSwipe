@@ -24,21 +24,21 @@ interface Category {
 }
 
 const categories: Category[] = [
-  { key: "tree", params: "?type=Tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
-  { key: "shrub", params: "?type=Shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
-  { key: "fruitTree", params: "?type=Tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
-  { key: "bamboo", params: "?type=Bambu", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
-  { key: "cactusSucculent", params: "?type=Cactus,Succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
-  { key: "herbaceous", params: "?plantHabit=shrubby,bushy,erect,upright", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
+  { key: "tree", params: "?type=tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
+  { key: "shrub", params: "?type=shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
+  { key: "fruitTree", params: "?type=tree&usage=Comestible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
+  { key: "bamboo", params: "?type=grass", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
+  { key: "cactusSucculent", params: "?type=succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
+  { key: "herbaceous", params: "?type=herb,grass", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
   { key: "fruitPlant", params: "?usage=Comestible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible produce" },
   { key: "aromatic", params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
   { key: "medicinal", params: "?usage=Medicinal", defaultName: "Medicinal Plant", defaultDesc: "Plants with therapeutic properties" },
-  { key: "climbing", params: "?plantHabit=climbing,liana,trailing", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
+  { key: "climbing", params: "?type=climber", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
   { key: "perennial", params: "?lifeCycle=perennial,succulent_perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
-  { key: "bulb", params: "?ediblePart=bulb", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
+  { key: "bulb", params: "?plantPart=bulbs", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Indoor Plant", defaultDesc: "Plants suited for indoor living spaces" },
-  { key: "fern", params: "?q=fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
-  { key: "aquatic", params: "?q=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
+  { key: "fern", params: "?type=fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
+  { key: "aquatic", params: "?habitat=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
 ]
 
 interface CategoryPlantPreview {
@@ -51,6 +51,8 @@ type PlantRow = {
   id: string
   name: string
   plant_type: string | null
+  plant_part: string[] | null
+  habitat: string[] | null
   utility: string[] | null
   plant_habit: string[] | null
   life_cycle: string[] | null
@@ -97,19 +99,25 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     if (!parts.some((p) => plantParts.includes(p))) return false
   }
 
+  const plantPart = sp.get("plantPart")
+  if (plantPart) {
+    const parts = plantPart.split(",").map((e) => e.trim().toLowerCase())
+    const plantParts = (plant.plant_part || []).map((e) => e.toLowerCase())
+    if (!parts.some((p) => plantParts.includes(p))) return false
+  }
+
+  const habitat = sp.get("habitat")
+  if (habitat) {
+    const habitats = habitat.split(",").map((h) => h.trim().toLowerCase())
+    const plantHabitats = (plant.habitat || []).map((h) => h.toLowerCase())
+    if (!habitats.some((h) => plantHabitats.includes(h))) return false
+  }
+
   const livingSpace = sp.get("livingSpace")
   if (livingSpace) {
     const spaces = livingSpace.split(",").map((s) => s.trim().toLowerCase())
     const plantSpaces = (plant.living_space || []).map((s) => s.toLowerCase())
     if (!spaces.some((s) => plantSpaces.includes(s))) return false
-  }
-
-  const q = sp.get("q")
-  if (q) {
-    const query = q.toLowerCase()
-    const name = (plant.name || "").toLowerCase()
-    const scientific = (plant.scientific_name_species || "").toLowerCase()
-    if (!name.includes(query) && !scientific.includes(query)) return false
   }
 
   return true
@@ -131,7 +139,7 @@ export default function CategoriesPage() {
       const { data: plants } = await supabase
         .from("plants")
         .select(
-          "id, name, plant_type, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
+          "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
         )
         .eq("plant_images.use", "primary")
 

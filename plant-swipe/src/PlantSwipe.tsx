@@ -102,6 +102,7 @@ type PreparedPlant = Plant & {
   _lifeCycleSet: Set<string>       // O(1) life cycle lookups
   _plantHabitSet: Set<string>      // O(1) plant habit lookups
   _ediblePartSet: Set<string>      // O(1) edible part lookups
+  _plantPartSet: Set<string>       // O(1) plant part lookups
   _createdAtTs: number             // Pre-parsed timestamp for sorting
   _popularityLikes: number         // Pre-extracted popularity for sorting
   _hasImage: boolean               // Pre-computed image availability
@@ -184,6 +185,7 @@ export default function PlantSwipe() {
   const [lifeCycleFilters, setLifeCycleFilters] = useState<string[]>([])
   const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
   const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
+  const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -486,6 +488,7 @@ export default function PlantSwipe() {
         setLifeCycleFilters(urlLifeCycle ? urlLifeCycle.split(",").map(l => l.trim()) : [])
         setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
         setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
+        setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
         setColorFilter([])
 
         // Clear URL parameters after applying to keep URL clean
@@ -906,6 +909,7 @@ export default function PlantSwipe() {
       let _cachedLifeCycleSet: Set<string> | undefined
       let _cachedPlantHabitSet: Set<string> | undefined
       let _cachedEdiblePartSet: Set<string> | undefined
+      let _cachedPlantPartSet: Set<string> | undefined
       let _cachedSearchString: string | undefined
 
       // Type — use plantType or classification fallback
@@ -982,6 +986,13 @@ export default function PlantSwipe() {
 
       const getHabitats = () => {
         if (_cachedHabitats) return _cachedHabitats
+        // Prefer new habitat field (aquatic, terrestrial, epiphytic, etc.)
+        const habitatArr = Array.isArray(p.habitat) ? p.habitat : []
+        if (habitatArr.length > 0) {
+          _cachedHabitats = habitatArr.filter((h): h is string => typeof h === 'string').map(h => h.toLowerCase())
+          return _cachedHabitats
+        }
+        // Fallback to legacy climate/habitat fields
         const climateArr = Array.isArray(p.climate) ? p.climate : []
         const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
         const combined = climateArr.length > 0 ? climateArr : legacyHabitat
@@ -1062,6 +1073,11 @@ export default function PlantSwipe() {
            if (_cachedEdiblePartSet) return _cachedEdiblePartSet
            _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
            return _cachedEdiblePartSet
+        },
+        get _plantPartSet() {
+           if (_cachedPlantPartSet) return _cachedPlantPartSet
+           _cachedPlantPartSet = new Set((p.plantPart || []).map((e: string) => e.toLowerCase()))
+           return _cachedPlantPartSet
         },
         _createdAtTs: createdAtTsFinal,
         _popularityLikes: popularityLikes,
@@ -1145,7 +1161,8 @@ export default function PlantSwipe() {
     lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
     plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
     ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters])
+    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1153,7 +1170,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
     
     // Pre-compute living space matching logic
     const livingSpaceCount = livingSpaceSet.size
@@ -1258,6 +1275,18 @@ export default function PlantSwipe() {
           for (const e of ediblePartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
         } else {
           for (const e of plantSet) { if (ediblePartSet.has(e)) { hasMatch = true; break } }
+        }
+        if (!hasMatch) return false
+      }
+
+      // Plant part filter - OR logic: match if plant has ANY selected plant part (roots, bulbs, stems, etc.)
+      if (plantPartSet.size > 0) {
+        let hasMatch = false
+        const plantSet = p._plantPartSet
+        if (plantPartSet.size <= plantSet.size) {
+          for (const e of plantPartSet) { if (plantSet.has(e)) { hasMatch = true; break } }
+        } else {
+          for (const e of plantSet) { if (plantPartSet.has(e)) { hasMatch = true; break } }
         }
         if (!hasMatch) return false
       }

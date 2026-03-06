@@ -31638,21 +31638,21 @@ async function generateCrawlerHtml(req, pagePath) {
       description = tr.categoriesDesc
 
       const categoryItems = [
-        { name: tr.catTree, desc: tr.catTreeDesc, params: '?type=Tree', icon: '🌳' },
-        { name: tr.catShrub, desc: tr.catShrubDesc, params: '?type=Shrub', icon: '🌿' },
-        { name: tr.catFruitTree, desc: tr.catFruitTreeDesc, params: '?type=Tree&usage=Comestible', icon: '🍎' },
-        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?type=Bambu', icon: '🎋' },
-        { name: tr.catCactus, desc: tr.catCactusDesc, params: '?type=Cactus,Succulent', icon: '🌵' },
-        { name: tr.catHerbaceous, desc: tr.catHerbaceousDesc, params: '?plantHabit=shrubby,bushy,erect,upright', icon: '🌸' },
+        { name: tr.catTree, desc: tr.catTreeDesc, params: '?type=tree', icon: '🌳' },
+        { name: tr.catShrub, desc: tr.catShrubDesc, params: '?type=shrub', icon: '🌿' },
+        { name: tr.catFruitTree, desc: tr.catFruitTreeDesc, params: '?type=tree&usage=Comestible', icon: '🍎' },
+        { name: tr.catBamboo, desc: tr.catBambooDesc, params: '?type=grass', icon: '🎋' },
+        { name: tr.catCactus, desc: tr.catCactusDesc, params: '?type=succulent', icon: '🌵' },
+        { name: tr.catHerbaceous, desc: tr.catHerbaceousDesc, params: '?type=herb,grass', icon: '🌸' },
         { name: tr.catFruit, desc: tr.catFruitDesc, params: '?usage=Comestible', icon: '🍒' },
         { name: tr.catAromatic, desc: tr.catAromaticDesc, params: '?usage=Aromatic', icon: '🌬️' },
         { name: tr.catMedicinal, desc: tr.catMedicinalDesc, params: '?usage=Medicinal', icon: '⚕️' },
-        { name: tr.catClimbing, desc: tr.catClimbingDesc, params: '?plantHabit=climbing,liana,trailing', icon: '🧗' },
+        { name: tr.catClimbing, desc: tr.catClimbingDesc, params: '?type=climber', icon: '🧗' },
         { name: tr.catPerennial, desc: tr.catPerennialDesc, params: '?lifeCycle=perennial,succulent_perennial', icon: '🔄' },
-        { name: tr.catBulb, desc: tr.catBulbDesc, params: '?ediblePart=bulb', icon: '🧅' },
+        { name: tr.catBulb, desc: tr.catBulbDesc, params: '?plantPart=bulbs', icon: '🧅' },
         { name: tr.catIndoor, desc: tr.catIndoorDesc, params: '?livingSpace=indoor', icon: '🏠' },
-        { name: tr.catFern, desc: tr.catFernDesc, params: '?q=fern', icon: '🌿' },
-        { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?q=aquatic', icon: '💧' },
+        { name: tr.catFern, desc: tr.catFernDesc, params: '?type=fern', icon: '🌿' },
+        { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?habitat=aquatic', icon: '💧' },
       ]
 
       pageContent = `
