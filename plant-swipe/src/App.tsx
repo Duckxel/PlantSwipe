@@ -83,11 +83,11 @@ function AppShell() {
 function LanguageRoutes() {
   return (
     <Routes>
-      {/* Routes without language prefix (default language) */}
+      {/* Routes without language prefix (default/domain language) */}
       <Route path="/*" element={<AppShell />} />
-      
-      {/* Language-prefixed routes */}
-      {SUPPORTED_LANGUAGES.filter(lang => lang !== DEFAULT_LANGUAGE).map((lang) => (
+
+      {/* Language-prefixed routes (all languages, including /en for explicit override) */}
+      {SUPPORTED_LANGUAGES.map((lang) => (
         <Route
           key={lang}
           path={`/${lang}/*`}

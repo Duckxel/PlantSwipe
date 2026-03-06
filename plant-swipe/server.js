@@ -29951,12 +29951,17 @@ async function generateCrawlerHtml(req, pagePath) {
   const supportedLangs = ['en', 'fr']
   // All recognized 2-letter language codes (strip from path, default to 'en' if not fully supported)
   const allLangPrefixes = ['en', 'fr', 'de', 'es', 'it', 'pt', 'nl', 'pl', 'ru', 'ja', 'ko', 'zh', 'ar', 'hi', 'tr', 'vi', 'th', 'sv', 'da', 'no', 'fi', 'cs', 'hu', 'ro', 'uk', 'el', 'he', 'id', 'ms', 'tl']
-  let detectedLang = 'en' // Default to English
+  // Default language: use domain-based language if on a French domain, otherwise English
+  const xDefaultLang = req.headers['x-default-language']
+  const domainDefaultLang = (typeof xDefaultLang === 'string' && xDefaultLang.trim() && supportedLangs.includes(xDefaultLang.trim()))
+    ? xDefaultLang.trim()
+    : (FRENCH_DOMAIN_ENABLED && (req.hostname || req.headers.host || '').toLowerCase().endsWith('.fr') ? 'fr' : 'en')
+  let detectedLang = domainDefaultLang
   let effectivePath = pathParts
   if (pathParts.length > 0 && allLangPrefixes.includes(pathParts[0].toLowerCase())) {
     const langPrefix = pathParts[0].toLowerCase()
-    // Use the language if fully supported, otherwise default to English
-    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : 'en'
+    // Use the language if fully supported, otherwise use domain default
+    detectedLang = supportedLangs.includes(langPrefix) ? langPrefix : domainDefaultLang
     effectivePath = pathParts.slice(1)
   }
 
