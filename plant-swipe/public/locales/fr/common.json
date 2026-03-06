@@ -742,7 +742,8 @@
       "odorous": "Odorant",
       "climbing": "Grimpant",
       "cereal": "Céréale",
-      "spice": "Épice"
+      "spice": "Épice",
+      "infusion": "Infusion"
     }
   },
   "requestPlant": {

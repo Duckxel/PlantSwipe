@@ -739,10 +739,11 @@
       "produce_fruit": "Fruit Producing",
       "aromatic": "Aromatic",
       "medicinal": "Medicinal",
-      "odorous": "Odorous",
+      "odorous": "Fragrant",
       "climbing": "Climbing",
       "cereal": "Cereal",
-      "spice": "Spice"
+      "spice": "Spice",
+      "infusion": "Infusion"
     }
   },
   "requestPlant": {

@@ -2846,21 +2846,53 @@ function getPlantTypeLabel(plant: Plant): string | null {
   return null
 }
 
+// Normalize mixed EN/FR utility values from the database to canonical English keys.
+// The DB contains inconsistent values (e.g. "aromatique" and "aromatic" for the same thing).
+const UTILITY_ALIAS_MAP: Record<string, string> = {
+  // FR → canonical EN
+  aromatique: 'aromatic',
+  comestible: 'comestible',
+  médicinal: 'medicinal',
+  medicinal: 'medicinal',
+  ornemental: 'ornemental',
+  ornamental: 'ornemental',
+  céréale: 'cereal',
+  cereal: 'cereal',
+  épice: 'spice',
+  spice: 'spice',
+  grimpant: 'climbing',
+  climbing: 'climbing',
+  odorant: 'odorous',
+  odorous: 'odorous',
+  fragrant: 'odorous',
+  // EN synonyms
+  edible: 'comestible',
+  aromatic: 'aromatic',
+  infusion: 'infusion',
+  produce_fruit: 'produce_fruit',
+  'produce fruit': 'produce_fruit',
+  fruitier: 'produce_fruit',
+  fruitière: 'produce_fruit',
+}
+
+function normalizeUtilityKey(raw: string): string {
+  const lower = raw.toLowerCase().trim()
+  return UTILITY_ALIAS_MAP[lower] || lower
+}
+
 function getPlantUsageLabels(plant: Plant): string[] {
-  const labels: string[] = []
-  
+  const keys = new Set<string>()
+
   // Get usage labels from utility field
   if (plant.utility && Array.isArray(plant.utility) && plant.utility.length > 0) {
     plant.utility.forEach((util) => {
       if (util) {
-        const formatted = formatClassificationLabel(util)
-        if (formatted && !labels.includes(formatted)) {
-          labels.push(formatted)
-        }
+        const key = normalizeUtilityKey(util)
+        if (key) keys.add(key)
       }
     })
   }
-  
+
   // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
   const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
     ? plant.ediblePart
@@ -2870,16 +2902,10 @@ function getPlantUsageLabels(plant: Plant): string[] {
   if (edibleParts) {
     const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
     if (hasEdible) {
-      const edibleLabel = formatClassificationLabel('comestible')
-      if (edibleLabel && !labels.includes(edibleLabel)) {
-        labels.push(edibleLabel)
-      }
+      keys.add('comestible')
     }
   }
-  
-  // Aromatic and medicinal are now derived from the utility array (handled above)
-  // No additional boolean-based checks needed
-  
-  return labels
+
+  return Array.from(keys).map(k => formatClassificationLabel(k))
 }
 
