@@ -250,6 +250,11 @@ function mapDbRowToPlant(
 
     // Display
     images,
+    photos: images.map((img) => ({
+      url: img.link || '',
+      isPrimary: img.use === 'primary',
+      isVertical: false,
+    })),
     image: primaryImage,
     colors: colorObjects,
     colorNames: colorObjects.map(c => c.name),

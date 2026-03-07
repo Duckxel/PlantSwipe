@@ -73,7 +73,6 @@ import {
 import { getAccentOption } from "@/lib/accent";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/lib/i18nRouting";
-import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
 import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
@@ -1922,121 +1921,120 @@ export const GardenDashboardPage: React.FC = () => {
   const plantCacheRef = React.useRef<Map<string, Plant>>(new Map());
 
   // Async search for the SearchItem component: returns SearchItemOption[] with plant images
+  // Uses the same simple approach as the working CompanionSelector in PlantProfileForm
   const searchPlantsForGarden = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
-    const queryLower = query.toLowerCase().trim();
-    if (!queryLower) return [];
+    const trimmed = query.trim();
+    let plantResults: { id: string; name: string; variety?: string; scientificName?: string }[] = [];
 
-    // Search in base plants table by name or scientific name
-    const { data: basePlants, error: baseError } = await supabase
-      .from("plants")
-      .select("id")
-      .or(`name.ilike.%${queryLower}%,scientific_name_species.ilike.%${queryLower}%`)
-      .limit(20);
+    if (currentLang !== 'en') {
+      // Search translations table for non-English languages
+      let q = supabase
+        .from('plant_translations')
+        .select('plant_id, name, variety')
+        .eq('language', currentLang)
+        .order('name')
+        .limit(30);
+      if (trimmed) q = q.or(`name.ilike.%${trimmed}%,variety.ilike.%${trimmed}%`);
+      const { data } = await q;
+      if (data) {
+        plantResults = data.map((t) => ({
+          id: t.plant_id as string,
+          name: t.name as string,
+          variety: t.variety as string | undefined,
+        }));
+      }
+    } else {
+      // Search plants table by name for English
+      let q = supabase.from('plants').select('id, name, scientific_name_species').order('name').limit(30);
+      if (trimmed) q = q.ilike('name', `%${trimmed}%`);
+      const { data } = await q;
+      if (data) {
+        plantResults = data.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string,
+          scientificName: p.scientific_name_species as string | undefined,
+        }));
+      }
 
-    // Search in translations table by name or variety
-    const { data: translatedPlants, error: transError } = await supabase
-      .from("plant_translations")
-      .select("plant_id, common_names")
-      .eq("language", currentLang)
-      .or(`name.ilike.%${queryLower}%,variety.ilike.%${queryLower}%`)
-      .limit(30);
-
-    // Also fetch translations that might match by common_names (JSONB array — needs client-side filter)
-    const { data: commonNameMatches } = await supabase
-      .from("plant_translations")
-      .select("plant_id, common_names")
-      .eq("language", currentLang)
-      .limit(200);
-
-    if (baseError || transError) {
-      console.error("Error searching plants:", baseError || transError);
-      return [];
-    }
-
-    // Collect IDs from direct matches
-    const allPlantIds = new Set([
-      ...(basePlants || []).map((p: { id: string }) => p.id),
-      ...(translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
-    ]);
-
-    // Add IDs from common_names matches (client-side filter on JSONB array)
-    if (commonNameMatches) {
-      for (const row of commonNameMatches) {
-        const names = Array.isArray(row.common_names) ? row.common_names : [];
-        if (names.some((n: unknown) => typeof n === 'string' && n.toLowerCase().includes(queryLower))) {
-          allPlantIds.add(row.plant_id as string);
+      // Also search English translations by variety
+      if (trimmed) {
+        const { data: varietyData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .eq('language', 'en')
+          .ilike('variety', `%${trimmed}%`)
+          .limit(20);
+        if (varietyData) {
+          const existingIds = new Set(plantResults.map(p => p.id));
+          for (const t of varietyData) {
+            if (!existingIds.has(t.plant_id as string)) {
+              plantResults.push({
+                id: t.plant_id as string,
+                name: t.name as string,
+                variety: t.variety as string | undefined,
+              });
+            }
+          }
         }
       }
     }
 
-    if (allPlantIds.size === 0) return [];
+    if (plantResults.length === 0) return [];
 
-    const { data: fullPlants, error: fullError } = await supabase
-      .from("plants")
-      .select("*, plant_images (id,link,use)")
-      .in("id", Array.from(allPlantIds))
-      .limit(20);
+    const resultIds = plantResults.map(p => p.id);
 
-    if (fullError || !fullPlants) return [];
-
-    const plantIds = fullPlants.map((p: { id: string }) => p.id);
-    const { data: translations } = await supabase
-      .from("plant_translations")
-      .select("*")
-      .eq("language", currentLang)
-      .in("plant_id", plantIds);
-
-    const translationMap = new Map<string, { plant_id: string }>();
-    if (translations) {
-      translations.forEach((t: { plant_id: string }) => {
-        translationMap.set(t.plant_id, t);
+    // Fetch primary images for results
+    const imageMap = new Map<string, string>();
+    const { data: imagesData } = await supabase
+      .from('plant_images')
+      .select('plant_id, link')
+      .in('plant_id', resultIds)
+      .eq('use', 'primary');
+    if (imagesData) {
+      imagesData.forEach((img: { plant_id: string; link: string }) => {
+        if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link);
       });
     }
 
-    const results: SearchItemOption[] = [];
-    for (const p of fullPlants) {
-      const translation = translationMap.get(p.id) || null;
-      const images = Array.isArray(p.plant_images) ? p.plant_images : [];
-      const photos = images.map((img: { link?: string; use?: string }) => ({
-        url: img.link || '',
-        isPrimary: img.use === 'primary',
-        isVertical: false,
-      }));
-      const primaryImageUrl =
-        images.find((img: { use?: string }) => img.use === 'primary')?.link ||
-        images.find((img: { use?: string }) => img.use === 'discovery')?.link ||
-        images[0]?.link ||
-        p.image_url ||
-        p.image;
-      const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl };
-      const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
-
-      // Match on name, variety, scientific name, or common names
-      const nameMatch = mergedPlant.name.toLowerCase().includes(queryLower);
-      const varietyMatch = mergedPlant.variety?.toLowerCase().includes(queryLower);
-      const sciMatch = (mergedPlant.scientificNameSpecies || mergedPlant.scientificName || '').toLowerCase().includes(queryLower);
-      const commonMatch = (mergedPlant.commonNames || mergedPlant.givenNames || []).some(
-        (n: string) => n.toLowerCase().includes(queryLower)
-      );
-      if (!nameMatch && !varietyMatch && !sciMatch && !commonMatch) continue;
-
-      // Cache the full Plant object for later retrieval on select
-      plantCacheRef.current.set(String(mergedPlant.id), mergedPlant);
-
-      const varietyLabel = mergedPlant.variety ? ` '${mergedPlant.variety}'` : '';
-      results.push({
-        id: String(mergedPlant.id),
-        label: mergedPlant.name + varietyLabel,
-        description: mergedPlant.identifiers?.scientificName || mergedPlant.scientificName || null,
-        icon: primaryImageUrl ? (
-          <img src={primaryImageUrl} alt="" className="w-full h-full object-cover rounded-lg" />
-        ) : (
-          <Sprout className="h-5 w-5 text-emerald-400/60" />
-        ),
-      });
-      if (results.length >= 10) break;
+    // For English path, also fetch variety from translations if not already present
+    if (currentLang === 'en') {
+      const needsVariety = plantResults.filter(p => !p.variety).map(p => p.id);
+      if (needsVariety.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', 'en')
+          .in('plant_id', needsVariety);
+        if (varData) {
+          const varMap = new Map<string, string>();
+          varData.forEach((v) => { if (v.variety) varMap.set(v.plant_id as string, v.variety as string); });
+          plantResults.forEach(p => { if (!p.variety && varMap.has(p.id)) p.variety = varMap.get(p.id); });
+        }
+      }
     }
-    return results;
+
+    // Cache minimal Plant objects for later retrieval on select
+    for (const p of plantResults) {
+      const imageUrl = imageMap.get(p.id);
+      plantCacheRef.current.set(p.id, {
+        id: p.id,
+        name: p.name,
+        variety: p.variety,
+        scientificName: p.scientificName,
+        image_url: imageUrl,
+      } as Plant);
+    }
+
+    // Use description to store image URL (for renderItem), meta for variety
+    return plantResults.map((p) => {
+      const imageUrl = imageMap.get(p.id);
+      return {
+        id: p.id,
+        label: p.name,
+        description: imageUrl || null,
+        meta: p.variety ? `'${p.variety}'` : null,
+      };
+    });
   }, [currentLang]);
 
   const loadFriends = React.useCallback(async () => {
@@ -3255,7 +3253,7 @@ export const GardenDashboardPage: React.FC = () => {
           {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
 
           {/* Add Plant Dialog */}
-          <Dialog open={addOpen} onOpenChange={setAddOpen}>
+          <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) setSelectedPlant(null); }}>
               <DialogContent
                 className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
                 aria-describedby={undefined}
@@ -3281,12 +3279,31 @@ export const GardenDashboardPage: React.FC = () => {
                   title={t("gardenDashboard.plantsSection.searchPlants")}
                   searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
                   emptyMessage={t("gardenDashboard.plantsSection.noResults")}
-                  priorityZIndex={60}
+                  priorityZIndex={100}
                   initialOption={selectedPlant ? {
                     id: selectedPlant.id,
                     label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
-                    description: selectedPlant.identifiers?.scientificName || selectedPlant.scientificName || null,
+                    description: null,
                   } : null}
+                  renderItem={(option) => (
+                    <div className="flex flex-col w-full h-full">
+                      <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+                        {option.description ? (
+                          <img src={option.description} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-400">
+                            <Leaf className="h-8 w-8" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
+                        <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+                        {option.meta && (
+                          <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 />
                 <div className="flex justify-end gap-2 pt-2">
                   <Button

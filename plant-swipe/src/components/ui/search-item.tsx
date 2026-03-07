@@ -42,12 +42,21 @@ export interface SearchItemProps {
   multiSelect?: boolean
   /** Currently selected option ids (multi-select mode) */
   values?: string[]
-  /** Called when the user confirms multi-selection */
+  /**
+   * Called when the user confirms multi-selection.
+   * Receives the **full final set** of selected options (existing kept + newly added, minus removed).
+   */
   onMultiSelect?: (options: SearchItemOption[]) => void
-  /** IDs to show as disabled (e.g. already-added items, current item) */
+  /** IDs to show as disabled (e.g. current plant — cannot be selected at all) */
   disabledIds?: Set<string>
   /** Label for the confirm button in multi-select mode */
   confirmLabel?: string
+  /**
+   * Pre-populated option data for already-selected items (multi-select mode).
+   * These are merged into the display list so selected items always appear
+   * at the top even if the async search didn't return them.
+   */
+  selectedOptions?: SearchItemOption[]
 
   // ---- Data source (choose ONE) ----
 
@@ -131,6 +140,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       onMultiSelect,
       disabledIds,
       confirmLabel = "Add Selected",
+      selectedOptions = [],
       options: staticOptions,
       onSearch,
       filterFn = defaultFilter,
@@ -154,8 +164,8 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     const [asyncResults, setAsyncResults] = React.useState<SearchItemOption[]>([])
     const [asyncLoading, setAsyncLoading] = React.useState(false)
     const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
-    // Multi-select: local pending selection (not yet confirmed)
-    const [pendingIds, setPendingIds] = React.useState<Set<string>>(new Set())
+    // Multi-select: working set of selected IDs (initialized from `values` on open)
+    const [workingIds, setWorkingIds] = React.useState<Set<string>>(new Set())
 
     // In static mode keep a reference to all options for lookup
     const allOptions = staticOptions ?? asyncResults
@@ -171,13 +181,28 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       [value, allOptions, initialOption, multiSelect],
     )
 
-    // ------ Filtered list (static mode) ------
+    // ------ Filtered & merged list ------
     const filteredOptions = React.useMemo(() => {
-      if (onSearch) return asyncResults // async mode – server already filtered
-      if (!staticOptions) return []
-      if (!search.trim()) return staticOptions
-      return staticOptions.filter((o) => filterFn(o, search))
-    }, [onSearch, staticOptions, asyncResults, search, filterFn])
+      let result: SearchItemOption[]
+      if (onSearch) result = asyncResults
+      else if (!staticOptions) result = []
+      else if (!search.trim()) result = staticOptions
+      else result = staticOptions.filter((o) => filterFn(o, search))
+
+      // In multi-select mode, merge selectedOptions and sort selected to top
+      if (multiSelect && selectedOptions.length > 0) {
+        // Merge: add selectedOptions that aren't already in the result
+        const resultIds = new Set(result.map((o) => o.id))
+        const missing = selectedOptions.filter((o) => !resultIds.has(o.id))
+        if (missing.length > 0) result = [...result, ...missing]
+
+        // Sort: selected items first
+        const selected = result.filter((o) => workingIds.has(o.id))
+        const rest = result.filter((o) => !workingIds.has(o.id))
+        return [...selected, ...rest]
+      }
+      return result
+    }, [onSearch, staticOptions, asyncResults, search, filterFn, multiSelect, selectedOptions, workingIds])
 
     // ------ Async search effect ------
     React.useEffect(() => {
@@ -212,17 +237,20 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
-    // Reset search + pending selection when dialog closes
+    // Initialize working set from `values` when dialog opens; reset when it closes
     React.useEffect(() => {
-      if (!open) {
+      if (open) {
+        setWorkingIds(new Set(values))
+      } else {
         setSearch("")
-        setPendingIds(new Set())
+        setWorkingIds(new Set())
       }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
     // ------ Multi-select helpers ------
-    const togglePending = (id: string) => {
-      setPendingIds(prev => {
+    const toggleWorking = (id: string) => {
+      setWorkingIds(prev => {
         const next = new Set(prev)
         if (next.has(id)) next.delete(id)
         else next.add(id)
@@ -230,12 +258,28 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       })
     }
 
+    // Build a map of all known options for lookup during confirm
+    const optionMap = React.useMemo(() => {
+      const map = new Map<string, SearchItemOption>()
+      for (const o of selectedOptions) map.set(o.id, o)
+      for (const o of allOptions) map.set(o.id, o)
+      return map
+    }, [selectedOptions, allOptions])
+
     const confirmMultiSelect = () => {
-      if (!onMultiSelect || pendingIds.size === 0) return
-      const selected = allOptions.filter(o => pendingIds.has(o.id))
-      onMultiSelect(selected)
+      if (!onMultiSelect) return
+      const finalOptions = Array.from(workingIds)
+        .map(id => optionMap.get(id))
+        .filter((o): o is SearchItemOption => !!o)
+      onMultiSelect(finalOptions)
       setOpen(false)
     }
+
+    // Has anything changed from the original values?
+    const hasChanges = React.useMemo(() => {
+      if (workingIds.size !== values.length) return true
+      return values.some(id => !workingIds.has(id))
+    }, [workingIds, values])
 
     // ------ Trigger label ------
     const triggerLabel = multiSelect
@@ -374,15 +418,21 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
             </div>
 
             {/* Multi-select: selection summary bar */}
-            {multiSelect && pendingIds.size > 0 && (
+            {multiSelect && workingIds.size > 0 && (
               <div className="flex items-center justify-between px-5 py-2 border-b border-stone-100 dark:border-[#2a2a2d] bg-emerald-50 dark:bg-emerald-900/20">
                 <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-                  {pendingIds.size} selected
+                  {workingIds.size} selected
                 </span>
                 <button
                   type="button"
                   onClick={confirmMultiSelect}
-                  className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors"
+                  disabled={!hasChanges}
+                  className={cn(
+                    "px-3 py-1.5 rounded-lg text-white text-sm font-medium transition-colors",
+                    hasChanges
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-stone-300 dark:bg-stone-600 cursor-not-allowed",
+                  )}
                 >
                   {confirmLabel}
                 </button>
@@ -407,17 +457,16 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                   {filteredOptions.map((option) => {
                     const isItemDisabled = disabledIds?.has(option.id) ?? false
                     const isActive = multiSelect
-                      ? pendingIds.has(option.id) || values.includes(option.id)
+                      ? workingIds.has(option.id)
                       : option.id === value
-                    const isAlreadySelected = multiSelect && values.includes(option.id)
                     return (
                       <li key={option.id} className="contents">
                         <button
                           type="button"
-                          disabled={isItemDisabled || isAlreadySelected}
+                          disabled={isItemDisabled}
                           onClick={() => {
                             if (multiSelect) {
-                              togglePending(option.id)
+                              toggleWorking(option.id)
                             } else {
                               onSelect(option)
                               setOpen(false)
@@ -426,7 +475,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                           className={cn(
                             "group relative w-full h-full rounded-xl sm:rounded-2xl border cursor-pointer transition-all text-left overflow-hidden",
                             renderItem ? "p-0" : "p-4",
-                            (isItemDisabled || isAlreadySelected)
+                            isItemDisabled
                               ? "opacity-50 cursor-not-allowed border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20]"
                               : isActive
                                 ? "bg-emerald-50 dark:bg-emerald-900/20 border-emerald-300 dark:border-emerald-700 shadow-md shadow-emerald-500/10"
@@ -436,11 +485,11 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                           {/* Hover gradient accent */}
                           <div className={cn(
                             "absolute inset-x-0 top-0 h-1 rounded-t-xl sm:rounded-t-2xl bg-gradient-to-r from-emerald-400 via-teal-400 to-cyan-400 transition-opacity",
-                            isActive && !isItemDisabled && !isAlreadySelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
+                            isActive && !isItemDisabled ? "opacity-100" : "opacity-0 group-hover:opacity-100",
                           )} />
 
                           {/* Multi-select checkmark */}
-                          {multiSelect && isActive && !isAlreadySelected && (
+                          {multiSelect && isActive && (
                             <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 text-white flex items-center justify-center z-10">
                               <Check className="h-3.5 w-3.5" />
                             </div>
@@ -469,16 +518,16 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                 </button>
                 <button
                   type="button"
-                  disabled={pendingIds.size === 0}
+                  disabled={!hasChanges}
                   onClick={confirmMultiSelect}
                   className={cn(
                     "px-4 py-2 rounded-xl text-sm font-medium transition-colors",
-                    pendingIds.size > 0
+                    hasChanges
                       ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                       : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-400 cursor-not-allowed",
                   )}
                 >
-                  {confirmLabel}{pendingIds.size > 0 ? ` (${pendingIds.size})` : ""}
+                  {confirmLabel}{workingIds.size > 0 ? ` (${workingIds.size})` : ""}
                 </button>
               </div>
             ) : value && onClear ? (

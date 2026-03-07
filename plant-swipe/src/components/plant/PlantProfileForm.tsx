@@ -234,16 +234,16 @@ const CompanionSelector: React.FC<{
   language?: string;
 }> = ({ value, onChange, suggestions, showSuggestions, onToggleSuggestions, currentPlantId, language = 'en' }) => {
   const { t } = useTranslation('plantAdmin')
-  const [companions, setCompanions] = React.useState<{ id: string; name: string; imageUrl?: string }[]>([])
+  const [companions, setCompanions] = React.useState<{ id: string; name: string; variety?: string; imageUrl?: string }[]>([])
   const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
 
-  // Track disabled IDs (current plant + already selected)
+  // Track disabled IDs (only the current plant — cannot select itself)
   const disabledIds = React.useMemo(() => {
-    const ids = new Set(value)
+    const ids = new Set<string>()
     if (currentPlantId) ids.add(currentPlantId)
     return ids
-  }, [value, currentPlantId])
+  }, [currentPlantId])
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
@@ -259,7 +259,7 @@ const CompanionSelector: React.FC<{
     const loadMissing = async () => {
       setLoadingCompanions(true)
       try {
-        const plantNames: { id: string; name: string }[] = []
+        const plantNames: { id: string; name: string; variety?: string }[] = []
 
         // Batch the queries to avoid URL length limits
         for (let i = 0; i < missing.length; i += BATCH) {
@@ -269,14 +269,15 @@ const CompanionSelector: React.FC<{
           if (language !== 'en') {
             const { data: translationData } = await supabase
               .from('plant_translations')
-              .select('plant_id, name')
+              .select('plant_id, name, variety')
               .in('plant_id', batch)
               .eq('language', language)
 
             if (translationData && translationData.length > 0) {
               plantNames.push(...translationData.map((t) => ({
                 id: t.plant_id as string,
-                name: t.name as string
+                name: t.name as string,
+                variety: t.variety as string | undefined,
               })))
             }
 
@@ -301,6 +302,18 @@ const CompanionSelector: React.FC<{
                 id: p.id as string,
                 name: (p as any).name as string
               })))
+            }
+
+            // Fetch variety from translations for English
+            const { data: varData } = await supabase
+              .from('plant_translations')
+              .select('plant_id, variety')
+              .in('plant_id', batch)
+              .eq('language', 'en')
+            if (varData) {
+              const varMap = new Map<string, string>()
+              varData.forEach((v) => { if (v.variety) varMap.set(v.plant_id as string, v.variety as string) })
+              plantNames.forEach(p => { if (!p.variety && varMap.has(p.id)) p.variety = varMap.get(p.id) })
             }
           }
         }
@@ -335,6 +348,7 @@ const CompanionSelector: React.FC<{
               .map((p) => ({
                 id: p.id,
                 name: p.name,
+                variety: p.variety,
                 imageUrl: imageMap.get(p.id)
               }))
             return [...prev, ...newCompanions]
@@ -351,7 +365,7 @@ const CompanionSelector: React.FC<{
 
   // Async search for SearchItem: returns SearchItemOption[] with plant images as icons
   const searchPlantsAsync = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
-    let plantResults: { id: string; name: string }[] = []
+    let plantResults: { id: string; name: string; variety?: string }[] = []
 
     if (language !== 'en') {
       let q = supabase
@@ -364,7 +378,8 @@ const CompanionSelector: React.FC<{
       const { data } = await q
       if (data) plantResults = data.map((t) => ({
         id: t.plant_id as string,
-        name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+        name: t.name as string,
+        variety: t.variety as string | undefined,
       }))
     } else {
       // Search plants table by name, then also check translations for variety matches
@@ -387,10 +402,26 @@ const CompanionSelector: React.FC<{
             if (!existingIds.has(t.plant_id as string)) {
               plantResults.push({
                 id: t.plant_id as string,
-                name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+                name: t.name as string,
+                variety: t.variety as string | undefined,
               })
             }
           }
+        }
+      }
+
+      // Fetch variety for English plants that don't have it yet
+      const needsVariety = plantResults.filter(p => !p.variety).map(p => p.id)
+      if (needsVariety.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', 'en')
+          .in('plant_id', needsVariety)
+        if (varData) {
+          const varMap = new Map<string, string>()
+          varData.forEach((v) => { if (v.variety) varMap.set(v.plant_id as string, v.variety as string) })
+          plantResults.forEach(p => { if (!p.variety && varMap.has(p.id)) p.variety = varMap.get(p.id) })
         }
       }
     }
@@ -412,20 +443,32 @@ const CompanionSelector: React.FC<{
       id: p.id,
       label: p.name,
       description: imageMap.get(p.id) || null,
+      meta: p.variety ? `'${p.variety}'` : null,
     }))
   }, [language])
 
-  const handleMultiSelect = (selected: SearchItemOption[]) => {
-    const newIds = selected.map(o => o.id).filter(id => !value.includes(id) && id !== currentPlantId)
-    if (!newIds.length) return
-    onChange([...value, ...newIds])
-    // Add to companions cache for immediate display
+  // Build selectedOptions from companions cache for SearchItem
+  const selectedOptionsForSearch: SearchItemOption[] = React.useMemo(() =>
+    companions.map((c) => ({
+      id: c.id,
+      label: c.name,
+      description: c.imageUrl || null,
+      meta: c.variety ? `'${c.variety}'` : null,
+    })),
+  [companions])
+
+  const handleMultiSelect = (finalSet: SearchItemOption[]) => {
+    const finalIds = finalSet.map(o => o.id)
+    onChange(finalIds)
+    // Update companions cache with any new entries
     setCompanions(prev => {
       const existingIds = new Set(prev.map(c => c.id))
-      const added = selected
-        .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
-        .map(o => ({ id: o.id, name: o.label, imageUrl: (o.description || undefined) as string | undefined }))
-      return [...prev, ...added]
+      const added = finalSet
+        .filter(o => !existingIds.has(o.id))
+        .map(o => ({ id: o.id, name: o.label, variety: o.meta ? o.meta.replace(/^'|'$/g, '') : undefined, imageUrl: (o.description || undefined) as string | undefined }))
+      // Keep only items still in the final set
+      const finalIdSet = new Set(finalIds)
+      return [...prev.filter(c => finalIdSet.has(c.id)), ...added]
     })
   }
 
@@ -559,7 +602,7 @@ const CompanionSelector: React.FC<{
             <div
               key={c.id}
               className="relative group"
-              title={c.name}
+              title={c.variety ? `${c.name} '${c.variety}'` : c.name}
             >
               <div className="h-12 w-12 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
                 {c.imageUrl ? (
@@ -600,6 +643,7 @@ const CompanionSelector: React.FC<{
         multiSelect
         value={null}
         values={value}
+        selectedOptions={selectedOptionsForSearch}
         onSelect={() => {}}
         onMultiSelect={handleMultiSelect}
         onSearch={searchPlantsAsync}
@@ -621,8 +665,11 @@ const CompanionSelector: React.FC<{
                 </div>
               )}
             </div>
-            <div className="flex-1 flex items-center px-3 py-2">
+            <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
               <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+              {option.meta && (
+                <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
+              )}
             </div>
           </div>
         )}
