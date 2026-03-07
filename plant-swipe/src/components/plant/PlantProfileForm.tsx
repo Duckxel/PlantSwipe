@@ -2739,6 +2739,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'floweringMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'fruitingMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'harvestingMonth')!, t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.dimensions', 'Dimensions & Support')} />
