@@ -2,6 +2,7 @@ import React, { useMemo, useRef, useState, useLayoutEffect } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ExternalLink, Utensils, Clock, Zap, Flame, ChefHat } from 'lucide-react'
 import type { PlantRecipe } from '@/types/plant'
+import { ScrollingTitle } from '@/components/ui/scrolling-title'
 
 /* ═══════════════════════════════════════════════════════════════════════════
    Category / time config
@@ -395,13 +396,13 @@ function RecipeCard({
           }}
         />
 
-        {/* Red margin line */}
+        {/* Red margin line — closer to edge on mobile */}
         <div
-          className="pointer-events-none absolute top-0 bottom-0 opacity-30 dark:opacity-[.14]"
-          style={{ left: 48, width: 2, background: '#d66' }}
+          className="pointer-events-none absolute top-0 bottom-0 left-[22px] sm:left-[48px] opacity-30 dark:opacity-[.14]"
+          style={{ width: 2, background: '#d66' }}
         />
 
-        <div className="relative px-5 sm:px-7 pt-4 sm:pt-5" style={{ paddingLeft: 58, paddingBottom: OVERLAP + TAB_HEIGHT + 8 }}>
+        <div className="relative px-2 sm:px-7 pt-4 sm:pt-5 pl-[30px] sm:!pl-[58px]" style={{ paddingBottom: OVERLAP + TAB_HEIGHT + 8 }}>
           {/* Category heading */}
           <div className="flex items-center gap-2.5 mb-3">
             <span className="text-lg sm:text-xl">{categoryIcon}</span>
@@ -420,7 +421,7 @@ function RecipeCard({
               return (
                 <div
                   key={`${recipe.name}-${idx}`}
-                  className="group flex items-center gap-3 rounded-lg px-3 py-2 -mx-1 transition-colors hover:bg-sky-50 dark:hover:bg-white/[.05]"
+                  className="group flex items-center gap-1.5 sm:gap-3 rounded-lg px-1.5 sm:px-3 py-2 -mx-1 transition-colors hover:bg-sky-50 dark:hover:bg-white/[.05]"
                 >
                   <Utensils className="h-4 w-4 shrink-0 text-stone-300 dark:text-stone-600" />
 
@@ -429,14 +430,17 @@ function RecipeCard({
                       href={recipe.link}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-4 hover:decoration-sky-500 dark:hover:decoration-sky-400 transition-colors truncate"
+                      className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200 underline decoration-stone-300 dark:decoration-stone-600 underline-offset-4 hover:decoration-sky-500 dark:hover:decoration-sky-400 transition-colors"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      {recipe.name}
+                      <ScrollingTitle className="text-base sm:text-lg font-medium" speed={25}>
+                        {recipe.name}
+                      </ScrollingTitle>
                     </a>
                   ) : (
-                    <span className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200 truncate">
+                    <ScrollingTitle className="flex-1 min-w-0 text-base sm:text-lg font-medium text-stone-700 dark:text-stone-200">
                       {recipe.name}
-                    </span>
+                    </ScrollingTitle>
                   )}
 
                   {resolvedTimeLabel && (
