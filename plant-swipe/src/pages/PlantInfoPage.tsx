@@ -63,6 +63,7 @@ import {
   Minimize2,
   Flag,
   Scissors,
+  Wheat,
   ExternalLink,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
@@ -95,6 +96,7 @@ type WaterSchedules = PlantWateringSchedule[]
 const TIMELINE_COLORS = {
   flowering: '#f97316',
   fruiting: '#22c55e',
+  harvesting: '#eab308',
   sowing: '#6366f1',
   pruning: '#ec4899',
 } as const
@@ -113,6 +115,7 @@ const MONTH_SLUGS_ORDERED = ['january','february','march','april','may','june','
 const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
   const flowering = plant.floweringMonth || []
   const fruiting = plant.fruitingMonth || []
+  const harvesting = plant.harvestingMonth || []
   const sowing = plant.sowingMonth || []
   const pruning = plant.pruningMonth || []
   return monthLabels.map((label, idx) => {
@@ -121,6 +124,7 @@ const buildTimelineData = (plant: Plant, monthLabels: string[]) => {
       month: label,
       flowering: flowering.includes(slug as any) ? 1 : 0,
       fruiting: fruiting.includes(slug as any) ? 1 : 0,
+      harvesting: harvesting.includes(slug as any) ? 1 : 0,
       sowing: sowing.includes(slug as any) ? 1 : 0,
       pruning: pruning.includes(slug as any) ? 1 : 0,
     }
@@ -340,6 +344,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     sowingMonth: data.sowing_month || [],
     floweringMonth: data.flowering_month || [],
     fruitingMonth: data.fruiting_month || [],
+    harvestingMonth: data.harvesting_month || [],
     heightCm: data.height_cm || undefined,
     wingspanCm: data.wingspan_cm || undefined,
     staking: data.staking ?? false,
@@ -1840,14 +1845,14 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
 
 // Gantt-style seasonal timeline with rows per activity and month columns
 type GanttTimelineProps = {
-  timelineData: Array<{ month: string; flowering: number; fruiting: number; sowing: number; pruning: number }>
+  timelineData: Array<{ month: string; flowering: number; fruiting: number; harvesting: number; sowing: number; pruning: number }>
   monthLabels: string[]
   t: (key: string, options?: Record<string, string>) => string
 }
 
 const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
   const rows: Array<{
-    key: 'flowering' | 'fruiting' | 'sowing' | 'pruning'
+    key: 'flowering' | 'fruiting' | 'harvesting' | 'sowing' | 'pruning'
     label: string
     color: string
     bgClass: string
@@ -1866,6 +1871,13 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
       color: TIMELINE_COLORS.fruiting,
       bgClass: 'bg-green-500',
       icon: <Cherry className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.fruiting }} />,
+    },
+    {
+      key: 'harvesting',
+      label: t('plantInfo:timeline.legend.harvesting'),
+      color: TIMELINE_COLORS.harvesting,
+      bgClass: 'bg-yellow-500',
+      icon: <Wheat className="h-3.5 w-3.5 sm:h-4 sm:w-4" style={{ color: TIMELINE_COLORS.harvesting }} />,
     },
     {
       key: 'sowing',
@@ -1891,7 +1903,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   if (activeRows.length === 0) return null
 
   // Build contiguous bar segments for a row (consecutive active months get merged into one bar)
-  const buildSegments = (key: 'flowering' | 'fruiting' | 'sowing' | 'pruning') => {
+  const buildSegments = (key: 'flowering' | 'fruiting' | 'harvesting' | 'sowing' | 'pruning') => {
     const segments: Array<{ start: number; end: number }> = []
     let segStart: number | null = null
     for (let i = 0; i < 12; i++) {

@@ -657,6 +657,7 @@ export async function processPlantRequest(
       sowingMonth: (plant.sowingMonth || []).length ? plant.sowingMonth : ['march'],
       floweringMonth: (plant.floweringMonth || []).length ? plant.floweringMonth : ['june'],
       fruitingMonth: (plant.fruitingMonth || []).length ? plant.fruitingMonth : ['september'],
+      harvestingMonth: (plant.harvestingMonth || []).length ? plant.harvestingMonth : ['october'],
       status: plant.status || IN_PROGRESS_STATUS,
     }
     
@@ -734,6 +735,7 @@ export async function processPlantRequest(
       sowing_month: plant.sowingMonth || [],
       flowering_month: plant.floweringMonth || [],
       fruiting_month: plant.fruitingMonth || [],
+      harvesting_month: plant.harvestingMonth || [],
       height_cm: plant.heightCm || null,
       wingspan_cm: plant.wingspanCm || null,
       separation_cm: plant.separationCm || null,

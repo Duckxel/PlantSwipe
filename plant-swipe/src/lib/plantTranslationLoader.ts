@@ -160,6 +160,7 @@ function mapDbRowToPlant(
     sowingMonth: (basePlant.sowing_month as MonthSlug[]) || [],
     floweringMonth: (basePlant.flowering_month as MonthSlug[]) || [],
     fruitingMonth: (basePlant.fruiting_month as MonthSlug[]) || [],
+    harvestingMonth: (basePlant.harvesting_month as MonthSlug[]) || [],
     heightCm: (basePlant.height_cm as number) || undefined,
     wingspanCm: (basePlant.wingspan_cm as number) || undefined,
     staking: (basePlant.staking as boolean) ?? false,

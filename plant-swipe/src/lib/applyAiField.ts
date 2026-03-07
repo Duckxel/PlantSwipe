@@ -165,7 +165,7 @@ const SINGLE_ENUM_FIELDS: Record<string, EnumTools> = {
 
 // Month-based array fields
 const MONTH_FIELDS = new Set([
-  'featuredMonth', 'sowingMonth', 'floweringMonth', 'fruitingMonth', 'pruningMonth',
+  'featuredMonth', 'sowingMonth', 'floweringMonth', 'fruitingMonth', 'harvestingMonth', 'pruningMonth',
 ])
 
 // Boolean fields
