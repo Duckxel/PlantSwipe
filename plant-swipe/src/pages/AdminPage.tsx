@@ -246,9 +246,11 @@ type ListedMember = {
   isAdmin: boolean;
   roles: string[];
   rpm5m: number | null;
+  lastVisitAt: string | null;
+  visits7d: number;
 };
 
-type MemberListSort = "newest" | "oldest" | "rpm" | "role";
+type MemberListSort = "newest" | "oldest" | "rpm" | "role" | "active";
 
 type RoleStats = {
   totalMembers: number;
@@ -658,6 +660,27 @@ export const AdminPage: React.FC = () => {
     return "0.00";
   }, []);
 
+  const formatLastVisit = React.useCallback((value?: string | null): string => {
+    if (!value) return "Never";
+    try {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      const now = Date.now();
+      const diff = now - date.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "Just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days}d ago`;
+      if (days < 30) return `${Math.floor(days / 7)}w ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return String(value);
+    }
+  }, []);
+
   // Compute a responsive max character count for branch names based on viewport width
   const computeBranchMaxChars = React.useCallback(
     (viewportWidth: number): number => {
@@ -825,6 +848,7 @@ export const AdminPage: React.FC = () => {
       [
         { value: "newest", label: "New" },
         { value: "oldest", label: "Oldest" },
+        { value: "active", label: "Active" },
         { value: "rpm", label: "RPM (5m)" },
         { value: "role", label: "Role" },
       ] as Array<{ value: MemberListSort; label: string }>,
@@ -5585,6 +5609,18 @@ export const AdminPage: React.FC = () => {
                   : typeof mm?.rpm5m === "string" && mm.rpm5m.length > 0
                     ? Number(mm.rpm5m)
                     : null,
+              lastVisitAt:
+                typeof mm?.last_visit_at === "string"
+                  ? mm.last_visit_at
+                  : typeof mm?.lastVisitAt === "string"
+                    ? mm.lastVisitAt
+                    : null,
+              visits7d:
+                typeof mm?.visits_7d === "number"
+                  ? mm.visits_7d
+                  : typeof mm?.visits7d === "number"
+                    ? mm.visits7d
+                    : 0,
             } as ListedMember;
           })
           .filter(
@@ -12931,6 +12967,10 @@ export const AdminPage: React.FC = () => {
                                         <span className="hidden sm:inline">•</span>
                                         <span className="tabular-nums">
                                           RPM (5m): {formatRpmValue(member.rpm5m)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span>
+                                          Last seen: {formatLastVisit(member.lastVisitAt)}
                                         </span>
                                       </div>
                                   </button>

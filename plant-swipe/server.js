@@ -15392,7 +15392,9 @@ app.get('/api/admin/member-list', async (req, res) => {
         ? 'rpm'
         : sortRaw === 'role' || sortRaw.startsWith('role')
           ? 'role'
-          : 'newest'
+          : sortRaw === 'active' || sortRaw.startsWith('active')
+            ? 'active'
+            : 'newest'
     const filterRoleRaw = (req.query.role || '').toString().trim().toLowerCase()
     // Whitelist known roles to prevent SQL injection via string interpolation
     const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta', 'bug_catcher']
@@ -15417,6 +15419,8 @@ app.get('/api/admin/member-list', async (req, res) => {
             is_admin: r?.is_admin === true,
             roles,
             rpm5m: Number.isFinite(rpm) ? rpm : null,
+            last_visit_at: r?.last_visit_at || null,
+            visits_7d: typeof r?.visits_7d === 'number' ? r.visits_7d : (r?.visits_7d != null ? Number(r.visits_7d) : 0),
           }
         })
         .filter((r) => r !== null)
@@ -15430,18 +15434,20 @@ app.get('/api/admin/member-list', async (req, res) => {
           ? 'rpm5m desc nulls last, u.created_at desc'
           : sort === 'oldest'
             ? 'u.created_at asc'
-            : sort === 'role'
-              ? `case 
-                   when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
-                   when 'editor' = any(coalesce(p.roles, '{}')) then 1
-                   when 'pro' = any(coalesce(p.roles, '{}')) then 2
-                   when 'vip' = any(coalesce(p.roles, '{}')) then 3
-                   when 'plus' = any(coalesce(p.roles, '{}')) then 4
-                   when 'creator' = any(coalesce(p.roles, '{}')) then 5
-                   when 'merchant' = any(coalesce(p.roles, '{}')) then 6
-                   else 99
-                 end asc, u.created_at desc`
-              : 'u.created_at desc'
+            : sort === 'active'
+              ? 'visits_7d desc nulls last, last_visit_at desc nulls last, u.created_at desc'
+              : sort === 'role'
+                ? `case
+                     when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
+                     when 'editor' = any(coalesce(p.roles, '{}')) then 1
+                     when 'pro' = any(coalesce(p.roles, '{}')) then 2
+                     when 'vip' = any(coalesce(p.roles, '{}')) then 3
+                     when 'plus' = any(coalesce(p.roles, '{}')) then 4
+                     when 'creator' = any(coalesce(p.roles, '{}')) then 5
+                     when 'merchant' = any(coalesce(p.roles, '{}')) then 6
+                     else 99
+                   end asc, u.created_at desc`
+                : 'u.created_at desc'
 
       // Build WHERE clause for role filtering
       // Special case for admin: also check legacy is_admin field
@@ -15460,7 +15466,9 @@ app.get('/api/admin/member-list', async (req, res) => {
           p.display_name,
           p.is_admin,
           coalesce(p.roles, '{}') as roles,
-          coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+          coalesce(rpm.c, 0)::numeric / 5 as rpm5m,
+          lv.last_visit_at,
+          coalesce(v7.visits_7d, 0)::int as visits_7d
         from auth.users u
         left join public.profiles p on p.id = u.id
         left join lateral (
@@ -15469,6 +15477,17 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
+        left join lateral (
+          select max(v.occurred_at) as last_visit_at
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+        ) lv on true
+        left join lateral (
+          select count(*)::int as visits_7d
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+            and v.occurred_at >= now() - interval '7 days'
+        ) v7 on true
         ${roleFilterClause}
         order by ${orderClause}
         limit $1
