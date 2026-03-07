@@ -648,6 +648,7 @@ export interface PlantPhenology {
   fruitMonths?: string[]
   floweringMonths?: number[]
   fruitingMonths?: number[]
+  harvestingMonths?: number[]
   seasons?: string[]
   flowerColors?: ColorInfo[]
   leafColors?: ColorInfo[]
