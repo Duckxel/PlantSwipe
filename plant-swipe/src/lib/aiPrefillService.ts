@@ -657,7 +657,6 @@ export async function processPlantRequest(
       sowingMonth: (plant.sowingMonth || []).length ? plant.sowingMonth : ['march'],
       floweringMonth: (plant.floweringMonth || []).length ? plant.floweringMonth : ['june'],
       fruitingMonth: (plant.fruitingMonth || []).length ? plant.fruitingMonth : ['september'],
-      harvestingMonth: (plant.harvestingMonth || []).length ? plant.harvestingMonth : ['october'],
       status: plant.status || IN_PROGRESS_STATUS,
     }
     
