@@ -173,11 +173,21 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
 
     // ------ Filtered list (static mode) ------
     const filteredOptions = React.useMemo(() => {
-      if (onSearch) return asyncResults // async mode – server already filtered
-      if (!staticOptions) return []
-      if (!search.trim()) return staticOptions
-      return staticOptions.filter((o) => filterFn(o, search))
-    }, [onSearch, staticOptions, asyncResults, search, filterFn])
+      let result: SearchItemOption[]
+      if (onSearch) result = asyncResults // async mode – server already filtered
+      else if (!staticOptions) result = []
+      else if (!search.trim()) result = staticOptions
+      else result = staticOptions.filter((o) => filterFn(o, search))
+
+      // In multi-select mode, sort already-selected items to the top
+      if (multiSelect && values.length > 0 && result.length > 0) {
+        const selectedSet = new Set(values)
+        const selected = result.filter((o) => selectedSet.has(o.id))
+        const rest = result.filter((o) => !selectedSet.has(o.id))
+        return [...selected, ...rest]
+      }
+      return result
+    }, [onSearch, staticOptions, asyncResults, search, filterFn, multiSelect, values])
 
     // ------ Async search effect ------
     React.useEffect(() => {
