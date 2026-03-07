@@ -15395,7 +15395,7 @@ app.get('/api/admin/member-list', async (req, res) => {
           : 'newest'
     const filterRoleRaw = (req.query.role || '').toString().trim().toLowerCase()
     // Whitelist known roles to prevent SQL injection via string interpolation
-    const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta']
+    const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta', 'bug_catcher']
     const filterRole = KNOWN_ROLES.includes(filterRoleRaw) ? filterRoleRaw : ''
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
