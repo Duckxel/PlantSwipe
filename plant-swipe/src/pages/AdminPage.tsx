@@ -12972,6 +12972,10 @@ export const AdminPage: React.FC = () => {
                                         <span>
                                           Last seen: {formatLastVisit(member.lastVisitAt)}
                                         </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span className="tabular-nums">
+                                          7d: {member.visits7d} visit{member.visits7d !== 1 ? "s" : ""}
+                                        </span>
                                       </div>
                                   </button>
                                 ))}
