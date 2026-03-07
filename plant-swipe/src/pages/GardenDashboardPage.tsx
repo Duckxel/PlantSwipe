@@ -73,7 +73,6 @@ import {
 import { getAccentOption } from "@/lib/accent";
 import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/lib/i18nRouting";
-import { mergePlantWithTranslation } from "@/lib/plantTranslationLoader";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
 import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
@@ -1922,121 +1921,106 @@ export const GardenDashboardPage: React.FC = () => {
   const plantCacheRef = React.useRef<Map<string, Plant>>(new Map());
 
   // Async search for the SearchItem component: returns SearchItemOption[] with plant images
+  // Uses the same simple approach as the working CompanionSelector in PlantProfileForm
   const searchPlantsForGarden = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
-    const queryLower = query.toLowerCase().trim();
-    if (!queryLower) return [];
+    const trimmed = query.trim();
+    let plantResults: { id: string; name: string; variety?: string; scientificName?: string }[] = [];
 
-    // Search in base plants table by name or scientific name
-    const { data: basePlants, error: baseError } = await supabase
-      .from("plants")
-      .select("id")
-      .or(`name.ilike.%${queryLower}%,scientific_name_species.ilike.%${queryLower}%`)
-      .limit(20);
+    if (currentLang !== 'en') {
+      // Search translations table for non-English languages
+      let q = supabase
+        .from('plant_translations')
+        .select('plant_id, name, variety')
+        .eq('language', currentLang)
+        .order('name')
+        .limit(30);
+      if (trimmed) q = q.or(`name.ilike.%${trimmed}%,variety.ilike.%${trimmed}%`);
+      const { data } = await q;
+      if (data) {
+        plantResults = data.map((t) => ({
+          id: t.plant_id as string,
+          name: t.name as string,
+          variety: t.variety as string | undefined,
+        }));
+      }
+    } else {
+      // Search plants table by name for English
+      let q = supabase.from('plants').select('id, name, scientific_name_species').order('name').limit(30);
+      if (trimmed) q = q.ilike('name', `%${trimmed}%`);
+      const { data } = await q;
+      if (data) {
+        plantResults = data.map((p: Record<string, unknown>) => ({
+          id: p.id as string,
+          name: p.name as string,
+          scientificName: p.scientific_name_species as string | undefined,
+        }));
+      }
 
-    // Search in translations table by name or variety
-    const { data: translatedPlants, error: transError } = await supabase
-      .from("plant_translations")
-      .select("plant_id, common_names")
-      .eq("language", currentLang)
-      .or(`name.ilike.%${queryLower}%,variety.ilike.%${queryLower}%`)
-      .limit(30);
-
-    // Also fetch translations that might match by common_names (JSONB array — needs client-side filter)
-    const { data: commonNameMatches } = await supabase
-      .from("plant_translations")
-      .select("plant_id, common_names")
-      .eq("language", currentLang)
-      .limit(200);
-
-    if (baseError || transError) {
-      console.error("Error searching plants:", baseError || transError);
-      return [];
-    }
-
-    // Collect IDs from direct matches
-    const allPlantIds = new Set([
-      ...(basePlants || []).map((p: { id: string }) => p.id),
-      ...(translatedPlants || []).map((t: { plant_id: string }) => t.plant_id),
-    ]);
-
-    // Add IDs from common_names matches (client-side filter on JSONB array)
-    if (commonNameMatches) {
-      for (const row of commonNameMatches) {
-        const names = Array.isArray(row.common_names) ? row.common_names : [];
-        if (names.some((n: unknown) => typeof n === 'string' && n.toLowerCase().includes(queryLower))) {
-          allPlantIds.add(row.plant_id as string);
+      // Also search English translations by variety
+      if (trimmed) {
+        const { data: varietyData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .eq('language', 'en')
+          .ilike('variety', `%${trimmed}%`)
+          .limit(20);
+        if (varietyData) {
+          const existingIds = new Set(plantResults.map(p => p.id));
+          for (const t of varietyData) {
+            if (!existingIds.has(t.plant_id as string)) {
+              plantResults.push({
+                id: t.plant_id as string,
+                name: t.name as string,
+                variety: t.variety as string | undefined,
+              });
+            }
+          }
         }
       }
     }
 
-    if (allPlantIds.size === 0) return [];
+    if (plantResults.length === 0) return [];
 
-    const { data: fullPlants, error: fullError } = await supabase
-      .from("plants")
-      .select("*, plant_images (id,link,use)")
-      .in("id", Array.from(allPlantIds))
-      .limit(20);
-
-    if (fullError || !fullPlants) return [];
-
-    const plantIds = fullPlants.map((p: { id: string }) => p.id);
-    const { data: translations } = await supabase
-      .from("plant_translations")
-      .select("*")
-      .eq("language", currentLang)
-      .in("plant_id", plantIds);
-
-    const translationMap = new Map<string, { plant_id: string }>();
-    if (translations) {
-      translations.forEach((t: { plant_id: string }) => {
-        translationMap.set(t.plant_id, t);
+    // Fetch primary images for results
+    const imageMap = new Map<string, string>();
+    const resultIds = plantResults.map(p => p.id);
+    const { data: imagesData } = await supabase
+      .from('plant_images')
+      .select('plant_id, link')
+      .in('plant_id', resultIds)
+      .eq('use', 'primary');
+    if (imagesData) {
+      imagesData.forEach((img: { plant_id: string; link: string }) => {
+        if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link);
       });
     }
 
-    const results: SearchItemOption[] = [];
-    for (const p of fullPlants) {
-      const translation = translationMap.get(p.id) || null;
-      const images = Array.isArray(p.plant_images) ? p.plant_images : [];
-      const photos = images.map((img: { link?: string; use?: string }) => ({
-        url: img.link || '',
-        isPrimary: img.use === 'primary',
-        isVertical: false,
-      }));
-      const primaryImageUrl =
-        images.find((img: { use?: string }) => img.use === 'primary')?.link ||
-        images.find((img: { use?: string }) => img.use === 'discovery')?.link ||
-        images[0]?.link ||
-        p.image_url ||
-        p.image;
-      const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl };
-      const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation || {});
+    // Cache minimal Plant objects for later retrieval on select
+    for (const p of plantResults) {
+      const imageUrl = imageMap.get(p.id);
+      plantCacheRef.current.set(p.id, {
+        id: p.id,
+        name: p.name,
+        variety: p.variety,
+        scientificName: p.scientificName,
+        image_url: imageUrl,
+      } as Plant);
+    }
 
-      // Match on name, variety, scientific name, or common names
-      const nameMatch = mergedPlant.name.toLowerCase().includes(queryLower);
-      const varietyMatch = mergedPlant.variety?.toLowerCase().includes(queryLower);
-      const sciMatch = (mergedPlant.scientificNameSpecies || mergedPlant.scientificName || '').toLowerCase().includes(queryLower);
-      const commonMatch = (mergedPlant.commonNames || mergedPlant.givenNames || []).some(
-        (n: string) => n.toLowerCase().includes(queryLower)
-      );
-      if (!nameMatch && !varietyMatch && !sciMatch && !commonMatch) continue;
-
-      // Cache the full Plant object for later retrieval on select
-      plantCacheRef.current.set(String(mergedPlant.id), mergedPlant);
-
-      const varietyLabel = mergedPlant.variety ? ` '${mergedPlant.variety}'` : '';
-      results.push({
-        id: String(mergedPlant.id),
-        label: mergedPlant.name + varietyLabel,
-        description: mergedPlant.identifiers?.scientificName || mergedPlant.scientificName || null,
-        icon: primaryImageUrl ? (
-          <img src={primaryImageUrl} alt="" className="w-full h-full object-cover rounded-lg" />
+    return plantResults.map((p) => {
+      const imageUrl = imageMap.get(p.id);
+      const varietyLabel = p.variety ? ` '${p.variety}'` : '';
+      return {
+        id: p.id,
+        label: p.name + varietyLabel,
+        description: p.scientificName || null,
+        icon: imageUrl ? (
+          <img src={imageUrl} alt="" className="w-full h-full object-cover rounded-lg" />
         ) : (
           <Sprout className="h-5 w-5 text-emerald-400/60" />
         ),
-      });
-      if (results.length >= 10) break;
-    }
-    return results;
+      };
+    });
   }, [currentLang]);
 
   const loadFriends = React.useCallback(async () => {
