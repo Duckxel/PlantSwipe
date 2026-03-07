@@ -1946,11 +1946,18 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
           ))}
         </div>
 
-        {/* Activity rows — bar then label below */}
+        {/* Activity rows — label above, then bar */}
         {activeRows.map((row) => {
           const segments = buildSegments(row.key)
           return (
             <div key={row.key} className="space-y-1">
+              {/* Row label above the bar */}
+              <div className="flex items-center gap-1.5">
+                {row.icon}
+                <span className="text-[10px] font-semibold text-stone-600 dark:text-stone-300">
+                  {row.label}
+                </span>
+              </div>
               {/* Full-width month cells with bars */}
               <div className="relative grid grid-cols-12 gap-0.5">
                 {/* Background cells */}
@@ -1979,13 +1986,6 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
                     </div>
                   )
                 })}
-              </div>
-              {/* Row label below the bar */}
-              <div className="flex items-center gap-1.5">
-                {row.icon}
-                <span className="text-[10px] font-semibold text-stone-600 dark:text-stone-300">
-                  {row.label}
-                </span>
               </div>
             </div>
           )
