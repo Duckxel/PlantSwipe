@@ -1857,7 +1857,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
   React.useEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const check = () => setCompact(el.offsetWidth < 420)
+    const check = () => setCompact(el.offsetWidth < 320)
     check()
     const ro = new ResizeObserver(check)
     ro.observe(el)
