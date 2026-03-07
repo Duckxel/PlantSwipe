@@ -23,7 +23,7 @@ try {
 // @sentry/bun would only work when running with the Bun runtime
 import * as Sentry from '@sentry/node';
 
-const SENTRY_DSN = 'https://758053551e0396eab52314bdbcf57924@o4510783278350336.ingest.de.sentry.io/4510783285821520';
+const SENTRY_DSN = process.env.SENTRY_DSN || process.env.VITE_SENTRY_DSN || '';
 
 // Server identification: Set PLANTSWIPE_SERVER_NAME to 'DEV' or 'MAIN' on each server
 // Now this will correctly read from .env since dotenv was loaded above
@@ -156,115 +156,119 @@ function shouldSuppressMaintenanceError(event, hint) {
   return false;
 }
 
-Sentry.init({
-  dsn: SENTRY_DSN,
-  environment: process.env.NODE_ENV || 'production',
-  // Server identification
-  serverName: SERVER_NAME,
-  // Send structured logs to Sentry
-  _experiments: {
-    enableLogs: true,
-  },
-  // GDPR: Sample 20% of transactions in production (cost-effective)
-  tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
-  // GDPR: Do NOT send PII automatically (IP addresses, cookies, etc.)
-  sendDefaultPii: false,
-  // Add server tag to all events
-  initialScope: {
-    tags: {
-      server: SERVER_NAME,
-      app: 'plant-swipe-server',
+if (!SENTRY_DSN) {
+  console.warn('[Sentry] SENTRY_DSN not configured, skipping initialization');
+} else {
+  Sentry.init({
+    dsn: SENTRY_DSN,
+    environment: process.env.NODE_ENV || 'production',
+    // Server identification
+    serverName: SERVER_NAME,
+    // Send structured logs to Sentry
+    _experiments: {
+      enableLogs: true,
     },
-  },
-  // Filter and scrub events before sending to Sentry
-  beforeSend(event, hint) {
-    // MAINTENANCE MODE: Suppress expected errors during pull-and-build operations
-    if (shouldSuppressMaintenanceError(event, hint)) {
-      return null;
-    }
-    
-    const error = hint.originalException;
-    if (error instanceof Error) {
-      // Ignore connection reset errors (common with load balancers)
-      if (error.message?.includes('ECONNRESET')) {
+    // GDPR: Sample 20% of transactions in production (cost-effective)
+    tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.2 : 1.0,
+    // GDPR: Do NOT send PII automatically (IP addresses, cookies, etc.)
+    sendDefaultPii: false,
+    // Add server tag to all events
+    initialScope: {
+      tags: {
+        server: SERVER_NAME,
+        app: 'plant-swipe-server',
+      },
+    },
+    // Filter and scrub events before sending to Sentry
+    beforeSend(event, hint) {
+      // MAINTENANCE MODE: Suppress expected errors during pull-and-build operations
+      if (shouldSuppressMaintenanceError(event, hint)) {
         return null;
       }
-      // Ignore socket hang up errors
-      if (error.message?.includes('socket hang up')) {
-        return null;
+
+      const error = hint.originalException;
+      if (error instanceof Error) {
+        // Ignore connection reset errors (common with load balancers)
+        if (error.message?.includes('ECONNRESET')) {
+          return null;
+        }
+        // Ignore socket hang up errors
+        if (error.message?.includes('socket hang up')) {
+          return null;
+        }
+        // Ignore cancelled requests
+        if (error.name === 'AbortError') {
+          return null;
+        }
       }
-      // Ignore cancelled requests
-      if (error.name === 'AbortError') {
-        return null;
+
+      // GDPR: Scrub PII from exception messages
+      if (event.exception?.values) {
+        event.exception.values = event.exception.values.map(exc => ({
+          ...exc,
+          value: scrubPII(exc.value),
+        }));
       }
-    }
-    
-    // GDPR: Scrub PII from exception messages
-    if (event.exception?.values) {
-      event.exception.values = event.exception.values.map(exc => ({
-        ...exc,
-        value: scrubPII(exc.value),
-      }));
-    }
-    
-    // GDPR: Scrub request data
-    if (event.request) {
-      // Remove IP address
-      delete event.request.ip;
-      // Remove cookies
-      delete event.request.cookies;
-      // Only keep safe headers
-      if (event.request.headers) {
-        const safeHeaders = ['content-type', 'accept', 'user-agent', 'accept-language'];
-        event.request.headers = Object.fromEntries(
-          Object.entries(event.request.headers)
-            .filter(([k]) => safeHeaders.includes(k.toLowerCase()))
-        );
+
+      // GDPR: Scrub request data
+      if (event.request) {
+        // Remove IP address
+        delete event.request.ip;
+        // Remove cookies
+        delete event.request.cookies;
+        // Only keep safe headers
+        if (event.request.headers) {
+          const safeHeaders = ['content-type', 'accept', 'user-agent', 'accept-language'];
+          event.request.headers = Object.fromEntries(
+            Object.entries(event.request.headers)
+              .filter(([k]) => safeHeaders.includes(k.toLowerCase()))
+          );
+        }
+        // Scrub URL query params (may contain tokens)
+        if (event.request.url && event.request.url.includes('?')) {
+          event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
+        }
+        // Scrub request body
+        if (event.request.data) {
+          event.request.data = typeof event.request.data === 'string'
+            ? scrubPII(event.request.data)
+            : '[BODY_REDACTED]';
+        }
       }
-      // Scrub URL query params (may contain tokens)
-      if (event.request.url && event.request.url.includes('?')) {
+
+      // GDPR: Remove user email if present
+      if (event.user) {
+        delete event.user.email;
+        delete event.user.ip_address;
+      }
+
+      // Add useful server context
+      event.contexts = event.contexts || {};
+      event.contexts.server = {
+        name: SERVER_NAME,
+        node_version: process.version,
+        platform: process.platform,
+      };
+
+      return event;
+    },
+    // GDPR: Also filter transactions
+    beforeSendTransaction(event) {
+      // Scrub URL query parameters
+      if (event.request?.url && event.request.url.includes('?')) {
         event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
       }
-      // Scrub request body
-      if (event.request.data) {
-        event.request.data = typeof event.request.data === 'string' 
-          ? scrubPII(event.request.data)
-          : '[BODY_REDACTED]';
+      // Remove user PII
+      if (event.user) {
+        delete event.user.email;
+        delete event.user.ip_address;
       }
-    }
-    
-    // GDPR: Remove user email if present
-    if (event.user) {
-      delete event.user.email;
-      delete event.user.ip_address;
-    }
-    
-    // Add useful server context
-    event.contexts = event.contexts || {};
-    event.contexts.server = {
-      name: SERVER_NAME,
-      node_version: process.version,
-      platform: process.platform,
-    };
-    
-    return event;
-  },
-  // GDPR: Also filter transactions
-  beforeSendTransaction(event) {
-    // Scrub URL query parameters
-    if (event.request?.url && event.request.url.includes('?')) {
-      event.request.url = event.request.url.split('?')[0] + '?[PARAMS_REDACTED]';
-    }
-    // Remove user PII
-    if (event.user) {
-      delete event.user.email;
-      delete event.user.ip_address;
-    }
-    return event;
-  },
-});
+      return event;
+    },
+  });
 
-console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
+  console.log(`[Sentry] Initialized for server: ${SERVER_NAME} (GDPR-compliant)`);
+}
 
 // Global error handlers for uncaught exceptions and unhandled rejections
 process.on('uncaughtException', (error) => {

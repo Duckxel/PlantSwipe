@@ -1,5 +1,4 @@
-
-## 2025-03-08 - Missing Authentication on Member Lookup Endpoint
-**Vulnerability:** The `/api/admin/member` endpoint in `server.js` lacked an authentication check (`await ensureAdmin(req, res)` was deliberately omitted in the code to make it universally accessible), allowing unauthenticated users to look up other users' information (like IP addresses, email, and roles) by providing an email or username.
-**Learning:** Even utility or "universal" lookup endpoints that interact with PII (Personally Identifiable Information) must have robust authorization checks. Removing admin constraints on sensitive endpoints to circumvent permission issues can create significant data leak vulnerabilities.
-**Prevention:** Always use `ensureAdmin` or equivalent authorization barriers for any endpoints returning PII, regardless of its intended universal utility. Never remove authorization checks from administrative routes without implementing a secure, limited-scope alternative.
+## 2025-03-08 - Sentry DSN Exposure
+**Vulnerability:** Hardcoded SENTRY_DSN API keys found across the repository (Node backend, React frontend, scripts, and python Admin API).
+**Learning:** Hardcoded telemetry keys (like Sentry DSNs) are common oversights, especially when attempting to maintain separate configuration logic. Sentry implementations fail catastrophically when DSNs are dynamically passed but not checked correctly (`if (!DSN)` wrapper prevents crashing when removed).
+**Prevention:** Always initialize third-party SDKs using environment variables (`process.env` / `import.meta.env`) and wrap the initialization block in a check to ensure the application starts up gracefully when telemetry is intentionally disabled or misconfigured. Never commit DSNs in `EXTERNAL_APIS.md` or similar documentation.

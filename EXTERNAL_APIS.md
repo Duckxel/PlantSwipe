@@ -555,7 +555,7 @@ SUPABASE_SERVICE_ROLE_KEY=your-service-key
 # Analytics & Monitoring (public keys - configured in code)
 # GA_MEASUREMENT_ID=G-LDSYW5QNK5
 # RECAPTCHA_SITE_KEY=6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd
-# SENTRY_DSN=https://758053551e0396eab52314bdbcf57924@...
+# SENTRY_DSN=https://your-public-key@o0.ingest.sentry.io/0
 ```
 
 ---
