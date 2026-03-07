@@ -238,12 +238,12 @@ const CompanionSelector: React.FC<{
   const [loadingCompanions, setLoadingCompanions] = React.useState(false)
   const [suggestionSearching, setSuggestionSearching] = React.useState<string | null>(null)
 
-  // Track disabled IDs (current plant + already selected)
+  // Track disabled IDs (only the current plant — cannot select itself)
   const disabledIds = React.useMemo(() => {
-    const ids = new Set(value)
+    const ids = new Set<string>()
     if (currentPlantId) ids.add(currentPlantId)
     return ids
-  }, [value, currentPlantId])
+  }, [currentPlantId])
 
   React.useEffect(() => {
     setCompanions((prev) => prev.filter((c) => value.includes(c.id)))
@@ -447,17 +447,28 @@ const CompanionSelector: React.FC<{
     }))
   }, [language])
 
-  const handleMultiSelect = (selected: SearchItemOption[]) => {
-    const newIds = selected.map(o => o.id).filter(id => !value.includes(id) && id !== currentPlantId)
-    if (!newIds.length) return
-    onChange([...value, ...newIds])
-    // Add to companions cache for immediate display
+  // Build selectedOptions from companions cache for SearchItem
+  const selectedOptionsForSearch: SearchItemOption[] = React.useMemo(() =>
+    companions.map((c) => ({
+      id: c.id,
+      label: c.name,
+      description: c.imageUrl || null,
+      meta: c.variety ? `'${c.variety}'` : null,
+    })),
+  [companions])
+
+  const handleMultiSelect = (finalSet: SearchItemOption[]) => {
+    const finalIds = finalSet.map(o => o.id)
+    onChange(finalIds)
+    // Update companions cache with any new entries
     setCompanions(prev => {
       const existingIds = new Set(prev.map(c => c.id))
-      const added = selected
-        .filter(o => newIds.includes(o.id) && !existingIds.has(o.id))
+      const added = finalSet
+        .filter(o => !existingIds.has(o.id))
         .map(o => ({ id: o.id, name: o.label, variety: o.meta ? o.meta.replace(/^'|'$/g, '') : undefined, imageUrl: (o.description || undefined) as string | undefined }))
-      return [...prev, ...added]
+      // Keep only items still in the final set
+      const finalIdSet = new Set(finalIds)
+      return [...prev.filter(c => finalIdSet.has(c.id)), ...added]
     })
   }
 
@@ -632,6 +643,7 @@ const CompanionSelector: React.FC<{
         multiSelect
         value={null}
         values={value}
+        selectedOptions={selectedOptionsForSearch}
         onSelect={() => {}}
         onMultiSelect={handleMultiSelect}
         onSearch={searchPlantsAsync}
