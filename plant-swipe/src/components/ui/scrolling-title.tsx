@@ -8,6 +8,14 @@ interface ScrollingTitleProps {
   as?: "h1" | "h2" | "h3" | "h4" | "h5" | "h6" | "p" | "span" | "div"
   /** Speed in pixels per second (default: 25) */
   speed?: number
+  /**
+   * Activation mode:
+   * - "hover"  → scroll on mouse hover (desktop default)
+   * - "touch"  → scroll on tap/touch and toggle off on second tap (mobile)
+   * - "auto"   → hover on pointer devices, touch on coarse/touch devices
+   * Default: "auto"
+   */
+  mode?: "hover" | "touch" | "auto"
 }
 
 // Classes that must live on the inner (scrolling) element so they
@@ -45,14 +53,26 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   className,
   as: Tag = "span",
   speed = 25,
+  mode = "auto",
 }) => {
   const containerRef = useRef<HTMLDivElement>(null)
   const textRef = useRef<HTMLElement>(null)
   const [isOverflowing, setIsOverflowing] = useState(false)
-  const [isHovered, setIsHovered] = useState(false)
+  const [isActive, setIsActive] = useState(false)
   const [scrollDistance, setScrollDistance] = useState(0)
+  const [resolvedMode, setResolvedMode] = useState<"hover" | "touch">("hover")
 
   const { outer: outerClasses, inner: innerClasses } = splitClasses(className)
+
+  // Resolve "auto" mode based on device capabilities
+  useEffect(() => {
+    if (mode !== "auto") {
+      setResolvedMode(mode)
+      return
+    }
+    const isCoarse = window.matchMedia("(pointer: coarse)").matches
+    setResolvedMode(isCoarse ? "touch" : "hover")
+  }, [mode])
 
   useEffect(() => {
     const check = () => {
@@ -74,12 +94,21 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   }, [children])
 
   const onEnter = useCallback(() => {
-    if (isOverflowing) setIsHovered(true)
-  }, [isOverflowing])
+    if (resolvedMode === "hover" && isOverflowing) setIsActive(true)
+  }, [isOverflowing, resolvedMode])
 
   const onLeave = useCallback(() => {
-    setIsHovered(false)
-  }, [])
+    if (resolvedMode === "hover") setIsActive(false)
+  }, [resolvedMode])
+
+  const onTap = useCallback(
+    (e: React.MouseEvent | React.TouchEvent) => {
+      if (resolvedMode !== "touch" || !isOverflowing) return
+      e.stopPropagation()
+      setIsActive((prev) => !prev)
+    },
+    [isOverflowing, resolvedMode],
+  )
 
   // Duration scales with distance: longer text = longer animation
   const duration = Math.max(3, scrollDistance / speed)
@@ -90,12 +119,13 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
       className={cn("overflow-hidden min-w-0", outerClasses)}
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
+      onClick={onTap}
     >
       <Tag
         ref={textRef as React.Ref<never>}
         className={cn("block whitespace-nowrap max-w-full", innerClasses)}
         style={
-          isHovered && scrollDistance > 0
+          isActive && scrollDistance > 0
             ? {
                 overflow: "visible",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
