@@ -3281,7 +3281,7 @@ export const GardenDashboardPage: React.FC = () => {
                   title={t("gardenDashboard.plantsSection.searchPlants")}
                   searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
                   emptyMessage={t("gardenDashboard.plantsSection.noResults")}
-                  priorityZIndex={60}
+                  priorityZIndex={100}
                   initialOption={selectedPlant ? {
                     id: selectedPlant.id,
                     label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
