@@ -3299,7 +3299,7 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
                         <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
                         {option.meta && (
-                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate italic">{option.meta}</p>
+                          <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
                         )}
                       </div>
                     </div>
