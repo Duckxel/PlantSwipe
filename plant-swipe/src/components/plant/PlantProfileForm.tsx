@@ -351,7 +351,7 @@ const CompanionSelector: React.FC<{
 
   // Async search for SearchItem: returns SearchItemOption[] with plant images as icons
   const searchPlantsAsync = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
-    let plantResults: { id: string; name: string }[] = []
+    let plantResults: { id: string; name: string; variety?: string }[] = []
 
     if (language !== 'en') {
       let q = supabase
@@ -364,7 +364,8 @@ const CompanionSelector: React.FC<{
       const { data } = await q
       if (data) plantResults = data.map((t) => ({
         id: t.plant_id as string,
-        name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+        name: t.name as string,
+        variety: t.variety as string | undefined,
       }))
     } else {
       // Search plants table by name, then also check translations for variety matches
@@ -387,10 +388,26 @@ const CompanionSelector: React.FC<{
             if (!existingIds.has(t.plant_id as string)) {
               plantResults.push({
                 id: t.plant_id as string,
-                name: t.variety ? `${t.name} '${t.variety}'` : t.name as string,
+                name: t.name as string,
+                variety: t.variety as string | undefined,
               })
             }
           }
+        }
+      }
+
+      // Fetch variety for English plants that don't have it yet
+      const needsVariety = plantResults.filter(p => !p.variety).map(p => p.id)
+      if (needsVariety.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', 'en')
+          .in('plant_id', needsVariety)
+        if (varData) {
+          const varMap = new Map<string, string>()
+          varData.forEach((v) => { if (v.variety) varMap.set(v.plant_id as string, v.variety as string) })
+          plantResults.forEach(p => { if (!p.variety && varMap.has(p.id)) p.variety = varMap.get(p.id) })
         }
       }
     }
@@ -412,6 +429,7 @@ const CompanionSelector: React.FC<{
       id: p.id,
       label: p.name,
       description: imageMap.get(p.id) || null,
+      meta: p.variety ? `'${p.variety}'` : null,
     }))
   }, [language])
 
@@ -621,8 +639,11 @@ const CompanionSelector: React.FC<{
                 </div>
               )}
             </div>
-            <div className="flex-1 flex items-center px-3 py-2">
+            <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
               <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+              {option.meta && (
+                <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
+              )}
             </div>
           </div>
         )}
