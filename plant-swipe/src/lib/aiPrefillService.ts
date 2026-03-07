@@ -734,6 +734,7 @@ export async function processPlantRequest(
       sowing_month: plant.sowingMonth || [],
       flowering_month: plant.floweringMonth || [],
       fruiting_month: plant.fruitingMonth || [],
+      harvesting_month: plant.harvestingMonth || [],
       height_cm: plant.heightCm || null,
       wingspan_cm: plant.wingspanCm || null,
       separation_cm: plant.separationCm || null,

@@ -1023,6 +1023,7 @@ const growthFields: FieldConfig[] = [
   { key: "sowingMonth", label: "Sowing Month(s)", description: "Best months for sowing", type: "multiselect", options: monthOptions },
   { key: "floweringMonth", label: "Flowering Month(s)", description: "Months when plant flowers", type: "multiselect", options: monthOptions },
   { key: "fruitingMonth", label: "Fruiting Month(s)", description: "Months when plant fruits", type: "multiselect", options: monthOptions },
+  { key: "harvestingMonth", label: "Harvesting Month(s)", description: "Months when plant can be harvested", type: "multiselect", options: monthOptions },
   { key: "heightCm", label: "Height (cm)", description: "Mature height in centimeters", type: "number" },
   { key: "wingspanCm", label: "Spread / Width (cm)", description: "Mature spread in centimeters", type: "number" },
   { key: "separationCm", label: "Spacing (cm)", description: "Recommended distance between two plants", type: "number" },
@@ -2738,6 +2739,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         {renderField(value, setPath, growthFields.find(f => f.key === 'sowingMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'floweringMonth')!, t)}
         {renderField(value, setPath, growthFields.find(f => f.key === 'fruitingMonth')!, t)}
+        {renderField(value, setPath, growthFields.find(f => f.key === 'harvestingMonth')!, t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.dimensions', 'Dimensions & Support')} />

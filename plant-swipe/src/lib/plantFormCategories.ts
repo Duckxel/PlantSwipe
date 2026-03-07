@@ -87,6 +87,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   sowingMonth: 'growth',
   floweringMonth: 'growth',
   fruitingMonth: 'growth',
+  harvestingMonth: 'growth',
   heightCm: 'growth',
   wingspanCm: 'growth',
   separationCm: 'growth',

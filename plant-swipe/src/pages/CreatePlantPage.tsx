@@ -907,6 +907,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       sowingMonth: monthSlugsToNumbers(data.sowing_month),
       floweringMonth: monthSlugsToNumbers(data.flowering_month),
       fruitingMonth: monthSlugsToNumbers(data.fruiting_month),
+      harvestingMonth: monthSlugsToNumbers(data.harvesting_month),
       height: data.height_cm || undefined,
       wingspan: data.wingspan_cm || undefined,
       tutoring: data.tutoring || false,
@@ -1062,6 +1063,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.sowingMonth = data.sowing_month || []
   flat.floweringMonth = data.flowering_month || []
   flat.fruitingMonth = data.fruiting_month || []
+  flat.harvestingMonth = data.harvesting_month || []
   flat.heightCm = data.height_cm ?? undefined
   flat.wingspanCm = data.wingspan_cm ?? undefined
   flat.separationCm = data.separation_cm ?? undefined
@@ -1740,6 +1742,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
             flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
             fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
+            harvesting_month: normalizeMonthsToSlugs(p.harvestingMonth || p.growth?.harvestingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             separation_cm: p.separationCm || p.growth?.separation || null,
@@ -1839,6 +1842,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             sowing_month: normalizeMonthsToSlugs(p.sowingMonth || p.growth?.sowingMonth),
             flowering_month: normalizeMonthsToSlugs(p.floweringMonth || p.growth?.floweringMonth),
             fruiting_month: normalizeMonthsToSlugs(p.fruitingMonth || p.growth?.fruitingMonth),
+            harvesting_month: normalizeMonthsToSlugs(p.harvestingMonth || p.growth?.harvestingMonth),
             height_cm: p.heightCm || p.growth?.height || null,
             wingspan_cm: p.wingspanCm || p.growth?.wingspan || null,
             separation_cm: p.separationCm || p.growth?.separation || null,

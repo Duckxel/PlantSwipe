@@ -877,6 +877,11 @@ export const CompleteAdvancedForm: React.FC<CompleteAdvancedFormProps> = ({
             values={phenology?.fruitingMonths || []}
             onChange={(fruitingMonths) => setPhenology({ ...phenology, fruitingMonths })}
           />
+          <MonthSelectorField
+            label="Harvesting Months"
+            values={phenology?.harvestingMonths || []}
+            onChange={(harvestingMonths) => setPhenology({ ...phenology, harvestingMonths })}
+          />
           <ArrayInputField
             label="Scent Notes"
             values={phenology?.scentNotes || []}

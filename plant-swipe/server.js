@@ -22071,7 +22071,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         p.temperature_min, p.temperature_max, p.temperature_ideal,
         p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
         -- Growing info
-        p.sowing_month, p.flowering_month, p.fruiting_month,
+        p.sowing_month, p.flowering_month, p.fruiting_month, p.harvesting_month,
         p.height_cm, p.wingspan_cm, p.separation_cm,
         p.tutoring, p.transplanting, p.sow_type, p.division,
         -- Characteristics
@@ -22327,6 +22327,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       if (p.sowing_month && p.sowing_month.length > 0) growingInfo.push(`Sow: ${p.sowing_month.join(', ')}`)
       if (p.flowering_month && p.flowering_month.length > 0) growingInfo.push(`Flowers: ${p.flowering_month.join(', ')}`)
       if (p.fruiting_month && p.fruiting_month.length > 0) growingInfo.push(`Fruits: ${p.fruiting_month.join(', ')}`)
+      if (p.harvesting_month && p.harvesting_month.length > 0) growingInfo.push(`Harvest: ${p.harvesting_month.join(', ')}`)
       if (growingInfo.length > 0) lines.push(`- Growing: ${growingInfo.join(' | ')}`)
       
       // Characteristics
@@ -26677,6 +26678,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.sowing_month,
         p.flowering_month,
         p.fruiting_month,
+        p.harvesting_month,
         p.height_cm,
         p.wingspan_cm,
         p.separation_cm,
@@ -26804,6 +26806,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       sowingMonths: row.sowing_month,
       floweringMonths: row.flowering_month,
       fruitingMonths: row.fruiting_month,
+      harvestingMonths: row.harvesting_month,
       heightCm: row.height_cm,
       wingspanCm: row.wingspan_cm,
       separationCm: row.separation_cm,
@@ -29430,7 +29433,7 @@ app.get('/llms-full.txt', async (req, res) => {
     while (true) {
       const { data: batch, error } = await db
         .from('plants')
-        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, soil, sowing_month, flowering_month, fruiting_month, melliferous, infusion, aromatherapy, conservation_status, companions, utility, comestible_part')
+        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, soil, sowing_month, flowering_month, fruiting_month, harvesting_month, melliferous, infusion, aromatherapy, conservation_status, companions, utility, comestible_part')
         .order('name', { ascending: true })
         .range(offset, offset + batchSize - 1)
       if (error) { console.error('[llms-full] plants error:', error.message); break }
@@ -29496,6 +29499,7 @@ app.get('/llms-full.txt', async (req, res) => {
       if (p.sowing_month?.length) lines.push(`- Sowing: ${p.sowing_month.join(', ')}`)
       if (p.flowering_month?.length) lines.push(`- Flowering: ${p.flowering_month.join(', ')}`)
       if (p.fruiting_month?.length) lines.push(`- Fruiting: ${p.fruiting_month.join(', ')}`)
+      if (p.harvesting_month?.length) lines.push(`- Harvesting: ${p.harvesting_month.join(', ')}`)
       if (p.utility?.length) lines.push(`- Uses: ${p.utility.join(', ')}`)
       if (p.comestible_part?.length) lines.push(`- Edible parts: ${p.comestible_part.join(', ')}`)
       if (p.infusion) lines.push(`- Infusion: yes`)
@@ -30428,7 +30432,7 @@ async function generateCrawlerHtml(req, pagePath) {
               spiked, scent, multicolor, bicolor,
               temperature_max, temperature_min, temperature_ideal, hygrometry,
               watering_type, division, soil, mulching, nutrition_need, fertilizer,
-              sowing_month, flowering_month, fruiting_month,
+              sowing_month, flowering_month, fruiting_month, harvesting_month,
               height_cm, wingspan_cm, sow_type, separation_cm,
               tutoring, transplanting,
               infusion, aromatherapy,
@@ -30720,6 +30724,7 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plant.sowing_month?.length) phenology.push(`🌱 <strong>${detectedLang === 'fr' ? 'Semis' : 'Sowing'}:</strong> ${plant.sowing_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
           if (plant.flowering_month?.length) phenology.push(`🌸 <strong>${detectedLang === 'fr' ? 'Floraison' : 'Flowering'}:</strong> ${plant.flowering_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
           if (plant.fruiting_month?.length) phenology.push(`🍎 <strong>${detectedLang === 'fr' ? 'Fructification' : 'Fruiting'}:</strong> ${plant.fruiting_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.harvesting_month?.length) phenology.push(`🌾 <strong>${detectedLang === 'fr' ? 'Récolte' : 'Harvesting'}:</strong> ${plant.harvesting_month.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
 
           // Ecology information
           let ecology = []

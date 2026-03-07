@@ -191,6 +191,11 @@ export const plantSchema = {
     options: ['january','february','march','april','may','june','july','august','september','october','november','december'],
     description: 'Months when plant fruits',
   },
+  harvestingMonth: {
+    type: 'enum[]',
+    options: ['january','february','march','april','may','june','july','august','september','october','november','december'],
+    description: 'Months when plant can be harvested',
+  },
   heightCm: { type: 'int', description: 'Mature height in centimeters' },
   wingspanCm: { type: 'int', description: 'Mature spread/width in centimeters' },
   separationCm: { type: 'int', description: 'Recommended spacing between two plants of this species in centimeters' },

@@ -521,6 +521,7 @@ fertilizer                TEXT[]                 -- Multi-select fertilizers (no
 sowing_month              TEXT[]                 -- Multi-select months
 flowering_month           TEXT[]                 -- Multi-select months
 fruiting_month            TEXT[]                 -- Multi-select months
+harvesting_month          TEXT[]                 -- Multi-select months
 
 -- Section 4: Growth — Dimensions & support
 height_cm                 INTEGER

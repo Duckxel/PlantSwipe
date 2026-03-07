@@ -179,6 +179,7 @@ create table if not exists public.plants (
   sowing_month text[] not null default '{}'::text[],
   flowering_month text[] not null default '{}'::text[],
   fruiting_month text[] not null default '{}'::text[],
+  harvesting_month text[] not null default '{}'::text[],
 
   -- Section 4: Growth — Dimensions & support
   height_cm integer,
@@ -537,6 +538,7 @@ declare
     array['sowing_month', 'text[] not null default ''{}''::text[]'],
     array['flowering_month', 'text[] not null default ''{}''::text[]'],
     array['fruiting_month', 'text[] not null default ''{}''::text[]'],
+    array['harvesting_month', 'text[] not null default ''{}''::text[]'],
     array['height_cm', 'integer'],
     array['wingspan_cm', 'integer'],
     array['separation_cm', 'integer'],
@@ -1461,6 +1463,7 @@ do $$ declare
     'sowing_month',
     'flowering_month',
     'fruiting_month',
+    'harvesting_month',
     'height_cm',
     'wingspan_cm',
     'separation_cm',

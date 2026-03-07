@@ -239,6 +239,7 @@ export interface Plant {
   sowingMonth?: MonthSlug[]
   floweringMonth?: MonthSlug[]
   fruitingMonth?: MonthSlug[]
+  harvestingMonth?: MonthSlug[]
   heightCm?: number
   wingspanCm?: number
   separationCm?: number
@@ -647,6 +648,7 @@ export interface PlantPhenology {
   fruitMonths?: string[]
   floweringMonths?: number[]
   fruitingMonths?: number[]
+  harvestingMonths?: number[]
   seasons?: string[]
   flowerColors?: ColorInfo[]
   leafColors?: ColorInfo[]
