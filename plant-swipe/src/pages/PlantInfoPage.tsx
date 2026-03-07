@@ -1851,6 +1851,19 @@ type GanttTimelineProps = {
 }
 
 const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels, t }) => {
+  const containerRef = React.useRef<HTMLDivElement>(null)
+  const [compact, setCompact] = React.useState(false)
+
+  React.useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const check = () => setCompact(el.offsetWidth < 420)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
   const rows: Array<{
     key: 'flowering' | 'fruiting' | 'harvesting' | 'sowing' | 'pruning'
     label: string
@@ -1918,8 +1931,72 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
     return segments
   }
 
+  // Compact layout: full-width bars with labels below each row
+  if (compact) {
+    return (
+      <div ref={containerRef} className="space-y-3">
+        {/* Month labels row — full width */}
+        <div className="grid grid-cols-12 gap-0.5">
+          {monthLabels.map((label, idx) => (
+            <div key={idx} className="flex items-center justify-center">
+              <span className="text-[8px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+                {label.slice(0, 3)}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        {/* Activity rows — bar then label below */}
+        {activeRows.map((row) => {
+          const segments = buildSegments(row.key)
+          return (
+            <div key={row.key} className="space-y-1">
+              {/* Full-width month cells with bars */}
+              <div className="relative grid grid-cols-12 gap-0.5">
+                {/* Background cells */}
+                {Array.from({ length: 12 }).map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="h-7 rounded-md bg-stone-100/60 dark:bg-stone-800/30 border border-stone-200/40 dark:border-stone-700/25"
+                  />
+                ))}
+                {/* Colored bar segments overlaid */}
+                {segments.map((seg, sIdx) => {
+                  const span = seg.end - seg.start + 1
+                  return (
+                    <div
+                      key={sIdx}
+                      className="absolute inset-y-0 flex items-center"
+                      style={{
+                        left: `calc(${(seg.start / 12) * 100}% + 2px)`,
+                        width: `calc(${(span / 12) * 100}% - 4px)`,
+                      }}
+                    >
+                      <div
+                        className="w-full h-5 rounded-md shadow-sm"
+                        style={{ backgroundColor: row.color, opacity: 0.85 }}
+                      />
+                    </div>
+                  )
+                })}
+              </div>
+              {/* Row label below the bar */}
+              <div className="flex items-center gap-1.5">
+                {row.icon}
+                <span className="text-[10px] font-semibold text-stone-600 dark:text-stone-300">
+                  {row.label}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div
+      ref={containerRef}
       className="grid items-center gap-x-1 sm:gap-x-1.5 gap-y-2"
       style={{ gridTemplateColumns: 'auto repeat(12, minmax(0, 1fr))' }}
     >
