@@ -2009,7 +2009,7 @@ export const GardenDashboardPage: React.FC = () => {
         p.image_url ||
         p.image;
       const plantWithPhotos = { ...p, photos, image_url: primaryImageUrl };
-      const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation);
+      const mergedPlant = mergePlantWithTranslation(plantWithPhotos, translation || {});
 
       // Match on name, variety, scientific name, or common names
       const nameMatch = mergedPlant.name.toLowerCase().includes(queryLower);
