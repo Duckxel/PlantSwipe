@@ -1981,9 +1981,10 @@ export const GardenDashboardPage: React.FC = () => {
 
     if (plantResults.length === 0) return [];
 
+    const resultIds = plantResults.map(p => p.id);
+
     // Fetch primary images for results
     const imageMap = new Map<string, string>();
-    const resultIds = plantResults.map(p => p.id);
     const { data: imagesData } = await supabase
       .from('plant_images')
       .select('plant_id, link')
@@ -1993,6 +1994,23 @@ export const GardenDashboardPage: React.FC = () => {
       imagesData.forEach((img: { plant_id: string; link: string }) => {
         if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link);
       });
+    }
+
+    // For English path, also fetch variety from translations if not already present
+    if (currentLang === 'en') {
+      const needsVariety = plantResults.filter(p => !p.variety).map(p => p.id);
+      if (needsVariety.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', 'en')
+          .in('plant_id', needsVariety);
+        if (varData) {
+          const varMap = new Map<string, string>();
+          varData.forEach((v) => { if (v.variety) varMap.set(v.plant_id as string, v.variety as string); });
+          plantResults.forEach(p => { if (!p.variety && varMap.has(p.id)) p.variety = varMap.get(p.id); });
+        }
+      }
     }
 
     // Cache minimal Plant objects for later retrieval on select
@@ -2007,18 +2025,14 @@ export const GardenDashboardPage: React.FC = () => {
       } as Plant);
     }
 
+    // Use description to store image URL (for renderItem), meta for variety
     return plantResults.map((p) => {
       const imageUrl = imageMap.get(p.id);
-      const varietyLabel = p.variety ? ` '${p.variety}'` : '';
       return {
         id: p.id,
-        label: p.name + varietyLabel,
-        description: p.scientificName || null,
-        icon: imageUrl ? (
-          <img src={imageUrl} alt="" className="w-full h-full object-cover rounded-lg" />
-        ) : (
-          <Sprout className="h-5 w-5 text-emerald-400/60" />
-        ),
+        label: p.name,
+        description: imageUrl || null,
+        meta: p.variety ? `'${p.variety}'` : null,
       };
     });
   }, [currentLang]);
@@ -3269,8 +3283,27 @@ export const GardenDashboardPage: React.FC = () => {
                   initialOption={selectedPlant ? {
                     id: selectedPlant.id,
                     label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
-                    description: selectedPlant.identifiers?.scientificName || selectedPlant.scientificName || null,
+                    description: null,
                   } : null}
+                  renderItem={(option) => (
+                    <div className="flex flex-col w-full h-full">
+                      <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+                        {option.description ? (
+                          <img src={option.description} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-stone-400">
+                            <Leaf className="h-8 w-8" />
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
+                        <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+                        {option.meta && (
+                          <p className="text-xs text-stone-500 dark:text-stone-400 truncate italic">{option.meta}</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 />
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
