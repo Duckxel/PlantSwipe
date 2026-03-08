@@ -829,9 +829,6 @@ const HeroVisual: React.FC = () => {
             </div>
           </div>
         </div>
-            </div>
-          </div>
-        </div>
 
         {/* Side buttons */}
         <div className="absolute right-[-2px] top-28 w-[3px] h-8 bg-stone-700 dark:bg-stone-800 rounded-r-sm" />
