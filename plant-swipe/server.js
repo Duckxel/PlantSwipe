@@ -13582,14 +13582,14 @@ app.get('/api/admin/member', async (req, res) => {
     let lastCountry = null
     let lastReferrer = null
     try {
-      const visitsTableId = sql.identifier(getVisitsTableIdentifierParts())
-      const lastRows = await sql`
-        select occurred_at, ip_address::text as ip, geo_country, referrer
-        from ${visitsTableId}
-        where user_id = ${user.id}
-        order by occurred_at desc
-        limit 1
-      `
+      const lastRows = await sql.unsafe(
+        `select occurred_at, ip_address::text as ip, geo_country, referrer
+         from ${VISITS_TABLE_SQL_IDENT}
+         where user_id = $1
+         order by occurred_at desc
+         limit 1`,
+        [user.id]
+      )
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
         lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
