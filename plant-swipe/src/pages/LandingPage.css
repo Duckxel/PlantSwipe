@@ -68,6 +68,19 @@
   background-clip: text;
 }
 
+.gradient-text-title {
+  background: linear-gradient(135deg, #1c1917 0%, #292524 40%, #44403c 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+.dark .gradient-text-title {
+  background: linear-gradient(135deg, #fafaf9 0%, #d6d3d1 40%, #a8a29e 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
 .glass-card {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(20px);

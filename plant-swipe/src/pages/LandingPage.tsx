@@ -583,7 +583,7 @@ const HeroSection: React.FC = React.memo(() => {
       </div>
 
       <div className="relative max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left: Hero Content */}
           <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
             {/* Badge */}
@@ -601,7 +601,7 @@ const HeroSection: React.FC = React.memo(() => {
 
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
-              <span className="text-stone-900 dark:text-white">{titleStart}</span>{" "}
+              <span className="gradient-text-title">{titleStart}</span>{" "}
               {Array.isArray(titleRotating) && titleRotating.length > 0 && (
                 <Typewriter
                   text={titleRotating}
@@ -614,8 +614,8 @@ const HeroSection: React.FC = React.memo(() => {
                 />
               )}
               <br />
-              <span className="gradient-text">{titleHighlight}</span>{" "}
-              <span className="text-stone-900 dark:text-white">{titleEnd}</span>
+              <span className="gradient-text-title">{titleHighlight}</span>{" "}
+              <span className="gradient-text-title">{titleEnd}</span>
             </h1>
 
             {/* Subheadline */}
@@ -717,7 +717,7 @@ const HeroVisual: React.FC = () => {
       <div className="absolute inset-0 -m-8 bg-gradient-to-tr from-teal-400/15 to-emerald-600/15 rounded-full blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
 
       {/* Main Phone Frame */}
-      <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
+      <div className="relative w-[260px] sm:w-[290px] animate-float-slow">
         {/* Phone body — thin bezel */}
         <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.8rem] p-[2px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
           <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.75rem] p-1.5">
