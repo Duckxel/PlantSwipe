@@ -10,6 +10,32 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
 import i18n from "@/lib/i18n"
+import "./LandingPage.css"
+
+// Intersection Observer hook: defers rendering of below-fold sections until they approach the viewport.
+// rootMargin="400px" triggers 400px before the section scrolls into view for seamless UX.
+const useLazySection = (rootMargin = "400px") => {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = React.useState(false)
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [rootMargin])
+
+  return { ref, isVisible }
+}
 import {
   Leaf,
   Droplets,
@@ -241,81 +267,16 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
 
 const useLandingData = () => React.useContext(LandingDataContext)
 
-// CSS Animations
-const animationStyles = `
-  @keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(3deg); }
-  }
-  @keyframes float-slow {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-  }
-  @keyframes float-delayed {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-15px) rotate(-2deg); }
-  }
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 0.4; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.05); }
-  }
-  @keyframes gradient-shift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  @keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-  @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes scale-in {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-  }
-  @keyframes spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  @keyframes counter-spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(-360deg); }
-  }
-  @keyframes bounce-subtle {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-  .animate-float { animation: float 6s ease-in-out infinite; }
-  .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
-  .animate-float-delayed { animation: float-delayed 7s ease-in-out infinite 1s; }
-  .animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
-  .animate-gradient { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }
-  .animate-marquee { animation: marquee 30s linear infinite; }
-  .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
-  .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
-  .animate-spin-slow { animation: spin-slow 20s linear infinite; }
-  .animate-counter-spin-slow { animation: counter-spin-slow 20s linear infinite; }
-  .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
-  .plant-icon-theme { filter: brightness(0) saturate(100%); }
-  .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
-  .gradient-text {
-    background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .glass-card {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-  .dark .glass-card {
-    background: rgba(30, 30, 30, 0.7);
-  }
-`
+// LazySection wrapper: renders a placeholder until the section approaches the viewport,
+// then mounts the actual component. Prevents rendering heavy below-fold content on initial load.
+const LazySection: React.FC<{ children: React.ReactNode; minHeight?: string }> = ({ children, minHeight = "200px" }) => {
+  const { ref, isVisible } = useLazySection()
+  return (
+    <div ref={ref}>
+      {isVisible ? children : <div style={{ minHeight }} />}
+    </div>
+  )
+}
 
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
@@ -344,8 +305,10 @@ const LandingPage: React.FC = () => {
   React.useEffect(() => {
     const loadData = async () => {
       try {
-        // Execute all queries in parallel, but handle errors individually
-        // Some tables may not exist yet (404), which is fine - we fall back to defaults
+        const needsTranslation = currentLang !== 'en'
+
+        // Execute ALL queries in a single parallel batch — including translations and showcase.
+        // Previously, translations were fetched sequentially after the main batch, adding latency.
         const results = await Promise.allSettled([
           supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
@@ -353,13 +316,23 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_demo_features").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_showcase_config").select("*").limit(1).maybeSingle(),
+          // Translation queries — fire in parallel even if not needed (no-op if English)
+          needsTranslation
+            ? supabase.from("landing_faq_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
+          needsTranslation
+            ? supabase.from("landing_demo_feature_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
+          needsTranslation
+            ? supabase.from("landing_stats_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
         ])
 
         // Extract data safely, using null/empty array as fallback for any failures
         const getData = <T,>(result: PromiseSettledResult<{ data: T | null; error: unknown }>, defaultValue: T): T => {
           if (result.status === 'rejected') return defaultValue
           const { data, error } = result.value
-          // Treat any error (including 404 for missing tables) as "use default"
           if (error || data === null) return defaultValue
           return data
         }
@@ -370,108 +343,45 @@ const LandingPage: React.FC = () => {
         const testimonials = getData(results[3], [])
         let faqItems = getData(results[4], []) as FAQ[]
         let demoFeatures = getData(results[5], []) as DemoFeature[]
-        
-        // Load FAQ translations for current language (if not English)
-        if (currentLang !== 'en' && faqItems.length > 0) {
-          try {
-            const { data: translations } = await supabase
-              .from("landing_faq_translations")
-              .select("*")
-              .eq("language", currentLang)
-            
-            if (translations && translations.length > 0) {
-              // Create a map of translations by faq_id
-              const translationMap = new Map<string, { question: string; answer: string }>()
-              translations.forEach((t: { faq_id: string; question: string; answer: string }) => {
-                translationMap.set(t.faq_id, { question: t.question, answer: t.answer })
-              })
-              
-              // Apply translations to FAQ items
-              faqItems = faqItems.map(faq => {
-                const translation = translationMap.get(faq.id)
-                if (translation) {
-                  return { ...faq, question: translation.question, answer: translation.answer }
-                }
-                return faq
-              })
-            }
-          } catch (e) {
-            console.error("Failed to load FAQ translations:", e)
-          }
+        const showcaseConfig = getData<ShowcaseConfig | null>(results[6], null)
+
+        // Apply FAQ translations
+        const faqTranslations = getData(results[7], null) as Array<{ faq_id: string; question: string; answer: string }> | null
+        if (faqTranslations && faqTranslations.length > 0 && faqItems.length > 0) {
+          const translationMap = new Map(faqTranslations.map(t => [t.faq_id, { question: t.question, answer: t.answer }]))
+          faqItems = faqItems.map(faq => {
+            const tr = translationMap.get(faq.id)
+            return tr ? { ...faq, question: tr.question, answer: tr.answer } : faq
+          })
         }
 
-        // Load Demo Feature translations for current language (if not English)
-        if (currentLang !== 'en' && demoFeatures.length > 0) {
-          try {
-            const { data: translations } = await supabase
-              .from("landing_demo_feature_translations")
-              .select("*")
-              .eq("language", currentLang)
-            
-            if (translations && translations.length > 0) {
-              // Create a map of translations by feature_id
-              const translationMap = new Map<string, string>()
-              translations.forEach((t: { feature_id: string; label: string }) => {
-                translationMap.set(t.feature_id, t.label)
-              })
-              
-              // Apply translations to demo features
-              demoFeatures = demoFeatures.map(feature => {
-                const translatedLabel = translationMap.get(feature.id)
-                if (translatedLabel) {
-                  return { ...feature, label: translatedLabel }
-                }
-                return feature
-              })
-            }
-          } catch (e) {
-            console.error("Failed to load demo feature translations:", e)
-          }
+        // Apply Demo Feature translations
+        const featureTranslations = getData(results[8], null) as Array<{ feature_id: string; label: string }> | null
+        if (featureTranslations && featureTranslations.length > 0 && demoFeatures.length > 0) {
+          const translationMap = new Map(featureTranslations.map(t => [t.feature_id, t.label]))
+          demoFeatures = demoFeatures.map(f => {
+            const label = translationMap.get(f.id)
+            return label ? { ...f, label } : f
+          })
         }
 
-        // Load Stats translations for current language (if not English)
+        // Apply Stats translations
         let translatedStats = stats
-        if (currentLang !== 'en' && stats) {
-          try {
-            const { data: statsTranslation } = await supabase
-              .from("landing_stats_translations")
-              .select("*")
-              .eq("stats_id", stats.id)
-              .eq("language", currentLang)
-              .maybeSingle()
-            
-            if (statsTranslation) {
-              // Apply translations to stats labels
-              translatedStats = {
-                ...stats,
-                plants_label: statsTranslation.plants_label || stats.plants_label,
-                users_label: statsTranslation.users_label || stats.users_label,
-                tasks_label: statsTranslation.tasks_label || stats.tasks_label,
-                rating_label: statsTranslation.rating_label || stats.rating_label,
-              }
+        const statsTranslations = getData(results[9], null) as Array<{ stats_id: string; plants_label: string; users_label: string; tasks_label: string; rating_label: string }> | null
+        if (statsTranslations && statsTranslations.length > 0 && stats) {
+          // Find the matching stats translation
+          const st = statsTranslations.find(t => t.stats_id === stats.id)
+          if (st) {
+            translatedStats = {
+              ...stats,
+              plants_label: st.plants_label || stats.plants_label,
+              users_label: st.users_label || stats.users_label,
+              tasks_label: st.tasks_label || stats.tasks_label,
+              rating_label: st.rating_label || stats.rating_label,
             }
-          } catch (e) {
-            console.error("Failed to load stats translations:", e)
           }
         }
 
-        // Load Showcase Configuration
-        let showcaseConfig: ShowcaseConfig | null = null
-        try {
-          const { data: showcaseData } = await supabase
-            .from("landing_showcase_config")
-            .select("*")
-            .limit(1)
-            .maybeSingle()
-          
-          if (showcaseData) {
-            showcaseConfig = showcaseData
-          }
-        } catch (e) {
-          // Table may not exist yet, use defaults in component
-          console.error("Failed to load showcase config:", e)
-        }
-        
         setLandingData({
           heroCards: heroCards || [],
           stats: translatedStats || null,
@@ -517,13 +427,11 @@ const LandingPage: React.FC = () => {
   return (
     <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
-      <style>{animationStyles}</style>
-      
-      {/* Ambient Background Elements */}
+      {/* Ambient Background Elements - reduced blur radii for better GPU performance */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse-glow" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[100px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[80px]" />
+        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-3xl" style={{ animationDelay: '2s' }} />
+        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-2xl" />
       </div>
 
       <div className="relative">
@@ -556,32 +464,41 @@ const LandingPage: React.FC = () => {
         {/* Hero Section */}
         {(landingData.settings?.show_hero_section ?? true) && <HeroSection />}
 
-        {/* Stats Banner */}
+        {/* Stats Banner - above fold on some viewports, keep eager */}
         {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
 
-        {/* Beginner Friendly Section */}
-        {(landingData.settings?.show_beginner_section ?? true) && <BeginnerFriendlySection />}
+        {/* Below-fold sections: lazily rendered via IntersectionObserver */}
+        {(landingData.settings?.show_beginner_section ?? true) && (
+          <LazySection minHeight="400px"><BeginnerFriendlySection /></LazySection>
+        )}
 
-        {/* Features Grid */}
-        {(landingData.settings?.show_features_section ?? true) && <FeaturesSection />}
+        {(landingData.settings?.show_features_section ?? true) && (
+          <LazySection minHeight="500px"><FeaturesSection /></LazySection>
+        )}
 
-        {/* Interactive Demo - Feature Wheel */}
-        {(landingData.settings?.show_demo_section ?? true) && <InteractiveDemoSection />}
+        {(landingData.settings?.show_demo_section ?? true) && (
+          <LazySection minHeight="500px"><InteractiveDemoSection /></LazySection>
+        )}
 
-        {/* Showcase Section */}
-        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
+        {(landingData.settings?.show_showcase_section ?? true) && (
+          <LazySection minHeight="600px"><ShowcaseSection /></LazySection>
+        )}
 
-        {/* How It Works */}
-        {(landingData.settings?.show_how_it_works_section ?? true) && <HowItWorksSection />}
+        {(landingData.settings?.show_how_it_works_section ?? true) && (
+          <LazySection minHeight="400px"><HowItWorksSection /></LazySection>
+        )}
 
-        {/* Testimonials */}
-        {(landingData.settings?.show_testimonials_section ?? true) && <TestimonialsSection />}
+        {(landingData.settings?.show_testimonials_section ?? true) && (
+          <LazySection minHeight="400px"><TestimonialsSection /></LazySection>
+        )}
 
-        {/* FAQ */}
-        {(landingData.settings?.show_faq_section ?? true) && <FAQSection />}
+        {(landingData.settings?.show_faq_section ?? true) && (
+          <LazySection minHeight="400px"><FAQSection /></LazySection>
+        )}
 
-        {/* Final CTA */}
-        {(landingData.settings?.show_final_cta_section ?? true) && <FinalCTASection />}
+        {(landingData.settings?.show_final_cta_section ?? true) && (
+          <LazySection minHeight="300px"><FinalCTASection /></LazySection>
+        )}
 
         {/* Footer */}
         <Footer />
@@ -594,7 +511,7 @@ const LandingPage: React.FC = () => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    HERO SECTION - Completely Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const HeroSection: React.FC = () => {
+const HeroSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { stats } = useLandingData()
 
@@ -711,7 +628,7 @@ const HeroSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
@@ -768,9 +685,11 @@ const HeroVisual: React.FC = () => {
               {/* Plant Image Area */}
               <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
                 {imageUrl ? (
-                  <img 
-                    src={imageUrl} 
+                  <img
+                    src={imageUrl}
                     alt={plantName}
+                    loading="lazy"
+                    decoding="async"
                     className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
                   />
                 ) : (
@@ -864,7 +783,7 @@ const HeroVisual: React.FC = () => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    STATS BANNER - Animated Counter Section
    ═══════════════════════════════════════════════════════════════════════════════ */
-const StatsBanner: React.FC = () => {
+const StatsBanner: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { stats: dbStats } = useLandingData()
   
@@ -915,12 +834,12 @@ const StatsBanner: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    BEGINNER FRIENDLY SECTION - New Gardeners Welcome
    ═══════════════════════════════════════════════════════════════════════════════ */
-const BeginnerFriendlySection: React.FC = () => {
+const BeginnerFriendlySection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   // All text content from translations (not editable via admin)
@@ -1031,12 +950,12 @@ const BeginnerFriendlySection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FEATURES SECTION - Bento Grid Style
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FeaturesSection: React.FC = () => {
+const FeaturesSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   return (
@@ -1158,7 +1077,7 @@ const FeaturesSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 const FeatureCard: React.FC<{
   icon: React.ElementType
@@ -1185,7 +1104,7 @@ const demoIconMap: Record<string, React.ElementType> = {
   Bell, Heart, Star, Zap, Globe, Search, BookMarked, Flower2, TreeDeciduous, Sprout, Sun, Droplets
 }
 
-const InteractiveDemoSection: React.FC = () => {
+const InteractiveDemoSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { demoFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
@@ -1303,13 +1222,13 @@ const InteractiveDemoSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    SHOWCASE SECTION - Realistic UI Previews matching actual app components
    Fully configurable via Admin Panel
    ═══════════════════════════════════════════════════════════════════════════════ */
-const ShowcaseSection: React.FC = () => {
+const ShowcaseSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { showcaseConfig } = useLandingData()
 
@@ -1404,7 +1323,7 @@ const ShowcaseSection: React.FC = () => {
               {config.cover_image_url ? (
                 <>
                   <div className="absolute inset-0">
-                    <img src={config.cover_image_url} alt={config.garden_name} className="w-full h-full object-cover" />
+                    <img src={config.cover_image_url} alt={config.garden_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
                   </div>
                   <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
@@ -1533,7 +1452,7 @@ const ShowcaseSection: React.FC = () => {
                 {config.plant_cards.slice(0, 6).map((plant) => (
                   <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
                     {plant.image_url ? (
-                      <img src={plant.image_url} alt={plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                      <img src={plant.image_url} alt={plant.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
                     ) : (
                       <div className={`absolute inset-0 bg-gradient-to-br ${plant.gradient}`}>
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1775,12 +1694,12 @@ const ShowcaseSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    HOW IT WORKS - Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const HowItWorksSection: React.FC = () => {
+const HowItWorksSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   const steps = [
@@ -1829,12 +1748,12 @@ const HowItWorksSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    TESTIMONIALS - Redesigned with Marquee
    ═══════════════════════════════════════════════════════════════════════════════ */
-const TestimonialsSection: React.FC = () => {
+const TestimonialsSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { testimonials: dbTestimonials } = useLandingData()
 
@@ -1902,12 +1821,12 @@ const TestimonialsSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FAQ SECTION - Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FAQSection: React.FC = () => {
+const FAQSection: React.FC = React.memo(() => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
   const { faqItems: dbFaqItems } = useLandingData()
@@ -2043,12 +1962,12 @@ const FAQSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FINAL CTA - Enhanced
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FinalCTASection: React.FC = () => {
+const FinalCTASection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   // All text content from translations (not editable via admin)
@@ -2144,6 +2063,6 @@ const FinalCTASection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 export default LandingPage
