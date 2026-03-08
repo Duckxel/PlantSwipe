@@ -15004,7 +15004,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             `select v.user_id as id,
                     u.email,
                     p.display_name,
-                    max(v.occurred_at) as last_seen_at
+                    max(v.occurred_at) as last_seen_at,
+                    (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v2 where v2.user_id = v.user_id and v2.occurred_at >= now() - interval '7 days') as visits_7d
              from ${VISITS_TABLE_SQL_IDENT} v
              left join auth.users u on u.id = v.user_id
              left join public.profiles p on p.id = v.user_id
@@ -15048,6 +15049,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
           email: r.email || null,
           display_name: r.display_name || null,
           last_seen_at: r.last_seen_at || null,
+          visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0),
         }))
         const connectionsCount = aggRows?.[0]?.connections_count ?? users.length
         // Align displayed count with actual list of user cards
@@ -15729,14 +15731,17 @@ app.get('/api/admin/member-suggest', async (req, res) => {
     try {
       if (sql) {
         // Email matches
-        const emailRows = await sql`
-          select u.id, u.email, u.created_at, p.display_name
+        const emailRows = await sql.unsafe(
+          `select u.id, u.email, u.created_at, p.display_name,
+            (select max(v.occurred_at) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id) as last_seen_at,
+            (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id and v.occurred_at >= now() - interval '7 days') as visits_7d
           from auth.users u
           left join public.profiles p on p.id = u.id
-          where lower(u.email) like ${q + '%'}
+          where lower(u.email) like $1
           order by u.created_at desc
-          limit 7
-        `
+          limit 7`,
+          [q + '%']
+        )
         if (Array.isArray(emailRows)) {
           for (const r of emailRows) {
             const idKey = String(r.id)
@@ -15745,18 +15750,21 @@ app.get('/api/admin/member-suggest', async (req, res) => {
             seenIds.add(idKey)
             if (emailKey) seenEmails.add(emailKey)
             if (r.display_name) seenDisplay.add(String(r.display_name).toLowerCase())
-            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at, last_seen_at: r.last_seen_at || null, visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0) })
           }
         }
         // Display name matches
-        const nameRows = await sql`
-          select u.id, u.email, u.created_at, p.display_name
+        const nameRows = await sql.unsafe(
+          `select u.id, u.email, u.created_at, p.display_name,
+            (select max(v.occurred_at) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id) as last_seen_at,
+            (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id and v.occurred_at >= now() - interval '7 days') as visits_7d
           from public.profiles p
           join auth.users u on u.id = p.id
-          where lower(p.display_name) like ${q + '%'}
+          where lower(p.display_name) like $1
           order by u.created_at desc
-          limit 7
-        `
+          limit 7`,
+          [q + '%']
+        )
         if (Array.isArray(nameRows)) {
           for (const r of nameRows) {
             const idKey = String(r.id)
@@ -15768,7 +15776,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
             seenIds.add(idKey)
             if (emailKey) seenEmails.add(emailKey)
             if (dispKey) seenDisplay.add(dispKey)
-            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at, last_seen_at: r.last_seen_at || null, visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0) })
           }
         }
       } else {

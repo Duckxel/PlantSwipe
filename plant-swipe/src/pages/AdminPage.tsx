@@ -653,6 +653,13 @@ export const AdminPage: React.FC = () => {
     [],
   );
 
+  const formatCompactNumber = React.useCallback((value: number): string => {
+    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value % 1_000_000_000 === 0 ? 0 : 1)} B`;
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)} M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)} K`;
+    return String(value);
+  }, []);
+
   const formatRpmValue = React.useCallback((value?: number | null): string => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value.toFixed(2);
@@ -5339,7 +5346,7 @@ export const AdminPage: React.FC = () => {
 
   // Email/username autocomplete state
   const [emailSuggestions, setEmailSuggestions] = React.useState<
-    Array<{ id: string; email: string | null; display_name?: string | null }>
+    Array<{ id: string; email: string | null; display_name?: string | null; last_seen_at?: string | null; visits_7d?: number | null }>
   >([]);
   const [suggestionsOpen, setSuggestionsOpen] = React.useState(false);
   const [suggestLoading, setSuggestLoading] = React.useState(false);
@@ -5355,6 +5362,7 @@ export const AdminPage: React.FC = () => {
       email: string | null;
       display_name: string | null;
       last_seen_at: string | null;
+      visits_7d: number;
     }>
   >([]);
   const [ipUsed, setIpUsed] = React.useState<string | null>(null);
@@ -6020,6 +6028,7 @@ export const AdminPage: React.FC = () => {
               email: uu?.email ?? null,
               display_name: uu?.display_name ?? null,
               last_seen_at: uu?.last_seen_at ?? null,
+              visits_7d: typeof uu?.visits_7d === "number" ? uu.visits_7d : (uu?.visits_7d != null ? Number(uu.visits_7d) : 0),
             };
             })
           : [];
@@ -6466,6 +6475,8 @@ export const AdminPage: React.FC = () => {
               id: String(ss.id),
               email: ss?.email ? String(ss.email) : null,
               display_name: ss?.display_name ? String(ss.display_name) : null,
+              last_seen_at: ss?.last_seen_at ? String(ss.last_seen_at) : null,
+              visits_7d: typeof ss?.visits_7d === "number" ? ss.visits_7d : null,
             };
             }),
           );
@@ -10681,6 +10692,19 @@ export const AdminPage: React.FC = () => {
                                           {s.email}
                                         </div>
                                       )}
+                                    {(s.last_seen_at || s.visits_7d != null) && (
+                                      <div className="text-[11px] opacity-50 mt-0.5 flex items-center gap-1.5">
+                                        {s.last_seen_at && (
+                                          <span>Last seen: {formatLastVisit(s.last_seen_at)}</span>
+                                        )}
+                                        {s.last_seen_at && s.visits_7d != null && (
+                                          <span>•</span>
+                                        )}
+                                        {s.visits_7d != null && (
+                                          <span>7d: {formatCompactNumber(s.visits_7d)} visit{s.visits_7d !== 1 ? "s" : ""}</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </button>
                                 ))}
                                 {suggestLoading && (
@@ -12760,14 +12784,15 @@ export const AdminPage: React.FC = () => {
                                       <div className="text-xs opacity-70 truncate">
                                         {u.email || "-"}
                                       </div>
-                                      {u.last_seen_at && (
-                                        <div className="text-[11px] opacity-60 mt-0.5">
-                                          Last seen{" "}
-                                          {new Date(
-                                            u.last_seen_at,
-                                          ).toLocaleString()}
-                                        </div>
-                                      )}
+                                      <div className="text-[11px] opacity-60 mt-0.5 flex items-center gap-1.5">
+                                        {u.last_seen_at && (
+                                          <span>Last seen: {formatLastVisit(u.last_seen_at)}</span>
+                                        )}
+                                        {u.last_seen_at && u.visits_7d != null && (
+                                          <span>•</span>
+                                        )}
+                                        <span>7d: {formatCompactNumber(u.visits_7d)} visit{u.visits_7d !== 1 ? "s" : ""}</span>
+                                      </div>
                                     </button>
                                   ))}
                                 </div>
@@ -12974,7 +12999,7 @@ export const AdminPage: React.FC = () => {
                                         </span>
                                         <span className="hidden sm:inline">•</span>
                                         <span className="tabular-nums">
-                                          7d: {member.visits7d} visit{member.visits7d !== 1 ? "s" : ""}
+                                          7d: {formatCompactNumber(member.visits7d)} visit{member.visits7d !== 1 ? "s" : ""}
                                         </span>
                                       </div>
                                   </button>
