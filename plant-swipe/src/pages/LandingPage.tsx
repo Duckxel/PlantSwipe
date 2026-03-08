@@ -708,11 +708,7 @@ const HeroVisual: React.FC = () => {
   }, [dbHeroCards.length])
 
   // Water progress animation (simulate filling to ~70%)
-  const [waterProgress, setWaterProgress] = React.useState(0)
-  React.useEffect(() => {
-    const timer = setTimeout(() => setWaterProgress(72), 800)
-    return () => clearTimeout(timer)
-  }, [activeCardIndex])
+  // REMOVED — reverted per user request
 
   return (
     <div className="relative">
@@ -722,15 +718,17 @@ const HeroVisual: React.FC = () => {
 
       {/* Main Phone Frame */}
       <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
-        {/* Phone body with subtle ring */}
-        <div className="relative bg-gradient-to-b from-stone-800 to-stone-900 dark:from-stone-900 dark:to-black rounded-[3rem] p-[3px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
-          <div className="bg-stone-900 dark:bg-black rounded-[2.85rem] p-2.5">
+        {/* Phone body — thin bezel */}
+        <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.8rem] p-[2px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
+          <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.75rem] p-1.5">
             {/* Screen */}
             <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.4rem] overflow-hidden">
-              {/* Status Bar */}
-              <div className="flex items-center justify-between px-8 pt-4 pb-1">
+              {/* Status Bar + Dynamic Island with camera */}
+              <div className="flex items-center justify-between px-7 pt-2.5 pb-0.5">
                 <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
-                <div className="w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full" />
+                <div className="relative w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full flex items-center justify-end pr-2">
+                  <div className="h-[10px] w-[10px] rounded-full bg-stone-800 dark:bg-stone-900 ring-1 ring-stone-600/50" />
+                </div>
                 <div className="flex items-center gap-1">
                   <div className="flex gap-[2px]">
                     <div className="w-[3px] h-[6px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
@@ -743,7 +741,7 @@ const HeroVisual: React.FC = () => {
               </div>
 
               {/* App Content */}
-              <div className="px-4 pb-6 pt-2 space-y-3">
+              <div className="px-4 pb-2 pt-2 space-y-3">
                 {/* Plant Image — hero card style */}
                 <div className="relative aspect-[4/3] rounded-2xl overflow-hidden group">
                   {/* Shimmer placeholder */}
@@ -764,36 +762,26 @@ const HeroVisual: React.FC = () => {
                       </div>
                     </div>
                   )}
-                  {/* Gradient overlay for text readability */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
-                  {/* Plant Info — overlaid on image */}
-                  <div className="absolute bottom-0 left-0 right-0 p-3.5">
-                    <p className="text-white font-bold text-base drop-shadow-md">{plantName}</p>
-                    <p className="text-white/70 text-xs italic drop-shadow-sm">{plantScientific}</p>
+                  {/* Plant Info — glass card overlay */}
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <div className="glass-card rounded-2xl p-3 border border-white/30 dark:border-white/10">
+                      <p className="text-stone-900 dark:text-white font-bold text-sm drop-shadow-sm">{plantName}</p>
+                      <p className="text-stone-600 dark:text-stone-300 text-xs italic">{plantScientific}</p>
+                    </div>
                   </div>
                 </div>
 
-                {/* Stats Row — compact pills with visual indicators */}
+                {/* Stats Row — simple pills, no water animation */}
                 <div className="grid grid-cols-2 gap-2">
-                  <div className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10 overflow-hidden">
-                    {/* Circular water progress */}
-                    <div className="relative h-9 w-9 flex-shrink-0">
-                      <svg className="h-9 w-9 -rotate-90" viewBox="0 0 36 36">
-                        <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="3" className="text-blue-100 dark:text-blue-900/30" />
-                        <circle
-                          cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="3"
-                          strokeLinecap="round"
-                          className="text-blue-500 transition-all duration-1000 ease-out"
-                          strokeDasharray={`${waterProgress * 0.88} 88`}
-                        />
-                      </svg>
-                      <Droplets className="absolute inset-0 m-auto h-3.5 w-3.5 text-blue-500" />
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                    <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                      <Droplets className="h-4 w-4 text-blue-500" />
                     </div>
                     <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{waterFrequency}</span>
                   </div>
-                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
-                    <div className="relative h-9 w-9 flex-shrink-0 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                      <Sun className="h-4 w-4 text-amber-500 animate-spin-slow" style={{ animationDuration: '12s' }} />
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                    <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                      <Sun className="h-4 w-4 text-amber-500" />
                     </div>
                     <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{lightLevel}</span>
                   </div>
@@ -832,12 +820,15 @@ const HeroVisual: React.FC = () => {
                     ))}
                   </div>
                 )}
-
-                {/* Bottom bar indicator */}
-                <div className="flex justify-center pt-1 pb-1">
-                  <div className="w-28 h-1 rounded-full bg-stone-300 dark:bg-stone-600" />
-                </div>
               </div>
+
+              {/* Bottom bar indicator — pinned to bottom of screen */}
+              <div className="flex justify-center pb-2 pt-1">
+                <div className="w-28 h-1 rounded-full bg-stone-300 dark:bg-stone-600" />
+              </div>
+            </div>
+          </div>
+        </div>
             </div>
           </div>
         </div>
