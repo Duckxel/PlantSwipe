@@ -10,6 +10,7 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
 import i18n from "@/lib/i18n"
+import { DitheringShader } from "@/components/ui/dithering-shader"
 import "./LandingPage.css"
 
 // Intersection Observer hook: defers rendering of below-fold sections until they approach the viewport.
@@ -427,8 +428,23 @@ const LandingPage: React.FC = () => {
   return (
     <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
-      {/* Ambient Background — layered mesh of scattered orbs for depth */}
+      {/* Ambient Background — dithering swirl shader + layered orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
+        {/* WebGL swirl shader — subtle animated texture behind everything */}
+        <div className="absolute inset-0 opacity-[0.12] dark:opacity-[0.18] mix-blend-screen dark:mix-blend-lighten">
+          <DitheringShader
+            shape="swirl"
+            type="4x4"
+            colorBack="#0a0f0a"
+            colorFront="#34d399"
+            pxSize={5}
+            speed={0.4}
+            className="w-full h-full"
+            style={{ width: "100%", height: "100%" }}
+            width={1200}
+            height={1200}
+          />
+        </div>
         {/* Top-left: warm emerald glow */}
         <div className="absolute -top-32 -left-20 w-[500px] h-[500px] bg-emerald-500/[0.07] rounded-full blur-3xl" />
         {/* Top-right: subtle teal accent */}
