@@ -1379,6 +1379,41 @@ function convertImageGridToEmailTable(html: string): string {
  * Sanitizes HTML content to make it email-client compatible
  * Replaces CSS properties that email clients don't support with compatible alternatives
  */
+/**
+ * Generates email-safe HTML for a styled divider based on style and color.
+ * This is a standalone version for the edge function (mirrors getDividerHTML from the frontend).
+ */
+function getEmailDividerHTML(style: string, color: string): string {
+  const colorMap: Record<string, { primary: string; secondary: string }> = {
+    emerald: { primary: "#059669", secondary: "#34d399" },
+    blue: { primary: "#2563eb", secondary: "#60a5fa" },
+    purple: { primary: "#7c3aed", secondary: "#a78bfa" },
+    pink: { primary: "#db2777", secondary: "#f472b6" },
+    amber: { primary: "#d97706", secondary: "#fbbf24" },
+    gray: { primary: "#4b5563", secondary: "#9ca3af" },
+  }
+
+  const colors = colorMap[color] || colorMap.emerald
+
+  switch (style) {
+    case "gradient":
+      return `<div style="height: 3px; background-color: ${colors.primary}; border-radius: 2px;"></div>`
+    case "dashed":
+      return `<div style="height: 0; border-top: 2px dashed ${colors.primary}; opacity: 0.5;"></div>`
+    case "dots":
+      return `<div style="text-align: center; font-size: 24px; color: ${colors.primary}; letter-spacing: 12px;">&#8226; &#8226; &#8226;</div>`
+    case "fancy":
+      return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin: 0;"><tr><td style="width: 40%; height: 1px; background-color: ${colors.primary};"></td><td style="width: 20%; text-align: center; font-size: 20px;">&#10022;</td><td style="width: 40%; height: 1px; background-color: ${colors.primary};"></td></tr></table>`
+    case "wave":
+      return `<div style="height: 4px; background-color: ${colors.primary}; border-radius: 2px;"></div>`
+    case "stars":
+      return `<div style="text-align: center; font-size: 14px; color: ${colors.primary}; letter-spacing: 6px;">&#10022; &#10022; &#10022; &#10022; &#10022;</div>`
+    case "solid":
+    default:
+      return `<div style="height: 2px; background-color: ${colors.primary}; opacity: 0.3; border-radius: 1px;"></div>`
+  }
+}
+
 function sanitizeHtmlForEmail(html: string): string {
   if (!html) return html
   
@@ -1389,7 +1424,17 @@ function sanitizeHtmlForEmail(html: string): string {
   
   // 0b. Convert image grids to email-compatible tables (must be done early before other transformations)
   result = convertImageGridToEmailTable(result)
-  
+
+  // 0c. Fix styled-divider nodes BEFORE gradient stripping: reconstruct proper email HTML from data attributes
+  // Must run early because step 2 replaces all linear-gradient with solid colors, destroying divider styles
+  result = result.replace(
+    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi,
+    (_match: string, divStyle: string, divColor: string) => {
+      const dividerInner = getEmailDividerHTML(divStyle, divColor)
+      return `<div data-type="styled-divider" data-style="${divStyle}" data-color="${divColor}" style="padding: 24px 0; text-align: center;">${dividerInner}</div>`
+    }
+  )
+
   // 1. Replace CSS variables with hardcoded colors (Gmail doesn't support var())
   const cssVarMap: Record<string, string> = {
     "--tt-color-highlight-yellow": "#fef08a",
@@ -1473,29 +1518,7 @@ function sanitizeHtmlForEmail(html: string): string {
   // This was used to make SVGs white, but PNG is already white
   result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, "")
   
-  // 12. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
-  // These patterns match common escaped divider content
-  const escapedDividerReplacements = [
-    // Solid emerald divider
-    {
-      pattern: /&lt;div style="height: 2px; background: #059669; opacity: 0\.3; border-radius: 1px"&gt;&lt;\/div&gt;/g,
-      replacement: '<div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px;"></div>'
-    },
-    // Gradient emerald divider  
-    {
-      pattern: /&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;\/div&gt;/g,
-      replacement: '<div style="height: 3px; background-color: #059669; border-radius: 2px;"></div>'
-    },
-    // Generic escaped divs within styled-divider containers
-    {
-      pattern: /&lt;div\s+style="([^"]*)"&gt;&lt;\/div&gt;/g,
-      replacement: '<div style="$1"></div>'
-    }
-  ]
-  
-  for (const { pattern, replacement } of escapedDividerReplacements) {
-    result = result.replace(pattern, replacement)
-  }
+  // 12. (Divider fix moved to step 0c — runs before gradient stripping)
   
   return result
 }

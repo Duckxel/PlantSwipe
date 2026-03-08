@@ -904,10 +904,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
           height: auto !important;
           border-radius: 12px !important;
         }
-        /* Styled Divider - Override inline gradient with solid green */
-        .email-preview-body [data-type="styled-divider"] > div {
-          background: #10b981 !important;
-          height: 3px !important;
+        /* Styled Divider - ensure proper display in preview */
+        .email-preview-body [data-type="styled-divider"] {
+          padding: 24px 0 !important;
+          text-align: center !important;
         }
         /* Email Card Styles - Override general table styles */
         .email-preview-body [data-type="email-card"] {
@@ -1790,10 +1790,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
               height: auto !important;
               border-radius: 12px !important;
             }
-            /* Styled Divider - Override inline gradient with solid green */
-            .email-preview-body [data-type="styled-divider"] > div {
-              background: #10b981 !important;
-              height: 3px !important;
+            /* Styled Divider - ensure proper display in preview */
+            .email-preview-body [data-type="styled-divider"] {
+              padding: 24px 0 !important;
+              text-align: center !important;
             }
             /* Email Card Styles - Override general table styles */
             .email-preview-body [data-type="email-card"] {
