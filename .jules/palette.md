@@ -1,0 +1,3 @@
+## 2024-05-20 - Add accessibility and localization to ImageViewer
+**Learning:** Found that icon-only action buttons in full-screen modals (like ImageViewer) lacked explicit translations for their tooltips (`title`) and screen reader text (`aria-label`). While adding these, it's crucial to use the `t()` translation function with a `defaultValue` fallback to maintain internationalization support in a multi-language app structure.
+**Action:** Always wrap standard UI strings (like "Close", "Download", "Zoom in", "Next") in `t('common.key', { defaultValue: '...' })` for `aria-label` and `title` attributes on all specialized icon-only action buttons.
