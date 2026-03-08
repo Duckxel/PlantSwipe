@@ -10544,35 +10544,35 @@ export const AdminPage: React.FC = () => {
                 {/* Members Tab */}
                 {activeTab === "members" && (
                   <div className="space-y-4" ref={membersContainerRef}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
+                    <div className="flex justify-center">
+                      <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                         <Link
                           to="/admin/members"
-                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           Search
                         </Link>
-                        <span className="text-xs opacity-50">|</span>
                         <Link
                           to="/admin/members/list"
-                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           List
                         </Link>
-                        <span className="text-xs opacity-50">|</span>
                         <Link
                           to="/admin/members/reports"
-                          className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           Reports
                           {activeReportsCount > 0 && (
-                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${membersView === "reports" ? "bg-white/20 text-white" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                            <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full ${membersView === "reports" ? "bg-white/25 text-white" : "bg-amber-500 text-white"}`}>
                               {activeReportsCount}
                             </span>
                           )}
                         </Link>
                       </div>
-                      {membersView === "list" && (
+                    </div>
+                    {membersView === "list" && (
+                      <div className="flex justify-center">
                         <Button
                           variant="outline"
                           size="sm"
@@ -10585,8 +10585,8 @@ export const AdminPage: React.FC = () => {
                           />
                           Refresh list
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {membersView === "search" && (
                       <>
