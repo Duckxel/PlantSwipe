@@ -45,11 +45,17 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
         parseHTML: (element: HTMLElement) => {
           return (element.getAttribute("data-style") as DividerStyle) || "gradient"
         },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          return { "data-style": attributes.style || "gradient" }
+        },
       },
       color: {
         default: "emerald",
         parseHTML: (element: HTMLElement) => {
           return element.getAttribute("data-color") || "emerald"
+        },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          return { "data-color": attributes.color || "emerald" }
         },
       },
     }
@@ -60,23 +66,27 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { style, color } = HTMLAttributes as StyledDividerAttributes
+    // TipTap auto-renders attributes as data-{name}, so read from the rendered keys
+    const style = (HTMLAttributes["data-style"] || "gradient") as DividerStyle
+    const color = (HTMLAttributes["data-color"] || "emerald") as string
     const dividerStyle = getDividerStyle(style, color)
+    const textContent = getDividerTextContent(style)
 
-    // Return proper DOM structure instead of HTML string to avoid escaping
-    return [
-      "div",
-      mergeAttributes(
-        { 
-          "data-type": "styled-divider",
-          "data-style": style,
-          "data-color": color,
-          style: "padding: 24px 0; text-align: center;",
-        },
-        this.options.HTMLAttributes
-      ),
-      ["div", { style: dividerStyle }],
-    ]
+    const outerAttrs = mergeAttributes(
+      {
+        "data-type": "styled-divider",
+        style: "padding: 24px 0; text-align: center;",
+      },
+      HTMLAttributes,
+      this.options.HTMLAttributes
+    )
+
+    // For text-based styles (dots, stars), include the text content in the inner div
+    if (textContent) {
+      return ["div", outerAttrs, ["div", { style: dividerStyle }, textContent]]
+    }
+
+    return ["div", outerAttrs, ["div", { style: dividerStyle }]]
   },
 
   addNodeView() {
@@ -133,6 +143,18 @@ function getDividerStyle(style: DividerStyle, color: string): string {
     case "solid":
     default:
       return `height: 2px; background: ${colors.primary}; opacity: 0.3; border-radius: 1px;`
+  }
+}
+
+// Returns text content for text-based divider styles (dots, stars)
+function getDividerTextContent(style: DividerStyle): string | null {
+  switch (style) {
+    case "dots":
+      return "• • •"
+    case "stars":
+      return "✦ ✦ ✦ ✦ ✦"
+    default:
+      return null
   }
 }
 

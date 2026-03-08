@@ -860,7 +860,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
           font-size: inherit !important;
         }
         .email-preview-body mark,
-        .email-preview-body [data-color] {
+        .email-preview-body span[data-color],
+        .email-preview-body span[style*="background"] mark {
           background: linear-gradient(135deg, #fef08a 0%, #fde047 100%) !important;
           color: #713f12 !important;
           padding: 2px 6px !important;
@@ -880,11 +881,17 @@ export const AdminEmailTemplatePage: React.FC = () => {
         .email-preview-body ul, .email-preview-body ol {
           margin: 16px 0 !important;
           padding-left: 28px !important;
-          // font-family: 'Quicksand', sans-serif !important;
+        }
+        .email-preview-body ul {
+          list-style-type: disc !important;
+        }
+        .email-preview-body ol {
+          list-style-type: decimal !important;
         }
         .email-preview-body li {
           margin: 8px 0 !important;
           color: #374151 !important;
+          display: list-item !important;
         }
         .email-preview-body hr {
           border: none !important;
@@ -904,10 +911,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
           height: auto !important;
           border-radius: 12px !important;
         }
-        /* Styled Divider - Override inline gradient with solid green */
-        .email-preview-body [data-type="styled-divider"] > div {
-          background: #10b981 !important;
-          height: 3px !important;
+        /* Styled Divider - ensure proper display in preview */
+        .email-preview-body [data-type="styled-divider"] {
+          padding: 24px 0 !important;
+          text-align: center !important;
         }
         /* Email Card Styles - Override general table styles */
         .email-preview-body [data-type="email-card"] {
@@ -1747,7 +1754,8 @@ export const AdminEmailTemplatePage: React.FC = () => {
               font-size: inherit !important;
             }
             .email-preview-body mark,
-            .email-preview-body [data-color] {
+            .email-preview-body span[data-color],
+            .email-preview-body span[style*="background"] mark {
               background: linear-gradient(135deg, #fef08a 0%, #fde047 100%) !important;
               color: #713f12 !important;
               padding: 2px 6px !important;
@@ -1768,9 +1776,16 @@ export const AdminEmailTemplatePage: React.FC = () => {
               margin: 16px 0 !important;
               padding-left: 28px !important;
             }
+            .email-preview-body ul {
+              list-style-type: disc !important;
+            }
+            .email-preview-body ol {
+              list-style-type: decimal !important;
+            }
             .email-preview-body li {
               margin: 8px 0 !important;
               color: #374151 !important;
+              display: list-item !important;
             }
             .email-preview-body hr {
               border: none !important;
@@ -1790,10 +1805,10 @@ export const AdminEmailTemplatePage: React.FC = () => {
               height: auto !important;
               border-radius: 12px !important;
             }
-            /* Styled Divider - Override inline gradient with solid green */
-            .email-preview-body [data-type="styled-divider"] > div {
-              background: #10b981 !important;
-              height: 3px !important;
+            /* Styled Divider - ensure proper display in preview */
+            .email-preview-body [data-type="styled-divider"] {
+              padding: 24px 0 !important;
+              text-align: center !important;
             }
             /* Email Card Styles - Override general table styles */
             .email-preview-body [data-type="email-card"] {

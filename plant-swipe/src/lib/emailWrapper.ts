@@ -267,36 +267,22 @@ export function sanitizeEmailHtml(html: string): string {
   // The filter:brightness(0) invert(1) was used to make SVGs white, but PNG is already white
   result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, '')
 
-  // 3. Fix escaped styled-divider HTML (TipTap escapes the inner HTML)
-  // Match dividers with escaped content like &lt;div style="..."&gt;&lt;/div&gt;
+  // 3. Fix styled-divider nodes: reconstruct proper HTML from data attributes
+  // Uses a flexible regex that extracts data-style and data-color regardless of attribute order
   result = result.replace(
-    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>([^<]*(?:&lt;|&gt;|&#\d+;)[^<]*)<\/div>/gi,
-    (match: string, style: string, color: string, escapedContent: string) => {
-      // Check if the content is escaped HTML
-      if (escapedContent.includes('&lt;') || escapedContent.includes('&gt;')) {
-        const dividerHtml = getDividerHTML(style as DividerStyle, color)
-        return `<div data-type="styled-divider" data-style="${style}" data-color="${color}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
-      }
-      return match
+    /<div[^>]*data-type="styled-divider"[^>]*>[\s\S]*?<\/div>(?:\s*<\/div>)?/gi,
+    (match: string) => {
+      const styleMatch = match.match(/data-style="([^"]*)"/)
+      const colorMatch = match.match(/data-color="([^"]*)"/)
+      const rawStyle = styleMatch?.[1] || "gradient"
+      const rawColor = colorMatch?.[1] || "emerald"
+      // Treat "undefined" (from old buggy renderHTML) as defaults
+      const safeStyle = rawStyle === "undefined" ? "gradient" : rawStyle
+      const safeColor = rawColor === "undefined" ? "emerald" : rawColor
+      const dividerHtml = getDividerHTML(safeStyle as DividerStyle, safeColor)
+      return `<div data-type="styled-divider" data-style="${safeStyle}" data-color="${safeColor}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
     }
   )
-
-  // 4. Also handle dividers where the style attribute is inline (simpler pattern)
-  // This catches cases where the escaped HTML is directly inside
-  const escapedDividerPatterns = [
-    // Solid divider
-    { escaped: '&lt;div style="height: 2px; background: #059669; opacity: 0.3; border-radius: 1px"&gt;&lt;/div&gt;', style: 'solid', color: 'emerald' },
-    { escaped: '&lt;div style="height: 3px; background-color: #059669; border-radius: 2px"&gt;&lt;/div&gt;', style: 'gradient', color: 'emerald' },
-  ]
-
-  for (const pattern of escapedDividerPatterns) {
-    if (result.includes(pattern.escaped)) {
-      result = result.replace(
-        new RegExp(pattern.escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'),
-        getDividerHTML(pattern.style as DividerStyle, pattern.color)
-      )
-    }
-  }
 
   return result
 }
