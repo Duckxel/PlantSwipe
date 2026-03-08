@@ -45,11 +45,17 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
         parseHTML: (element: HTMLElement) => {
           return (element.getAttribute("data-style") as DividerStyle) || "gradient"
         },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          return { "data-style": attributes.style || "gradient" }
+        },
       },
       color: {
         default: "emerald",
         parseHTML: (element: HTMLElement) => {
           return element.getAttribute("data-color") || "emerald"
+        },
+        renderHTML: (attributes: Record<string, unknown>) => {
+          return { "data-color": attributes.color || "emerald" }
         },
       },
     }
@@ -60,17 +66,18 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
   },
 
   renderHTML({ HTMLAttributes }) {
-    const { style, color } = HTMLAttributes as StyledDividerAttributes
+    // TipTap auto-renders attributes as data-{name}, so read from the rendered keys
+    const style = (HTMLAttributes["data-style"] || "gradient") as DividerStyle
+    const color = (HTMLAttributes["data-color"] || "emerald") as string
     const dividerStyle = getDividerStyle(style, color)
     const textContent = getDividerTextContent(style)
 
     const outerAttrs = mergeAttributes(
       {
         "data-type": "styled-divider",
-        "data-style": style,
-        "data-color": color,
         style: "padding: 24px 0; text-align: center;",
       },
+      HTMLAttributes,
       this.options.HTMLAttributes
     )
 
@@ -79,7 +86,6 @@ export const StyledDividerNode = Node.create<StyledDividerNodeOptions>({
       return ["div", outerAttrs, ["div", { style: dividerStyle }, textContent]]
     }
 
-    // Return proper DOM structure instead of HTML string to avoid escaping
     return ["div", outerAttrs, ["div", { style: dividerStyle }]]
   },
 

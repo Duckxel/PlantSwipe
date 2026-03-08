@@ -268,12 +268,19 @@ export function sanitizeEmailHtml(html: string): string {
   result = result.replace(/filter:\s*brightness\(0\)\s*invert\(1\);?/g, '')
 
   // 3. Fix styled-divider nodes: reconstruct proper HTML from data attributes
-  // This handles escaped inner HTML, malformed content, and ensures the chosen style/color is respected
+  // Uses a flexible regex that extracts data-style and data-color regardless of attribute order
   result = result.replace(
-    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi,
-    (_match: string, style: string, color: string) => {
-      const dividerHtml = getDividerHTML(style as DividerStyle, color)
-      return `<div data-type="styled-divider" data-style="${style}" data-color="${color}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
+    /<div[^>]*data-type="styled-divider"[^>]*>[\s\S]*?<\/div>(?:\s*<\/div>)?/gi,
+    (match: string) => {
+      const styleMatch = match.match(/data-style="([^"]*)"/)
+      const colorMatch = match.match(/data-color="([^"]*)"/)
+      const rawStyle = styleMatch?.[1] || "gradient"
+      const rawColor = colorMatch?.[1] || "emerald"
+      // Treat "undefined" (from old buggy renderHTML) as defaults
+      const safeStyle = rawStyle === "undefined" ? "gradient" : rawStyle
+      const safeColor = rawColor === "undefined" ? "emerald" : rawColor
+      const dividerHtml = getDividerHTML(safeStyle as DividerStyle, safeColor)
+      return `<div data-type="styled-divider" data-style="${safeStyle}" data-color="${safeColor}" style="padding: 24px 0; text-align: center;">${dividerHtml}</div>`
     }
   )
 

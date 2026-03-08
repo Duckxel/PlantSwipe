@@ -1427,11 +1427,19 @@ function sanitizeHtmlForEmail(html: string): string {
 
   // 0c. Fix styled-divider nodes BEFORE gradient stripping: reconstruct proper email HTML from data attributes
   // Must run early because step 2 replaces all linear-gradient with solid colors, destroying divider styles
+  // Uses a flexible regex that extracts data-style and data-color regardless of attribute order
   result = result.replace(
-    /<div[^>]*data-type="styled-divider"[^>]*data-style="([^"]*)"[^>]*data-color="([^"]*)"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi,
-    (_match: string, divStyle: string, divColor: string) => {
-      const dividerInner = getEmailDividerHTML(divStyle, divColor)
-      return `<div data-type="styled-divider" data-style="${divStyle}" data-color="${divColor}" style="padding: 24px 0; text-align: center;">${dividerInner}</div>`
+    /<div[^>]*data-type="styled-divider"[^>]*>[\s\S]*?<\/div>(?:\s*<\/div>)?/gi,
+    (match: string) => {
+      const styleMatch = match.match(/data-style="([^"]*)"/)
+      const colorMatch = match.match(/data-color="([^"]*)"/)
+      const divStyle = styleMatch?.[1] || "gradient"
+      const divColor = colorMatch?.[1] || "emerald"
+      // Treat "undefined" (from old buggy renderHTML) as defaults
+      const safeStyle = divStyle === "undefined" ? "gradient" : divStyle
+      const safeColor = divColor === "undefined" ? "emerald" : divColor
+      const dividerInner = getEmailDividerHTML(safeStyle, safeColor)
+      return `<div data-type="styled-divider" data-style="${safeStyle}" data-color="${safeColor}" style="padding: 24px 0; text-align: center;">${dividerInner}</div>`
     }
   )
 
