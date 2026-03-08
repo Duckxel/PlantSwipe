@@ -936,7 +936,7 @@ const BeginnerFriendlySection: React.FC = React.memo(() => {
           {beginnerFeatures.map((feature, i) => (
             <div
               key={i}
-              className="group relative rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
+              className="group relative rounded-3xl bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
             >
               <div className={`h-14 w-14 rounded-2xl bg-${feature.color}-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                 <feature.icon className={`h-7 w-7 text-${feature.color}-500`} />
@@ -1009,7 +1009,7 @@ const FeaturesSection: React.FC = React.memo(() => {
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Large Feature Card */}
-          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent backdrop-blur-sm border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
             <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
             <div className="relative">
               <div className="inline-flex h-14 w-14 rounded-2xl bg-emerald-500 items-center justify-center mb-6 shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
@@ -1033,7 +1033,7 @@ const FeaturesSection: React.FC = React.memo(() => {
           </div>
 
           {/* Care Reminders - Enhanced Card */}
-          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
             <div className="inline-flex h-12 w-12 rounded-xl bg-blue-500 items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
               <Bell className="h-6 w-6 text-white" />
             </div>
@@ -1081,7 +1081,7 @@ const FeaturesSection: React.FC = React.memo(() => {
           <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
           
           {/* Wide Feature Card */}
-          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent backdrop-blur-sm border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="inline-flex h-14 w-14 rounded-2xl bg-purple-500 items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform flex-shrink-0">
                 <Wifi className="h-7 w-7 text-white" />
@@ -1115,7 +1115,7 @@ const FeatureCard: React.FC<{
   gradient: string
   iconBg: string
 }> = ({ icon: Icon, title, description, gradient, iconBg }) => (
-  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
+  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
     <div className={`inline-flex h-12 w-12 rounded-xl ${iconBg} items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
       <Icon className="h-6 w-6 text-white" />
     </div>
@@ -1554,7 +1554,7 @@ const ShowcaseSection: React.FC = React.memo(() => {
           </div>
 
           {/* Tasks Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 backdrop-blur-sm border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex items-center justify-between mb-4">
               <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
                 <Droplets className="h-6 w-6 text-white" />
@@ -1673,7 +1673,7 @@ const ShowcaseSection: React.FC = React.memo(() => {
           </div>
 
           {/* Pet Safety Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 backdrop-blur-sm border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t("showcase.toxicityAlert")}</span>
@@ -1694,7 +1694,7 @@ const ShowcaseSection: React.FC = React.memo(() => {
           </div>
 
           {/* Encyclopedia Card */}
-          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 backdrop-blur-sm border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="flex-shrink-0">
                 <div className="h-14 w-14 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
@@ -1824,7 +1824,7 @@ const TestimonialsSection: React.FC = React.memo(() => {
         <div className="flex animate-marquee">
           {[...testimonials, ...testimonials].map((testimonial, i) => (
             <div key={i} className="flex-shrink-0 w-[350px] mx-3">
-              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 h-full hover:shadow-xl transition-shadow">
+              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm p-6 h-full hover:shadow-xl transition-shadow">
                 <div className="flex gap-1 mb-4">
                   {[...Array(5)].map((_, j) => (
                     <Star 
@@ -1884,7 +1884,7 @@ const FAQSection: React.FC = React.memo(() => {
 
         <div className="space-y-4">
           {faqs.map((faq, i) => (
-            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden hover:border-emerald-500/30 transition-colors">
+            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm overflow-hidden hover:border-emerald-500/30 transition-colors">
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 className="w-full px-6 py-5 flex items-center justify-between text-left"
