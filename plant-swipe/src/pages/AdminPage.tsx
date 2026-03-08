@@ -246,9 +246,11 @@ type ListedMember = {
   isAdmin: boolean;
   roles: string[];
   rpm5m: number | null;
+  lastVisitAt: string | null;
+  visits7d: number;
 };
 
-type MemberListSort = "newest" | "oldest" | "rpm" | "role";
+type MemberListSort = "newest" | "oldest" | "rpm" | "role" | "active";
 
 type RoleStats = {
   totalMembers: number;
@@ -651,11 +653,39 @@ export const AdminPage: React.FC = () => {
     [],
   );
 
+  const formatCompactNumber = React.useCallback((value: number): string => {
+    if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toFixed(value % 1_000_000_000 === 0 ? 0 : 1)} B`;
+    if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value % 1_000_000 === 0 ? 0 : 1)} M`;
+    if (value >= 1_000) return `${(value / 1_000).toFixed(value % 1_000 === 0 ? 0 : 1)} K`;
+    return String(value);
+  }, []);
+
   const formatRpmValue = React.useCallback((value?: number | null): string => {
     if (typeof value === "number" && Number.isFinite(value)) {
       return value.toFixed(2);
     }
     return "0.00";
+  }, []);
+
+  const formatLastVisit = React.useCallback((value?: string | null): string => {
+    if (!value) return "Never";
+    try {
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return value;
+      const now = Date.now();
+      const diff = now - date.getTime();
+      const mins = Math.floor(diff / 60000);
+      if (mins < 1) return "Just now";
+      if (mins < 60) return `${mins}m ago`;
+      const hrs = Math.floor(mins / 60);
+      if (hrs < 24) return `${hrs}h ago`;
+      const days = Math.floor(hrs / 24);
+      if (days < 7) return `${days}d ago`;
+      if (days < 30) return `${Math.floor(days / 7)}w ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return String(value);
+    }
   }, []);
 
   // Compute a responsive max character count for branch names based on viewport width
@@ -825,6 +855,7 @@ export const AdminPage: React.FC = () => {
       [
         { value: "newest", label: "New" },
         { value: "oldest", label: "Oldest" },
+        { value: "active", label: "Active" },
         { value: "rpm", label: "RPM (5m)" },
         { value: "role", label: "Role" },
       ] as Array<{ value: MemberListSort; label: string }>,
@@ -5191,6 +5222,7 @@ export const AdminPage: React.FC = () => {
     lastOnlineAt?: string | null;
     lastIp?: string | null;
     visitsCount?: number;
+    visits7d?: number;
     uniqueIpsCount?: number;
     plantsTotal?: number;
     isBannedEmail?: boolean;
@@ -5315,7 +5347,7 @@ export const AdminPage: React.FC = () => {
 
   // Email/username autocomplete state
   const [emailSuggestions, setEmailSuggestions] = React.useState<
-    Array<{ id: string; email: string | null; display_name?: string | null }>
+    Array<{ id: string; email: string | null; display_name?: string | null; last_seen_at?: string | null; visits_7d?: number | null }>
   >([]);
   const [suggestionsOpen, setSuggestionsOpen] = React.useState(false);
   const [suggestLoading, setSuggestLoading] = React.useState(false);
@@ -5331,6 +5363,7 @@ export const AdminPage: React.FC = () => {
       email: string | null;
       display_name: string | null;
       last_seen_at: string | null;
+      visits_7d: number;
     }>
   >([]);
   const [ipUsed, setIpUsed] = React.useState<string | null>(null);
@@ -5585,6 +5618,18 @@ export const AdminPage: React.FC = () => {
                   : typeof mm?.rpm5m === "string" && mm.rpm5m.length > 0
                     ? Number(mm.rpm5m)
                     : null,
+              lastVisitAt:
+                typeof mm?.last_visit_at === "string"
+                  ? mm.last_visit_at
+                  : typeof mm?.lastVisitAt === "string"
+                    ? mm.lastVisitAt
+                    : null,
+              visits7d:
+                typeof mm?.visits_7d === "number"
+                  ? mm.visits_7d
+                  : typeof mm?.visits7d === "number"
+                    ? mm.visits7d
+                    : 0,
             } as ListedMember;
           })
           .filter(
@@ -5682,6 +5727,10 @@ export const AdminPage: React.FC = () => {
             typeof data?.visitsCount === "number"
               ? data.visitsCount
               : undefined,
+          visits7d:
+            typeof data?.visits7d === "number"
+              ? data.visits7d
+              : 0,
           uniqueIpsCount:
             typeof data?.uniqueIpsCount === "number"
               ? data.uniqueIpsCount
@@ -5984,6 +6033,7 @@ export const AdminPage: React.FC = () => {
               email: uu?.email ?? null,
               display_name: uu?.display_name ?? null,
               last_seen_at: uu?.last_seen_at ?? null,
+              visits_7d: typeof uu?.visits_7d === "number" ? uu.visits_7d : (uu?.visits_7d != null ? Number(uu.visits_7d) : 0),
             };
             })
           : [];
@@ -6430,6 +6480,8 @@ export const AdminPage: React.FC = () => {
               id: String(ss.id),
               email: ss?.email ? String(ss.email) : null,
               display_name: ss?.display_name ? String(ss.display_name) : null,
+              last_seen_at: ss?.last_seen_at ? String(ss.last_seen_at) : null,
+              visits_7d: typeof ss?.visits_7d === "number" ? ss.visits_7d : null,
             };
             }),
           );
@@ -10492,35 +10544,35 @@ export const AdminPage: React.FC = () => {
                 {/* Members Tab */}
                 {activeTab === "members" && (
                   <div className="space-y-4" ref={membersContainerRef}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="flex items-center gap-2 text-sm font-semibold">
+                    <div className="flex justify-center">
+                      <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
                         <Link
                           to="/admin/members"
-                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "search" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           Search
                         </Link>
-                        <span className="text-xs opacity-50">|</span>
                         <Link
                           to="/admin/members/list"
-                          className={`px-3 py-1.5 rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "list" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           List
                         </Link>
-                        <span className="text-xs opacity-50">|</span>
                         <Link
                           to="/admin/members/reports"
-                          className={`px-3 py-1.5 rounded-full transition-colors flex items-center gap-1.5 ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
+                          className={`px-4 py-1.5 text-sm font-semibold rounded-full transition-colors ${membersView === "reports" ? "bg-emerald-600 text-white shadow" : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white"}`}
                         >
                           Reports
                           {activeReportsCount > 0 && (
-                            <span className={`px-1.5 py-0.5 text-[10px] font-semibold rounded-full ${membersView === "reports" ? "bg-white/20 text-white" : "bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400"}`}>
+                            <span className={`ml-1.5 px-1.5 py-0.5 text-[10px] font-bold rounded-full ${membersView === "reports" ? "bg-white/25 text-white" : "bg-amber-500 text-white"}`}>
                               {activeReportsCount}
                             </span>
                           )}
                         </Link>
                       </div>
-                      {membersView === "list" && (
+                    </div>
+                    {membersView === "list" && (
+                      <div className="flex justify-center">
                         <Button
                           variant="outline"
                           size="sm"
@@ -10533,8 +10585,8 @@ export const AdminPage: React.FC = () => {
                           />
                           Refresh list
                         </Button>
-                      )}
-                    </div>
+                      </div>
+                    )}
 
                     {membersView === "search" && (
                       <>
@@ -10645,6 +10697,19 @@ export const AdminPage: React.FC = () => {
                                           {s.email}
                                         </div>
                                       )}
+                                    {(s.last_seen_at || s.visits_7d != null) && (
+                                      <div className="text-[11px] opacity-50 mt-0.5 flex items-center gap-1.5">
+                                        {s.last_seen_at && (
+                                          <span>Last seen: {formatLastVisit(s.last_seen_at)}</span>
+                                        )}
+                                        {s.last_seen_at && s.visits_7d != null && (
+                                          <span>•</span>
+                                        )}
+                                        {s.visits_7d != null && (
+                                          <span>7d: {formatCompactNumber(s.visits_7d)} visit{s.visits_7d !== 1 ? "s" : ""}</span>
+                                        )}
+                                      </div>
+                                    )}
                                   </button>
                                 ))}
                                 {suggestLoading && (
@@ -10715,12 +10780,12 @@ export const AdminPage: React.FC = () => {
                                           memberData.user?.email ||
                                           "-"}
                                       </div>
-                                      <div className="text-xs opacity-70 truncate">
+                                      <div className="text-xs opacity-70 truncate select-all cursor-text">
                                         {memberData.user?.email || "-"}
                                         {memberData.user?.id ? (
-                                          <span className="opacity-60">
+                                          <span className="opacity-60 select-text">
                                             {" "}
-                                            ? id {memberData.user.id}
+                                            · id {memberData.user.id}
                                           </span>
                                         ) : null}
                                       </div>
@@ -11717,6 +11782,26 @@ export const AdminPage: React.FC = () => {
                                 )}
                               </div>
                             </div>
+
+                            <Card className={glassCardClass}>
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-6">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">Last seen</div>
+                                    <div className="text-lg font-semibold tabular-nums">
+                                      {formatLastVisit(memberData.lastOnlineAt)}
+                                    </div>
+                                  </div>
+                                  <div className="w-px h-10 bg-stone-300 dark:bg-stone-600" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">Visits (7d)</div>
+                                    <div className="text-lg font-semibold tabular-nums">
+                                      {formatCompactNumber(memberData.visits7d ?? 0)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
 
                             <Card className={glassCardClass}>
                               <CardContent className="p-4">
@@ -12724,14 +12809,15 @@ export const AdminPage: React.FC = () => {
                                       <div className="text-xs opacity-70 truncate">
                                         {u.email || "-"}
                                       </div>
-                                      {u.last_seen_at && (
-                                        <div className="text-[11px] opacity-60 mt-0.5">
-                                          Last seen{" "}
-                                          {new Date(
-                                            u.last_seen_at,
-                                          ).toLocaleString()}
-                                        </div>
-                                      )}
+                                      <div className="text-[11px] opacity-60 mt-0.5 flex items-center gap-1.5">
+                                        {u.last_seen_at && (
+                                          <span>Last seen: {formatLastVisit(u.last_seen_at)}</span>
+                                        )}
+                                        {u.last_seen_at && u.visits_7d != null && (
+                                          <span>•</span>
+                                        )}
+                                        <span>7d: {formatCompactNumber(u.visits_7d)} visit{u.visits_7d !== 1 ? "s" : ""}</span>
+                                      </div>
                                     </button>
                                   ))}
                                 </div>
@@ -12931,6 +13017,14 @@ export const AdminPage: React.FC = () => {
                                         <span className="hidden sm:inline">•</span>
                                         <span className="tabular-nums">
                                           RPM (5m): {formatRpmValue(member.rpm5m)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span>
+                                          Last seen: {formatLastVisit(member.lastVisitAt)}
+                                        </span>
+                                        <span className="hidden sm:inline">•</span>
+                                        <span className="tabular-nums">
+                                          7d: {formatCompactNumber(member.visits7d)} visit{member.visits7d !== 1 ? "s" : ""}
                                         </span>
                                       </div>
                                   </button>

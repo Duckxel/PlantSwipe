@@ -12901,13 +12901,23 @@ app.get('/api/admin/member', async (req, res) => {
 
       // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
+      let visits7d = 0
       try {
-        const vc = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
-          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-        })
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const [vc, v7] = await Promise.all([
+          fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          }),
+          fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(sevenDaysAgo)}&select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          }),
+        ])
         const cr = vc.headers.get('content-range') || ''
         const m = cr.match(/\/(\d+)$/)
         if (m) visitsCount = Number(m[1])
+        const cr7 = v7.headers.get('content-range') || ''
+        const m7 = cr7.match(/\/(\d+)$/)
+        if (m7) visits7d = Number(m7[1])
       } catch { }
 
       // Bans (does not require Authorization; public schema via security definer policies)
@@ -13380,6 +13390,7 @@ app.get('/api/admin/member', async (req, res) => {
         lastCountry,
         lastReferrer,
         visitsCount,
+        visits7d,
         uniqueIpsCount: Array.isArray(ips) ? ips.length : undefined,
         plantsTotal,
         isBannedEmail,
@@ -13571,14 +13582,14 @@ app.get('/api/admin/member', async (req, res) => {
     let lastCountry = null
     let lastReferrer = null
     try {
-      const visitsTableId = sql.identifier(getVisitsTableIdentifierParts())
-      const lastRows = await sql`
-        select occurred_at, ip_address::text as ip, geo_country, referrer
-        from ${visitsTableId}
-        where user_id = ${user.id}
-        order by occurred_at desc
-        limit 1
-      `
+      const lastRows = await sql.unsafe(
+        `select occurred_at, ip_address::text as ip, geo_country, referrer
+         from ${VISITS_TABLE_SQL_IDENT}
+         where user_id = $1
+         order by occurred_at desc
+         limit 1`,
+        [user.id]
+      )
       if (Array.isArray(lastRows) && lastRows[0]) {
         lastOnlineAt = lastRows[0].occurred_at || null
         lastIp = (lastRows[0].ip || '').toString().replace(/\/[0-9]{1,3}$/, '') || null
@@ -13592,13 +13603,16 @@ app.get('/api/admin/member', async (req, res) => {
     if (!lastIp && Array.isArray(ips) && ips.length > 0) {
       lastIp = ips[0]
     }
+    let visits7d = 0
     try {
-      const [vcRows, uipRows] = await Promise.all([
+      const [vcRows, uipRows, v7Rows] = await Promise.all([
         sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
         sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [user.id]),
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and occurred_at >= now() - interval '7 days'`, [user.id]),
       ])
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
+      visits7d = v7Rows?.[0]?.c ?? 0
     } catch { }
     // Drop garden counts on server path
     try {
@@ -13685,7 +13699,7 @@ app.get('/api/admin/member', async (req, res) => {
           select
             ps.*,
             p.name as matched_plant_name,
-            p.scientific_name as matched_plant_scientific_name,
+            p.scientific_name_species as matched_plant_scientific_name,
             (select pi.link from public.plant_images pi where pi.plant_id = p.id and pi.use = 'primary' limit 1) as matched_plant_image
           from public.plant_scans ps
           left join public.plants p on p.id = ps.matched_plant_id
@@ -14053,6 +14067,7 @@ app.get('/api/admin/member', async (req, res) => {
       lastCountry,
       lastReferrer,
       visitsCount,
+      visits7d,
       uniqueIpsCount,
       plantsTotal,
       isBannedEmail,
@@ -15004,7 +15019,8 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
             `select v.user_id as id,
                     u.email,
                     p.display_name,
-                    max(v.occurred_at) as last_seen_at
+                    max(v.occurred_at) as last_seen_at,
+                    (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v2 where v2.user_id = v.user_id and v2.occurred_at >= now() - interval '7 days') as visits_7d
              from ${VISITS_TABLE_SQL_IDENT} v
              left join auth.users u on u.id = v.user_id
              left join public.profiles p on p.id = v.user_id
@@ -15048,6 +15064,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
           email: r.email || null,
           display_name: r.display_name || null,
           last_seen_at: r.last_seen_at || null,
+          visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0),
         }))
         const connectionsCount = aggRows?.[0]?.connections_count ?? users.length
         // Align displayed count with actual list of user cards
@@ -15392,10 +15409,12 @@ app.get('/api/admin/member-list', async (req, res) => {
         ? 'rpm'
         : sortRaw === 'role' || sortRaw.startsWith('role')
           ? 'role'
-          : 'newest'
+          : sortRaw === 'active' || sortRaw.startsWith('active')
+            ? 'active'
+            : 'newest'
     const filterRoleRaw = (req.query.role || '').toString().trim().toLowerCase()
     // Whitelist known roles to prevent SQL injection via string interpolation
-    const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta']
+    const KNOWN_ROLES = ['admin', 'editor', 'pro', 'vip', 'plus', 'creator', 'merchant', 'moderator', 'tester', 'beta', 'bug_catcher']
     const filterRole = KNOWN_ROLES.includes(filterRoleRaw) ? filterRoleRaw : ''
     const fetchSize = limit + 1
     const normalizeRows = (rows) => {
@@ -15417,6 +15436,8 @@ app.get('/api/admin/member-list', async (req, res) => {
             is_admin: r?.is_admin === true,
             roles,
             rpm5m: Number.isFinite(rpm) ? rpm : null,
+            last_visit_at: r?.last_visit_at || null,
+            visits_7d: typeof r?.visits_7d === 'number' ? r.visits_7d : (r?.visits_7d != null ? Number(r.visits_7d) : 0),
           }
         })
         .filter((r) => r !== null)
@@ -15430,18 +15451,20 @@ app.get('/api/admin/member-list', async (req, res) => {
           ? 'rpm5m desc nulls last, u.created_at desc'
           : sort === 'oldest'
             ? 'u.created_at asc'
-            : sort === 'role'
-              ? `case 
-                   when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
-                   when 'editor' = any(coalesce(p.roles, '{}')) then 1
-                   when 'pro' = any(coalesce(p.roles, '{}')) then 2
-                   when 'vip' = any(coalesce(p.roles, '{}')) then 3
-                   when 'plus' = any(coalesce(p.roles, '{}')) then 4
-                   when 'creator' = any(coalesce(p.roles, '{}')) then 5
-                   when 'merchant' = any(coalesce(p.roles, '{}')) then 6
-                   else 99
-                 end asc, u.created_at desc`
-              : 'u.created_at desc'
+            : sort === 'active'
+              ? 'visits_7d desc nulls last, last_visit_at desc nulls last, u.created_at desc'
+              : sort === 'role'
+                ? `case
+                     when p.is_admin = true or 'admin' = any(coalesce(p.roles, '{}')) then 0
+                     when 'editor' = any(coalesce(p.roles, '{}')) then 1
+                     when 'pro' = any(coalesce(p.roles, '{}')) then 2
+                     when 'vip' = any(coalesce(p.roles, '{}')) then 3
+                     when 'plus' = any(coalesce(p.roles, '{}')) then 4
+                     when 'creator' = any(coalesce(p.roles, '{}')) then 5
+                     when 'merchant' = any(coalesce(p.roles, '{}')) then 6
+                     else 99
+                   end asc, u.created_at desc`
+                : 'u.created_at desc'
 
       // Build WHERE clause for role filtering
       // Special case for admin: also check legacy is_admin field
@@ -15460,7 +15483,9 @@ app.get('/api/admin/member-list', async (req, res) => {
           p.display_name,
           p.is_admin,
           coalesce(p.roles, '{}') as roles,
-          coalesce(rpm.c, 0)::numeric / 5 as rpm5m
+          coalesce(rpm.c, 0)::numeric / 5 as rpm5m,
+          lv.last_visit_at,
+          coalesce(v7.visits_7d, 0)::int as visits_7d
         from auth.users u
         left join public.profiles p on p.id = u.id
         left join lateral (
@@ -15469,6 +15494,17 @@ app.get('/api/admin/member-list', async (req, res) => {
           where v.user_id = u.id
             and v.occurred_at >= now() - interval '5 minutes'
         ) rpm on true
+        left join lateral (
+          select max(v.occurred_at) as last_visit_at
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+        ) lv on true
+        left join lateral (
+          select count(*)::int as visits_7d
+          from ${visitsTableSql} v
+          where v.user_id = u.id
+            and v.occurred_at >= now() - interval '7 days'
+        ) v7 on true
         ${roleFilterClause}
         order by ${orderClause}
         limit $1
@@ -15710,14 +15746,17 @@ app.get('/api/admin/member-suggest', async (req, res) => {
     try {
       if (sql) {
         // Email matches
-        const emailRows = await sql`
-          select u.id, u.email, u.created_at, p.display_name
+        const emailRows = await sql.unsafe(
+          `select u.id, u.email, u.created_at, p.display_name,
+            (select max(v.occurred_at) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id) as last_seen_at,
+            (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id and v.occurred_at >= now() - interval '7 days') as visits_7d
           from auth.users u
           left join public.profiles p on p.id = u.id
-          where lower(u.email) like ${q + '%'}
+          where lower(u.email) like $1
           order by u.created_at desc
-          limit 7
-        `
+          limit 7`,
+          [q + '%']
+        )
         if (Array.isArray(emailRows)) {
           for (const r of emailRows) {
             const idKey = String(r.id)
@@ -15726,18 +15765,21 @@ app.get('/api/admin/member-suggest', async (req, res) => {
             seenIds.add(idKey)
             if (emailKey) seenEmails.add(emailKey)
             if (r.display_name) seenDisplay.add(String(r.display_name).toLowerCase())
-            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at, last_seen_at: r.last_seen_at || null, visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0) })
           }
         }
         // Display name matches
-        const nameRows = await sql`
-          select u.id, u.email, u.created_at, p.display_name
+        const nameRows = await sql.unsafe(
+          `select u.id, u.email, u.created_at, p.display_name,
+            (select max(v.occurred_at) from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id) as last_seen_at,
+            (select count(*)::int from ${VISITS_TABLE_SQL_IDENT} v where v.user_id = u.id and v.occurred_at >= now() - interval '7 days') as visits_7d
           from public.profiles p
           join auth.users u on u.id = p.id
-          where lower(p.display_name) like ${q + '%'}
+          where lower(p.display_name) like $1
           order by u.created_at desc
-          limit 7
-        `
+          limit 7`,
+          [q + '%']
+        )
         if (Array.isArray(nameRows)) {
           for (const r of nameRows) {
             const idKey = String(r.id)
@@ -15749,7 +15791,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
             seenIds.add(idKey)
             if (emailKey) seenEmails.add(emailKey)
             if (dispKey) seenDisplay.add(dispKey)
-            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at })
+            out.push({ id: r.id, email: r.email || null, display_name: r.display_name || null, created_at: r.created_at, last_seen_at: r.last_seen_at || null, visits_7d: typeof r.visits_7d === 'number' ? r.visits_7d : (r.visits_7d != null ? Number(r.visits_7d) : 0) })
           }
         }
       } else {
