@@ -953,7 +953,7 @@ const BeginnerFriendlySection: React.FC = React.memo(() => {
 
         {/* Bottom CTA */}
         <div className="mt-12 text-center">
-          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 border border-emerald-500/10">
+          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 backdrop-blur-sm border border-emerald-500/10">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                 <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -992,7 +992,7 @@ const FeaturesSection: React.FC = React.memo(() => {
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 mb-6">
             <Zap className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               {t("features.badge", { defaultValue: "Powerful Features" })}
@@ -1174,8 +1174,8 @@ const InteractiveDemoSection: React.FC = React.memo(() => {
           <div className="relative order-2 lg:order-1">
             <div className="relative aspect-square max-w-md mx-auto">
               {/* Center Circle */}
-              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
-              <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
+              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 backdrop-blur-sm border border-emerald-500/30" />
+              <div className="absolute inset-[25%] rounded-full bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
                 <div className="text-center p-4 sm:p-6">
                   {features[activeFeature] && (
                     <>
