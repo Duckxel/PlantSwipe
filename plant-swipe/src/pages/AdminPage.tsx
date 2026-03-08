@@ -10780,12 +10780,12 @@ export const AdminPage: React.FC = () => {
                                           memberData.user?.email ||
                                           "-"}
                                       </div>
-                                      <div className="text-xs opacity-70 truncate">
+                                      <div className="text-xs opacity-70 truncate select-all cursor-text">
                                         {memberData.user?.email || "-"}
                                         {memberData.user?.id ? (
-                                          <span className="opacity-60">
+                                          <span className="opacity-60 select-text">
                                             {" "}
-                                            ? id {memberData.user.id}
+                                            · id {memberData.user.id}
                                           </span>
                                         ) : null}
                                       </div>
