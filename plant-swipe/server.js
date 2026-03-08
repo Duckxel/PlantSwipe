@@ -17133,10 +17133,25 @@ app.post('/api/admin/backup-db', async (req, res) => {
     const filename = `plantswipe_backup_${ts}.sql.gz`
     const destPath = path.join(backupDir, filename)
 
+    // Prevent password from leaking in process list by stripping it from the connection string argument
+    let safeConnectionString = connectionString
+    let dbPassword = ''
+    try {
+      const u = new URL(connectionString)
+      if (u.password) {
+        dbPassword = decodeURIComponent(u.password)
+        u.password = ''
+        safeConnectionString = u.toString()
+      }
+    } catch { }
+
     // Spawn pg_dump and gzip the output to a file
     let stderrBuf = ''
-    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
-      env: { ...process.env },
+    const dumpEnv = { ...process.env }
+    if (dbPassword) dumpEnv.PGPASSWORD = dbPassword
+
+    const dump = spawnChild('pg_dump', ['--dbname', safeConnectionString, '--no-owner', '--no-acl'], {
+      env: dumpEnv,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     dump.on('error', async () => {
