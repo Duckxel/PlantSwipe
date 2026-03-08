@@ -676,9 +676,9 @@ const HeroSection: React.FC = React.memo(() => {
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { heroCards: dbHeroCards } = useLandingData()
-  
+
   // Start with a random card for variety across different page loads
-  const [activeCardIndex, setActiveCardIndex] = React.useState(() => 
+  const [activeCardIndex, setActiveCardIndex] = React.useState(() =>
     dbHeroCards.length > 0 ? Math.floor(Math.random() * dbHeroCards.length) : 0
   )
 
@@ -690,7 +690,6 @@ const HeroVisual: React.FC = () => {
   }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
-  // Plant name and image come from database, but all other fields use translations for proper localization
   const activeCard = dbHeroCards[activeCardIndex] || null
   const plantName = activeCard?.plant_name || t("heroCard.plantName")
   const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
@@ -708,115 +707,177 @@ const HeroVisual: React.FC = () => {
     return () => clearInterval(interval)
   }, [dbHeroCards.length])
 
+  // Water progress animation (simulate filling to ~70%)
+  const [waterProgress, setWaterProgress] = React.useState(0)
+  React.useEffect(() => {
+    const timer = setTimeout(() => setWaterProgress(72), 800)
+    return () => clearTimeout(timer)
+  }, [activeCardIndex])
+
   return (
     <div className="relative">
-      {/* Glow Effects */}
-      <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/30 via-teal-500/20 to-green-500/30 rounded-full blur-3xl animate-pulse-glow" />
-      
+      {/* Glow Effects — layered for depth */}
+      <div className="absolute inset-0 -m-16 bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-green-500/20 rounded-full blur-3xl animate-pulse-glow" />
+      <div className="absolute inset-0 -m-8 bg-gradient-to-tr from-teal-400/15 to-emerald-600/15 rounded-full blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
+
       {/* Main Phone Frame */}
       <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
-        <div className="relative bg-stone-900 dark:bg-stone-950 rounded-[3rem] p-3 shadow-2xl shadow-emerald-900/20">
-          {/* Screen */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
-            {/* Dynamic Island */}
-            <div className="h-10 flex items-center justify-center pt-2">
-              <div className="w-24 h-7 bg-stone-900 dark:bg-black rounded-full" />
-            </div>
+        {/* Phone body with subtle ring */}
+        <div className="relative bg-gradient-to-b from-stone-800 to-stone-900 dark:from-stone-900 dark:to-black rounded-[3rem] p-[3px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
+          <div className="bg-stone-900 dark:bg-black rounded-[2.85rem] p-2.5">
+            {/* Screen */}
+            <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.4rem] overflow-hidden">
+              {/* Status Bar */}
+              <div className="flex items-center justify-between px-8 pt-4 pb-1">
+                <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
+                <div className="w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full" />
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-[2px]">
+                    <div className="w-[3px] h-[6px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[8px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[10px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[12px] bg-stone-300 dark:bg-stone-600 rounded-sm" />
+                  </div>
+                  <Wifi className="h-3 w-3 text-stone-400 dark:text-stone-500" />
+                </div>
+              </div>
 
-            {/* App Content */}
-            <div className="px-5 pb-8 space-y-4">
-              {/* Plant Image Area */}
-              <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
-                {imageUrl ? (
-                  <img
-                    src={imageUrl}
-                    alt={plantName}
-                    loading="lazy"
-                    decoding="async"
-                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
-                      <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+              {/* App Content */}
+              <div className="px-4 pb-6 pt-2 space-y-3">
+                {/* Plant Image — hero card style */}
+                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden group">
+                  {/* Shimmer placeholder */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30" />
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={plantName}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+                        <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                      </div>
                     </div>
+                  )}
+                  {/* Gradient overlay for text readability */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
+                  {/* Plant Info — overlaid on image */}
+                  <div className="absolute bottom-0 left-0 right-0 p-3.5">
+                    <p className="text-white font-bold text-base drop-shadow-md">{plantName}</p>
+                    <p className="text-white/70 text-xs italic drop-shadow-sm">{plantScientific}</p>
+                  </div>
+                </div>
+
+                {/* Stats Row — compact pills with visual indicators */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="relative flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10 overflow-hidden">
+                    {/* Circular water progress */}
+                    <div className="relative h-9 w-9 flex-shrink-0">
+                      <svg className="h-9 w-9 -rotate-90" viewBox="0 0 36 36">
+                        <circle cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="3" className="text-blue-100 dark:text-blue-900/30" />
+                        <circle
+                          cx="18" cy="18" r="14" fill="none" stroke="currentColor" strokeWidth="3"
+                          strokeLinecap="round"
+                          className="text-blue-500 transition-all duration-1000 ease-out"
+                          strokeDasharray={`${waterProgress * 0.88} 88`}
+                        />
+                      </svg>
+                      <Droplets className="absolute inset-0 m-auto h-3.5 w-3.5 text-blue-500" />
+                    </div>
+                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{waterFrequency}</span>
+                  </div>
+                  <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                    <div className="relative h-9 w-9 flex-shrink-0 rounded-lg bg-amber-500/10 flex items-center justify-center">
+                      <Sun className="h-4 w-4 text-amber-500 animate-spin-slow" style={{ animationDuration: '12s' }} />
+                    </div>
+                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{lightLevel}</span>
+                  </div>
+                </div>
+
+                {/* Reminder Card — elevated design */}
+                <div className="relative flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20 overflow-hidden">
+                  {/* Subtle pattern overlay */}
+                  <div className="absolute inset-0 opacity-10" style={{
+                    backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
+                    backgroundSize: '16px 16px'
+                  }} />
+                  <div className="relative h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-white animate-bounce-subtle" />
+                  </div>
+                  <div className="relative flex-1">
+                    <p className="text-[10px] text-white/70 uppercase tracking-wider font-medium">{t("heroCard.nextReminder")}</p>
+                    <p className="text-sm font-bold text-white">{reminderText}</p>
+                  </div>
+                  <ArrowRight className="relative h-4 w-4 text-white/70" />
+                </div>
+
+                {/* Card Indicators - show if multiple cards */}
+                {dbHeroCards.length > 1 && (
+                  <div className="flex justify-center gap-1.5 pt-1">
+                    {dbHeroCards.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveCardIndex(i)}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          i === activeCardIndex
+                            ? 'w-6 bg-emerald-500'
+                            : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
+                        }`}
+                      />
+                    ))}
                   </div>
                 )}
-                {/* Plant Info Overlay */}
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="glass-card rounded-2xl p-3 space-y-1 border border-white/30 dark:border-white/10">
-                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{plantName}</p>
-                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{plantScientific}</p>
-                  </div>
+
+                {/* Bottom bar indicator */}
+                <div className="flex justify-center pt-1 pb-1">
+                  <div className="w-28 h-1 rounded-full bg-stone-300 dark:bg-stone-600" />
                 </div>
               </div>
-
-              {/* Care Pills */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
-                  <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                    <Droplets className="h-4 w-4 text-blue-500" />
-                  </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{waterFrequency}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                    <Sun className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{lightLevel}</span>
-                </div>
-              </div>
-
-              {/* Reminder Card */}
-              <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center animate-bounce-subtle">
-                  <Bell className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wide">{t("heroCard.nextReminder")}</p>
-                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{reminderText}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 text-emerald-500" />
-              </div>
-
-              {/* Card Indicators - show if multiple cards */}
-              {dbHeroCards.length > 1 && (
-                <div className="flex justify-center gap-1.5 pt-2">
-                  {dbHeroCards.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveCardIndex(i)}
-                      className={`h-1.5 rounded-full transition-all ${
-                        i === activeCardIndex 
-                          ? 'w-6 bg-emerald-500' 
-                          : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
+
+        {/* Side buttons */}
+        <div className="absolute right-[-2px] top-28 w-[3px] h-8 bg-stone-700 dark:bg-stone-800 rounded-r-sm" />
+        <div className="absolute left-[-2px] top-24 w-[3px] h-6 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
+        <div className="absolute left-[-2px] top-36 w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
+        <div className="absolute left-[-2px] top-[196px] w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
       </div>
 
-      {/* Floating Cards */}
-      <div className="absolute -top-4 -left-8 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float" style={{ animationDelay: '0.5s' }}>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      {/* Floating Cards — redesigned with blur and better positioning */}
+      <div className="absolute -top-3 -left-6 sm:-left-10 animate-float" style={{ animationDelay: '0.5s' }}>
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center">
+            <Check className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("heroCard.careLogged")}</span>
+          <span className="text-sm font-semibold text-stone-800 dark:text-white">{t("heroCard.careLogged")}</span>
         </div>
       </div>
 
-      <div className="absolute -bottom-2 -right-6 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float-delayed">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
-            <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+      <div className="absolute -bottom-1 -right-4 sm:-right-8 animate-float-delayed">
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-pink-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+            <Heart className="h-4 w-4 text-white fill-white" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-stone-800 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
+            <span className="text-[10px] text-stone-500 dark:text-stone-400">{t("floatingCards.likesLabel", { defaultValue: "new likes" })}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Extra floating badge — plant count */}
+      <div className="absolute top-1/2 -right-4 sm:-right-12 animate-float" style={{ animationDelay: '1.5s' }}>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-lg shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+            <Leaf className="h-3.5 w-3.5 text-white" />
+          </div>
+          <span className="text-xs font-bold text-stone-800 dark:text-white">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
         </div>
       </div>
     </div>

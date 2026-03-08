@@ -157,6 +157,7 @@
   },
   "floatingCards": {
     "newLikes": "+42 today",
+    "likesLabel": "new likes",
     "morePlants": "+10K"
   },
   "pricingSection": {
