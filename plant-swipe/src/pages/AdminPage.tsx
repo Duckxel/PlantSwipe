@@ -5222,6 +5222,7 @@ export const AdminPage: React.FC = () => {
     lastOnlineAt?: string | null;
     lastIp?: string | null;
     visitsCount?: number;
+    visits7d?: number;
     uniqueIpsCount?: number;
     plantsTotal?: number;
     isBannedEmail?: boolean;
@@ -5726,6 +5727,10 @@ export const AdminPage: React.FC = () => {
             typeof data?.visitsCount === "number"
               ? data.visitsCount
               : undefined,
+          visits7d:
+            typeof data?.visits7d === "number"
+              ? data.visits7d
+              : 0,
           uniqueIpsCount:
             typeof data?.uniqueIpsCount === "number"
               ? data.uniqueIpsCount
@@ -11777,6 +11782,26 @@ export const AdminPage: React.FC = () => {
                                 )}
                               </div>
                             </div>
+
+                            <Card className={glassCardClass}>
+                              <CardContent className="p-4">
+                                <div className="flex items-center gap-6">
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">Last seen</div>
+                                    <div className="text-lg font-semibold tabular-nums">
+                                      {formatLastVisit(memberData.lastOnlineAt)}
+                                    </div>
+                                  </div>
+                                  <div className="w-px h-10 bg-stone-300 dark:bg-stone-600" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="text-xs uppercase tracking-wide opacity-50 mb-1">Visits (7d)</div>
+                                    <div className="text-lg font-semibold tabular-nums">
+                                      {formatCompactNumber(memberData.visits7d ?? 0)}
+                                    </div>
+                                  </div>
+                                </div>
+                              </CardContent>
+                            </Card>
 
                             <Card className={glassCardClass}>
                               <CardContent className="p-4">

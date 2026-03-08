@@ -12901,13 +12901,23 @@ app.get('/api/admin/member', async (req, res) => {
 
       // Counts (best-effort via headers; requires Authorization)
       let visitsCount = undefined
+      let visits7d = 0
       try {
-        const vc = await fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
-          headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
-        })
+        const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+        const [vc, v7] = await Promise.all([
+          fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          }),
+          fetch(`${supabaseUrlEnv}/rest/v1/${tablePath}?user_id=eq.${encodeURIComponent(targetId)}&occurred_at=gte.${encodeURIComponent(sevenDaysAgo)}&select=id`, {
+            headers: { ...baseHeaders, 'Prefer': 'count=exact', 'Range': '0-0' },
+          }),
+        ])
         const cr = vc.headers.get('content-range') || ''
         const m = cr.match(/\/(\d+)$/)
         if (m) visitsCount = Number(m[1])
+        const cr7 = v7.headers.get('content-range') || ''
+        const m7 = cr7.match(/\/(\d+)$/)
+        if (m7) visits7d = Number(m7[1])
       } catch { }
 
       // Bans (does not require Authorization; public schema via security definer policies)
@@ -13380,6 +13390,7 @@ app.get('/api/admin/member', async (req, res) => {
         lastCountry,
         lastReferrer,
         visitsCount,
+        visits7d,
         uniqueIpsCount: Array.isArray(ips) ? ips.length : undefined,
         plantsTotal,
         isBannedEmail,
@@ -13592,13 +13603,16 @@ app.get('/api/admin/member', async (req, res) => {
     if (!lastIp && Array.isArray(ips) && ips.length > 0) {
       lastIp = ips[0]
     }
+    let visits7d = 0
     try {
-      const [vcRows, uipRows] = await Promise.all([
+      const [vcRows, uipRows, v7Rows] = await Promise.all([
         sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1`, [user.id]),
         sql.unsafe(`select count(distinct ip_address)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and ip_address is not null`, [user.id]),
+        sql.unsafe(`select count(*)::int as c from ${VISITS_TABLE_SQL_IDENT} where user_id = $1 and occurred_at >= now() - interval '7 days'`, [user.id]),
       ])
       visitsCount = vcRows?.[0]?.c ?? 0
       uniqueIpsCount = uipRows?.[0]?.c ?? 0
+      visits7d = v7Rows?.[0]?.c ?? 0
     } catch { }
     // Drop garden counts on server path
     try {
@@ -13685,7 +13699,7 @@ app.get('/api/admin/member', async (req, res) => {
           select
             ps.*,
             p.name as matched_plant_name,
-            p.scientific_name as matched_plant_scientific_name,
+            p.scientific_name_species as matched_plant_scientific_name,
             (select pi.link from public.plant_images pi where pi.plant_id = p.id and pi.use = 'primary' limit 1) as matched_plant_image
           from public.plant_scans ps
           left join public.plants p on p.id = ps.matched_plant_id
@@ -14053,6 +14067,7 @@ app.get('/api/admin/member', async (req, res) => {
       lastCountry,
       lastReferrer,
       visitsCount,
+      visits7d,
       uniqueIpsCount,
       plantsTotal,
       isBannedEmail,
