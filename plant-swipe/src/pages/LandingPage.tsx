@@ -1,4 +1,5 @@
 import React from "react"
+import { Typewriter } from "@/components/ui/typewriter"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
@@ -547,6 +548,7 @@ const HeroSection: React.FC = React.memo(() => {
   // All text content from translations (not editable via admin)
   const badgeText = t("hero.badge")
   const titleStart = t("hero.title")
+  const titleRotating = t("hero.titleRotating", { returnObjects: true }) as string[]
   const titleHighlight = t("hero.titleHighlight")
   const titleEnd = t("hero.titleEnd")
   const description = t("hero.description")
@@ -600,6 +602,18 @@ const HeroSection: React.FC = React.memo(() => {
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
               <span className="text-stone-900 dark:text-white">{titleStart}</span>{" "}
+              {Array.isArray(titleRotating) && titleRotating.length > 0 && (
+                <Typewriter
+                  text={titleRotating}
+                  speed={80}
+                  deleteSpeed={50}
+                  waitTime={2000}
+                  className="gradient-text"
+                  cursorChar="|"
+                  cursorClassName="ml-0.5 font-light gradient-text"
+                />
+              )}
+              <br />
               <span className="gradient-text">{titleHighlight}</span>{" "}
               <span className="text-stone-900 dark:text-white">{titleEnd}</span>
             </h1>
