@@ -10,9 +10,10 @@
   },
   "hero": {
     "badge": "Votre compagnon pour des plantes plus heureuses",
-    "title": "Cultivez un jardin que vous aimez",
-    "titleHighlight": "— Sans incertitudes.",
+    "title": "Cultivez un Jardin à",
+    "titleHighlight": "Sans incertitudes.",
     "titleEnd": "",
+    "titleRotating": ["Aimer", "Chérir", "Savourer", "Admirer"],
     "description": "Découvrez des plantes, suivez leur croissance et recevez des rappels d'entretien intelligents — tout en un seul endroit. Que vous soyez débutant ou jardinier expérimenté, Aphylia aide vos plantes à prospérer.",
     "ctaDownload": "Commencer gratuitement",
     "ctaTryBrowser": "Explorer l'appli",
@@ -176,6 +177,7 @@
   },
   "floatingCards": {
     "newLikes": "+42 aujourd'hui",
+    "likesLabel": "nouveaux likes",
     "morePlants": "+10K"
   },
   "pricingSection": {

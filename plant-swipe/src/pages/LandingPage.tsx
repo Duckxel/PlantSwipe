@@ -1,4 +1,5 @@
 import React from "react"
+import { Typewriter } from "@/components/ui/typewriter"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useAuth } from "@/context/AuthContext"
@@ -10,6 +11,33 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
 import i18n from "@/lib/i18n"
+import { DitheringShader } from "@/components/ui/dithering-shader"
+import "./LandingPage.css"
+
+// Intersection Observer hook: defers rendering of below-fold sections until they approach the viewport.
+// rootMargin="400px" triggers 400px before the section scrolls into view for seamless UX.
+const useLazySection = (rootMargin = "400px") => {
+  const ref = React.useRef<HTMLDivElement>(null)
+  const [isVisible, setIsVisible] = React.useState(false)
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true)
+          observer.disconnect()
+        }
+      },
+      { rootMargin }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [rootMargin])
+
+  return { ref, isVisible }
+}
 import {
   Leaf,
   Droplets,
@@ -241,81 +269,16 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
 
 const useLandingData = () => React.useContext(LandingDataContext)
 
-// CSS Animations
-const animationStyles = `
-  @keyframes float {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-20px) rotate(3deg); }
-  }
-  @keyframes float-slow {
-    0%, 100% { transform: translateY(0px); }
-    50% { transform: translateY(-10px); }
-  }
-  @keyframes float-delayed {
-    0%, 100% { transform: translateY(0px) rotate(0deg); }
-    50% { transform: translateY(-15px) rotate(-2deg); }
-  }
-  @keyframes pulse-glow {
-    0%, 100% { opacity: 0.4; transform: scale(1); }
-    50% { opacity: 0.8; transform: scale(1.05); }
-  }
-  @keyframes gradient-shift {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-  }
-  @keyframes marquee {
-    0% { transform: translateX(0); }
-    100% { transform: translateX(-50%); }
-  }
-  @keyframes fade-in-up {
-    from { opacity: 0; transform: translateY(30px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  @keyframes scale-in {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-  }
-  @keyframes spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-  }
-  @keyframes counter-spin-slow {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(-360deg); }
-  }
-  @keyframes bounce-subtle {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-5px); }
-  }
-  .animate-float { animation: float 6s ease-in-out infinite; }
-  .animate-float-slow { animation: float-slow 8s ease-in-out infinite; }
-  .animate-float-delayed { animation: float-delayed 7s ease-in-out infinite 1s; }
-  .animate-pulse-glow { animation: pulse-glow 4s ease-in-out infinite; }
-  .animate-gradient { animation: gradient-shift 8s ease infinite; background-size: 200% 200%; }
-  .animate-marquee { animation: marquee 30s linear infinite; }
-  .animate-fade-in-up { animation: fade-in-up 0.6s ease-out forwards; }
-  .animate-scale-in { animation: scale-in 0.5s ease-out forwards; }
-  .animate-spin-slow { animation: spin-slow 20s linear infinite; }
-  .animate-counter-spin-slow { animation: counter-spin-slow 20s linear infinite; }
-  .animate-bounce-subtle { animation: bounce-subtle 2s ease-in-out infinite; }
-  .plant-icon-theme { filter: brightness(0) saturate(100%); }
-  .dark .plant-icon-theme { filter: brightness(0) saturate(100%) invert(100%); }
-  .gradient-text {
-    background: linear-gradient(135deg, #10b981 0%, #059669 50%, #047857 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-  .glass-card {
-    background: rgba(255, 255, 255, 0.7);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-  }
-  .dark .glass-card {
-    background: rgba(30, 30, 30, 0.7);
-  }
-`
+// LazySection wrapper: renders a placeholder until the section approaches the viewport,
+// then mounts the actual component. Prevents rendering heavy below-fold content on initial load.
+const LazySection: React.FC<{ children: React.ReactNode; minHeight?: string }> = ({ children, minHeight = "200px" }) => {
+  const { ref, isVisible } = useLazySection()
+  return (
+    <div ref={ref}>
+      {isVisible ? children : <div style={{ minHeight }} />}
+    </div>
+  )
+}
 
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
@@ -344,8 +307,10 @@ const LandingPage: React.FC = () => {
   React.useEffect(() => {
     const loadData = async () => {
       try {
-        // Execute all queries in parallel, but handle errors individually
-        // Some tables may not exist yet (404), which is fine - we fall back to defaults
+        const needsTranslation = currentLang !== 'en'
+
+        // Execute ALL queries in a single parallel batch — including translations and showcase.
+        // Previously, translations were fetched sequentially after the main batch, adding latency.
         const results = await Promise.allSettled([
           supabase.from("landing_page_settings").select("*").limit(1).maybeSingle(),
           supabase.from("landing_hero_cards").select("*").eq("is_active", true).order("position"),
@@ -353,13 +318,23 @@ const LandingPage: React.FC = () => {
           supabase.from("landing_testimonials").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_faq").select("*").eq("is_active", true).order("position"),
           supabase.from("landing_demo_features").select("*").eq("is_active", true).order("position"),
+          supabase.from("landing_showcase_config").select("*").limit(1).maybeSingle(),
+          // Translation queries — fire in parallel even if not needed (no-op if English)
+          needsTranslation
+            ? supabase.from("landing_faq_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
+          needsTranslation
+            ? supabase.from("landing_demo_feature_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
+          needsTranslation
+            ? supabase.from("landing_stats_translations").select("*").eq("language", currentLang)
+            : Promise.resolve({ data: null, error: null }),
         ])
 
         // Extract data safely, using null/empty array as fallback for any failures
         const getData = <T,>(result: PromiseSettledResult<{ data: T | null; error: unknown }>, defaultValue: T): T => {
           if (result.status === 'rejected') return defaultValue
           const { data, error } = result.value
-          // Treat any error (including 404 for missing tables) as "use default"
           if (error || data === null) return defaultValue
           return data
         }
@@ -370,108 +345,45 @@ const LandingPage: React.FC = () => {
         const testimonials = getData(results[3], [])
         let faqItems = getData(results[4], []) as FAQ[]
         let demoFeatures = getData(results[5], []) as DemoFeature[]
-        
-        // Load FAQ translations for current language (if not English)
-        if (currentLang !== 'en' && faqItems.length > 0) {
-          try {
-            const { data: translations } = await supabase
-              .from("landing_faq_translations")
-              .select("*")
-              .eq("language", currentLang)
-            
-            if (translations && translations.length > 0) {
-              // Create a map of translations by faq_id
-              const translationMap = new Map<string, { question: string; answer: string }>()
-              translations.forEach((t: { faq_id: string; question: string; answer: string }) => {
-                translationMap.set(t.faq_id, { question: t.question, answer: t.answer })
-              })
-              
-              // Apply translations to FAQ items
-              faqItems = faqItems.map(faq => {
-                const translation = translationMap.get(faq.id)
-                if (translation) {
-                  return { ...faq, question: translation.question, answer: translation.answer }
-                }
-                return faq
-              })
-            }
-          } catch (e) {
-            console.error("Failed to load FAQ translations:", e)
-          }
+        const showcaseConfig = getData<ShowcaseConfig | null>(results[6], null)
+
+        // Apply FAQ translations
+        const faqTranslations = getData(results[7], null) as Array<{ faq_id: string; question: string; answer: string }> | null
+        if (faqTranslations && faqTranslations.length > 0 && faqItems.length > 0) {
+          const translationMap = new Map(faqTranslations.map(t => [t.faq_id, { question: t.question, answer: t.answer }]))
+          faqItems = faqItems.map(faq => {
+            const tr = translationMap.get(faq.id)
+            return tr ? { ...faq, question: tr.question, answer: tr.answer } : faq
+          })
         }
 
-        // Load Demo Feature translations for current language (if not English)
-        if (currentLang !== 'en' && demoFeatures.length > 0) {
-          try {
-            const { data: translations } = await supabase
-              .from("landing_demo_feature_translations")
-              .select("*")
-              .eq("language", currentLang)
-            
-            if (translations && translations.length > 0) {
-              // Create a map of translations by feature_id
-              const translationMap = new Map<string, string>()
-              translations.forEach((t: { feature_id: string; label: string }) => {
-                translationMap.set(t.feature_id, t.label)
-              })
-              
-              // Apply translations to demo features
-              demoFeatures = demoFeatures.map(feature => {
-                const translatedLabel = translationMap.get(feature.id)
-                if (translatedLabel) {
-                  return { ...feature, label: translatedLabel }
-                }
-                return feature
-              })
-            }
-          } catch (e) {
-            console.error("Failed to load demo feature translations:", e)
-          }
+        // Apply Demo Feature translations
+        const featureTranslations = getData(results[8], null) as Array<{ feature_id: string; label: string }> | null
+        if (featureTranslations && featureTranslations.length > 0 && demoFeatures.length > 0) {
+          const translationMap = new Map(featureTranslations.map(t => [t.feature_id, t.label]))
+          demoFeatures = demoFeatures.map(f => {
+            const label = translationMap.get(f.id)
+            return label ? { ...f, label } : f
+          })
         }
 
-        // Load Stats translations for current language (if not English)
+        // Apply Stats translations
         let translatedStats = stats
-        if (currentLang !== 'en' && stats) {
-          try {
-            const { data: statsTranslation } = await supabase
-              .from("landing_stats_translations")
-              .select("*")
-              .eq("stats_id", stats.id)
-              .eq("language", currentLang)
-              .maybeSingle()
-            
-            if (statsTranslation) {
-              // Apply translations to stats labels
-              translatedStats = {
-                ...stats,
-                plants_label: statsTranslation.plants_label || stats.plants_label,
-                users_label: statsTranslation.users_label || stats.users_label,
-                tasks_label: statsTranslation.tasks_label || stats.tasks_label,
-                rating_label: statsTranslation.rating_label || stats.rating_label,
-              }
+        const statsTranslations = getData(results[9], null) as Array<{ stats_id: string; plants_label: string; users_label: string; tasks_label: string; rating_label: string }> | null
+        if (statsTranslations && statsTranslations.length > 0 && stats) {
+          // Find the matching stats translation
+          const st = statsTranslations.find(t => t.stats_id === stats.id)
+          if (st) {
+            translatedStats = {
+              ...stats,
+              plants_label: st.plants_label || stats.plants_label,
+              users_label: st.users_label || stats.users_label,
+              tasks_label: st.tasks_label || stats.tasks_label,
+              rating_label: st.rating_label || stats.rating_label,
             }
-          } catch (e) {
-            console.error("Failed to load stats translations:", e)
           }
         }
 
-        // Load Showcase Configuration
-        let showcaseConfig: ShowcaseConfig | null = null
-        try {
-          const { data: showcaseData } = await supabase
-            .from("landing_showcase_config")
-            .select("*")
-            .limit(1)
-            .maybeSingle()
-          
-          if (showcaseData) {
-            showcaseConfig = showcaseData
-          }
-        } catch (e) {
-          // Table may not exist yet, use defaults in component
-          console.error("Failed to load showcase config:", e)
-        }
-        
         setLandingData({
           heroCards: heroCards || [],
           stats: translatedStats || null,
@@ -517,13 +429,39 @@ const LandingPage: React.FC = () => {
   return (
     <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
-      <style>{animationStyles}</style>
-      
-      {/* Ambient Background Elements */}
+      {/* Ambient Background — dithering swirl shader + layered orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-[120px] animate-pulse-glow" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-[100px] animate-pulse-glow" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-[80px]" />
+        {/* WebGL swirl shader — subtle animated texture behind everything */}
+        <div className="absolute inset-0 opacity-[0.06] dark:opacity-[0.015] mix-blend-multiply dark:mix-blend-lighten">
+          <DitheringShader
+            shape="swirl"
+            type="4x4"
+            colorBack="#0a0f0a"
+            colorFront="#34d399"
+            pxSize={5}
+            speed={0.2}
+            className="w-full h-full"
+            style={{ width: "100%", height: "100%" }}
+            width={1200}
+            height={1200}
+          />
+        </div>
+        {/* Top-left: warm emerald glow */}
+        <div className="absolute -top-32 -left-20 w-[500px] h-[500px] bg-emerald-500/[0.07] rounded-full blur-3xl" />
+        {/* Top-right: subtle teal accent */}
+        <div className="absolute top-16 right-[10%] w-[350px] h-[350px] bg-teal-400/[0.06] rounded-full blur-3xl" />
+        {/* Center-left: deeper green, offset low */}
+        <div className="absolute top-[40%] -left-16 w-[400px] h-[400px] bg-green-600/[0.05] rounded-full blur-3xl" />
+        {/* Center-right: cyan hint for variety */}
+        <div className="absolute top-[35%] right-[5%] w-[300px] h-[300px] bg-cyan-500/[0.04] rounded-full blur-3xl" />
+        {/* Mid-page: warm lime accent to break monotone */}
+        <div className="absolute top-[55%] left-[30%] w-[450px] h-[350px] bg-lime-500/[0.04] rounded-full blur-3xl" />
+        {/* Lower-left: teal depth */}
+        <div className="absolute top-[70%] -left-10 w-[350px] h-[350px] bg-teal-500/[0.06] rounded-full blur-3xl" />
+        {/* Lower-right: emerald anchor */}
+        <div className="absolute top-[75%] right-[15%] w-[400px] h-[400px] bg-emerald-400/[0.05] rounded-full blur-3xl" />
+        {/* Bottom: subtle warm green wash */}
+        <div className="absolute -bottom-20 left-[20%] w-[600px] h-[300px] bg-green-500/[0.04] rounded-full blur-3xl" />
       </div>
 
       <div className="relative">
@@ -556,32 +494,41 @@ const LandingPage: React.FC = () => {
         {/* Hero Section */}
         {(landingData.settings?.show_hero_section ?? true) && <HeroSection />}
 
-        {/* Stats Banner */}
+        {/* Stats Banner - above fold on some viewports, keep eager */}
         {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
 
-        {/* Beginner Friendly Section */}
-        {(landingData.settings?.show_beginner_section ?? true) && <BeginnerFriendlySection />}
+        {/* Below-fold sections: lazily rendered via IntersectionObserver */}
+        {(landingData.settings?.show_beginner_section ?? true) && (
+          <LazySection minHeight="400px"><BeginnerFriendlySection /></LazySection>
+        )}
 
-        {/* Features Grid */}
-        {(landingData.settings?.show_features_section ?? true) && <FeaturesSection />}
+        {(landingData.settings?.show_features_section ?? true) && (
+          <LazySection minHeight="500px"><FeaturesSection /></LazySection>
+        )}
 
-        {/* Interactive Demo - Feature Wheel */}
-        {(landingData.settings?.show_demo_section ?? true) && <InteractiveDemoSection />}
+        {(landingData.settings?.show_demo_section ?? true) && (
+          <LazySection minHeight="500px"><InteractiveDemoSection /></LazySection>
+        )}
 
-        {/* Showcase Section */}
-        {(landingData.settings?.show_showcase_section ?? true) && <ShowcaseSection />}
+        {(landingData.settings?.show_showcase_section ?? true) && (
+          <LazySection minHeight="600px"><ShowcaseSection /></LazySection>
+        )}
 
-        {/* How It Works */}
-        {(landingData.settings?.show_how_it_works_section ?? true) && <HowItWorksSection />}
+        {(landingData.settings?.show_how_it_works_section ?? true) && (
+          <LazySection minHeight="400px"><HowItWorksSection /></LazySection>
+        )}
 
-        {/* Testimonials */}
-        {(landingData.settings?.show_testimonials_section ?? true) && <TestimonialsSection />}
+        {(landingData.settings?.show_testimonials_section ?? true) && (
+          <LazySection minHeight="400px"><TestimonialsSection /></LazySection>
+        )}
 
-        {/* FAQ */}
-        {(landingData.settings?.show_faq_section ?? true) && <FAQSection />}
+        {(landingData.settings?.show_faq_section ?? true) && (
+          <LazySection minHeight="400px"><FAQSection /></LazySection>
+        )}
 
-        {/* Final CTA */}
-        {(landingData.settings?.show_final_cta_section ?? true) && <FinalCTASection />}
+        {(landingData.settings?.show_final_cta_section ?? true) && (
+          <LazySection minHeight="300px"><FinalCTASection /></LazySection>
+        )}
 
         {/* Footer */}
         <Footer />
@@ -594,13 +541,14 @@ const LandingPage: React.FC = () => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    HERO SECTION - Completely Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const HeroSection: React.FC = () => {
+const HeroSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { stats } = useLandingData()
 
   // All text content from translations (not editable via admin)
   const badgeText = t("hero.badge")
   const titleStart = t("hero.title")
+  const titleRotating = t("hero.titleRotating", { returnObjects: true }) as string[]
   const titleHighlight = t("hero.titleHighlight")
   const titleEnd = t("hero.titleEnd")
   const description = t("hero.description")
@@ -635,7 +583,7 @@ const HeroSection: React.FC = () => {
       </div>
 
       <div className="relative max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
+        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
           {/* Left: Hero Content */}
           <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
             {/* Badge */}
@@ -653,9 +601,21 @@ const HeroSection: React.FC = () => {
 
             {/* Headline */}
             <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
-              <span className="text-stone-900 dark:text-white">{titleStart}</span>{" "}
-              <span className="gradient-text">{titleHighlight}</span>{" "}
-              <span className="text-stone-900 dark:text-white">{titleEnd}</span>
+              <span className="gradient-text-title">{titleStart}</span>{" "}
+              {Array.isArray(titleRotating) && titleRotating.length > 0 && (
+                <Typewriter
+                  text={titleRotating}
+                  speed={80}
+                  deleteSpeed={50}
+                  waitTime={2000}
+                  className="gradient-text"
+                  cursorChar="|"
+                  cursorClassName="ml-0.5 font-light gradient-text"
+                />
+              )}
+              <br />
+              <span className="gradient-text-title">{titleHighlight}</span>{" "}
+              <span className="gradient-text-title">{titleEnd}</span>
             </h1>
 
             {/* Subheadline */}
@@ -711,14 +671,14 @@ const HeroSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { heroCards: dbHeroCards } = useLandingData()
-  
+
   // Start with a random card for variety across different page loads
-  const [activeCardIndex, setActiveCardIndex] = React.useState(() => 
+  const [activeCardIndex, setActiveCardIndex] = React.useState(() =>
     dbHeroCards.length > 0 ? Math.floor(Math.random() * dbHeroCards.length) : 0
   )
 
@@ -730,7 +690,6 @@ const HeroVisual: React.FC = () => {
   }, [dbHeroCards.length])
 
   // Use first hero card from database if available, otherwise use translation defaults
-  // Plant name and image come from database, but all other fields use translations for proper localization
   const activeCard = dbHeroCards[activeCardIndex] || null
   const plantName = activeCard?.plant_name || t("heroCard.plantName")
   const plantScientific = activeCard?.plant_scientific_name || t("heroCard.plantSubname")
@@ -748,113 +707,165 @@ const HeroVisual: React.FC = () => {
     return () => clearInterval(interval)
   }, [dbHeroCards.length])
 
+  // Water progress animation (simulate filling to ~70%)
+  // REMOVED — reverted per user request
+
   return (
     <div className="relative">
-      {/* Glow Effects */}
-      <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/30 via-teal-500/20 to-green-500/30 rounded-full blur-3xl animate-pulse-glow" />
-      
-      {/* Main Phone Frame */}
-      <div className="relative w-[300px] sm:w-[340px] animate-float-slow">
-        <div className="relative bg-stone-900 dark:bg-stone-950 rounded-[3rem] p-3 shadow-2xl shadow-emerald-900/20">
-          {/* Screen */}
-          <div className="bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-[#0f1a14] dark:to-[#0a1510] rounded-[2.5rem] overflow-hidden">
-            {/* Dynamic Island */}
-            <div className="h-10 flex items-center justify-center pt-2">
-              <div className="w-24 h-7 bg-stone-900 dark:bg-black rounded-full" />
-            </div>
+      {/* Glow Effects — layered for depth */}
+      <div className="absolute inset-0 -m-16 bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-green-500/20 rounded-full blur-3xl animate-pulse-glow" />
+      <div className="absolute inset-0 -m-8 bg-gradient-to-tr from-teal-400/15 to-emerald-600/15 rounded-full blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
 
-            {/* App Content */}
-            <div className="px-5 pb-8 space-y-4">
-              {/* Plant Image Area */}
-              <div className="relative aspect-[4/3] rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20">
-                {imageUrl ? (
-                  <img 
-                    src={imageUrl} 
-                    alt={plantName}
-                    className="absolute inset-0 w-full h-full object-cover transition-opacity duration-500"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="relative">
-                      <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
-                      <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+      {/* Main Phone Frame */}
+      <div className="relative w-[260px] sm:w-[290px] animate-float-slow">
+        {/* Phone body — thin bezel */}
+        <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.8rem] p-[2px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
+          <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.75rem] p-1.5">
+            {/* Screen */}
+            <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.4rem] overflow-hidden">
+              {/* Status Bar + Dynamic Island with camera */}
+              <div className="flex items-center justify-between px-7 pt-2.5 pb-0.5">
+                <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
+                <div className="relative w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full flex items-center justify-end pr-2">
+                  <div className="h-[10px] w-[10px] rounded-full bg-stone-800 dark:bg-stone-900 ring-1 ring-stone-600/50" />
+                </div>
+                <div className="flex items-center gap-1">
+                  <div className="flex gap-[2px]">
+                    <div className="w-[3px] h-[6px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[8px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[10px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
+                    <div className="w-[3px] h-[12px] bg-stone-300 dark:bg-stone-600 rounded-sm" />
+                  </div>
+                  <Wifi className="h-3 w-3 text-stone-400 dark:text-stone-500" />
+                </div>
+              </div>
+
+              {/* App Content */}
+              <div className="px-4 pb-2 pt-2 space-y-3">
+                {/* Plant Image — hero card style */}
+                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden group">
+                  {/* Shimmer placeholder */}
+                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30" />
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt={plantName}
+                      loading="lazy"
+                      decoding="async"
+                      className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="relative">
+                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
+                        <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+                      </div>
+                    </div>
+                  )}
+                  {/* Plant Info — glass card overlay */}
+                  <div className="absolute bottom-3 left-3 right-3">
+                    <div className="glass-card rounded-2xl p-3 border border-white/30 dark:border-white/10">
+                      <p className="text-stone-900 dark:text-white font-bold text-sm drop-shadow-sm">{plantName}</p>
+                      <p className="text-stone-600 dark:text-stone-300 text-xs italic">{plantScientific}</p>
                     </div>
                   </div>
+                </div>
+
+                {/* Stats Row — simple pills, no water animation */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                    <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
+                      <Droplets className="h-4 w-4 text-blue-500" />
+                    </div>
+                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{waterFrequency}</span>
+                  </div>
+                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                    <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
+                      <Sun className="h-4 w-4 text-amber-500" />
+                    </div>
+                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{lightLevel}</span>
+                  </div>
+                </div>
+
+                {/* Reminder Card — elevated design */}
+                <div className="relative flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20 overflow-hidden">
+                  {/* Subtle pattern overlay */}
+                  <div className="absolute inset-0 opacity-10" style={{
+                    backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
+                    backgroundSize: '16px 16px'
+                  }} />
+                  <div className="relative h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+                    <Bell className="h-5 w-5 text-white animate-bounce-subtle" />
+                  </div>
+                  <div className="relative flex-1">
+                    <p className="text-[10px] text-white/70 uppercase tracking-wider font-medium">{t("heroCard.nextReminder")}</p>
+                    <p className="text-sm font-bold text-white">{reminderText}</p>
+                  </div>
+                  <ArrowRight className="relative h-4 w-4 text-white/70" />
+                </div>
+
+                {/* Card Indicators - show if multiple cards */}
+                {dbHeroCards.length > 1 && (
+                  <div className="flex justify-center gap-1.5 pt-1">
+                    {dbHeroCards.map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setActiveCardIndex(i)}
+                        className={`h-1.5 rounded-full transition-all duration-300 ${
+                          i === activeCardIndex
+                            ? 'w-6 bg-emerald-500'
+                            : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
+                        }`}
+                      />
+                    ))}
+                  </div>
                 )}
-                {/* Plant Info Overlay */}
-                <div className="absolute bottom-3 left-3 right-3">
-                  <div className="glass-card rounded-2xl p-3 space-y-1 border border-white/30 dark:border-white/10">
-                    <p className="text-stone-900 dark:text-white font-semibold text-sm">{plantName}</p>
-                    <p className="text-stone-600 dark:text-stone-400 text-xs italic">{plantScientific}</p>
-                  </div>
-                </div>
               </div>
 
-              {/* Care Pills */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
-                  <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center">
-                    <Droplets className="h-4 w-4 text-blue-500" />
-                  </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{waterFrequency}</span>
-                </div>
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white dark:bg-white/10 border border-stone-200/50 dark:border-white/10">
-                  <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center">
-                    <Sun className="h-4 w-4 text-amber-500" />
-                  </div>
-                  <span className="text-xs text-stone-600 dark:text-stone-300">{lightLevel}</span>
-                </div>
+              {/* Bottom bar indicator — pinned to bottom of screen */}
+              <div className="flex justify-center pb-2 pt-1">
+                <div className="w-28 h-1 rounded-full bg-stone-300 dark:bg-stone-600" />
               </div>
-
-              {/* Reminder Card */}
-              <div className="flex items-center gap-3 px-4 py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 flex items-center justify-center animate-bounce-subtle">
-                  <Bell className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
-                <div className="flex-1">
-                  <p className="text-[10px] text-emerald-600/80 dark:text-emerald-400/80 uppercase tracking-wide">{t("heroCard.nextReminder")}</p>
-                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{reminderText}</p>
-                </div>
-                <ArrowRight className="h-4 w-4 text-emerald-500" />
-              </div>
-
-              {/* Card Indicators - show if multiple cards */}
-              {dbHeroCards.length > 1 && (
-                <div className="flex justify-center gap-1.5 pt-2">
-                  {dbHeroCards.map((_, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setActiveCardIndex(i)}
-                      className={`h-1.5 rounded-full transition-all ${
-                        i === activeCardIndex 
-                          ? 'w-6 bg-emerald-500' 
-                          : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
             </div>
           </div>
         </div>
+
+        {/* Side buttons */}
+        <div className="absolute right-[-2px] top-28 w-[3px] h-8 bg-stone-700 dark:bg-stone-800 rounded-r-sm" />
+        <div className="absolute left-[-2px] top-24 w-[3px] h-6 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
+        <div className="absolute left-[-2px] top-36 w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
+        <div className="absolute left-[-2px] top-[196px] w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
       </div>
 
-      {/* Floating Cards */}
-      <div className="absolute -top-4 -left-8 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float" style={{ animationDelay: '0.5s' }}>
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+      {/* Floating Cards — redesigned with blur and better positioning */}
+      <div className="absolute -top-3 -left-6 sm:-left-10 animate-float" style={{ animationDelay: '0.5s' }}>
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center">
+            <Check className="h-4 w-4 text-white" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("heroCard.careLogged")}</span>
+          <span className="text-sm font-semibold text-stone-800 dark:text-white">{t("heroCard.careLogged")}</span>
         </div>
       </div>
 
-      <div className="absolute -bottom-2 -right-6 px-4 py-3 rounded-2xl glass-card shadow-lg border border-white/30 dark:border-white/10 animate-float-delayed">
-        <div className="flex items-center gap-2">
-          <div className="h-8 w-8 rounded-xl bg-pink-500/20 flex items-center justify-center">
-            <Heart className="h-4 w-4 text-pink-500 fill-pink-500" />
+      <div className="absolute -bottom-1 -right-4 sm:-right-8 animate-float-delayed">
+        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-pink-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
+            <Heart className="h-4 w-4 text-white fill-white" />
           </div>
-          <span className="text-sm font-medium text-stone-900 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
+          <div className="flex flex-col">
+            <span className="text-sm font-bold text-stone-800 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
+            <span className="text-[10px] text-stone-500 dark:text-stone-400">{t("floatingCards.likesLabel", { defaultValue: "new likes" })}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Extra floating badge — plant count */}
+      <div className="absolute top-1/2 -right-4 sm:-right-12 animate-float" style={{ animationDelay: '1.5s' }}>
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-lg shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
+          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
+            <Leaf className="h-3.5 w-3.5 text-white" />
+          </div>
+          <span className="text-xs font-bold text-stone-800 dark:text-white">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
         </div>
       </div>
     </div>
@@ -864,7 +875,7 @@ const HeroVisual: React.FC = () => {
 /* ═══════════════════════════════════════════════════════════════════════════════
    STATS BANNER - Animated Counter Section
    ═══════════════════════════════════════════════════════════════════════════════ */
-const StatsBanner: React.FC = () => {
+const StatsBanner: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { stats: dbStats } = useLandingData()
   
@@ -915,12 +926,12 @@ const StatsBanner: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    BEGINNER FRIENDLY SECTION - New Gardeners Welcome
    ═══════════════════════════════════════════════════════════════════════════════ */
-const BeginnerFriendlySection: React.FC = () => {
+const BeginnerFriendlySection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   // All text content from translations (not editable via admin)
@@ -988,7 +999,7 @@ const BeginnerFriendlySection: React.FC = () => {
           {beginnerFeatures.map((feature, i) => (
             <div
               key={i}
-              className="group relative rounded-3xl bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
+              className="group relative rounded-3xl bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
             >
               <div className={`h-14 w-14 rounded-2xl bg-${feature.color}-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                 <feature.icon className={`h-7 w-7 text-${feature.color}-500`} />
@@ -1005,7 +1016,7 @@ const BeginnerFriendlySection: React.FC = () => {
 
         {/* Bottom CTA */}
         <div className="mt-12 text-center">
-          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 border border-emerald-500/10">
+          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 backdrop-blur-sm border border-emerald-500/10">
             <div className="flex items-center gap-3">
               <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
                 <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
@@ -1031,12 +1042,12 @@ const BeginnerFriendlySection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FEATURES SECTION - Bento Grid Style
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FeaturesSection: React.FC = () => {
+const FeaturesSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   return (
@@ -1044,7 +1055,7 @@ const FeaturesSection: React.FC = () => {
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
         <div className="text-center max-w-3xl mx-auto mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
+          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 mb-6">
             <Zap className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               {t("features.badge", { defaultValue: "Powerful Features" })}
@@ -1061,7 +1072,7 @@ const FeaturesSection: React.FC = () => {
         {/* Bento Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 lg:gap-6">
           {/* Large Feature Card */}
-          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent backdrop-blur-sm border border-emerald-500/20 p-8 overflow-hidden hover:border-emerald-500/40 transition-all duration-500">
             <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl group-hover:bg-emerald-500/20 transition-colors" />
             <div className="relative">
               <div className="inline-flex h-14 w-14 rounded-2xl bg-emerald-500 items-center justify-center mb-6 shadow-lg shadow-emerald-500/30 group-hover:scale-110 transition-transform">
@@ -1085,7 +1096,7 @@ const FeaturesSection: React.FC = () => {
           </div>
 
           {/* Care Reminders - Enhanced Card */}
-          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+          <div className="group relative rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-blue-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
             <div className="inline-flex h-12 w-12 rounded-xl bg-blue-500 items-center justify-center mb-4 shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
               <Bell className="h-6 w-6 text-white" />
             </div>
@@ -1133,7 +1144,7 @@ const FeaturesSection: React.FC = () => {
           <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
           
           {/* Wide Feature Card */}
-          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
+          <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent backdrop-blur-sm border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="inline-flex h-14 w-14 rounded-2xl bg-purple-500 items-center justify-center shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform flex-shrink-0">
                 <Wifi className="h-7 w-7 text-white" />
@@ -1158,7 +1169,7 @@ const FeaturesSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 const FeatureCard: React.FC<{
   icon: React.ElementType
@@ -1167,7 +1178,7 @@ const FeatureCard: React.FC<{
   gradient: string
   iconBg: string
 }> = ({ icon: Icon, title, description, gradient, iconBg }) => (
-  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
+  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
     <div className={`inline-flex h-12 w-12 rounded-xl ${iconBg} items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
       <Icon className="h-6 w-6 text-white" />
     </div>
@@ -1185,7 +1196,7 @@ const demoIconMap: Record<string, React.ElementType> = {
   Bell, Heart, Star, Zap, Globe, Search, BookMarked, Flower2, TreeDeciduous, Sprout, Sun, Droplets
 }
 
-const InteractiveDemoSection: React.FC = () => {
+const InteractiveDemoSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { demoFeatures } = useLandingData()
   const [activeFeature, setActiveFeature] = React.useState(0)
@@ -1226,8 +1237,8 @@ const InteractiveDemoSection: React.FC = () => {
           <div className="relative order-2 lg:order-1">
             <div className="relative aspect-square max-w-md mx-auto">
               {/* Center Circle */}
-              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 border border-emerald-500/30" />
-              <div className="absolute inset-[25%] rounded-full bg-white dark:bg-stone-900 shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
+              <div className="absolute inset-[15%] rounded-full bg-gradient-to-br from-emerald-500/20 to-teal-500/20 backdrop-blur-sm border border-emerald-500/30" />
+              <div className="absolute inset-[25%] rounded-full bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm shadow-2xl shadow-emerald-500/20 flex items-center justify-center">
                 <div className="text-center p-4 sm:p-6">
                   {features[activeFeature] && (
                     <>
@@ -1303,13 +1314,13 @@ const InteractiveDemoSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    SHOWCASE SECTION - Realistic UI Previews matching actual app components
    Fully configurable via Admin Panel
    ═══════════════════════════════════════════════════════════════════════════════ */
-const ShowcaseSection: React.FC = () => {
+const ShowcaseSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { showcaseConfig } = useLandingData()
 
@@ -1404,7 +1415,7 @@ const ShowcaseSection: React.FC = () => {
               {config.cover_image_url ? (
                 <>
                   <div className="absolute inset-0">
-                    <img src={config.cover_image_url} alt={config.garden_name} className="w-full h-full object-cover" />
+                    <img src={config.cover_image_url} alt={config.garden_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/20" />
                   </div>
                   <div className="relative z-10 p-6 md:p-8 min-h-[200px] flex flex-col justify-end">
@@ -1533,7 +1544,7 @@ const ShowcaseSection: React.FC = () => {
                 {config.plant_cards.slice(0, 6).map((plant) => (
                   <div key={plant.id} className="relative aspect-square rounded-2xl overflow-hidden group/plant">
                     {plant.image_url ? (
-                      <img src={plant.image_url} alt={plant.name} className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
+                      <img src={plant.image_url} alt={plant.name} loading="lazy" decoding="async" className="w-full h-full object-cover group-hover/plant:scale-110 transition-transform" />
                     ) : (
                       <div className={`absolute inset-0 bg-gradient-to-br ${plant.gradient}`}>
                         <div className="absolute inset-0 flex items-center justify-center">
@@ -1606,7 +1617,7 @@ const ShowcaseSection: React.FC = () => {
           </div>
 
           {/* Tasks Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="group rounded-3xl bg-gradient-to-br from-blue-500/10 to-indigo-500/10 backdrop-blur-sm border border-blue-500/20 p-6 hover:border-blue-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex items-center justify-between mb-4">
               <div className="h-12 w-12 rounded-xl bg-blue-500 flex items-center justify-center shadow-lg shadow-blue-500/30 group-hover:scale-110 transition-transform">
                 <Droplets className="h-6 w-6 text-white" />
@@ -1725,7 +1736,7 @@ const ShowcaseSection: React.FC = () => {
           </div>
 
           {/* Pet Safety Card */}
-          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="group rounded-3xl bg-gradient-to-br from-rose-500/10 to-pink-500/10 backdrop-blur-sm border border-rose-500/20 p-6 hover:border-rose-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex items-center gap-2 mb-4">
               <div className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
               <span className="text-xs text-rose-600 dark:text-rose-400 font-medium">{t("showcase.toxicityAlert")}</span>
@@ -1746,7 +1757,7 @@ const ShowcaseSection: React.FC = () => {
           </div>
 
           {/* Encyclopedia Card */}
-          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
+          <div className="md:col-span-2 group rounded-3xl bg-gradient-to-br from-amber-500/10 to-orange-500/10 backdrop-blur-sm border border-amber-500/20 p-6 hover:border-amber-500/40 transition-all duration-300 hover:-translate-y-1 dark:bg-stone-900/50">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
               <div className="flex-shrink-0">
                 <div className="h-14 w-14 rounded-2xl bg-amber-500 flex items-center justify-center shadow-lg shadow-amber-500/30 group-hover:scale-110 transition-transform">
@@ -1775,12 +1786,12 @@ const ShowcaseSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    HOW IT WORKS - Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const HowItWorksSection: React.FC = () => {
+const HowItWorksSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   const steps = [
@@ -1829,12 +1840,12 @@ const HowItWorksSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    TESTIMONIALS - Redesigned with Marquee
    ═══════════════════════════════════════════════════════════════════════════════ */
-const TestimonialsSection: React.FC = () => {
+const TestimonialsSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { testimonials: dbTestimonials } = useLandingData()
 
@@ -1876,7 +1887,7 @@ const TestimonialsSection: React.FC = () => {
         <div className="flex animate-marquee">
           {[...testimonials, ...testimonials].map((testimonial, i) => (
             <div key={i} className="flex-shrink-0 w-[350px] mx-3">
-              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 p-6 h-full hover:shadow-xl transition-shadow">
+              <div className="rounded-3xl border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm p-6 h-full hover:shadow-xl transition-shadow">
                 <div className="flex gap-1 mb-4">
                   {[...Array(5)].map((_, j) => (
                     <Star 
@@ -1902,12 +1913,12 @@ const TestimonialsSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FAQ SECTION - Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FAQSection: React.FC = () => {
+const FAQSection: React.FC = React.memo(() => {
   const [openIndex, setOpenIndex] = React.useState<number | null>(0)
   const { t } = useTranslation("Landing")
   const { faqItems: dbFaqItems } = useLandingData()
@@ -1936,7 +1947,7 @@ const FAQSection: React.FC = () => {
 
         <div className="space-y-4">
           {faqs.map((faq, i) => (
-            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 overflow-hidden hover:border-emerald-500/30 transition-colors">
+            <div key={i} className="rounded-2xl border border-stone-200 dark:border-stone-800 bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm overflow-hidden hover:border-emerald-500/30 transition-colors">
               <button
                 onClick={() => setOpenIndex(openIndex === i ? null : i)}
                 className="w-full px-6 py-5 flex items-center justify-between text-left"
@@ -2043,12 +2054,12 @@ const FAQSection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FINAL CTA - Enhanced
    ═══════════════════════════════════════════════════════════════════════════════ */
-const FinalCTASection: React.FC = () => {
+const FinalCTASection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   // All text content from translations (not editable via admin)
@@ -2144,6 +2155,6 @@ const FinalCTASection: React.FC = () => {
       </div>
     </section>
   )
-}
+})
 
 export default LandingPage
