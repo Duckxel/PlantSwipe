@@ -427,11 +427,24 @@ const LandingPage: React.FC = () => {
   return (
     <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
-      {/* Ambient Background Elements - reduced blur radii for better GPU performance */}
+      {/* Ambient Background — layered mesh of scattered orbs for depth */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        <div className="absolute top-0 left-1/4 w-[600px] h-[600px] bg-emerald-500/10 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 right-1/4 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-3xl" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-0 w-[400px] h-[400px] bg-emerald-600/5 rounded-full blur-2xl" />
+        {/* Top-left: warm emerald glow */}
+        <div className="absolute -top-32 -left-20 w-[500px] h-[500px] bg-emerald-500/[0.07] rounded-full blur-3xl" />
+        {/* Top-right: subtle teal accent */}
+        <div className="absolute top-16 right-[10%] w-[350px] h-[350px] bg-teal-400/[0.06] rounded-full blur-3xl" />
+        {/* Center-left: deeper green, offset low */}
+        <div className="absolute top-[40%] -left-16 w-[400px] h-[400px] bg-green-600/[0.05] rounded-full blur-3xl" />
+        {/* Center-right: cyan hint for variety */}
+        <div className="absolute top-[35%] right-[5%] w-[300px] h-[300px] bg-cyan-500/[0.04] rounded-full blur-3xl" />
+        {/* Mid-page: warm lime accent to break monotone */}
+        <div className="absolute top-[55%] left-[30%] w-[450px] h-[350px] bg-lime-500/[0.04] rounded-full blur-3xl" />
+        {/* Lower-left: teal depth */}
+        <div className="absolute top-[70%] -left-10 w-[350px] h-[350px] bg-teal-500/[0.06] rounded-full blur-3xl" />
+        {/* Lower-right: emerald anchor */}
+        <div className="absolute top-[75%] right-[15%] w-[400px] h-[400px] bg-emerald-400/[0.05] rounded-full blur-3xl" />
+        {/* Bottom: subtle warm green wash */}
+        <div className="absolute -bottom-20 left-[20%] w-[600px] h-[300px] bg-green-500/[0.04] rounded-full blur-3xl" />
       </div>
 
       <div className="relative">
