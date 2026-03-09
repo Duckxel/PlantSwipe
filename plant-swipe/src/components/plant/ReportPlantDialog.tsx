@@ -222,6 +222,7 @@ export const ReportPlantDialog: React.FC<ReportPlantDialogProps> = ({
                       onClick={handleRemoveImage}
                       className="absolute -top-2 -right-2 rounded-full bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 p-1 shadow-md hover:opacity-80 transition-opacity"
                       disabled={uploading}
+                      aria-label={t('plantInfo.report.removeImage', { defaultValue: 'Remove image' })}
                     >
                       <X className="h-3.5 w-3.5" />
                     </button>
