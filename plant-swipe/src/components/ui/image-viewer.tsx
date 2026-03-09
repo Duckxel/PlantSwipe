@@ -32,6 +32,7 @@ import {
   Download,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useTranslation } from "react-i18next"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -87,6 +88,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   title,
   className,
 }) => {
+  const { t } = useTranslation("common")
   /* ---- state ---- */
   const [activeIndex, setActiveIndex] = useState(initialIndex)
   const [zoom, setZoom] = useState(MIN_ZOOM)
@@ -332,8 +334,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                 type="button"
                 onClick={onClose}
                 className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                aria-label="Close"
-                title="Close"
+                aria-label={t('common.close', { defaultValue: 'Close' })}
+                title={t('common.close', { defaultValue: 'Close' })}
               >
                 <X className="h-5 w-5" />
               </button>
@@ -350,8 +352,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                     type="button"
                     onClick={handleDownload}
                     className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                    aria-label="Download"
-                    title="Download"
+                    aria-label={t('common.download', { defaultValue: 'Download' })}
+                    title={t('common.download', { defaultValue: 'Download' })}
                   >
                     <Download className="h-5 w-5" />
                   </button>
@@ -393,8 +395,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   onClick={() => adjustZoom(-ZOOM_STEP)}
                   disabled={zoom <= MIN_ZOOM}
                   className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                  aria-label="Zoom out"
-                  title="Zoom out"
+                  aria-label={t('common.zoomOut', { defaultValue: 'Zoom out' })}
+                  title={t('common.zoomOut', { defaultValue: 'Zoom out' })}
                 >
                   <ZoomOut className="h-5 w-5" />
                 </button>
@@ -408,8 +410,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                   onClick={() => adjustZoom(ZOOM_STEP)}
                   disabled={zoom >= MAX_ZOOM}
                   className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 disabled:opacity-30 disabled:pointer-events-none transition-colors backdrop-blur-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                  aria-label="Zoom in"
-                  title="Zoom in"
+                  aria-label={t('common.zoomIn', { defaultValue: 'Zoom in' })}
+                  title={t('common.zoomIn', { defaultValue: 'Zoom in' })}
                 >
                   <ZoomIn className="h-5 w-5" />
                 </button>
@@ -419,8 +421,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                     type="button"
                     onClick={resetView}
                     className="rounded-full p-2.5 text-white/90 hover:text-white bg-white/10 hover:bg-white/20 transition-colors backdrop-blur-sm ml-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
-                    aria-label="Reset zoom"
-                    title="Reset zoom"
+                    aria-label={t('common.resetZoom', { defaultValue: 'Reset zoom' })}
+                    title={t('common.resetZoom', { defaultValue: 'Reset zoom' })}
                   >
                     <RotateCcw className="h-4 w-4" />
                   </button>
@@ -435,8 +437,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
               type="button"
               className="absolute left-2 sm:left-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               onClick={goToPrev}
-              aria-label="Previous image"
-              title="Previous image"
+              aria-label={t('common.previous', { defaultValue: 'Previous' })}
+              title={t('common.previous', { defaultValue: 'Previous' })}
             >
               <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
                 <ChevronLeft className="h-6 w-6" />
@@ -448,8 +450,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
               type="button"
               className="absolute right-2 sm:right-4 top-1/2 -translate-y-1/2 z-20 p-3 text-white active:scale-95 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50"
               onClick={goToNext}
-              aria-label="Next image"
-              title="Next image"
+              aria-label={t('common.next', { defaultValue: 'Next' })}
+              title={t('common.next', { defaultValue: 'Next' })}
             >
               <div className="rounded-full p-2 bg-black/40 hover:bg-black/60 backdrop-blur-sm transition-colors">
                 <ChevronRight className="h-6 w-6" />
@@ -465,25 +467,28 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
                 enableZoom ? "bottom-16 sm:bottom-20" : "bottom-6 sm:bottom-8",
               )}
             >
-              {images.map((_, idx) => (
-                <button
-                  key={idx}
-                  type="button"
-                  onClick={() => {
-                    setActiveIndex(idx)
-                    setZoom(MIN_ZOOM)
-                    setOffset({ x: 0, y: 0 })
-                  }}
-                  className={cn(
-                    "h-2 w-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
-                    idx === activeIndex
-                      ? "bg-white scale-110"
-                      : "bg-white/40 hover:bg-white/60",
-                  )}
-                  aria-label={`Go to image ${idx + 1}`}
-                  title={`Go to image ${idx + 1}`}
-                />
-              ))}
+              {images.map((_, idx) => {
+                const imgLabel = t('common.goToImage', { index: idx + 1, defaultValue: `Go to image ${idx + 1}` });
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setActiveIndex(idx)
+                      setZoom(MIN_ZOOM)
+                      setOffset({ x: 0, y: 0 })
+                    }}
+                    className={cn(
+                      "h-2 w-2 rounded-full transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50",
+                      idx === activeIndex
+                        ? "bg-white scale-110"
+                        : "bg-white/40 hover:bg-white/60",
+                    )}
+                    aria-label={imgLabel}
+                    title={imgLabel}
+                  />
+                );
+              })}
             </div>
           )}
         </DialogPrimitive.Content>
