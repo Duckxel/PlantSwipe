@@ -1653,7 +1653,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
 
               {((plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)) && (
                 <LivingSpaceVisualizer
-                  livingSpace={plant.livingSpace?.join(', ')}
+                  livingSpace={plant.livingSpace}
                   isPottable={plant.landscaping?.includes('pot') ?? false}
                   t={t}
                 />
@@ -2100,7 +2100,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
 
 // Indoor / Outdoor / Pot visual indicator
 type LivingSpaceVisualizerProps = {
-  livingSpace: string | undefined
+  livingSpace: string[] | undefined
   isPottable: boolean
   t: (key: string, options?: Record<string, string>) => string
 }
@@ -2127,13 +2127,11 @@ const LivingSpacePanel: React.FC<{
 )
 
 const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, isPottable, t }) => {
-  if (!livingSpace && !isPottable) return null
+  if ((!livingSpace || livingSpace.length === 0) && !isPottable) return null
 
-  const normalized = (livingSpace || '').toLowerCase().replace(/[_\s&-]+/g, '')
-
-  const isIndoor = normalized === 'indoor'
-  const isOutdoor = normalized === 'outdoor'
-  const isBoth = normalized === 'both' || normalized === 'indooroutdoor'
+  const spaces = (livingSpace || []).map(s => s.toLowerCase())
+  const isIndoor = spaces.includes('indoor')
+  const isOutdoor = spaces.includes('outdoor')
 
   const activeClass = 'text-emerald-600 dark:text-emerald-400'
   const inactiveClass = 'text-stone-400 dark:text-stone-600'
@@ -2149,13 +2147,13 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
 
         <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
           <LivingSpacePanel
-            active={isIndoor || isBoth}
-            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            active={isIndoor}
+            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
           />
           <LivingSpacePanel
-            active={isOutdoor || isBoth}
-            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            active={isOutdoor}
+            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
           />
           <LivingSpacePanel

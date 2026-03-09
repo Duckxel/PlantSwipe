@@ -49,7 +49,7 @@ export type FoliagePersistence =
   | "marcescent" | "winter_dormant" | "dry_season_deciduous"
 
 export type LivingSpace =
-  | "indoor" | "outdoor" | "both" | "terrarium" | "greenhouse"
+  | "indoor" | "outdoor" | "terrarium" | "greenhouse"
 
 export type PlantSeason = "spring" | "summer" | "autumn" | "winter"
 

@@ -88,7 +88,7 @@ create table if not exists public.plants (
   foliage_persistence text[] not null default '{}'::text[] check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']),
 
   -- Section 2: Identity — Habitat & plant form
-  living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']),
+  living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']),
   landscaping text[] not null default '{}'::text[] check (landscaping <@ array[
     'pot','planter','hanging','window_box','green_wall','flowerbed','border',
     'edging','path','tree_base','vegetable_garden','orchard','hedge',
@@ -1202,7 +1202,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']) not valid;
+    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 

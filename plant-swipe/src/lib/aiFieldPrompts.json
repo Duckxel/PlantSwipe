@@ -31,7 +31,7 @@
     "- `lifeCycle`: array from ONLY: [\"annual\",\"biennial\",\"perennial\",\"succulent_perennial\",\"monocarpic\",\"short_cycle\",\"ephemeral\"]",
     "- `averageLifespan`: array from ONLY: [\"less_than_1_year\",\"2_years\",\"3_to_10_years\",\"10_to_50_years\",\"over_50_years\"]",
     "- `foliagePersistence`: array from ONLY: [\"deciduous\",\"evergreen\",\"semi_evergreen\",\"marcescent\",\"winter_dormant\",\"dry_season_deciduous\"]",
-    "- `livingSpace`: array from ONLY: [\"indoor\",\"outdoor\",\"both\",\"terrarium\",\"greenhouse\"]",
+    "- `livingSpace`: array from ONLY: [\"indoor\",\"outdoor\",\"terrarium\",\"greenhouse\"]. Use [\"indoor\",\"outdoor\"] for plants suited to both",
     "- `landscaping`: array from ONLY: [\"pot\",\"planter\",\"hanging\",\"window_box\",\"green_wall\",\"flowerbed\",\"border\",\"edging\",\"path\",\"tree_base\",\"vegetable_garden\",\"orchard\",\"hedge\",\"free_growing\",\"trimmed_hedge\",\"windbreak\",\"pond_edge\",\"waterside\",\"ground_cover\",\"grove\",\"background\",\"foreground\"]",
     "- `plantHabit`: array from ONLY: [\"upright\",\"arborescent\",\"shrubby\",\"bushy\",\"clumping\",\"erect\",\"creeping\",\"carpeting\",\"ground_cover\",\"prostrate\",\"spreading\",\"climbing\",\"twining\",\"scrambling\",\"liana\",\"trailing\",\"columnar\",\"conical\",\"fastigiate\",\"globular\",\"spreading_flat\",\"rosette\",\"cushion\",\"ball_shaped\",\"succulent\",\"palmate\",\"rhizomatous\",\"suckering\"]",
     "IMPORTANT: All text/string fields must be max 50 characters. Be concise."

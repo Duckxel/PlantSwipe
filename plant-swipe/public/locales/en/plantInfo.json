@@ -306,7 +306,6 @@
     "livingSpace": {
       "indoor": "Indoor",
       "outdoor": "Outdoor",
-      "both": "Both",
       "terrarium": "Terrarium",
       "greenhouse": "Greenhouse"
     },

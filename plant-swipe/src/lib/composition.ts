@@ -191,10 +191,25 @@ export const foliagePersistenceEnum = createEnumTools([
 export const livingSpaceEnum = createEnumTools([
   { dbValue: 'indoor', uiValue: 'Indoor', aliases: ['indoors'] },
   { dbValue: 'outdoor', uiValue: 'Outdoor', aliases: ['outdoors'] },
-  { dbValue: 'both', uiValue: 'Both', aliases: ['indoor/outdoor'] },
   { dbValue: 'terrarium', uiValue: 'Terrarium' },
   { dbValue: 'greenhouse', uiValue: 'Greenhouse', aliases: ['glasshouse'] },
 ])
+
+/**
+ * Expand legacy 'both' values to ['indoor', 'outdoor'] then normalize via livingSpaceEnum.
+ * Use this instead of livingSpaceEnum.toDbArray() when the input may contain 'both'.
+ */
+export function normalizeLivingSpace(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value as string[]
+    : typeof value === 'string' ? value.split(/[,;/]+/).map(s => s.trim()).filter(Boolean)
+    : []
+  const expanded = raw.flatMap(v =>
+    v.toLowerCase().replace(/[^a-z]/g, '') === 'both'
+      ? ['indoor', 'outdoor']
+      : [v]
+  )
+  return livingSpaceEnum.toDbArray(expanded)
+}
 
 export const seasonEnum = createEnumTools([
   { dbValue: 'spring', uiValue: 'Spring', aliases: ['spr'] },

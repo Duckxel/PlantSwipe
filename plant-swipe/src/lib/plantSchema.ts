@@ -110,7 +110,7 @@ export const plantSchema = {
   },
   livingSpace: {
     type: 'enum[]',
-    options: ['indoor','outdoor','both','terrarium','greenhouse'],
+    options: ['indoor','outdoor','terrarium','greenhouse'],
     description: 'Where the plant can be grown',
   },
   landscaping: {
