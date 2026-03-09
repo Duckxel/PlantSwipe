@@ -17134,9 +17134,22 @@ app.post('/api/admin/backup-db', async (req, res) => {
     const destPath = path.join(backupDir, filename)
 
     // Spawn pg_dump and gzip the output to a file
+    // SECURITY: Prevent password leakage in process list by extracting it
+    // and passing it via the PGPASSWORD environment variable.
+    let safeConnectionString = connectionString
+    let envVars = { ...process.env }
+    try {
+      const u = new URL(connectionString)
+      if (u.password) {
+        envVars.PGPASSWORD = decodeURIComponent(u.password)
+        u.password = ''
+        safeConnectionString = u.toString()
+      }
+    } catch { }
+
     let stderrBuf = ''
-    const dump = spawnChild('pg_dump', ['--dbname', connectionString, '--no-owner', '--no-acl'], {
-      env: { ...process.env },
+    const dump = spawnChild('pg_dump', ['--dbname', safeConnectionString, '--no-owner', '--no-acl'], {
+      env: envVars,
       stdio: ['ignore', 'pipe', 'pipe'],
     })
     dump.on('error', async () => {
