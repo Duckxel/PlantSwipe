@@ -432,7 +432,7 @@ const LandingPage: React.FC = () => {
       {/* Ambient Background — dithering swirl shader + layered orbs */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         {/* WebGL swirl shader — subtle animated texture behind everything */}
-        <div className="absolute inset-0 opacity-[0.06] dark:opacity-[0.015] mix-blend-multiply dark:mix-blend-lighten">
+        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.015] mix-blend-multiply dark:mix-blend-lighten">
           <DitheringShader
             shape="swirl"
             type="4x4"
