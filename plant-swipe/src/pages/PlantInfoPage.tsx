@@ -1389,7 +1389,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     const showPalette = palette.length > 0
     const showRightColumn = showPalette || (plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)
     const gridClass = showRightColumn
-      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-stretch'
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
       : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('plantInfo:values.flexible')
@@ -2141,9 +2141,9 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
   const inactiveClass = 'text-stone-400 dark:text-stone-600'
 
   return (
-    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex-1">
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-      <div className="relative space-y-1.5 sm:space-y-2 h-full flex flex-col">
+      <div className="relative space-y-1.5 sm:space-y-2">
         <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
           <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
