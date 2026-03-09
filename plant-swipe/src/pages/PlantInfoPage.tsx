@@ -59,6 +59,8 @@ import {
   Cherry,
   House,
   TreeDeciduous,
+  Warehouse,
+  GlassWater,
   Maximize2,
   Minimize2,
   Flag,
@@ -2132,6 +2134,8 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
   const spaces = (livingSpace || []).map(s => s.toLowerCase())
   const isIndoor = spaces.includes('indoor')
   const isOutdoor = spaces.includes('outdoor')
+  const isTerrarium = spaces.includes('terrarium')
+  const isGreenhouse = spaces.includes('greenhouse')
 
   const activeClass = 'text-emerald-600 dark:text-emerald-400'
   const inactiveClass = 'text-stone-400 dark:text-stone-600'
@@ -2145,7 +2149,7 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
           <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 flex-1">
           <LivingSpacePanel
             active={isIndoor}
             icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
@@ -2160,6 +2164,16 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
             active={isPottable}
             icon={<Flower className={`h-7 w-7 sm:h-8 sm:w-8 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
+          />
+          <LivingSpacePanel
+            active={isTerrarium}
+            icon={<GlassWater className={`h-7 w-7 sm:h-8 sm:w-8 ${isTerrarium ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('plantInfo:enums.livingSpace.terrarium', { defaultValue: 'Terrarium' })}
+          />
+          <LivingSpacePanel
+            active={isGreenhouse}
+            icon={<Warehouse className={`h-7 w-7 sm:h-8 sm:w-8 ${isGreenhouse ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('plantInfo:enums.livingSpace.greenhouse', { defaultValue: 'Greenhouse' })}
           />
         </div>
       </div>
