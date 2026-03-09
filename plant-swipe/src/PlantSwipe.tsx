@@ -959,7 +959,7 @@ export default function PlantSwipe() {
       // Derive a single label: 'both' if plant has both indoor + outdoor (or explicit 'both')
       const hasIndoor = livingSpaceLower.includes('indoor')
       const hasOutdoor = livingSpaceLower.includes('outdoor')
-      const livingSpace = livingSpaceLower.includes('both') || (hasIndoor && hasOutdoor)
+      const livingSpace = (livingSpaceLower.includes('both') || (hasIndoor && hasOutdoor))
         ? 'both'
         : livingSpaceLower[0] || ''
 
