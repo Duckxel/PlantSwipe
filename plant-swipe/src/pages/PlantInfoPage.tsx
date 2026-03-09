@@ -2112,7 +2112,7 @@ const LivingSpacePanel: React.FC<{
   icon: React.ReactNode
   label: string
 }> = ({ active, icon, label }) => (
-  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all flex-1 min-w-0 ${
+  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all min-w-0 ${
     active
       ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
       : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
@@ -2149,7 +2149,7 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
           <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
-        <div className="grid grid-cols-3 gap-1.5 sm:gap-2 flex-1">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           <LivingSpacePanel
             active={isIndoor}
             icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
