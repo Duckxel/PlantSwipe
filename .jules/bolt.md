@@ -1,0 +1,3 @@
+## 2026-02-14 - Garbage Collection Pressure in Recursive Object Mappers
+**Learning:** Using `Object.keys(obj).length === 0` inside highly-recursive hot paths (like DB object sanitizers that run across hundreds of properties) causes measurable garbage collection pressure by repeatedly allocating and discarding intermediate arrays. The same is true for chained `.map().filter()` array operations.
+**Action:** In critical hot loops, especially when doing deep object traversals, use `for...in` early returns instead of `Object.keys()`, and replace functional array methods with single-pass `for` loops to minimize memory allocation overhead.

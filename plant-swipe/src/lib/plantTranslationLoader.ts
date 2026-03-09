@@ -42,30 +42,49 @@ const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' &&
   (value.constructor === Object || Object.getPrototypeOf(value) === Object.prototype)
 
+// ⚡ Bolt Optimization: Avoid intermediate array allocations in hot paths.
+// Replaced chained .map().filter() with a single-pass for loop.
+// Replaced Object.keys().length === 0 with a for...in early return check.
 const sanitizeDeep = <T>(value: T): T => {
   if (typeof value === 'string') {
     const sanitized = sanitizeStringValue(value)
     return (sanitized === undefined ? undefined : sanitized) as T
   }
   if (Array.isArray(value)) {
-    const sanitizedArray = value
-      .map((item) => sanitizeDeep(item))
-      .filter((item) => {
-        if (item === undefined || item === null) return false
-        if (Array.isArray(item) && item.length === 0) return false
-        if (isPlainObject(item) && Object.keys(item).length === 0) return false
-        return true
-      })
+    const sanitizedArray: unknown[] = []
+    for (let i = 0; i < value.length; i++) {
+      const sanitized = sanitizeDeep(value[i])
+      if (sanitized === undefined || sanitized === null) continue
+      if (Array.isArray(sanitized) && sanitized.length === 0) continue
+
+      let empty = false
+      if (isPlainObject(sanitized)) {
+        empty = true
+        for (const _ in sanitized) { empty = false; break; }
+      }
+      if (empty) continue
+
+      sanitizedArray.push(sanitized)
+    }
     return sanitizedArray as unknown as T
   }
   if (isPlainObject(value)) {
     const result: Record<string, unknown> = {}
-    for (const [key, entry] of Object.entries(value)) {
-      const sanitized = sanitizeDeep(entry)
-      if (sanitized === undefined || sanitized === null) continue
-      if (Array.isArray(sanitized) && sanitized.length === 0) continue
-      if (isPlainObject(sanitized) && Object.keys(sanitized).length === 0) continue
-      result[key] = sanitized
+    for (const key in value) {
+      if (Object.prototype.hasOwnProperty.call(value, key)) {
+        const sanitized = sanitizeDeep(value[key])
+        if (sanitized === undefined || sanitized === null) continue
+        if (Array.isArray(sanitized) && sanitized.length === 0) continue
+
+        let empty = false
+        if (isPlainObject(sanitized)) {
+          empty = true
+          for (const _ in sanitized) { empty = false; break; }
+        }
+        if (empty) continue
+
+        result[key] = sanitized
+      }
     }
     return result as T
   }
