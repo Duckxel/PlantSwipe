@@ -59,6 +59,8 @@ import {
   Cherry,
   House,
   TreeDeciduous,
+  Warehouse,
+  GlassWater,
   Maximize2,
   Minimize2,
   Flag,
@@ -1370,6 +1372,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   const wingspan = plant.wingspanCm ?? null
   const spacing = plant.separationCm ?? null
   const [cubeExpanded, setCubeExpanded] = React.useState(false)
+  const [habitatDetailsOpen, setHabitatDetailsOpen] = React.useState(false)
   const toggleCubeExpanded = React.useCallback(() => {
     setCubeExpanded(prev => !prev)
   }, [])
@@ -1378,7 +1381,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       { label: t('plantInfo:dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('plantInfo:dimensions.spreadSub') },
       { label: t('plantInfo:dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('plantInfo:dimensions.spacingSub') },
     ]
-    const habitats = plant.climate || []
+    const habitats = plant.habitat || []
   const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
     label: translateEnum(label),
@@ -1387,7 +1390,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     const showPalette = palette.length > 0
     const showRightColumn = showPalette || (plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)
     const gridClass = showRightColumn
-      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-stretch'
+      ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
       : ''
     const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
       if (!schedules.length) return t('plantInfo:values.flexible')
@@ -1423,6 +1426,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const identityItems = filterInfoItems([
         { label: tp('labels.family'), value: formatTextValue(plant.family) },
         { label: tp('labels.origin'), value: joinRaw(plant.origin) },
+        { label: tp('labels.habitat'), value: joinArr(plant.habitat as string[]) },
         { label: tp('labels.climate'), value: joinArr(plant.climate as string[]), icon: <MapPin className="h-3.5 w-3.5" /> },
         { label: tp('labels.seasons'), value: joinArr(plant.season as string[]) },
         { label: tp('labels.utility'), value: joinArr(plant.utility as string[]), icon: <Palette className="h-3.5 w-3.5" /> },
@@ -1653,7 +1657,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
 
               {((plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)) && (
                 <LivingSpaceVisualizer
-                  livingSpace={plant.livingSpace?.join(', ')}
+                  livingSpace={plant.livingSpace}
                   isPottable={plant.landscaping?.includes('pot') ?? false}
                   t={t}
                 />
@@ -1670,7 +1674,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title')}</span>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title', { defaultValue: 'Habitat Map' })}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
                 <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
@@ -1688,6 +1692,27 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   </div>
                 ))}
               </div>
+              {/* Collapsible habitat descriptions */}
+              <button
+                type="button"
+                onClick={() => setHabitatDetailsOpen(prev => !prev)}
+                className="flex w-full items-center gap-1.5 text-[10px] sm:text-xs font-medium text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100 transition-colors"
+              >
+                <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${habitatDetailsOpen ? 'rotate-180' : ''}`} />
+                {t('plantInfo:habitatMap.details', { defaultValue: 'Details' })}
+              </button>
+              {habitatDetailsOpen && (
+                <div className="space-y-2">
+                  {habitats.map((h) => (
+                    <div key={h} className="rounded-xl bg-white/60 dark:bg-[#2d2d30]/60 px-3 py-2 backdrop-blur-sm">
+                      <p className="text-[11px] sm:text-xs font-semibold text-stone-800 dark:text-stone-100">{translateEnum(h)}</p>
+                      <p className="mt-0.5 text-[10px] sm:text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
+                        {t(`plantInfo:habitatMap.descriptions.${h}`, { defaultValue: h })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         )}
@@ -2100,7 +2125,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
 
 // Indoor / Outdoor / Pot visual indicator
 type LivingSpaceVisualizerProps = {
-  livingSpace: string | undefined
+  livingSpace: string[] | undefined
   isPottable: boolean
   t: (key: string, options?: Record<string, string>) => string
 }
@@ -2110,7 +2135,7 @@ const LivingSpacePanel: React.FC<{
   icon: React.ReactNode
   label: string
 }> = ({ active, icon, label }) => (
-  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all flex-1 min-w-0 ${
+  <div className={`flex flex-col items-center gap-1 rounded-xl sm:rounded-2xl border p-2 sm:p-3 transition-all min-w-0 ${
     active
       ? 'border-emerald-400/60 bg-emerald-50/60 dark:border-emerald-500/40 dark:bg-emerald-500/10 shadow-sm'
       : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
@@ -2127,41 +2152,51 @@ const LivingSpacePanel: React.FC<{
 )
 
 const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpace, isPottable, t }) => {
-  if (!livingSpace && !isPottable) return null
+  if ((!livingSpace || livingSpace.length === 0) && !isPottable) return null
 
-  const normalized = (livingSpace || '').toLowerCase().replace(/[_\s&-]+/g, '')
-
-  const isIndoor = normalized === 'indoor'
-  const isOutdoor = normalized === 'outdoor'
-  const isBoth = normalized === 'both' || normalized === 'indooroutdoor'
+  const spaces = (livingSpace || []).map(s => s.toLowerCase())
+  const isIndoor = spaces.includes('indoor')
+  const isOutdoor = spaces.includes('outdoor')
+  const isTerrarium = spaces.includes('terrarium')
+  const isGreenhouse = spaces.includes('greenhouse')
 
   const activeClass = 'text-emerald-600 dark:text-emerald-400'
   const inactiveClass = 'text-stone-400 dark:text-stone-600'
 
   return (
-    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex-1">
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-      <div className="relative space-y-1.5 sm:space-y-2 h-full flex flex-col">
+      <div className="relative space-y-1.5 sm:space-y-2">
         <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
           <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
           <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
-        <div className="flex items-center justify-center gap-1.5 sm:gap-2 flex-1">
+        <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
           <LivingSpacePanel
-            active={isIndoor || isBoth}
-            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            active={isIndoor}
+            icon={<House className={`h-7 w-7 sm:h-8 sm:w-8 ${isIndoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:enums.livingSpace.indoor', { defaultValue: 'Indoor' })}
           />
           <LivingSpacePanel
-            active={isOutdoor || isBoth}
-            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor || isBoth ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            active={isOutdoor}
+            icon={<TreeDeciduous className={`h-7 w-7 sm:h-8 sm:w-8 ${isOutdoor ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:enums.livingSpace.outdoor', { defaultValue: 'Outdoor' })}
           />
           <LivingSpacePanel
             active={isPottable}
             icon={<Flower className={`h-7 w-7 sm:h-8 sm:w-8 ${isPottable ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:livingSpaceVisualizer.pot', { defaultValue: 'Pot' })}
+          />
+          <LivingSpacePanel
+            active={isTerrarium}
+            icon={<GlassWater className={`h-7 w-7 sm:h-8 sm:w-8 ${isTerrarium ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('plantInfo:enums.livingSpace.terrarium', { defaultValue: 'Terrarium' })}
+          />
+          <LivingSpacePanel
+            active={isGreenhouse}
+            icon={<Warehouse className={`h-7 w-7 sm:h-8 sm:w-8 ${isGreenhouse ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
+            label={t('plantInfo:enums.livingSpace.greenhouse', { defaultValue: 'Greenhouse' })}
           />
         </div>
       </div>

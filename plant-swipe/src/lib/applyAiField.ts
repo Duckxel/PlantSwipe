@@ -15,7 +15,7 @@ import {
   lifeCycleEnum,
   averageLifespanEnum,
   foliagePersistenceEnum,
-  livingSpaceEnum,
+  normalizeLivingSpace,
   seasonEnum,
   climateEnum,
   careLevelEnum,
@@ -145,7 +145,7 @@ const ENUM_FIELDS: Record<string, EnumTools> = {
   lifeCycle: lifeCycleEnum as EnumTools,
   averageLifespan: averageLifespanEnum as EnumTools,
   foliagePersistence: foliagePersistenceEnum as EnumTools,
-  livingSpace: livingSpaceEnum as EnumTools,
+  // livingSpace handled separately via normalizeLivingSpace to expand 'both' → ['indoor','outdoor']
   season: seasonEnum as EnumTools,
   climate: climateEnum as EnumTools,
   careLevel: careLevelEnum as EnumTools,
@@ -256,6 +256,13 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
   if (isFieldGatedOff(plant as unknown as Record<string, unknown>, fieldKey)) return plant
 
   const next = { ...plant } as Plant & Record<string, unknown>
+
+  // livingSpace: expand 'both' → ['indoor','outdoor'] before normalizing
+  if (fieldKey === 'livingSpace') {
+    const result = normalizeLivingSpace(data)
+    if (result.length > 0) next.livingSpace = result as Plant['livingSpace']
+    return next
+  }
 
   // Enum array fields
   if (ENUM_FIELDS[fieldKey]) {

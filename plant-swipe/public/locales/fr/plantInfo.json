@@ -38,7 +38,17 @@
     }
   },
   "habitatMap": {
-    "title": "Carte de l'habitat"
+    "title": "Carte de l'habitat",
+    "details": "Détails",
+    "descriptions": {
+      "aquatic": "Vit dans ou sur l'eau — étangs, rivières, marais ou milieux submergés. Les racines peuvent flotter librement ou s'ancrer dans un sol gorgé d'eau.",
+      "hygrophytic": "Prospère dans des conditions constamment humides — forêts tropicales, berges de cours d'eau, tourbières. Nécessite une humidité élevée et tolère rarement la sécheresse.",
+      "terrestrial": "Pousse enracinée dans le sol dans une grande variété de terres et de conditions. L'habitat le plus courant pour les plantes de jardin et de paysage.",
+      "xerophytic": "Adaptée aux environnements secs, arides ou désertiques. Stocke l'eau dans ses feuilles ou tiges et survit de longues périodes sans pluie.",
+      "halophytic": "Tolère ou nécessite des sols ou eaux salines — marais côtiers, salins, zones de mangrove.",
+      "epiphytic": "Pousse sur d'autres plantes (arbres, branches) sans les parasiter. Absorbe l'humidité et les nutriments de l'air et de la pluie.",
+      "parasitic": "Tire une partie ou la totalité de ses nutriments d'une plante hôte, en s'attachant via des structures spécialisées appelées haustoria."
+    }
   },
   "livingSpaceVisualizer": {
     "title": "Espace de vie",
@@ -306,7 +316,6 @@
     "livingSpace": {
       "indoor": "Intérieur",
       "outdoor": "Extérieur",
-      "both": "Les deux",
       "terrarium": "Terrarium",
       "greenhouse": "Serre"
     },
@@ -315,6 +324,15 @@
       "summer": "Été",
       "autumn": "Automne",
       "winter": "Hiver"
+    },
+    "habitat": {
+      "aquatic": "Aquatique",
+      "hygrophytic": "Hygrophyte (humide)",
+      "terrestrial": "Terrestre",
+      "xerophytic": "Xérophyte (sec/désert)",
+      "halophytic": "Halophyte (salin)",
+      "epiphytic": "Épiphyte",
+      "parasitic": "Parasite"
     },
     "climate": {
       "polar": "Polaire",

@@ -114,9 +114,11 @@ export const plantPartEnum = createEnumTools([
 
 export const habitatEnum = createEnumTools([
   { dbValue: 'aquatic', uiValue: 'Aquatic', aliases: ['water', 'aquatique'] },
+  { dbValue: 'hygrophytic', uiValue: 'Hygrophytic', aliases: ['wet', 'humid', 'hygrophyte', 'hygrophile'] },
   { dbValue: 'terrestrial', uiValue: 'Terrestrial', aliases: ['land', 'terrestre'] },
+  { dbValue: 'xerophytic', uiValue: 'Xerophytic', aliases: ['dry', 'desert', 'xerophyte', 'xérophyte'] },
+  { dbValue: 'halophytic', uiValue: 'Halophytic', aliases: ['saline', 'salt', 'halophyte', 'halophile'] },
   { dbValue: 'epiphytic', uiValue: 'Epiphytic', aliases: ['epiphyte', 'air plant'] },
-  { dbValue: 'lithophytic', uiValue: 'Lithophytic', aliases: ['lithophyte', 'rock'] },
   { dbValue: 'parasitic', uiValue: 'Parasitic', aliases: ['parasite'] },
 ])
 
@@ -191,10 +193,25 @@ export const foliagePersistenceEnum = createEnumTools([
 export const livingSpaceEnum = createEnumTools([
   { dbValue: 'indoor', uiValue: 'Indoor', aliases: ['indoors'] },
   { dbValue: 'outdoor', uiValue: 'Outdoor', aliases: ['outdoors'] },
-  { dbValue: 'both', uiValue: 'Both', aliases: ['indoor/outdoor'] },
   { dbValue: 'terrarium', uiValue: 'Terrarium' },
   { dbValue: 'greenhouse', uiValue: 'Greenhouse', aliases: ['glasshouse'] },
 ])
+
+/**
+ * Expand legacy 'both' values to ['indoor', 'outdoor'] then normalize via livingSpaceEnum.
+ * Use this instead of livingSpaceEnum.toDbArray() when the input may contain 'both'.
+ */
+export function normalizeLivingSpace(value: unknown): string[] {
+  const raw = Array.isArray(value) ? value as string[]
+    : typeof value === 'string' ? value.split(/[,;/]+/).map(s => s.trim()).filter(Boolean)
+    : []
+  const expanded = raw.flatMap(v =>
+    v.toLowerCase().replace(/[^a-z]/g, '') === 'both'
+      ? ['indoor', 'outdoor']
+      : [v]
+  )
+  return livingSpaceEnum.toDbArray(expanded)
+}
 
 export const seasonEnum = createEnumTools([
   { dbValue: 'spring', uiValue: 'Spring', aliases: ['spr'] },

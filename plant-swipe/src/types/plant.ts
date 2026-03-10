@@ -13,8 +13,8 @@ export type PlantPartValue =
   | "flowers" | "fruits" | "spores"
 
 export type HabitatValue =
-  | "aquatic" | "terrestrial" | "epiphytic"
-  | "lithophytic" | "parasitic"
+  | "aquatic" | "hygrophytic" | "terrestrial" | "xerophytic"
+  | "halophytic" | "epiphytic" | "parasitic"
 
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
@@ -49,7 +49,7 @@ export type FoliagePersistence =
   | "marcescent" | "winter_dormant" | "dry_season_deciduous"
 
 export type LivingSpace =
-  | "indoor" | "outdoor" | "both" | "terrarium" | "greenhouse"
+  | "indoor" | "outdoor" | "terrarium" | "greenhouse"
 
 export type PlantSeason = "spring" | "summer" | "autumn" | "winter"
 
@@ -194,6 +194,7 @@ export interface Plant {
   climate?: Climate[]
   season?: PlantSeason[]
   utility?: PlantUtility[]
+  vegetable?: boolean
   ediblePart?: EdiblePart[]
   thorny?: boolean
   toxicityHuman?: ToxicityLevel

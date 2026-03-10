@@ -98,7 +98,7 @@ type PreparedPlant = Plant & {
   _maintenance: string
   _petSafe: boolean
   _humanSafe: boolean
-  _livingSpace: string
+  _livingSpaceSet: Set<string>    // O(1) living space lookups
   _seasonsSet: Set<string>         // O(1) season lookups
   _lifeCycleSet: Set<string>       // O(1) life cycle lookups
   _plantHabitSet: Set<string>      // O(1) plant habit lookups
@@ -956,12 +956,7 @@ export default function PlantSwipe() {
       const livingSpaceLower = livingSpaceArr.length > 0
         ? livingSpaceArr.map(s => String(s).toLowerCase())
         : [(p.identity?.livingSpace as string || '').toLowerCase()].filter(Boolean)
-      // Derive a single label: 'both' if plant has both indoor + outdoor (or explicit 'both')
-      const hasIndoor = livingSpaceLower.includes('indoor')
-      const hasOutdoor = livingSpaceLower.includes('outdoor')
-      const livingSpace = livingSpaceLower.includes('both') || (hasIndoor && hasOutdoor)
-        ? 'both'
-        : livingSpaceLower[0] || ''
+      const livingSpaceSet = new Set(livingSpaceLower.filter(Boolean))
 
       // Pre-parse createdAt for faster sorting
       const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
@@ -1066,7 +1061,7 @@ export default function PlantSwipe() {
         _maintenance: maintenance,
         _petSafe: petSafe,
         _humanSafe: humanSafe,
-        _livingSpace: livingSpace,
+        _livingSpaceSet: livingSpaceSet,
         get _seasonsSet() {
            if (_cachedSeasonsSet) return _cachedSeasonsSet
            const seasonArr = Array.isArray(p.season) ? p.season
@@ -1189,11 +1184,8 @@ export default function PlantSwipe() {
   const filtered = useMemo(() => {
     const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
     
-    // Pre-compute living space matching logic
+    // Pre-compute living space filter
     const livingSpaceCount = livingSpaceSet.size
-    const requiresBoth = livingSpaceCount === 2
-    const requiresIndoor = livingSpaceSet.has('indoor')
-    const requiresOutdoor = livingSpaceSet.has('outdoor')
 
     return preparedPlants.filter((p) => {
       // Early exit pattern: check cheapest conditions first
@@ -1213,15 +1205,13 @@ export default function PlantSwipe() {
       // Season filter - O(1) Set lookup
       if (seasonFilter && !p._seasonsSet.has(seasonFilter)) return false
       
-      // Living space filter - pre-computed logic
+      // Living space filter - OR logic: plant must have ANY of the selected spaces
       if (livingSpaceCount > 0) {
-        if (requiresBoth) {
-          if (p._livingSpace !== 'both') return false
-        } else if (requiresIndoor) {
-          if (p._livingSpace !== 'indoor' && p._livingSpace !== 'both') return false
-        } else if (requiresOutdoor) {
-          if (p._livingSpace !== 'outdoor' && p._livingSpace !== 'both') return false
+        let hasMatch = false
+        for (const s of livingSpaceSet) {
+          if (p._livingSpaceSet.has(s)) { hasMatch = true; break }
         }
+        if (!hasMatch) return false
       }
       
       // Usage filter - O(k) where k is number of selected usages, using O(1) Set lookups

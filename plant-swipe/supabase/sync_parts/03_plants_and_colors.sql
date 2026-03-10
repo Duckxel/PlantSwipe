@@ -60,7 +60,7 @@ create table if not exists public.plants (
   -- Section 1: Base — Identity & naming
   plant_type text check (plant_type is null or plant_type in ('herb','shrub','tree','climber','succulent','fern','moss','grass')),
   plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','bulbs','stems','leaves','flowers','fruits','spores']),
-  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','terrestrial','epiphytic','lithophytic','parasitic']),
+  habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','parasitic']),
   scientific_name_species text,
   family text,
   featured_month text[] not null default '{}'::text[],
@@ -76,6 +76,7 @@ create table if not exists public.plants (
 
   -- Section 2: Identity — Utility & safety
   utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']),
+  vegetable boolean default false,
   edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
   thorny boolean default false,
   toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
@@ -88,7 +89,7 @@ create table if not exists public.plants (
   foliage_persistence text[] not null default '{}'::text[] check (foliage_persistence <@ array['deciduous','evergreen','semi_evergreen','marcescent','winter_dormant','dry_season_deciduous']),
 
   -- Section 2: Identity — Habitat & plant form
-  living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']),
+  living_space text[] not null default '{}'::text[] check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']),
   landscaping text[] not null default '{}'::text[] check (landscaping <@ array[
     'pot','planter','hanging','window_box','green_wall','flowerbed','border',
     'edging','path','tree_base','vegetable_garden','orchard','hedge',
@@ -1084,7 +1085,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_habitat_check check (habitat <@ array['aquatic','terrestrial','epiphytic','lithophytic','parasitic']) not valid;
+    alter table public.plants add constraint plants_habitat_check check (habitat <@ array['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','parasitic']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1202,7 +1203,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','both','terrarium','greenhouse']) not valid;
+    alter table public.plants add constraint plants_living_space_check check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 

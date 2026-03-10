@@ -401,7 +401,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Habitat */}
       <div>
         <FilterSectionHeader
-          label={t("plantInfo:labels.habitat", { defaultValue: "Habitat" })}
+          label={t("plantInfo:labels.climate", { defaultValue: "Climate" })}
           isOpen={habitatSectionOpen}
           onToggle={() => setHabitatSectionOpen((prev) => !prev)}
         />
@@ -527,7 +527,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         </div>
         {livingSpaceFilters.length === 2 && (
           <p className="mt-2 text-xs text-stone-500 dark:text-stone-400">
-            {t("plant.livingSpaceBothHint", { defaultValue: "Showing plants suitable for both indoor AND outdoor" })}
+            {t("plant.livingSpaceBothHint", { defaultValue: "Showing plants suitable for indoor OR outdoor" })}
           </p>
         )}
       </div>
