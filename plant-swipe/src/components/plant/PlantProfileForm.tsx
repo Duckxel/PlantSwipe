@@ -997,8 +997,6 @@ const baseFields: FieldConfig[] = [
     { label: "Moss", value: "moss" },
     { label: "Grass", value: "grass" },
   ] },
-  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
-  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Hygrophytic","Terrestrial","Xerophytic","Halophytic","Epiphytic","Parasitic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
 ]
@@ -1007,6 +1005,8 @@ const baseFields: FieldConfig[] = [
 // Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
+  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
+  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Hygrophytic","Terrestrial","Xerophytic","Halophytic","Epiphytic","Parasitic"] },
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
@@ -2619,10 +2619,6 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         </div>
         {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
       </div>
-      <div className={fieldRowClass}>
-        {renderField(value, setPath, baseFields.find(f => f.key === 'plantPart')!, t)}
-        {renderField(value, setPath, baseFields.find(f => f.key === 'habitat')!, t)}
-      </div>
 
       <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />
       <div className={fieldRowClass}>
@@ -2645,6 +2641,12 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
 
   const renderIdentity = () => (
     <div className="space-y-5">
+      <SectionDivider title={t('plantAdmin.sections.partsHabitat', 'Plant Parts & Habitat')} />
+      <div className={fieldRowClass}>
+        {renderField(value, setPath, identityFields.find(f => f.key === 'plantPart')!, t)}
+        {renderField(value, setPath, identityFields.find(f => f.key === 'habitat')!, t)}
+      </div>
+
       <SectionDivider title={t('plantAdmin.sections.originClimate', 'Origin & Climate')} />
       <div className={fieldRowClass}>
         {renderField(value, setPath, identityFields.find(f => f.key === 'origin')!, t)}
