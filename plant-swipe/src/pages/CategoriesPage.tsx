@@ -62,6 +62,39 @@ type PlantRow = {
   plant_images: { link: string }[]
 }
 
+/** Cache TTL for category previews (1 hour) */
+const CATEGORY_CACHE_TTL_MS = 60 * 60 * 1000
+const CATEGORY_CACHE_KEY_PREFIX = "plantswipe.categories."
+
+interface CachedCategoryData {
+  previews: Record<string, CategoryPlantPreview[]>
+  timestamp: number
+}
+
+function getCachedPreviews(language: string): Record<string, CategoryPlantPreview[]> | null {
+  try {
+    const raw = localStorage.getItem(`${CATEGORY_CACHE_KEY_PREFIX}${language}`)
+    if (!raw) return null
+    const cached: CachedCategoryData = JSON.parse(raw)
+    if (Date.now() - cached.timestamp > CATEGORY_CACHE_TTL_MS) {
+      localStorage.removeItem(`${CATEGORY_CACHE_KEY_PREFIX}${language}`)
+      return null
+    }
+    return cached.previews
+  } catch {
+    return null
+  }
+}
+
+function setCachedPreviews(language: string, previews: Record<string, CategoryPlantPreview[]>): void {
+  try {
+    const data: CachedCategoryData = { previews, timestamp: Date.now() }
+    localStorage.setItem(`${CATEGORY_CACHE_KEY_PREFIX}${language}`, JSON.stringify(data))
+  } catch {
+    // localStorage full or unavailable — skip
+  }
+}
+
 function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
   const sp = new URLSearchParams(params.replace("?", ""))
 
@@ -142,30 +175,46 @@ export default function CategoriesPage() {
   useEffect(() => {
     let cancelled = false
 
+    // Restore from cache immediately for instant rendering
+    const cached = getCachedPreviews(language)
+    if (cached) {
+      setCategoryPreviews(cached)
+    }
+
     async function fetchPreviews() {
-      const { data: plants } = await supabase
-        .from("plants")
-        .select(
-          "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
-        )
-        .eq("plant_images.use", "primary")
+      // Fetch plants, view counts, and translations all in parallel
+      const translationsPromise = language !== "en"
+        ? supabase.from("plant_translations").select("plant_id, name").eq("language", language)
+        : Promise.resolve({ data: null })
 
-      if (cancelled || !plants) return
+      const [plantsResult, viewsResult, translationsResult] = await Promise.all([
+        supabase
+          .from("plants")
+          .select(
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
+          )
+          .eq("plant_images.use", "primary"),
+        supabase.rpc("top_viewed_plants", { _limit: 500 }),
+        translationsPromise,
+      ])
 
-      const typedPlants = plants as unknown as PlantRow[]
+      if (cancelled || !plantsResult.data) return
 
-      // Fetch translations for non-English languages
-      let translationMap = new Map<string, string>()
-      if (language !== "en") {
-        const { data: translations } = await supabase
-          .from("plant_translations")
-          .select("plant_id, name")
-          .eq("language", language)
+      const typedPlants = plantsResult.data as unknown as PlantRow[]
 
-        if (translations) {
-          for (const t of translations) {
-            if (t.name) translationMap.set(t.plant_id as string, t.name as string)
-          }
+      // Build view-count map: plant_id -> views
+      const viewCountMap = new Map<string, number>()
+      if (Array.isArray(viewsResult.data)) {
+        for (const row of viewsResult.data) {
+          if (row?.plant_id) viewCountMap.set(String(row.plant_id), Number(row.views) || 0)
+        }
+      }
+
+      // Build translation map
+      const translationMap = new Map<string, string>()
+      if (translationsResult.data) {
+        for (const t of translationsResult.data) {
+          if (t.name) translationMap.set(t.plant_id as string, t.name as string)
         }
       }
 
@@ -174,11 +223,13 @@ export default function CategoriesPage() {
       const previews: Record<string, CategoryPlantPreview[]> = {}
       for (const cat of categories) {
         const matching = typedPlants.filter((p) => matchesCategoryFilter(p, cat.params))
-        // Fisher-Yates shuffle
-        for (let i = matching.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[matching[i], matching[j]] = [matching[j], matching[i]]
-        }
+        // Sort by most viewed (descending), then alphabetically as tiebreaker
+        matching.sort((a, b) => {
+          const viewsA = viewCountMap.get(a.id) || 0
+          const viewsB = viewCountMap.get(b.id) || 0
+          if (viewsB !== viewsA) return viewsB - viewsA
+          return a.name.localeCompare(b.name)
+        })
         previews[cat.key] = matching.slice(0, 5).map((p) => ({
           id: p.id,
           name: translationMap.get(p.id) || p.name,
@@ -187,6 +238,7 @@ export default function CategoriesPage() {
       }
 
       setCategoryPreviews(previews)
+      setCachedPreviews(language, previews)
     }
 
     fetchPreviews()

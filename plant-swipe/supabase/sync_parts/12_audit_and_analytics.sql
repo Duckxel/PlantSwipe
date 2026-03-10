@@ -892,6 +892,26 @@ $$;
 
 GRANT EXECUTE ON FUNCTION public.increment_impression(text, text) TO authenticated;
 
+-- Function to get most-viewed plants (security definer bypasses admin-only RLS).
+-- Returns plant_id and view count ordered by views DESC.
+-- Used by categories page to show the most popular plant as category cover.
+CREATE OR REPLACE FUNCTION public.top_viewed_plants(
+  _limit integer DEFAULT 100
+)
+RETURNS TABLE (plant_id text, views bigint)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT entity_id AS plant_id, count AS views
+  FROM public.impressions
+  WHERE entity_type = 'plant' AND count > 0
+  ORDER BY count DESC
+  LIMIT greatest(coalesce(_limit, 100), 0);
+$$;
+
+GRANT EXECUTE ON FUNCTION public.top_viewed_plants(integer) TO anon, authenticated;
+
 -- ========== Messaging System ==========
 -- This adds a complete messaging system with:
 -- - Conversations (1:1 between friends)
