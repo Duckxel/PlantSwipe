@@ -114,7 +114,10 @@ export const plantPartEnum = createEnumTools([
 
 export const habitatEnum = createEnumTools([
   { dbValue: 'aquatic', uiValue: 'Aquatic', aliases: ['water', 'aquatique'] },
+  { dbValue: 'hygrophytic', uiValue: 'Hygrophytic', aliases: ['wet', 'humid', 'hygrophyte', 'hygrophile'] },
   { dbValue: 'terrestrial', uiValue: 'Terrestrial', aliases: ['land', 'terrestre'] },
+  { dbValue: 'xerophytic', uiValue: 'Xerophytic', aliases: ['dry', 'desert', 'xerophyte', 'xérophyte'] },
+  { dbValue: 'halophytic', uiValue: 'Halophytic', aliases: ['saline', 'salt', 'halophyte', 'halophile'] },
   { dbValue: 'epiphytic', uiValue: 'Epiphytic', aliases: ['epiphyte', 'air plant'] },
   { dbValue: 'lithophytic', uiValue: 'Lithophytic', aliases: ['lithophyte', 'rock'] },
   { dbValue: 'parasitic', uiValue: 'Parasitic', aliases: ['parasite'] },

@@ -317,7 +317,10 @@
     },
     "habitat": {
       "aquatic": "Aquatic",
+      "hygrophytic": "Hygrophytic (wet/humid)",
       "terrestrial": "Terrestrial",
+      "xerophytic": "Xerophytic (dry/desert)",
+      "halophytic": "Halophytic (saline)",
       "epiphytic": "Epiphytic",
       "lithophytic": "Lithophytic",
       "parasitic": "Parasitic"

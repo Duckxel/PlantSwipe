@@ -998,7 +998,7 @@ const baseFields: FieldConfig[] = [
     { label: "Grass", value: "grass" },
   ] },
   { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
-  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Terrestrial","Epiphytic","Lithophytic","Parasitic"] },
+  { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Hygrophytic","Terrestrial","Xerophytic","Halophytic","Epiphytic","Lithophytic","Parasitic"] },
   { key: "presentation", label: "Presentation", description: "Encyclopedia-style description (150-300 words)", type: "textarea" },
   { key: "featuredMonth", label: "Featured Month(s)", description: "Months when this plant should be highlighted", type: "multiselect", options: monthSlugOptions },
 ]

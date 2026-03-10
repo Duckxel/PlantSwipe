@@ -13,8 +13,8 @@ export type PlantPartValue =
   | "flowers" | "fruits" | "spores"
 
 export type HabitatValue =
-  | "aquatic" | "terrestrial" | "epiphytic"
-  | "lithophytic" | "parasitic"
+  | "aquatic" | "hygrophytic" | "terrestrial" | "xerophytic"
+  | "halophytic" | "epiphytic" | "lithophytic" | "parasitic"
 
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
