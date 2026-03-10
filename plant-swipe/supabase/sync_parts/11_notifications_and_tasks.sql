@@ -743,16 +743,28 @@ CREATE INDEX IF NOT EXISTS idx_tasks_garden_plant
   ON public.garden_plant_tasks (garden_plant_id, schedule_kind);
 
 -- Index for occurrence lookups by task and date range
-CREATE INDEX IF NOT EXISTS idx_occurrences_task_due 
+CREATE INDEX IF NOT EXISTS idx_occurrences_task_due
   ON public.garden_plant_task_occurrences (task_id, due_at);
 
 -- Partial index for incomplete occurrences (most common query)
-CREATE INDEX IF NOT EXISTS idx_occurrences_incomplete 
-  ON public.garden_plant_task_occurrences (task_id, due_at) 
+CREATE INDEX IF NOT EXISTS idx_occurrences_incomplete
+  ON public.garden_plant_task_occurrences (task_id, due_at)
   WHERE completed_count < required_count;
 
+-- Composite index on (due_at, completed_at) – covers the "incomplete tasks today" query
+CREATE INDEX IF NOT EXISTS idx_task_occurrences_due_completed
+  ON public.garden_plant_task_occurrences (due_at, completed_at);
+
+-- Index on task_id for the inner-join to garden_plant_tasks
+CREATE INDEX IF NOT EXISTS idx_task_occurrences_task_id
+  ON public.garden_plant_task_occurrences (task_id);
+
+-- Index on garden_plant_tasks(garden_id) used in task queries joining to gardens
+CREATE INDEX IF NOT EXISTS idx_garden_plant_tasks_garden_id
+  ON public.garden_plant_tasks (garden_id);
+
 -- Index for user completions lookup
-CREATE INDEX IF NOT EXISTS idx_user_completions_user_time 
+CREATE INDEX IF NOT EXISTS idx_user_completions_user_time
   ON public.garden_task_user_completions (user_id, occurred_at DESC);
 
 -- ========== 5. CLEANUP FUNCTIONS ==========
