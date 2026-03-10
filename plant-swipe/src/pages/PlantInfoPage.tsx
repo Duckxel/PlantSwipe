@@ -1372,6 +1372,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   const wingspan = plant.wingspanCm ?? null
   const spacing = plant.separationCm ?? null
   const [cubeExpanded, setCubeExpanded] = React.useState(false)
+  const [habitatDetailsOpen, setHabitatDetailsOpen] = React.useState(false)
   const toggleCubeExpanded = React.useCallback(() => {
     setCubeExpanded(prev => !prev)
   }, [])
@@ -1691,6 +1692,27 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   </div>
                 ))}
               </div>
+              {/* Collapsible habitat descriptions */}
+              <button
+                type="button"
+                onClick={() => setHabitatDetailsOpen(prev => !prev)}
+                className="flex w-full items-center gap-1.5 text-[10px] sm:text-xs font-medium text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100 transition-colors"
+              >
+                <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${habitatDetailsOpen ? 'rotate-180' : ''}`} />
+                {t('plantInfo:habitatMap.details', { defaultValue: 'Details' })}
+              </button>
+              {habitatDetailsOpen && (
+                <div className="space-y-2">
+                  {habitats.map((h) => (
+                    <div key={h} className="rounded-xl bg-white/60 dark:bg-[#2d2d30]/60 px-3 py-2 backdrop-blur-sm">
+                      <p className="text-[11px] sm:text-xs font-semibold text-stone-800 dark:text-stone-100">{translateEnum(h)}</p>
+                      <p className="mt-0.5 text-[10px] sm:text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
+                        {t(`plantInfo:habitatMap.descriptions.${h}`, { defaultValue: h })}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </section>
         )}

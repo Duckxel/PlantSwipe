@@ -38,7 +38,17 @@
     }
   },
   "habitatMap": {
-    "title": "Habitat Map"
+    "title": "Habitat Map",
+    "details": "Details",
+    "descriptions": {
+      "aquatic": "Lives in or on water — ponds, rivers, marshes, or submerged environments. Roots may float freely or anchor in waterlogged soil.",
+      "hygrophytic": "Thrives in constantly wet or humid conditions — tropical forests, stream banks, bogs. Requires high moisture and rarely tolerates drought.",
+      "terrestrial": "Grows rooted in the ground in a wide range of soils and conditions. The most common habitat for garden and landscape plants.",
+      "xerophytic": "Adapted to dry, arid, or desert environments. Stores water in leaves or stems and survives long periods without rain.",
+      "halophytic": "Tolerates or requires saline (salty) soils or water — coastal marshes, salt flats, mangrove areas.",
+      "epiphytic": "Grows on other plants (trees, branches) without parasitising them. Absorbs moisture and nutrients from the air and rain.",
+      "parasitic": "Derives some or all of its nutrients from a host plant, attaching via specialised structures called haustoria."
+    }
   },
   "livingSpaceVisualizer": {
     "title": "Living Space",
