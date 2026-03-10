@@ -1380,8 +1380,8 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       { label: t('plantInfo:dimensions.spread'), value: wingspan ? `${wingspan} cm` : '—', subLabel: t('plantInfo:dimensions.spreadSub') },
       { label: t('plantInfo:dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('plantInfo:dimensions.spacingSub') },
     ]
-    const climates = plant.climate || []
-  const activePins = climates.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
+    const habitats = plant.habitat || []
+  const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
     label: translateEnum(label),
   }))
@@ -1665,15 +1665,15 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           )}
         </div>
 
-        {/* Climate Map */}
-        {climates.length > 0 && (
+        {/* Habitat Map */}
+        {habitats.length > 0 && (
           <section
             className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-gradient-to-br from-sky-100/80 via-white/80 to-emerald-100/80 p-4 sm:p-6 dark:bg-gradient-to-br dark:from-[#03191b]/90 dark:via-[#04263d]/85 dark:to-[#071321]/90"
           >
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:climateMap.title', { defaultValue: 'Climate Map' })}</span>
+                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title', { defaultValue: 'Habitat Map' })}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
                 <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />

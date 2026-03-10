@@ -37,8 +37,8 @@
       "pruning": "Taille"
     }
   },
-  "climateMap": {
-    "title": "Carte du climat"
+  "habitatMap": {
+    "title": "Carte de l'habitat"
   },
   "livingSpaceVisualizer": {
     "title": "Espace de vie",
