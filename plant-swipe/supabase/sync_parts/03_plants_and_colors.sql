@@ -76,6 +76,7 @@ create table if not exists public.plants (
 
   -- Section 2: Identity — Utility & safety
   utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']),
+  vegetable boolean default false,
   edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
   thorny boolean default false,
   toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),

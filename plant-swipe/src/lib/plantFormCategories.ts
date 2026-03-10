@@ -45,6 +45,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   season: 'identity',
   utility: 'identity',
   ediblePart: 'identity',
+  vegetable: 'identity',
   thorny: 'identity',
   toxicityHuman: 'identity',
   toxicityPets: 'identity',
@@ -191,6 +192,7 @@ export const BOOLEAN_GATE_DEPS: Record<string, string[]> = {
  * When the utility array does NOT include the value, dependent fields are hidden.
  */
 export const UTILITY_GATE_DEPS: Record<string, string[]> = {
+  edible: ['vegetable'],
   infusion: ['infusionParts', 'infusionBenefits', 'infusionRecipeIdeas', 'infusionMixes'],
   medicinal: ['medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory'],
   aromatic: ['aromatherapyBenefits', 'essentialOilBlends'],

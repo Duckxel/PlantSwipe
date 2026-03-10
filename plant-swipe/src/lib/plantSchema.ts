@@ -67,6 +67,10 @@ export const plantSchema = {
     options: ['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion'],
     description: 'Practical or ornamental uses',
   },
+  vegetable: {
+    type: 'boolean',
+    description: 'Whether this plant is a vegetable (only when edible)',
+  },
   ediblePart: {
     type: 'enum[]',
     options: ['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood'],

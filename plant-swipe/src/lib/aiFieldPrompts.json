@@ -21,6 +21,7 @@
     "- `climate`: array from ONLY: [\"polar\",\"montane\",\"oceanic\",\"degraded_oceanic\",\"temperate_continental\",\"mediterranean\",\"tropical_dry\",\"tropical_humid\",\"tropical_volcanic\",\"tropical_cyclonic\",\"humid_insular\",\"subtropical_humid\",\"equatorial\",\"windswept_coastal\"]",
     "- `season`: array from [\"spring\",\"summer\",\"autumn\",\"winter\"]",
     "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\",\"infusion\"]. Use \"infusion\" if plant can be used for tea/tisane, \"aromatic\" also covers aromatherapy, \"fragrant\" for notable fragrance, \"medicinal\" for medicinal uses.",
+    "- `vegetable`: boolean — true if the plant is a vegetable (only relevant when edible).",
     "- `ediblePart`: array from ONLY: [\"flower\",\"fruit\",\"seed\",\"leaf\",\"stem\",\"bulb\",\"rhizome\",\"bark\",\"wood\"]. Empty array if not edible.",
     "- `thorny`: boolean",
     "- `toxicityHuman`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",

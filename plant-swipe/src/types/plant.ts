@@ -194,6 +194,7 @@ export interface Plant {
   climate?: Climate[]
   season?: PlantSeason[]
   utility?: PlantUtility[]
+  vegetable?: boolean
   ediblePart?: EdiblePart[]
   thorny?: boolean
   toxicityHuman?: ToxicityLevel
