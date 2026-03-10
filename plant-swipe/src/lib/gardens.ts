@@ -2822,79 +2822,14 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
     }
     
     if (!userCacheErr && userCache) {
-      const totalDue = Number(userCache.total_due_count ?? 0)
-      const totalCompleted = Number(userCache.total_completed_count ?? 0)
-      
-      // Verify cache: if cache says no tasks, verify by checking garden cache
-      if (totalDue === 0 && totalCompleted === 0) {
-        // Cache says no tasks - verify this is correct by checking garden cache
-        const { data: memberships } = await supabase
-          .from('garden_members')
-          .select('garden_id')
-          .eq('user_id', userId)
-        
-        if (memberships && memberships.length > 0) {
-          const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          let gardenCache: any[] | null = null
-          if (!missingSupabaseTablesOrViews.has(gardenDailyTable)) {
-            try {
-              const response = await supabase
-                .from(gardenDailyTable)
-                .select('due_count, completed_count, has_remaining_tasks')
-                .in('garden_id', gardenIds)
-                .eq('cache_date', date)
-              if (response.error) {
-                if (isMissingTableOrView(response.error, gardenDailyTable)) {
-                  gardenCache = null
-                }
-              } else {
-                gardenCache = response.data
-              }
-            } catch (err) {
-              if (!isMissingTableOrView(err, gardenDailyTable)) {
-                console.warn('[gardens] getUserTasksTodayCached garden cache query failed, falling back:', err)
-              }
-            }
-          }
-          
-          // If garden cache shows tasks but user cache says zero, compute from garden cache
-          if (gardenCache && gardenCache.length > 0) {
-            let verifiedDue = 0
-            let verifiedCompleted = 0
-            let gardensWithRemaining = 0
-            
-            for (const row of gardenCache) {
-              verifiedDue += Number(row.due_count ?? 0)
-              verifiedCompleted += Number(row.completed_count ?? 0)
-              if (row.has_remaining_tasks) {
-                gardensWithRemaining++
-              }
-            }
-            
-            // If garden cache shows different values, use garden cache (more accurate)
-            if (verifiedDue > 0 || verifiedCompleted > 0) {
-              // Trigger background refresh of user cache
-              if (!taskCachesDisabled) {
-                setTimeout(() => {
-                  refreshUserTaskCache(userId, date).catch(() => {})
-                }, 0)
-              }
-              
-              return {
-                totalDueCount: verifiedDue,
-                totalCompletedCount: verifiedCompleted,
-                gardensWithRemainingTasks: gardensWithRemaining,
-                totalGardens: gardenIds.length,
-              }
-            }
-          }
-        }
-      }
-      
+      // Trust the user cache directly – it's refreshed in the background by
+      // realtime subscriptions and periodic polling.  The previous verification
+      // round-trip (garden_members → garden_task_daily_cache) added 2 extra
+      // sequential DB calls on every read when the cache said 0, which was the
+      // main source of perceived slowness.
       return {
-        totalDueCount: totalDue,
-        totalCompletedCount: totalCompleted,
+        totalDueCount: Number(userCache.total_due_count ?? 0),
+        totalCompletedCount: Number(userCache.total_completed_count ?? 0),
         gardensWithRemainingTasks: Number(userCache.gardens_with_remaining_tasks ?? 0),
         totalGardens: Number(userCache.total_gardens ?? 0),
       }

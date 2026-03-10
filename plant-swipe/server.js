@@ -3598,6 +3598,12 @@ try {
     }
   }
 } catch { }
+
+// Connection pooling: allow tuning via env vars; defaults optimised for moderate traffic
+postgresOptions.max = parseInt(process.env.PG_POOL_MAX || '10', 10)               // max connections in pool
+postgresOptions.idle_timeout = parseInt(process.env.PG_IDLE_TIMEOUT || '20', 10)   // seconds before idle conn is closed
+postgresOptions.connect_timeout = parseInt(process.env.PG_CONNECT_TIMEOUT || '10', 10) // seconds to wait for new conn
+
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
 
 let adminMediaUploadsEnsured = false
@@ -4144,34 +4150,45 @@ app.use((_req, res, next) => {
 // Supabase service client disabled to avoid using service-role env vars
 const supabaseAdmin = null
 
-// Composite health: reflect DB status so UI doesn't show green on failures
-app.get('/api/health', async (_req, res) => {
+// Cached DB health status to avoid hitting the database on every health-check call.
+// The probe runs at most once every DB_HEALTH_CACHE_TTL_MS milliseconds.
+const DB_HEALTH_CACHE_TTL_MS = parseInt(process.env.DB_HEALTH_CACHE_TTL_MS || '5000', 10) // 5s default
+let _dbHealthCache = { ok: false, latencyMs: 0, error: 'NOT_CHECKED_YET', ts: 0 }
+let _dbHealthPromise = null
+
+async function _probeDbHealth() {
   const started = Date.now()
   try {
-    let dbOk = false
-    let err = null
-    if (sql) {
-      try {
-        const rows = await withTimeout(sql`select 1 as one`, 1000, 'DB_TIMEOUT')
-        dbOk = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
-      } catch (e) {
-        err = e?.message || 'query failed'
-      }
-    }
-    res.status(200).json({
-      ok: true,
-      db: {
-        ok: dbOk,
-        latencyMs: Date.now() - started,
-        error: dbOk ? null : (err || (connectionString ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED')),
-      },
-    })
-  } catch {
-    res.status(200).json({
-      ok: true,
-      db: { ok: false, latencyMs: Date.now() - started, error: 'HEALTH_CHECK_FAILED' },
+    if (!sql) return { ok: false, latencyMs: 0, error: connectionString ? 'DB_QUERY_FAILED' : 'DB_NOT_CONFIGURED', ts: started }
+    const rows = await withTimeout(sql`select 1 as one`, 1000, 'DB_TIMEOUT')
+    const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
+    return { ok, latencyMs: Date.now() - started, error: ok ? null : 'DB_QUERY_FAILED', ts: Date.now() }
+  } catch (e) {
+    return { ok: false, latencyMs: Date.now() - started, error: e?.message || 'query failed', ts: Date.now() }
+  }
+}
+
+function getDbHealth() {
+  const now = Date.now()
+  if (now - _dbHealthCache.ts < DB_HEALTH_CACHE_TTL_MS) return Promise.resolve(_dbHealthCache)
+  // Coalesce concurrent callers into a single probe
+  if (!_dbHealthPromise) {
+    _dbHealthPromise = _probeDbHealth().then(result => {
+      _dbHealthCache = result
+      _dbHealthPromise = null
+      return result
+    }).catch(() => {
+      _dbHealthPromise = null
+      return _dbHealthCache
     })
   }
+  return _dbHealthPromise
+}
+
+// Composite health: reflect DB status so UI doesn't show green on failures
+app.get('/api/health', async (_req, res) => {
+  const db = await getDbHealth()
+  res.status(200).json({ ok: true, db })
 })
 
 // =============================================================================
@@ -5925,39 +5942,10 @@ app.post('/api/contact/delete-screenshot', async (req, res) => {
 })
 
 // Database health: returns ok along with latency; always 200 for easier probes
+// Uses the same cached probe as /api/health to avoid redundant DB round-trips
 app.get('/api/health/db', async (_req, res) => {
-  const started = Date.now()
-  try {
-    if (!sql) {
-      // Fallback: try Supabase reachability via anon client
-      if (supabaseServer) {
-        try {
-          const { error } = await supabaseServer.from('plants').select('id', { head: true, count: 'exact' }).limit(1)
-          const ok = !error
-          res.status(200).json({ ok, latencyMs: Date.now() - started, via: 'supabase' })
-          return
-        } catch { }
-      }
-      res.status(200).json({
-        ok: false,
-        error: 'Database not configured',
-        errorCode: 'DB_NOT_CONFIGURED',
-        latencyMs: Date.now() - started,
-      })
-      return
-    }
-    const rows = await sql`select 1 as one`
-    const ok = Array.isArray(rows) && rows[0] && Number(rows[0].one) === 1
-    res.status(200).json({ ok, latencyMs: Date.now() - started })
-  } catch (e) {
-    res.status(200).json({
-      ok: false,
-      latencyMs: Date.now() - started,
-      error: e?.message || 'query failed',
-      errorCode: 'DB_QUERY_FAILED',
-    })
-
-  }
+  const db = await getDbHealth()
+  res.status(200).json({ ok: db.ok, latencyMs: db.latencyMs, error: db.error || undefined, errorCode: db.ok ? undefined : (db.error === 'DB_NOT_CONFIGURED' ? 'DB_NOT_CONFIGURED' : 'DB_QUERY_FAILED') })
 })
 
 // Runtime environment injector for client (exposes safe VITE_* only)
