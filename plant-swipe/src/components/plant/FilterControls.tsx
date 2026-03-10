@@ -401,7 +401,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Habitat */}
       <div>
         <FilterSectionHeader
-          label={t("plantInfo:labels.habitat", { defaultValue: "Habitat" })}
+          label={t("plantInfo:labels.climate", { defaultValue: "Climate" })}
           isOpen={habitatSectionOpen}
           onToggle={() => setHabitatSectionOpen((prev) => !prev)}
         />
