@@ -2308,38 +2308,15 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
           // Disable future attempts
         }
       } else if (data) {
-        const due = Number(data.due_count ?? 0)
-        const completed = Number(data.completed_count ?? 0)
-        const allTasksDone = Boolean(data.all_tasks_done ?? true)
-        
-        // Verify cache: if cache says all done, verify by computing from real data
-        // This catches cases where new tasks were added after cache was updated
-        if (allTasksDone || (due === 0 && completed === 0)) {
-          // Cache says all tasks done or no tasks - verify this is correct
-          const verified = await getGardenTodayProgressUltraFast(normalizedGardenId, dayIso)
-          const verifiedHasRemaining = verified.due > verified.completed
-          
-          // Check if cache is stale (real data differs from cache)
-          if (verified.due !== due || verified.completed !== completed || verifiedHasRemaining !== !allTasksDone) {
-            // Cache is wrong - use real data and trigger refresh
-            if (!taskCachesDisabled) {
-              setTimeout(() => {
-                refreshGardenTaskCache(normalizedGardenId, dayIso).catch(() => {})
-              }, 0)
-            }
-            return {
-              ...verified,
-              hasRemainingTasks: verifiedHasRemaining,
-              allTasksDone: !verifiedHasRemaining && verified.due > 0,
-            }
-          }
-        }
-        
+        // Trust the cache directly – it's kept fresh by realtime subscriptions
+        // and background refresh.  The previous verification round-trip
+        // (getGardenTodayProgressUltraFast on every "all done" read) was the
+        // main source of latency for users with many completed gardens.
         return {
-          due,
-          completed,
+          due: Number(data.due_count ?? 0),
+          completed: Number(data.completed_count ?? 0),
           hasRemainingTasks: Boolean(data.has_remaining_tasks ?? false),
-          allTasksDone,
+          allTasksDone: Boolean(data.all_tasks_done ?? true),
         }
       }
     } catch (err) {
@@ -2423,24 +2400,19 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
       }
     }
     
-    // Fill in missing gardens - VERIFY by computing from real data
+    // Only compute from real data for gardens that have NO cache entry at all.
+    // Gardens with a cache entry are trusted (kept fresh by realtime + background refresh).
     const gardensToVerify: string[] = []
     for (const gid of gardenIds) {
       if (!result[gid]) {
         gardensToVerify.push(gid)
-      } else {
-        // Verify cache: if cache says all done, verify it's actually true
-        // This catches cases where new tasks were added after cache was updated
-        const cached = result[gid]
-        if (cached.allTasksDone || (cached.due === 0 && cached.completed === 0)) {
-          gardensToVerify.push(gid)
-        }
       }
     }
     
     // Compute from real data for gardens without cache or suspicious cache
     if (gardensToVerify.length > 0) {
       const verifiedProg = await getGardensTodayProgressBatch(gardensToVerify, dayIso)
+      const gidsToRefresh: string[] = []
       for (const gid of gardensToVerify) {
         const prog = verifiedProg[gid] || { due: 0, completed: 0 }
         const hasRemaining = prog.due > prog.completed
@@ -2450,15 +2422,14 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
           hasRemainingTasks: hasRemaining,
           allTasksDone: !hasRemaining && prog.due > 0,
         }
-        // Trigger background cache refresh for missing/wrong cache
-          if (!taskCachesDisabled) {
-            const normalizedGid = normalizeGardenId(gid)
-            if (normalizedGid) {
-              setTimeout(() => {
-                refreshGardenTaskCache(normalizedGid, dayIso).catch(() => {})
-              }, 0)
-            }
-          }
+        const normalizedGid = normalizeGardenId(gid)
+        if (normalizedGid) gidsToRefresh.push(normalizedGid)
+      }
+      // Single batched background refresh instead of per-garden setTimeout
+      if (!taskCachesDisabled && gidsToRefresh.length > 0) {
+        setTimeout(() => {
+          Promise.allSettled(gidsToRefresh.map(gid => refreshGardenTaskCache(gid, dayIso)))
+        }, 0)
       }
     }
     

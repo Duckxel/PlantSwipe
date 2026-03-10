@@ -368,16 +368,16 @@ def _is_service_allowed(service_name: str) -> bool:
 def _restart_service(service_name: str) -> None:
     if not _is_service_allowed(service_name):
         abort(400, description="service not allowed")
-    subprocess.run(["sudo", "systemctl", "restart", service_name], check=True)
+    subprocess.run(["sudo", "systemctl", "restart", service_name], check=True, timeout=60)
 
 
 def _reload_nginx() -> None:
     # nginx is commonly allowed; still validated by sudoers
-    subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True)
+    subprocess.run(["sudo", "systemctl", "reload", "nginx"], check=True, timeout=30)
 
 
 def _reboot_machine() -> None:
-    subprocess.run(["sudo", "systemctl", "reboot"], check=True)
+    subprocess.run(["sudo", "systemctl", "reboot"], check=True, timeout=30)
 def _get_repo_root() -> str:
     # Prefer explicit env override
     env_dir = _get_env_var("PLANTSWIPE_REPO_DIR", "").strip()

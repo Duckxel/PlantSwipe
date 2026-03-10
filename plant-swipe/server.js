@@ -18363,7 +18363,7 @@ app.get('/api/account/export', async (req, res) => {
     } catch (err) { console.warn('[gdpr-export] Auth user:', err?.message) }
 
     try {
-      // 3. Gardens and plants
+      // 3. Gardens and plants — batch-fetch to avoid N+1 per-garden queries
       if (sql) {
         const gardens = await sql`
           SELECT g.*, gm.role as member_role
@@ -18371,209 +18371,198 @@ app.get('/api/account/export', async (req, res) => {
           JOIN public.garden_members gm ON gm.garden_id = g.id
           WHERE gm.user_id = ${userId}
         `
-        for (const garden of gardens) {
-          const plants = await sql`
-            SELECT gp.*, p.name as plant_name
-            FROM public.garden_plants gp
-            LEFT JOIN public.plants p ON p.id = gp.plant_id
-            WHERE gp.garden_id = ${garden.id}
-          `
-          const tasks = await sql`
-            SELECT * FROM public.garden_plant_tasks
-            WHERE garden_id = ${garden.id}
-          `
-          exportData.gardens.push({
-            ...garden,
-            plants: plants || [],
-            tasks: tasks || []
-          })
+        if (gardens && gardens.length > 0) {
+          const gardenIds = gardens.map(g => g.id)
+          const [allPlants, allTasks] = await Promise.all([
+            sql`SELECT gp.*, p.name as plant_name
+                FROM public.garden_plants gp
+                LEFT JOIN public.plants p ON p.id = gp.plant_id
+                WHERE gp.garden_id = ANY(${gardenIds})`,
+            sql`SELECT * FROM public.garden_plant_tasks
+                WHERE garden_id = ANY(${gardenIds})`
+          ])
+          for (const garden of gardens) {
+            exportData.gardens.push({
+              ...garden,
+              plants: (allPlants || []).filter(p => p.garden_id === garden.id),
+              tasks: (allTasks || []).filter(t => t.garden_id === garden.id),
+            })
+          }
         }
       } else {
         const { data: memberships } = await supabaseServiceClient
           .from('garden_members')
           .select('garden_id, role')
           .eq('user_id', userId)
-        
-        for (const membership of (memberships || [])) {
-          const { data: garden } = await supabaseServiceClient
-            .from('gardens')
-            .select('*')
-            .eq('id', membership.garden_id)
-            .maybeSingle()
-          
-          if (garden) {
-            const { data: plants } = await supabaseServiceClient
-              .from('garden_plants')
-              .select('*')
-              .eq('garden_id', garden.id)
-            
-            const { data: tasks } = await supabaseServiceClient
-              .from('garden_plant_tasks')
-              .select('*')
-              .eq('garden_id', garden.id)
-            
+
+        if (memberships && memberships.length > 0) {
+          const gardenIds = memberships.map(m => m.garden_id)
+          const roleMap = Object.fromEntries(memberships.map(m => [m.garden_id, m.role]))
+          // Fetch gardens, plants, tasks in parallel instead of per-garden
+          const [gardensRes, plantsRes, tasksRes] = await Promise.all([
+            supabaseServiceClient.from('gardens').select('*').in('id', gardenIds),
+            supabaseServiceClient.from('garden_plants').select('*').in('garden_id', gardenIds),
+            supabaseServiceClient.from('garden_plant_tasks').select('*').in('garden_id', gardenIds),
+          ])
+          for (const garden of (gardensRes.data || [])) {
             exportData.gardens.push({
               ...garden,
-              member_role: membership.role,
-              plants: plants || [],
-              tasks: tasks || []
+              member_role: roleMap[garden.id] || 'member',
+              plants: (plantsRes.data || []).filter(p => p.garden_id === garden.id),
+              tasks: (tasksRes.data || []).filter(t => t.garden_id === garden.id),
             })
           }
         }
       }
     } catch (err) { console.warn('[gdpr-export] Gardens:', err?.message) }
 
-    try {
+    // Sections 4-12: all independent queries — run in parallel for ~5x speedup
+    const gdprParallelResults = await Promise.allSettled([
       // 4. Journal entries
-      if (sql) {
-        const journal = await sql`
-          SELECT gje.*, 
-            (SELECT json_agg(gjp.*) FROM public.garden_journal_photos gjp WHERE gjp.entry_id = gje.id) as photos
-          FROM public.garden_journal_entries gje
-          WHERE gje.user_id = ${userId}
-          ORDER BY gje.created_at DESC
-        `
-        exportData.journal = journal || []
-      } else {
-        const { data } = await supabaseServiceClient
-          .from('garden_journal_entries')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-        exportData.journal = data || []
-      }
-    } catch (err) { console.warn('[gdpr-export] Journal:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT gje.*,
+              (SELECT json_agg(gjp.*) FROM public.garden_journal_photos gjp WHERE gjp.entry_id = gje.id) as photos
+            FROM public.garden_journal_entries gje
+            WHERE gje.user_id = ${userId}
+            ORDER BY gje.created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('garden_journal_entries').select('*').eq('user_id', userId)
+            .order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
       // 5. Messages
-      if (sql) {
-        const messages = await sql`
-          SELECT m.*, c.participant_1, c.participant_2
-          FROM public.messages m
-          JOIN public.conversations c ON c.id = m.conversation_id
-          WHERE m.sender_id = ${userId}
-          ORDER BY m.created_at DESC
-        `
-        exportData.messages = messages || []
-      } else {
-        const { data } = await supabaseServiceClient
-          .from('messages')
-          .select('*, conversation:conversations(participant_1, participant_2)')
-          .eq('sender_id', userId)
-          .order('created_at', { ascending: false })
-        exportData.messages = data || []
-      }
-    } catch (err) { console.warn('[gdpr-export] Messages:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT m.*, c.participant_1, c.participant_2
+            FROM public.messages m
+            JOIN public.conversations c ON c.id = m.conversation_id
+            WHERE m.sender_id = ${userId}
+            ORDER BY m.created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('messages').select('*, conversation:conversations(participant_1, participant_2)')
+            .eq('sender_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
       // 6. Conversations
-      if (sql) {
-        const conversations = await sql`
-          SELECT * FROM public.conversations
-          WHERE participant_1 = ${userId} OR participant_2 = ${userId}
-        `
-        exportData.conversations = conversations || []
-      } else {
-        const { data: c1 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_1', userId)
-        const { data: c2 } = await supabaseServiceClient.from('conversations').select('*').eq('participant_2', userId)
-        exportData.conversations = [...(c1 || []), ...(c2 || [])]
-      }
-    } catch (err) { console.warn('[gdpr-export] Conversations:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT * FROM public.conversations
+            WHERE participant_1 = ${userId} OR participant_2 = ${userId}
+          `
+        } else {
+          const [{ data: c1 }, { data: c2 }] = await Promise.all([
+            supabaseServiceClient.from('conversations').select('*').eq('participant_1', userId),
+            supabaseServiceClient.from('conversations').select('*').eq('participant_2', userId),
+          ])
+          return [...(c1 || []), ...(c2 || [])]
+        }
+      })(),
       // 7. Friends
-      if (sql) {
-        const friends = await sql`
-          SELECT f.*, p.display_name as friend_name
-          FROM public.friends f
-          LEFT JOIN public.profiles p ON p.id = CASE
-            WHEN f.user_id = ${userId} THEN f.friend_id
-            ELSE f.user_id
-          END
-          WHERE f.user_id = ${userId} OR f.friend_id = ${userId}
-        `
-        exportData.friends = friends || []
-      } else {
-        const { data: f1 } = await supabaseServiceClient.from('friends').select('*').eq('user_id', userId)
-        const { data: f2 } = await supabaseServiceClient.from('friends').select('*').eq('friend_id', userId)
-        exportData.friends = [...(f1 || []), ...(f2 || [])]
-      }
-    } catch (err) { console.warn('[gdpr-export] Friends:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT f.*, p.display_name as friend_name
+            FROM public.friends f
+            LEFT JOIN public.profiles p ON p.id = CASE
+              WHEN f.user_id = ${userId} THEN f.friend_id
+              ELSE f.user_id
+            END
+            WHERE f.user_id = ${userId} OR f.friend_id = ${userId}
+          `
+        } else {
+          const [{ data: f1 }, { data: f2 }] = await Promise.all([
+            supabaseServiceClient.from('friends').select('*').eq('user_id', userId),
+            supabaseServiceClient.from('friends').select('*').eq('friend_id', userId),
+          ])
+          return [...(f1 || []), ...(f2 || [])]
+        }
+      })(),
       // 8. Friend requests
-      if (sql) {
-        const requests = await sql`
-          SELECT * FROM public.friend_requests
-          WHERE requester_id = ${userId} OR recipient_id = ${userId}
-        `
-        exportData.friendRequests = requests || []
-      } else {
-        const { data: r1 } = await supabaseServiceClient.from('friend_requests').select('*').eq('requester_id', userId)
-        const { data: r2 } = await supabaseServiceClient.from('friend_requests').select('*').eq('recipient_id', userId)
-        exportData.friendRequests = [...(r1 || []), ...(r2 || [])]
-      }
-    } catch (err) { console.warn('[gdpr-export] Friend requests:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT * FROM public.friend_requests
+            WHERE requester_id = ${userId} OR recipient_id = ${userId}
+          `
+        } else {
+          const [{ data: r1 }, { data: r2 }] = await Promise.all([
+            supabaseServiceClient.from('friend_requests').select('*').eq('requester_id', userId),
+            supabaseServiceClient.from('friend_requests').select('*').eq('recipient_id', userId),
+          ])
+          return [...(r1 || []), ...(r2 || [])]
+        }
+      })(),
       // 9. Bookmarks
-      if (sql) {
-        const bookmarks = await sql`
-          SELECT b.*, 
-            (SELECT array_agg(bi.plant_id) FROM public.bookmark_items bi WHERE bi.bookmark_id = b.id) as plant_ids
-          FROM public.bookmarks b
-          WHERE b.user_id = ${userId}
-        `
-        exportData.bookmarks = bookmarks || []
-      } else {
-        const { data } = await supabaseServiceClient
-          .from('bookmarks')
-          .select('*, bookmark_items(plant_id)')
-          .eq('user_id', userId)
-        exportData.bookmarks = data || []
-      }
-    } catch (err) { console.warn('[gdpr-export] Bookmarks:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT b.*,
+              (SELECT array_agg(bi.plant_id) FROM public.bookmark_items bi WHERE bi.bookmark_id = b.id) as plant_ids
+            FROM public.bookmarks b
+            WHERE b.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('bookmarks').select('*, bookmark_items(plant_id)').eq('user_id', userId)
+          return data || []
+        }
+      })(),
       // 10. Plant scans
-      if (sql) {
-        const scans = await sql`SELECT * FROM public.plant_scans WHERE user_id = ${userId}`
-        exportData.scans = scans || []
-      } else {
-        const { data } = await supabaseServiceClient.from('plant_scans').select('*').eq('user_id', userId)
-        exportData.scans = data || []
-      }
-    } catch (err) { console.warn('[gdpr-export] Scans:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`SELECT * FROM public.plant_scans WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient.from('plant_scans').select('*').eq('user_id', userId)
+          return data || []
+        }
+      })(),
       // 11. Notifications
-      if (sql) {
-        const notifications = await sql`
-          SELECT * FROM public.user_notifications
-          WHERE user_id = ${userId}
-          ORDER BY created_at DESC
-        `
-        exportData.notifications = notifications || []
-      } else {
-        const { data } = await supabaseServiceClient
-          .from('user_notifications')
-          .select('*')
-          .eq('user_id', userId)
-          .order('created_at', { ascending: false })
-        exportData.notifications = data || []
-      }
-    } catch (err) { console.warn('[gdpr-export] Notifications:', err?.message) }
-
-    try {
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT * FROM public.user_notifications
+            WHERE user_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('user_notifications').select('*').eq('user_id', userId)
+            .order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
       // 12. Bug reports
-      if (sql) {
-        const bugReports = await sql`SELECT * FROM public.bug_reports WHERE user_id = ${userId}`
-        exportData.bugReports = bugReports || []
+      (async () => {
+        if (sql) {
+          return await sql`SELECT * FROM public.bug_reports WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient.from('bug_reports').select('*').eq('user_id', userId)
+          return data || []
+        }
+      })(),
+    ])
+
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports']
+    for (let i = 0; i < gdprParallelResults.length; i++) {
+      const r = gdprParallelResults[i]
+      if (r.status === 'fulfilled') {
+        exportData[gdprKeys[i]] = r.value || []
       } else {
-        const { data } = await supabaseServiceClient.from('bug_reports').select('*').eq('user_id', userId)
-        exportData.bugReports = data || []
+        console.warn(`[gdpr-export] ${gdprLabels[i]}:`, r.reason?.message)
+        exportData[gdprKeys[i]] = []
       }
-    } catch (err) { console.warn('[gdpr-export] Bug reports:', err?.message) }
+    }
 
     try {
       // 13. Cookie consent (if server-tracked)
