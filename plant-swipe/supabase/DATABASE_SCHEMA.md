@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 6, 2026
+> **Last Updated:** March 10, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
 - **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
 - **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Removed UNIQUE constraint on `plants.name` — multiple plants can now share the same name (different varieties). Name column kept as non-unique fallback for app compatibility.
 - **Feb 28, 2026:** Added 3 new email automation triggers: `ACCOUNT_DELETION`, `FRIEND_REQUEST_REMINDER`, `GARDEN_INVITE_REMINDER`. Added `reminder_email_sent` column to `friend_requests` and `garden_invites` tables. Added server-side cron job (every 3 hours) for reminder emails. Added detailed table definitions for `friend_requests`, `garden_invites`, `admin_email_triggers`, `admin_automatic_email_sends`.
@@ -37,9 +38,6 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
 - **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users.
-- **Feb 12, 2026:** Added `plant_recipes` table with `category`, `time`, and `link` columns.
-- **Feb 10, 2026:** Added `impressions` table to track page view counts.
-- **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type.
 
 ### Required Extensions
 ```sql
@@ -946,6 +944,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `get_garden_progress(uuid)` | Get task completion progress |
 | `get_gardens_today_progress_batch(uuid[])` | Batch progress for multiple gardens |
 | `get_task_occurrences_batch(uuid[])` | Get task occurrences efficiently |
+| `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` | Get occurrences pre-joined with task metadata (type, emoji) for multiple gardens in one query |
 | `ensure_task_occurrences_for_garden(uuid)` | Generate task instances |
 
 ### Shadow Ban Functions (Threat Level 3)
@@ -1043,6 +1042,27 @@ Ensure indexes exist for:
 - Foreign keys (`user_id`, `garden_id`, etc.)
 - Frequently filtered columns (`created_at`, `status`)
 - Unique constraints
+
+**Task-specific performance indexes** (defined in `11_notifications_and_tasks.sql`):
+
+| Index | Table | Columns | Purpose |
+|-------|-------|---------|---------|
+| `idx_occurrences_task_due` | `garden_plant_task_occurrences` | `(task_id, due_at)` | Task + date range lookups |
+| `idx_occurrences_incomplete` | `garden_plant_task_occurrences` | `(task_id, due_at) WHERE completed_count < required_count` | Incomplete task queries |
+| `idx_task_occurrences_due_completed` | `garden_plant_task_occurrences` | `(due_at, completed_at)` | "Incomplete tasks today" notification query |
+| `idx_task_occurrences_task_id` | `garden_plant_task_occurrences` | `(task_id)` | Inner-join to `garden_plant_tasks` |
+| `idx_garden_plant_tasks_garden_id` | `garden_plant_tasks` | `(garden_id)` | Task queries filtered by garden |
+
+**Cache table indexes** (defined in `10_garden_invites_and_cache.sql`):
+
+| Index | Table | Columns |
+|-------|-------|---------|
+| `idx_garden_task_daily_cache_garden_date` | `garden_task_daily_cache` | `(garden_id, cache_date DESC)` |
+| `idx_garden_task_weekly_cache_garden_week` | `garden_task_weekly_cache` | `(garden_id, week_start_date DESC)` |
+| `idx_garden_plant_task_counts_cache_garden` | `garden_plant_task_counts_cache` | `(garden_id)` |
+| `idx_garden_plant_task_counts_cache_plant` | `garden_plant_task_counts_cache` | `(garden_plant_id)` |
+| `idx_garden_task_occurrences_today_cache_garden_date` | `garden_task_occurrences_today_cache` | `(garden_id, cache_date DESC)` |
+| `idx_garden_task_occurrences_today_cache_plant` | `garden_task_occurrences_today_cache` | `(garden_plant_id)` |
 
 ### 6. Avoid Many Consecutive ALTER TABLE Statements
 
