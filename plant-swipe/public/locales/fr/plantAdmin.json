@@ -333,7 +333,20 @@
       "3_10_years": "3–10 ans",
       "10_50_years": "10–50 ans",
       "50_years": "50+ ans",
+      "roots": "Racines",
+      "bulbs": "Bulbes",
+      "stems": "Tiges",
+      "leaves": "Feuilles",
+      "flowers": "Fleurs",
+      "fruits": "Fruits",
+      "spores": "Spores",
       "aquatic": "Aquatique",
+      "hygrophytic": "Hygrophyte",
+      "terrestrial": "Terrestre",
+      "xerophytic": "Xérophyte",
+      "halophytic": "Halophyte",
+      "epiphytic": "Épiphyte",
+      "parasitic": "Parasite",
       "semi_aquatic": "Semi-aquatique",
       "wetland": "Zone humide",
       "tropical": "Tropical",
@@ -512,6 +525,18 @@
       "utility": {
         "label": "Utilité / Usage",
         "description": "Rôles pratiques ou ornementaux"
+      },
+      "vegetable": {
+        "label": "Légume ?",
+        "description": "Cette plante est-elle un légume ?"
+      },
+      "plantPart": {
+        "label": "Partie(s) de la plante",
+        "description": "Principales parties anatomiques de la plante"
+      },
+      "habitat": {
+        "label": "Habitat",
+        "description": "Type(s) d'habitat naturel"
       },
       "ediblePart": {
         "label": "Partie(s) comestible(s)",
@@ -896,6 +921,7 @@
       "taxonomy": "Taxonomie",
       "presentation": "Présentation",
       "images": "Images",
+      "partsHabitat": "Parties de la plante & Habitat",
       "originClimate": "Origine & Climat",
       "utilityUse": "Utilité & Usage",
       "lifecycle": "Cycle de vie & Feuillage",
