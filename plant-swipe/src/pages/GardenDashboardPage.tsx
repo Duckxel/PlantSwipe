@@ -913,49 +913,38 @@ export const GardenDashboardPage: React.FC = () => {
         }
         const today = todayValue;
 
-        const [allTasks] = await Promise.all([
-          listGardenTasks(id),
-          needsTasksData && weekDaysIso.length === 7
-            ? (async () => {
-                const weekStartIso = `${
-                  weekDaysIso[0] || today
-                }T00:00:00.000Z`;
-                const weekEndIso = `${
-                  weekDaysIso[weekDaysIso.length - 1] || today
-                }T23:59:59.999Z`;
-                const resyncFn = () => {
-                  resyncTaskOccurrencesForGarden(
-                    id,
-                    weekStartIso,
-                    weekEndIso,
-                  ).catch(() => {});
-                };
-                if ("requestIdleCallback" in window) {
-                  window.requestIdleCallback(resyncFn, { timeout: 2000 });
-                } else {
-                  setTimeout(resyncFn, 500);
-                }
-              })()
-            : Promise.resolve(),
-        ]);
+        // Fire resync in background (don't block display)
+        if (needsTasksData && weekDaysIso.length === 7) {
+          const weekStartIso = `${weekDaysIso[0] || today}T00:00:00.000Z`;
+          const weekEndIso = `${weekDaysIso[weekDaysIso.length - 1] || today}T23:59:59.999Z`;
+          const resyncFn = () => {
+            resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso).catch(() => {});
+          };
+          if ("requestIdleCallback" in window) {
+            window.requestIdleCallback(resyncFn, { timeout: 2000 });
+          } else {
+            setTimeout(resyncFn, 500);
+          }
+        }
 
         const skipCache = skipTodayCacheRef.current;
         if (skipCache) skipTodayCacheRef.current = false;
 
+        // Load tasks and cached occurrences in PARALLEL — both are independent reads
         // eslint-disable-next-line @typescript-eslint/no-explicit-any -- occurrence shape from cache + listOccurrencesForTasks
         let occsDetailed: Array<any> = [];
         let usedCache = false;
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- cache return shape
-        let cachedOccs: Array<any> | null = null;
 
-        if (!skipCache) {
-          cachedOccs = await getGardenTodayOccurrencesCached(id, today).catch(
-            () => null,
-          );
-          if (cachedOccs && cachedOccs.length > 0) {
-            occsDetailed = cachedOccs;
-            usedCache = true;
-          }
+        const [allTasks, cachedOccs] = await Promise.all([
+          listGardenTasks(id),
+          !skipCache
+            ? getGardenTodayOccurrencesCached(id, today).catch(() => null)
+            : Promise.resolve(null),
+        ]);
+
+        if (cachedOccs && cachedOccs.length > 0) {
+          occsDetailed = cachedOccs;
+          usedCache = true;
         }
 
         if (!usedCache) {

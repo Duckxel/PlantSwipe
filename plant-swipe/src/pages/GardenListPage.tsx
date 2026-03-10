@@ -646,12 +646,16 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 2) Resync only if needed and not cached recently
-        // IMPORTANT: When skipResync=false, always resync to ensure task occurrences exist
+        // 2) Resync in background — don't block display.  If occurrences are
+        // missing the cache/query will return empty and the resync will populate
+        // them for the next load.  This eliminates the biggest latency source on
+        // cold-load (resync can take seconds for many gardens).
         if (!skipResync) {
-          // Use optimized server-side batch resync
           const gardenIdsToSync = gardensList.map((g) => g.id);
-          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
+          // Fire-and-forget — result will be used on next refresh
+          resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso).catch(
+            () => {},
+          );
 
           // Update cache timestamps
           const now = Date.now();
@@ -661,12 +665,12 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 3) Load occurrences for all gardens in a single batched query (reduces egress)
-        const occsByGarden = await listOccurrencesForMultipleGardens(
-          taskIdsByGarden,
-          startIso,
-          endIso,
-        );
+        // 3) Load occurrences and plants in PARALLEL (they're independent)
+        const gardenIds = gardensList.map((g) => g.id);
+        const [occsByGarden, plantsMinimal] = await Promise.all([
+          listOccurrencesForMultipleGardens(taskIdsByGarden, startIso, endIso),
+          getGardenPlantsMinimal(gardenIds),
+        ]);
         const occsAugmented: Array<any> = [];
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         for (const [gardenId, arr] of Object.entries(occsByGarden)) {
@@ -679,14 +683,11 @@ export const GardenListPage: React.FC = () => {
           }
         }
         setTodayTaskOccurrences(occsAugmented);
-        // Fetch completions for all occurrences
+        // Fetch completions (depends on occurrence IDs, so must be after)
         const ids = occsAugmented.map((o) => o.id);
         const compMap =
           ids.length > 0 ? await listCompletionsForOccurrences(ids) : {};
         setCompletionsByOcc(compMap || {});
-        // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
-        const gardenIds = gardensList.map((g) => g.id);
-        const plantsMinimal = await getGardenPlantsMinimal(gardenIds);
         const idToGardenName = gardensList.reduce<Record<string, string>>(
           (acc, g) => {
             acc[g.id] = g.name;

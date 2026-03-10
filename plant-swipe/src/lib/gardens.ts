@@ -2245,38 +2245,55 @@ export async function listOccurrencesForMultipleGardens(
 // Return a mapping from occurrenceId -> list of users who progressed/completed it
 export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
   if (occurrenceIds.length === 0) return {}
-  // Fetch raw completion rows
+  // Single query with join to profiles — eliminates the second sequential round-trip
   const { data: rows, error } = await supabase
     .from('garden_task_user_completions')
-    .select('occurrence_id, user_id')
+    .select('occurrence_id, user_id, profiles:user_id(display_name)')
     .in('occurrence_id', occurrenceIds)
-  if (error) throw new Error(error.message)
-  const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
+
+  if (error) {
+    // Fallback: if join isn't supported, fetch separately
+    const { data: rawRows, error: rawErr } = await supabase
+      .from('garden_task_user_completions')
+      .select('occurrence_id, user_id')
+      .in('occurrence_id', occurrenceIds)
+    if (rawErr) throw new Error(rawErr.message)
+    const uniqueUserIds = Array.from(new Set((rawRows || []).map((r: { user_id: string }) => r.user_id)))
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', uniqueUserIds)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const idToName: Record<string, string | null> = Object.fromEntries((profs || []).map((p: any) => [String(p.id), p.display_name || null]))
+    const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+    const seen = new Set<string>()
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    for (const r of (rawRows || []) as any[]) {
+      const occId = String(r.occurrence_id)
+      const uid = String(r.user_id)
+      const key = `${occId}::${uid}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (!map[occId]) map[occId] = []
+      map[occId].push({ userId: uid, displayName: idToName[uid] ?? null })
+    }
+    return map
+  }
+
+  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+  const seen = new Set<string>()
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const r of (rows || []) as any[]) {
+    const occId = String(r.occurrence_id)
+    const uid = String(r.user_id)
+    const key = `${occId}::${uid}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (!map[occId]) map[occId] = []
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const occId = String((r as any).occurrence_id)
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const uid = String((r as any).user_id)
-    uniquePairs.set(`${occId}::${uid}`, { occurrenceId: occId, userId: uid })
-  }
-  const pairs = Array.from(uniquePairs.values())
-  const userIds = Array.from(new Set(pairs.map(p => p.userId)))
-  // Resolve display names from profiles
-  const { data: profs } = await supabase
-    .from('profiles')
-    .select('id, display_name')
-    .in('id', userIds)
-  const idToName: Record<string, string | null> = {}
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  for (const p of (profs || []) as any[]) {
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    idToName[String(p.id)] = (p as any).display_name || null
-  }
-  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
-  for (const { occurrenceId, userId } of pairs) {
-    if (!map[occurrenceId]) map[occurrenceId] = []
-    map[occurrenceId].push({ userId, displayName: idToName[userId] ?? null })
+    const profile = r.profiles as any
+    const displayName = profile?.display_name || null
+    map[occId].push({ userId: uid, displayName })
   }
   return map
 }
