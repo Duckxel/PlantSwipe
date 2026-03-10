@@ -315,6 +315,13 @@
       "autumn": "Autumn",
       "winter": "Winter"
     },
+    "habitat": {
+      "aquatic": "Aquatic",
+      "terrestrial": "Terrestrial",
+      "epiphytic": "Epiphytic",
+      "lithophytic": "Lithophytic",
+      "parasitic": "Parasitic"
+    },
     "climate": {
       "polar": "Polar",
       "montane": "Montane",

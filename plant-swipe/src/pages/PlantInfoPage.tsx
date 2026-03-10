@@ -1425,6 +1425,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const identityItems = filterInfoItems([
         { label: tp('labels.family'), value: formatTextValue(plant.family) },
         { label: tp('labels.origin'), value: joinRaw(plant.origin) },
+        { label: tp('labels.habitat'), value: joinArr(plant.habitat as string[]) },
         { label: tp('labels.climate'), value: joinArr(plant.climate as string[]), icon: <MapPin className="h-3.5 w-3.5" /> },
         { label: tp('labels.seasons'), value: joinArr(plant.season as string[]) },
         { label: tp('labels.utility'), value: joinArr(plant.utility as string[]), icon: <Palette className="h-3.5 w-3.5" /> },
