@@ -18,7 +18,7 @@ export const plantSchema = {
   },
   habitat: {
     type: 'enum[]',
-    options: ['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','lithophytic','parasitic'],
+    options: ['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','parasitic'],
     description: 'Natural habitat type(s) where the plant grows',
   },
   scientificNameSpecies: {

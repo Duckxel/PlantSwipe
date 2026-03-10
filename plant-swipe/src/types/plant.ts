@@ -14,7 +14,7 @@ export type PlantPartValue =
 
 export type HabitatValue =
   | "aquatic" | "hygrophytic" | "terrestrial" | "xerophytic"
-  | "halophytic" | "epiphytic" | "lithophytic" | "parasitic"
+  | "halophytic" | "epiphytic" | "parasitic"
 
 export type MonthSlug =
   | "january" | "february" | "march" | "april" | "may" | "june"
