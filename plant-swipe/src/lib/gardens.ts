@@ -2138,6 +2138,87 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
 }
 
 /**
+ * Fetch today's occurrences for multiple gardens in a SINGLE query, pre-enriched
+ * with task metadata (type, emoji).  This replaces the 3-step pattern of:
+ *   1) listTasksForMultipleGardensMinimal  (fetch all tasks)
+ *   2) listOccurrencesForMultipleGardens   (fetch occurrences by task IDs)
+ *   3) client-side merge of task type/emoji onto each occurrence
+ *
+ * Returns a flat array ready for the UI — no further enrichment needed.
+ */
+export async function getEnrichedOccurrencesForGardens(
+  gardenIds: string[],
+  startIso: string,
+  endIso: string,
+): Promise<Array<GardenPlantTaskOccurrence & { taskType: string; taskEmoji: string | null; gardenId: string }>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return []
+
+  const rpcName = 'get_enriched_occurrences_for_gardens'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { data, error } = await supabase.rpc(rpcName, {
+        _garden_ids: safeIds,
+        _start_iso: startIso,
+        _end_iso: endIso,
+      })
+      if (!error && data && Array.isArray(data)) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        return data.map((r: any) => ({
+          id: String(r.id),
+          taskId: String(r.task_id),
+          gardenPlantId: String(r.garden_plant_id),
+          gardenId: String(r.garden_id),
+          dueAt: String(r.due_at),
+          requiredCount: Number(r.required_count ?? 1),
+          completedCount: Number(r.completed_count ?? 0),
+          completedAt: r.completed_at || null,
+          taskType: r.task_type || 'custom',
+          taskEmoji: r.task_emoji || null,
+        }))
+      }
+      if (error) {
+        if (!(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+          console.warn('[gardens] get_enriched_occurrences_for_gardens RPC failed, falling back:', error)
+        }
+      }
+    } catch (err) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] get_enriched_occurrences_for_gardens RPC failed, falling back:', err)
+      }
+    }
+  }
+
+  // Fallback: fetch tasks + occurrences separately and merge (old 3-step approach)
+  const tasksByGarden = await listTasksForMultipleGardensMinimal(safeIds)
+  const taskIdsByGarden: Record<string, string[]> = {}
+  const taskTypeById: Record<string, string> = {}
+  const taskEmojiById: Record<string, string | null> = {}
+  const taskGardenById: Record<string, string> = {}
+  for (const [gid, tasks] of Object.entries(tasksByGarden)) {
+    taskIdsByGarden[gid] = tasks.map(t => t.id)
+    for (const t of tasks) {
+      taskTypeById[t.id] = t.type
+      taskEmojiById[t.id] = t.emoji || null
+      taskGardenById[t.id] = gid
+    }
+  }
+  const occsByGarden = await listOccurrencesForMultipleGardens(taskIdsByGarden, startIso, endIso)
+  const result: Array<GardenPlantTaskOccurrence & { taskType: string; taskEmoji: string | null; gardenId: string }> = []
+  for (const [, arr] of Object.entries(occsByGarden)) {
+    for (const o of arr || []) {
+      result.push({
+        ...o,
+        taskType: taskTypeById[o.taskId] || 'custom',
+        taskEmoji: taskEmojiById[o.taskId] || null,
+        gardenId: taskGardenById[o.taskId] || '',
+      })
+    }
+  }
+  return result
+}
+
+/**
  * Batched version that fetches occurrences for multiple gardens at once.
  * Reduces egress by combining queries and minimizing round trips.
  * Adds limit to prevent excessive data transfer.

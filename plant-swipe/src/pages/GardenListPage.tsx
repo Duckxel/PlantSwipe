@@ -30,6 +30,7 @@ import {
   resyncTaskOccurrencesForGarden,
   resyncMultipleGardensTasks,
   listTasksForMultipleGardensMinimal,
+  getEnrichedOccurrencesForGardens,
   getGardenMemberCountsBatch,
   progressTaskOccurrence,
   listCompletionsForOccurrences,
@@ -626,38 +627,11 @@ export const GardenListPage: React.FC = () => {
       try {
         const startIso = `${today}T00:00:00.000Z`;
         const endIso = `${today}T23:59:59.999Z`;
-        // Optimization: Fetch tasks for ALL relevant gardens in one batch
-        const gardenIdsToLoad = gardensList.map(g => g.id);
-        const tasksByGardenId = await listTasksForMultipleGardensMinimal(gardenIdsToLoad);
+        const gardenIds = gardensList.map((g) => g.id);
 
-        const taskTypeById: Record<
-          string,
-          "water" | "fertilize" | "harvest" | "cut" | "custom"
-        > = {};
-        const taskEmojiById: Record<string, string | null> = {};
-        const taskIdsByGarden: Record<string, string[]> = {};
-
-        for (const g of gardensList) {
-          const tasks = tasksByGardenId[g.id] || [];
-          taskIdsByGarden[g.id] = tasks.map((t) => t.id);
-          for (const t of tasks) {
-            taskTypeById[t.id] = t.type;
-            taskEmojiById[t.id] = t.emoji || null;
-          }
-        }
-
-        // 2) Resync in background — don't block display.  If occurrences are
-        // missing the cache/query will return empty and the resync will populate
-        // them for the next load.  This eliminates the biggest latency source on
-        // cold-load (resync can take seconds for many gardens).
+        // Resync in background (fire-and-forget)
         if (!skipResync) {
-          const gardenIdsToSync = gardensList.map((g) => g.id);
-          // Fire-and-forget — result will be used on next refresh
-          resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso).catch(
-            () => {},
-          );
-
-          // Update cache timestamps
+          resyncMultipleGardensTasks(gardenIds, startIso, endIso).catch(() => {});
           const now = Date.now();
           for (const g of gardensList) {
             const cacheKey = `${g.id}::${today}`;
@@ -665,26 +639,20 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 3) Load occurrences and plants in PARALLEL (they're independent)
-        const gardenIds = gardensList.map((g) => g.id);
-        const [occsByGarden, plantsMinimal] = await Promise.all([
-          listOccurrencesForMultipleGardens(taskIdsByGarden, startIso, endIso),
+        // SINGLE enriched call replaces 3 steps:
+        //   1) listTasksForMultipleGardensMinimal (fetch tasks)
+        //   2) listOccurrencesForMultipleGardens  (fetch occurrences)
+        //   3) client-side merge of task type/emoji
+        // + plants and completions load in parallel where possible
+        const [enrichedOccs, plantsMinimal] = await Promise.all([
+          getEnrichedOccurrencesForGardens(gardenIds, startIso, endIso),
           getGardenPlantsMinimal(gardenIds),
         ]);
-        const occsAugmented: Array<any> = [];
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for (const [gardenId, arr] of Object.entries(occsByGarden)) {
-          for (const o of arr || []) {
-            occsAugmented.push({
-              ...o,
-              taskType: taskTypeById[o.taskId] || "custom",
-              taskEmoji: taskEmojiById[o.taskId] || null,
-            });
-          }
-        }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const occsAugmented: Array<any> = enrichedOccs;
         setTodayTaskOccurrences(occsAugmented);
-        // Fetch completions (depends on occurrence IDs, so must be after)
-        const ids = occsAugmented.map((o) => o.id);
+        // Fetch completions (depends on occurrence IDs)
+        const ids = occsAugmented.map((o: { id: string }) => o.id);
         const compMap =
           ids.length > 0 ? await listCompletionsForOccurrences(ids) : {};
         setCompletionsByOcc(compMap || {});
