@@ -37,8 +37,8 @@
       "pruning": "Pruning"
     }
   },
-  "habitatMap": {
-    "title": "Habitat Map"
+  "climateMap": {
+    "title": "Climate Map"
   },
   "livingSpaceVisualizer": {
     "title": "Living Space",
