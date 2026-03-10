@@ -51,6 +51,7 @@ import {
   removeGardenMember,
   listGardenTasks,
   listOccurrencesForTasks,
+  getEnrichedOccurrencesForGardens,
   progressTaskOccurrence,
   updateGardenPlantsOrder,
   refreshGardenStreak,
@@ -948,25 +949,14 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         if (!usedCache) {
-          const occs = await listOccurrencesForTasks(
-            allTasks.map((t) => t.id),
+          // Use enriched RPC (single query with pre-joined task type/emoji)
+          // instead of listOccurrencesForTasks + manual type mapping
+          const enriched = await getEnrichedOccurrencesForGardens(
+            [id],
             `${today}T00:00:00.000Z`,
             `${today}T23:59:59.999Z`,
           );
-          const taskTypeById: Record<
-            string,
-            "water" | "fertilize" | "harvest" | "cut" | "custom"
-          > = {};
-          const taskEmojiById: Record<string, string | null> = {};
-          for (const t of allTasks) {
-            taskTypeById[t.id] = t.type;
-            taskEmojiById[t.id] = t.emoji || null;
-          }
-          occsDetailed = occs.map((o) => ({
-            ...o,
-            taskType: taskTypeById[o.taskId] || "custom",
-            taskEmoji: taskEmojiById[o.taskId] || null,
-          }));
+          occsDetailed = enriched;
           refreshGardenTaskCache(id, today).catch(() => {});
         }
 
@@ -1032,18 +1022,13 @@ export const GardenDashboardPage: React.FC = () => {
             const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
             const weekEndIso =
               `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
-            const weekOccs = await listOccurrencesForTasks(
-              allTasks.map((t) => t.id),
+            // Use enriched RPC — single query with pre-joined task type/emoji
+            const weekOccs = await getEnrichedOccurrencesForGardens(
+              [id],
               weekStartIso,
               weekEndIso,
             );
             const dueMapSets: Record<string, Set<number>> = {};
-            const tByIdCached: Record<string, "water" | "fertilize" | "harvest" | "cut" | "custom"> = {};
-            const taskEmojiByCached: Record<string, string | null> = {};
-            for (const t of allTasks) {
-              tByIdCached[t.id] = t.type;
-              taskEmojiByCached[t.id] = t.emoji || null;
-            }
             const enrichedWeekOccsCached: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
@@ -1061,8 +1046,8 @@ export const GardenDashboardPage: React.FC = () => {
                   requiredCount: o.requiredCount,
                   completedCount: o.completedCount,
                   completedAt: o.completedAt || null,
-                  taskType: tByIdCached[o.taskId] || "custom",
-                  taskEmoji: taskEmojiByCached[o.taskId],
+                  taskType: (o.taskType || "custom") as "water" | "fertilize" | "harvest" | "cut" | "custom",
+                  taskEmoji: o.taskEmoji,
                   dayIndex: idx,
                 });
               }
@@ -1086,8 +1071,9 @@ export const GardenDashboardPage: React.FC = () => {
               const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
               const weekEndIso =
                 `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
-              const weekOccs = await listOccurrencesForTasks(
-                allTasks.map((t) => t.id),
+              // Use enriched RPC — single query with pre-joined task type/emoji
+              const weekOccs = await getEnrichedOccurrencesForGardens(
+                [id],
                 weekStartIso,
                 weekEndIso,
               );
@@ -1104,21 +1090,12 @@ export const GardenDashboardPage: React.FC = () => {
                 cut: Array(7).fill(0),
                 custom: Array(7).fill(0),
               };
-              const tById: Record<
-                string,
-                "water" | "fertilize" | "harvest" | "cut" | "custom"
-              > = {};
-              const taskEmojiByIdLoad: Record<string, string | null> = {};
-              for (const t of allTasks) {
-                tById[t.id] = t.type;
-                taskEmojiByIdLoad[t.id] = t.emoji || null;
-              }
               const enrichedWeekOccsLoad: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDaysIso.indexOf(dayIso);
                 if (idx >= 0) {
-                  const typ = tById[o.taskId] || "custom";
+                  const typ = (o.taskType || "custom") as "water" | "fertilize" | "harvest" | "cut" | "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   typeCounts[typ][idx] += inc;
                   enrichedWeekOccsLoad.push({
@@ -1130,7 +1107,7 @@ export const GardenDashboardPage: React.FC = () => {
                     completedCount: o.completedCount,
                     completedAt: o.completedAt || null,
                     taskType: typ,
-                    taskEmoji: taskEmojiByIdLoad[o.taskId],
+                    taskEmoji: o.taskEmoji,
                     dayIndex: idx,
                   });
                 }
@@ -1183,11 +1160,13 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         if (needsPlantsData || needsTasksData) {
-          const occsForDueToday =
-            cachedOccs && cachedOccs.length > 0
+          // Reuse already-fetched occsDetailed instead of making another round-trip
+          const occsForDueToday = occsDetailed.length > 0
+            ? occsDetailed
+            : cachedOccs && cachedOccs.length > 0
               ? cachedOccs
-              : await listOccurrencesForTasks(
-                  allTasks.map((t) => t.id),
+              : await getEnrichedOccurrencesForGardens(
+                  [id],
                   `${today}T00:00:00.000Z`,
                   `${today}T23:59:59.999Z`,
                 ).catch(() => []);
@@ -1272,25 +1251,12 @@ export const GardenDashboardPage: React.FC = () => {
               return mondayUTC.toISOString().slice(0, 10) + "T23:59:59.999Z";
             })();
             await resyncTaskOccurrencesForGarden(id, weekStartIso, weekEndIso);
-            const occs = await listOccurrencesForTasks(
-              allTasks.map((t) => t.id),
+            // Use enriched RPC — single query with pre-joined task type/emoji
+            const occsWithType = await getEnrichedOccurrencesForGardens(
+              [id],
               `${today}T00:00:00.000Z`,
               `${today}T23:59:59.999Z`,
             );
-            const taskTypeById: Record<
-              string,
-              "water" | "fertilize" | "harvest" | "cut" | "custom"
-            > = {};
-            const taskEmojiById: Record<string, string | null> = {};
-            for (const t of allTasks) {
-              taskTypeById[t.id] = t.type;
-              taskEmojiById[t.id] = t.emoji || null;
-            }
-            const occsWithType = occs.map((o) => ({
-              ...o,
-              taskType: taskTypeById[o.taskId] || "custom",
-              taskEmoji: taskEmojiById[o.taskId] || null,
-            }));
 
             // Update state using functional updates to preserve existing items
             setTodayTaskOccurrences((prev) => {
@@ -1356,8 +1322,9 @@ export const GardenDashboardPage: React.FC = () => {
             });
 
             if ((tab === "overview" || tab === "tasks") && today) {
-              const weekOccs = await listOccurrencesForTasks(
-                allTasks.map((t) => t.id),
+              // Use enriched RPC — single query with pre-joined task type/emoji
+              const weekOccs = await getEnrichedOccurrencesForGardens(
+                [id],
                 weekStartIso,
                 weekEndIso,
               );
@@ -1374,21 +1341,12 @@ export const GardenDashboardPage: React.FC = () => {
                 cut: Array(7).fill(0),
                 custom: Array(7).fill(0),
               };
-              const tById: Record<
-                string,
-                "water" | "fertilize" | "harvest" | "cut" | "custom"
-              > = {};
-              const taskEmojiByIdRefresh: Record<string, string | null> = {};
-              for (const t of allTasks) {
-                tById[t.id] = t.type;
-                taskEmojiByIdRefresh[t.id] = t.emoji || null;
-              }
               const enrichedWeekOccsRefresh: typeof weekTaskOccurrences = [];
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
                 const idx = weekDays.indexOf(dayIso);
                 if (idx >= 0) {
-                  const typ = tById[o.taskId] || "custom";
+                  const typ = (o.taskType || "custom") as "water" | "fertilize" | "harvest" | "cut" | "custom";
                   const inc = Math.max(1, Number(o.requiredCount || 1));
                   typeCounts[typ][idx] += inc;
                   enrichedWeekOccsRefresh.push({
@@ -1400,7 +1358,7 @@ export const GardenDashboardPage: React.FC = () => {
                     completedCount: o.completedCount,
                     completedAt: o.completedAt || null,
                     taskType: typ,
-                    taskEmoji: taskEmojiByIdRefresh[o.taskId],
+                    taskEmoji: o.taskEmoji,
                     dayIndex: idx,
                   });
                 }
@@ -2468,8 +2426,9 @@ export const GardenDashboardPage: React.FC = () => {
             `${today}T00:00:00.000Z`,
             `${today}T23:59:59.999Z`,
           );
-          const occs = await listOccurrencesForTasks(
-            allTasks.map((t) => t.id),
+          // Use enriched RPC — single query with pre-joined task type/emoji
+          const occs = await getEnrichedOccurrencesForGardens(
+            [garden.id],
             `${today}T00:00:00.000Z`,
             `${today}T23:59:59.999Z`,
           );
@@ -3047,16 +3006,15 @@ export const GardenDashboardPage: React.FC = () => {
                                       try {
                                         // Recompute success from occurrences only
                                         const today = serverToday;
-                                        const allTasks =
-                                          await listGardenTasks(id);
                                         await resyncTaskOccurrencesForGarden(
                                           id,
                                           `${today}T00:00:00.000Z`,
                                           `${today}T23:59:59.999Z`,
                                         );
+                                        // Use enriched RPC — single query with pre-joined task type/emoji
                                         const occs =
-                                          await listOccurrencesForTasks(
-                                            allTasks.map((t) => t.id),
+                                          await getEnrichedOccurrencesForGardens(
+                                            [id],
                                             `${today}T00:00:00.000Z`,
                                             `${today}T23:59:59.999Z`,
                                           );
