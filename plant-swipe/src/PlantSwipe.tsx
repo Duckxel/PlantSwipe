@@ -1001,14 +1001,26 @@ export default function PlantSwipe() {
         // Prefer new habitat field (aquatic, terrestrial, epiphytic, etc.)
         const habitatArr = Array.isArray(p.habitat) ? p.habitat : []
         if (habitatArr.length > 0) {
-          _cachedHabitats = habitatArr.filter(h => typeof h === 'string').map(h => (h as string).toLowerCase())
+          _cachedHabitats = []
+          for (let i = 0; i < habitatArr.length; i++) {
+            const h = habitatArr[i]
+            if (typeof h === 'string') {
+              _cachedHabitats.push(h.toLowerCase())
+            }
+          }
           return _cachedHabitats
         }
         // Fallback to legacy climate/habitat fields
         const climateArr = Array.isArray(p.climate) ? p.climate : []
         const legacyHabitat = (p.plantCare?.habitat || p.care?.habitat || []) as string[]
         const combined = climateArr.length > 0 ? climateArr : legacyHabitat
-        _cachedHabitats = combined.filter((h): h is string => typeof h === 'string').map(h => h.toLowerCase())
+        _cachedHabitats = []
+        for (let i = 0; i < combined.length; i++) {
+          const h = combined[i]
+          if (typeof h === 'string') {
+            _cachedHabitats.push(h.toLowerCase())
+          }
+        }
         return _cachedHabitats
       }
 
@@ -1110,7 +1122,13 @@ export default function PlantSwipe() {
   // This builds a Set of all color names that should match (including children of primary colors)
   // Enhanced: Also supports matching by translated color names for multi-language filtering
   const expandedColorFilterSet = useMemo(() => {
-    const normalizedColorFilters = colorFilter.map((c) => c.toLowerCase().trim()).filter(Boolean)
+    const normalizedColorFilters: string[] = []
+    for (let i = 0; i < colorFilter.length; i++) {
+      const normalized = colorFilter[i].toLowerCase().trim()
+      if (normalized) {
+        normalizedColorFilters.push(normalized)
+      }
+    }
     if (normalizedColorFilters.length === 0) return null
     
     const expandedSet = new Set<string>()
