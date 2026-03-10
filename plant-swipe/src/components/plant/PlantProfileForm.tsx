@@ -2657,6 +2657,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
 
       <SectionDivider title={t('plantAdmin.sections.utilityUse', 'Utility & Use')} />
       {renderField(value, setPath, identityFields.find(f => f.key === 'utility')!, t)}
+      {shouldShowField(identityFields.find(f => f.key === 'vegetable')!) && renderField(value, setPath, identityFields.find(f => f.key === 'vegetable')!, t)}
       {shouldShowField(identityFields.find(f => f.key === 'ediblePart')!) && renderField(value, setPath, identityFields.find(f => f.key === 'ediblePart')!, t)}
 
       <SectionDivider title={t('plantAdmin.sections.lifecycle', 'Life Cycle & Foliage')} />
