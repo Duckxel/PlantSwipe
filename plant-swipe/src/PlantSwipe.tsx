@@ -1876,18 +1876,18 @@ export default function PlantSwipe() {
     // Only redirect if not already on setup page and not on excluded pages
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
-    // Only exclude: setup page itself, admin panel, landing page, and forgot/password-change pages
+    // Only exclude: setup page itself, admin panel, and forgot/password-change pages
     const setupExcludedPaths = ['/setup', '/admin', '/forgot-password', '/password-change']
-    const isExcludedFromSetup = pathWithoutLang === '/' || setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const isExcludedFromSetup = setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
     // Check if user needs to verify email (setup complete but email not verified)
     // Only check if setup is completed to avoid conflicting with setup flow
     // SECURITY: Use !== true to catch both false AND null/undefined values
     const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified !== true
-    // Exclude: verify-email page itself, admin panel, landing page, and forgot/password-change pages
+    // Exclude: verify-email page itself, admin panel, and forgot/password-change pages
     const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-password', '/password-change']
-    const isExcludedFromEmailVerify = pathWithoutLang === '/' || emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
+    const isExcludedFromEmailVerify = emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToEmailVerify = needsEmailVerification && !needsLegalUpdate && !shouldRedirectToSetup && !isExcludedFromEmailVerify
     
     // Email verification page - full screen experience
