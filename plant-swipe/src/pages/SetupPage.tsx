@@ -62,25 +62,33 @@ const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = (
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress])
   
-  // Leaf positions - alternating above and below the vine at wave peaks/troughs
-  // x positions: peaks at 5,15,25,35,45,55,65,75,85,95 | troughs at 10,20,30,40,50,60,70,80,90
+  // Leaf positions - evenly alternating above and below the vine
+  // Peaks at x=5,15,25,35,45,55,65,75,85,95 | Troughs at x=10,20,30,40,50,60,70,80,90
+  // Leaves point forward (right) along the vine growth direction:
+  //   - Above leaves tilt right/forward with positive rotation
+  //   - Below leaves tilt right/forward with negative rotation (mirrored)
   const leafPositions = [
-    // Above the vine (at peaks, y=6) - pointing upward and outward
-    { x: 5, y: 6, rotation: -30 },
-    { x: 15, y: 6, rotation: -50 },
-    { x: 35, y: 6, rotation: -35 },
-    { x: 45, y: 6, rotation: -55 },
-    { x: 65, y: 6, rotation: -40 },
-    { x: 75, y: 6, rotation: -50 },
-    { x: 95, y: 6, rotation: -45 },
-    // Below the vine (at troughs, y=10) - pointing downward and outward  
-    { x: 10, y: 10, rotation: 130 },
-    { x: 20, y: 10, rotation: 150 },
-    { x: 40, y: 10, rotation: 135 },
-    { x: 50, y: 10, rotation: 145 },
-    { x: 70, y: 10, rotation: 130 },
-    { x: 80, y: 10, rotation: 150 },
-    { x: 90, y: 10, rotation: 140 },
+    // Evenly spaced, alternating above (peaks) and below (troughs)
+    { x: 5, y: 6, rotation: 30 },      // above - tilted right
+    { x: 10, y: 10, rotation: -30 },    // below - tilted right (mirrored)
+    { x: 15, y: 6, rotation: 40 },      // above
+    { x: 20, y: 10, rotation: -35 },    // below
+    // (x:25 has a flower)
+    { x: 30, y: 10, rotation: -40 },    // below
+    { x: 35, y: 6, rotation: 35 },      // above
+    { x: 40, y: 10, rotation: -30 },    // below
+    { x: 45, y: 6, rotation: 45 },      // above
+    { x: 50, y: 10, rotation: -35 },    // below
+    // (x:55 has a flower)
+    { x: 60, y: 10, rotation: -40 },    // below
+    { x: 65, y: 6, rotation: 30 },      // above
+    { x: 70, y: 10, rotation: -35 },    // below
+    { x: 75, y: 6, rotation: 40 },      // above
+    { x: 80, y: 10, rotation: -30 },    // below
+    { x: 85, y: 6, rotation: 35 },      // above
+    // (x:88 has a flower)
+    { x: 92, y: 10, rotation: -40 },    // below
+    { x: 95, y: 6, rotation: 30 },      // above
   ]
   
   // Flower positions - placed at specific peaks
@@ -874,32 +882,10 @@ export function SetupPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-stone-500 dark:text-stone-400 mb-4 -mt-4"
+              className="text-xs text-stone-500 dark:text-stone-400 mb-8 -mt-4"
             >
               {t('setup.parentMode.description', 'Many common houseplants and garden plants can be harmful if ingested or touched. Parent Mode makes sure you never miss a safety warning.')}
             </motion.p>
-
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="rounded-2xl border-2 border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-4 mb-8"
-            >
-              <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 mb-2">
-                {t('setup.parentMode.whatItDoes', 'What does Parent Mode do?')}
-              </p>
-              <ul className="text-sm text-stone-500 dark:text-stone-400 space-y-1.5">
-                <li>
-                  {t('setup.parentMode.benefit1', 'Toxicity and danger levels are shown at the top of every plant page')}
-                </li>
-                <li>
-                  {t('setup.parentMode.benefit2', 'Clear icons indicate risks for children, cats, and dogs')}
-                </li>
-                <li>
-                  {t('setup.parentMode.benefit3', 'Ideal for parents of toddlers, pet owners, or anyone sharing space with curious little ones')}
-                </li>
-              </ul>
-            </motion.div>
 
             <div className="flex flex-col gap-3">
               <PillOption
