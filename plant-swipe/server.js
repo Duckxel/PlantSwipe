@@ -5363,11 +5363,10 @@ app.post('/api/admin/plant-images/upload-from-url', async (req, res) => {
         if (supabaseServiceClient) {
           const { data: profile } = await supabaseServiceClient
             .from('profiles')
-            .select('display_name, email')
+            .select('display_name')
             .eq('id', userId)
             .maybeSingle()
           if (profile) {
-            adminEmail = profile.email || null
             adminName = profile.display_name || null
           }
         }
@@ -5411,11 +5410,10 @@ app.post('/api/admin/plant-images/upload-file', async (req, res) => {
         if (supabaseServiceClient) {
           const { data: profile } = await supabaseServiceClient
             .from('profiles')
-            .select('display_name, email')
+            .select('display_name')
             .eq('id', userId)
             .maybeSingle()
           if (profile) {
-            adminEmail = profile.email || null
             adminName = profile.display_name || null
           }
         }
