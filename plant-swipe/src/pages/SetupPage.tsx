@@ -874,10 +874,32 @@ export function SetupPage() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               transition={{ delay: 0.2 }}
-              className="text-stone-500 dark:text-stone-400 mb-8 -mt-4"
+              className="text-stone-500 dark:text-stone-400 mb-4 -mt-4"
             >
-              {t('setup.parentMode.description', 'Some plants can be toxic to children and animals. Enabling Parent Mode will highlight safety warnings more prominently on plant pages.')}
+              {t('setup.parentMode.description', 'Many common houseplants and garden plants can be harmful if ingested or touched. Parent Mode makes sure you never miss a safety warning.')}
             </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="rounded-2xl border-2 border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-4 mb-8"
+            >
+              <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 mb-2">
+                {t('setup.parentMode.whatItDoes', 'What does Parent Mode do?')}
+              </p>
+              <ul className="text-sm text-stone-500 dark:text-stone-400 space-y-1.5">
+                <li>
+                  {t('setup.parentMode.benefit1', 'Toxicity and danger levels are shown at the top of every plant page')}
+                </li>
+                <li>
+                  {t('setup.parentMode.benefit2', 'Clear icons indicate risks for children, cats, and dogs')}
+                </li>
+                <li>
+                  {t('setup.parentMode.benefit3', 'Ideal for parents of toddlers, pet owners, or anyone sharing space with curious little ones')}
+                </li>
+              </ul>
+            </motion.div>
 
             <div className="flex flex-col gap-3">
               <PillOption
