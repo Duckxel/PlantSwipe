@@ -2138,6 +2138,87 @@ export async function listOccurrencesForTasks(taskIds: string[], startIso: strin
 }
 
 /**
+ * Fetch today's occurrences for multiple gardens in a SINGLE query, pre-enriched
+ * with task metadata (type, emoji).  This replaces the 3-step pattern of:
+ *   1) listTasksForMultipleGardensMinimal  (fetch all tasks)
+ *   2) listOccurrencesForMultipleGardens   (fetch occurrences by task IDs)
+ *   3) client-side merge of task type/emoji onto each occurrence
+ *
+ * Returns a flat array ready for the UI — no further enrichment needed.
+ */
+export async function getEnrichedOccurrencesForGardens(
+  gardenIds: string[],
+  startIso: string,
+  endIso: string,
+): Promise<Array<GardenPlantTaskOccurrence & { taskType: string; taskEmoji: string | null; gardenId: string }>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return []
+
+  const rpcName = 'get_enriched_occurrences_for_gardens'
+  if (!missingSupabaseRpcs.has(rpcName)) {
+    try {
+      const { data, error } = await supabase.rpc(rpcName, {
+        _garden_ids: safeIds,
+        _start_iso: startIso,
+        _end_iso: endIso,
+      })
+      if (!error && data && Array.isArray(data)) {
+        /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+        return data.map((r: any) => ({
+          id: String(r.id),
+          taskId: String(r.task_id),
+          gardenPlantId: String(r.garden_plant_id),
+          gardenId: String(r.garden_id),
+          dueAt: String(r.due_at),
+          requiredCount: Number(r.required_count ?? 1),
+          completedCount: Number(r.completed_count ?? 0),
+          completedAt: r.completed_at || null,
+          taskType: r.task_type || 'custom',
+          taskEmoji: r.task_emoji || null,
+        }))
+      }
+      if (error) {
+        if (!(isMissingRpcFunction(error, rpcName) || isRpcDependencyUnavailable(error, rpcName))) {
+          console.warn('[gardens] get_enriched_occurrences_for_gardens RPC failed, falling back:', error)
+        }
+      }
+    } catch (err) {
+      if (!(isMissingRpcFunction(err, rpcName) || isRpcDependencyUnavailable(err, rpcName))) {
+        console.warn('[gardens] get_enriched_occurrences_for_gardens RPC failed, falling back:', err)
+      }
+    }
+  }
+
+  // Fallback: fetch tasks + occurrences separately and merge (old 3-step approach)
+  const tasksByGarden = await listTasksForMultipleGardensMinimal(safeIds)
+  const taskIdsByGarden: Record<string, string[]> = {}
+  const taskTypeById: Record<string, string> = {}
+  const taskEmojiById: Record<string, string | null> = {}
+  const taskGardenById: Record<string, string> = {}
+  for (const [gid, tasks] of Object.entries(tasksByGarden)) {
+    taskIdsByGarden[gid] = tasks.map(t => t.id)
+    for (const t of tasks) {
+      taskTypeById[t.id] = t.type
+      taskEmojiById[t.id] = t.emoji || null
+      taskGardenById[t.id] = gid
+    }
+  }
+  const occsByGarden = await listOccurrencesForMultipleGardens(taskIdsByGarden, startIso, endIso)
+  const result: Array<GardenPlantTaskOccurrence & { taskType: string; taskEmoji: string | null; gardenId: string }> = []
+  for (const [, arr] of Object.entries(occsByGarden)) {
+    for (const o of arr || []) {
+      result.push({
+        ...o,
+        taskType: taskTypeById[o.taskId] || 'custom',
+        taskEmoji: taskEmojiById[o.taskId] || null,
+        gardenId: taskGardenById[o.taskId] || '',
+      })
+    }
+  }
+  return result
+}
+
+/**
  * Batched version that fetches occurrences for multiple gardens at once.
  * Reduces egress by combining queries and minimizing round trips.
  * Adds limit to prevent excessive data transfer.
@@ -2245,38 +2326,55 @@ export async function listOccurrencesForMultipleGardens(
 // Return a mapping from occurrenceId -> list of users who progressed/completed it
 export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
   if (occurrenceIds.length === 0) return {}
-  // Fetch raw completion rows
+  // Single query with join to profiles — eliminates the second sequential round-trip
   const { data: rows, error } = await supabase
     .from('garden_task_user_completions')
-    .select('occurrence_id, user_id')
+    .select('occurrence_id, user_id, profiles:user_id(display_name)')
     .in('occurrence_id', occurrenceIds)
-  if (error) throw new Error(error.message)
-  const uniquePairs = new Map<string, { occurrenceId: string; userId: string }>()
+
+  if (error) {
+    // Fallback: if join isn't supported, fetch separately
+    const { data: rawRows, error: rawErr } = await supabase
+      .from('garden_task_user_completions')
+      .select('occurrence_id, user_id')
+      .in('occurrence_id', occurrenceIds)
+    if (rawErr) throw new Error(rawErr.message)
+    const uniqueUserIds = Array.from(new Set((rawRows || []).map((r: { user_id: string }) => r.user_id)))
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', uniqueUserIds)
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    const idToName: Record<string, string | null> = Object.fromEntries((profs || []).map((p: any) => [String(p.id), p.display_name || null]))
+    const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+    const seen = new Set<string>()
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    for (const r of (rawRows || []) as any[]) {
+      const occId = String(r.occurrence_id)
+      const uid = String(r.user_id)
+      const key = `${occId}::${uid}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      if (!map[occId]) map[occId] = []
+      map[occId].push({ userId: uid, displayName: idToName[uid] ?? null })
+    }
+    return map
+  }
+
+  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
+  const seen = new Set<string>()
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   for (const r of (rows || []) as any[]) {
+    const occId = String(r.occurrence_id)
+    const uid = String(r.user_id)
+    const key = `${occId}::${uid}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    if (!map[occId]) map[occId] = []
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const occId = String((r as any).occurrence_id)
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const uid = String((r as any).user_id)
-    uniquePairs.set(`${occId}::${uid}`, { occurrenceId: occId, userId: uid })
-  }
-  const pairs = Array.from(uniquePairs.values())
-  const userIds = Array.from(new Set(pairs.map(p => p.userId)))
-  // Resolve display names from profiles
-  const { data: profs } = await supabase
-    .from('profiles')
-    .select('id, display_name')
-    .in('id', userIds)
-  const idToName: Record<string, string | null> = {}
-  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  for (const p of (profs || []) as any[]) {
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    idToName[String(p.id)] = (p as any).display_name || null
-  }
-  const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
-  for (const { occurrenceId, userId } of pairs) {
-    if (!map[occurrenceId]) map[occurrenceId] = []
-    map[occurrenceId].push({ userId, displayName: idToName[userId] ?? null })
+    const profile = r.profiles as any
+    const displayName = profile?.display_name || null
+    map[occId].push({ userId: uid, displayName })
   }
   return map
 }
@@ -2308,38 +2406,15 @@ export async function getGardenTodayProgressCached(gardenId: string, dayIso: str
           // Disable future attempts
         }
       } else if (data) {
-        const due = Number(data.due_count ?? 0)
-        const completed = Number(data.completed_count ?? 0)
-        const allTasksDone = Boolean(data.all_tasks_done ?? true)
-        
-        // Verify cache: if cache says all done, verify by computing from real data
-        // This catches cases where new tasks were added after cache was updated
-        if (allTasksDone || (due === 0 && completed === 0)) {
-          // Cache says all tasks done or no tasks - verify this is correct
-          const verified = await getGardenTodayProgressUltraFast(normalizedGardenId, dayIso)
-          const verifiedHasRemaining = verified.due > verified.completed
-          
-          // Check if cache is stale (real data differs from cache)
-          if (verified.due !== due || verified.completed !== completed || verifiedHasRemaining !== !allTasksDone) {
-            // Cache is wrong - use real data and trigger refresh
-            if (!taskCachesDisabled) {
-              setTimeout(() => {
-                refreshGardenTaskCache(normalizedGardenId, dayIso).catch(() => {})
-              }, 0)
-            }
-            return {
-              ...verified,
-              hasRemainingTasks: verifiedHasRemaining,
-              allTasksDone: !verifiedHasRemaining && verified.due > 0,
-            }
-          }
-        }
-        
+        // Trust the cache directly – it's kept fresh by realtime subscriptions
+        // and background refresh.  The previous verification round-trip
+        // (getGardenTodayProgressUltraFast on every "all done" read) was the
+        // main source of latency for users with many completed gardens.
         return {
-          due,
-          completed,
+          due: Number(data.due_count ?? 0),
+          completed: Number(data.completed_count ?? 0),
           hasRemainingTasks: Boolean(data.has_remaining_tasks ?? false),
-          allTasksDone,
+          allTasksDone: Boolean(data.all_tasks_done ?? true),
         }
       }
     } catch (err) {
@@ -2423,24 +2498,19 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
       }
     }
     
-    // Fill in missing gardens - VERIFY by computing from real data
+    // Only compute from real data for gardens that have NO cache entry at all.
+    // Gardens with a cache entry are trusted (kept fresh by realtime + background refresh).
     const gardensToVerify: string[] = []
     for (const gid of gardenIds) {
       if (!result[gid]) {
         gardensToVerify.push(gid)
-      } else {
-        // Verify cache: if cache says all done, verify it's actually true
-        // This catches cases where new tasks were added after cache was updated
-        const cached = result[gid]
-        if (cached.allTasksDone || (cached.due === 0 && cached.completed === 0)) {
-          gardensToVerify.push(gid)
-        }
       }
     }
     
     // Compute from real data for gardens without cache or suspicious cache
     if (gardensToVerify.length > 0) {
       const verifiedProg = await getGardensTodayProgressBatch(gardensToVerify, dayIso)
+      const gidsToRefresh: string[] = []
       for (const gid of gardensToVerify) {
         const prog = verifiedProg[gid] || { due: 0, completed: 0 }
         const hasRemaining = prog.due > prog.completed
@@ -2450,15 +2520,14 @@ export async function getGardensTodayProgressBatchCached(gardenIds: string[], da
           hasRemainingTasks: hasRemaining,
           allTasksDone: !hasRemaining && prog.due > 0,
         }
-        // Trigger background cache refresh for missing/wrong cache
-          if (!taskCachesDisabled) {
-            const normalizedGid = normalizeGardenId(gid)
-            if (normalizedGid) {
-              setTimeout(() => {
-                refreshGardenTaskCache(normalizedGid, dayIso).catch(() => {})
-              }, 0)
-            }
-          }
+        const normalizedGid = normalizeGardenId(gid)
+        if (normalizedGid) gidsToRefresh.push(normalizedGid)
+      }
+      // Single batched background refresh instead of per-garden setTimeout
+      if (!taskCachesDisabled && gidsToRefresh.length > 0) {
+        setTimeout(() => {
+          Promise.allSettled(gidsToRefresh.map(gid => refreshGardenTaskCache(gid, dayIso)))
+        }, 0)
       }
     }
     
@@ -2822,79 +2891,14 @@ export async function getUserTasksTodayCached(userId: string, dayIso?: string): 
     }
     
     if (!userCacheErr && userCache) {
-      const totalDue = Number(userCache.total_due_count ?? 0)
-      const totalCompleted = Number(userCache.total_completed_count ?? 0)
-      
-      // Verify cache: if cache says no tasks, verify by checking garden cache
-      if (totalDue === 0 && totalCompleted === 0) {
-        // Cache says no tasks - verify this is correct by checking garden cache
-        const { data: memberships } = await supabase
-          .from('garden_members')
-          .select('garden_id')
-          .eq('user_id', userId)
-        
-        if (memberships && memberships.length > 0) {
-          const gardenIds = memberships.map((m: { garden_id: string }) => m.garden_id)
-          /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-          let gardenCache: any[] | null = null
-          if (!missingSupabaseTablesOrViews.has(gardenDailyTable)) {
-            try {
-              const response = await supabase
-                .from(gardenDailyTable)
-                .select('due_count, completed_count, has_remaining_tasks')
-                .in('garden_id', gardenIds)
-                .eq('cache_date', date)
-              if (response.error) {
-                if (isMissingTableOrView(response.error, gardenDailyTable)) {
-                  gardenCache = null
-                }
-              } else {
-                gardenCache = response.data
-              }
-            } catch (err) {
-              if (!isMissingTableOrView(err, gardenDailyTable)) {
-                console.warn('[gardens] getUserTasksTodayCached garden cache query failed, falling back:', err)
-              }
-            }
-          }
-          
-          // If garden cache shows tasks but user cache says zero, compute from garden cache
-          if (gardenCache && gardenCache.length > 0) {
-            let verifiedDue = 0
-            let verifiedCompleted = 0
-            let gardensWithRemaining = 0
-            
-            for (const row of gardenCache) {
-              verifiedDue += Number(row.due_count ?? 0)
-              verifiedCompleted += Number(row.completed_count ?? 0)
-              if (row.has_remaining_tasks) {
-                gardensWithRemaining++
-              }
-            }
-            
-            // If garden cache shows different values, use garden cache (more accurate)
-            if (verifiedDue > 0 || verifiedCompleted > 0) {
-              // Trigger background refresh of user cache
-              if (!taskCachesDisabled) {
-                setTimeout(() => {
-                  refreshUserTaskCache(userId, date).catch(() => {})
-                }, 0)
-              }
-              
-              return {
-                totalDueCount: verifiedDue,
-                totalCompletedCount: verifiedCompleted,
-                gardensWithRemainingTasks: gardensWithRemaining,
-                totalGardens: gardenIds.length,
-              }
-            }
-          }
-        }
-      }
-      
+      // Trust the user cache directly – it's refreshed in the background by
+      // realtime subscriptions and periodic polling.  The previous verification
+      // round-trip (garden_members → garden_task_daily_cache) added 2 extra
+      // sequential DB calls on every read when the cache said 0, which was the
+      // main source of perceived slowness.
       return {
-        totalDueCount: totalDue,
-        totalCompletedCount: totalCompleted,
+        totalDueCount: Number(userCache.total_due_count ?? 0),
+        totalCompletedCount: Number(userCache.total_completed_count ?? 0),
         gardensWithRemainingTasks: Number(userCache.gardens_with_remaining_tasks ?? 0),
         totalGardens: Number(userCache.total_gardens ?? 0),
       }

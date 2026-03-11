@@ -30,6 +30,7 @@ import {
   resyncTaskOccurrencesForGarden,
   resyncMultipleGardensTasks,
   listTasksForMultipleGardensMinimal,
+  getEnrichedOccurrencesForGardens,
   getGardenMemberCountsBatch,
   progressTaskOccurrence,
   listCompletionsForOccurrences,
@@ -626,34 +627,11 @@ export const GardenListPage: React.FC = () => {
       try {
         const startIso = `${today}T00:00:00.000Z`;
         const endIso = `${today}T23:59:59.999Z`;
-        // Optimization: Fetch tasks for ALL relevant gardens in one batch
-        const gardenIdsToLoad = gardensList.map(g => g.id);
-        const tasksByGardenId = await listTasksForMultipleGardensMinimal(gardenIdsToLoad);
+        const gardenIds = gardensList.map((g) => g.id);
 
-        const taskTypeById: Record<
-          string,
-          "water" | "fertilize" | "harvest" | "cut" | "custom"
-        > = {};
-        const taskEmojiById: Record<string, string | null> = {};
-        const taskIdsByGarden: Record<string, string[]> = {};
-
-        for (const g of gardensList) {
-          const tasks = tasksByGardenId[g.id] || [];
-          taskIdsByGarden[g.id] = tasks.map((t) => t.id);
-          for (const t of tasks) {
-            taskTypeById[t.id] = t.type;
-            taskEmojiById[t.id] = t.emoji || null;
-          }
-        }
-
-        // 2) Resync only if needed and not cached recently
-        // IMPORTANT: When skipResync=false, always resync to ensure task occurrences exist
+        // Resync in background (fire-and-forget)
         if (!skipResync) {
-          // Use optimized server-side batch resync
-          const gardenIdsToSync = gardensList.map((g) => g.id);
-          await resyncMultipleGardensTasks(gardenIdsToSync, startIso, endIso);
-
-          // Update cache timestamps
+          resyncMultipleGardensTasks(gardenIds, startIso, endIso).catch(() => {});
           const now = Date.now();
           for (const g of gardensList) {
             const cacheKey = `${g.id}::${today}`;
@@ -661,32 +639,23 @@ export const GardenListPage: React.FC = () => {
           }
         }
 
-        // 3) Load occurrences for all gardens in a single batched query (reduces egress)
-        const occsByGarden = await listOccurrencesForMultipleGardens(
-          taskIdsByGarden,
-          startIso,
-          endIso,
-        );
-        const occsAugmented: Array<any> = [];
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        for (const [gardenId, arr] of Object.entries(occsByGarden)) {
-          for (const o of arr || []) {
-            occsAugmented.push({
-              ...o,
-              taskType: taskTypeById[o.taskId] || "custom",
-              taskEmoji: taskEmojiById[o.taskId] || null,
-            });
-          }
-        }
+        // SINGLE enriched call replaces 3 steps:
+        //   1) listTasksForMultipleGardensMinimal (fetch tasks)
+        //   2) listOccurrencesForMultipleGardens  (fetch occurrences)
+        //   3) client-side merge of task type/emoji
+        // + plants and completions load in parallel where possible
+        const [enrichedOccs, plantsMinimal] = await Promise.all([
+          getEnrichedOccurrencesForGardens(gardenIds, startIso, endIso),
+          getGardenPlantsMinimal(gardenIds),
+        ]);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const occsAugmented: Array<any> = enrichedOccs;
         setTodayTaskOccurrences(occsAugmented);
-        // Fetch completions for all occurrences
-        const ids = occsAugmented.map((o) => o.id);
+        // Fetch completions (depends on occurrence IDs)
+        const ids = occsAugmented.map((o: { id: string }) => o.id);
         const compMap =
           ids.length > 0 ? await listCompletionsForOccurrences(ids) : {};
         setCompletionsByOcc(compMap || {});
-        // 4) Load plants for all gardens - use minimal version to reduce egress by ~80%
-        const gardenIds = gardensList.map((g) => g.id);
-        const plantsMinimal = await getGardenPlantsMinimal(gardenIds);
         const idToGardenName = gardensList.reduce<Record<string, string>>(
           (acc, g) => {
             acc[g.id] = g.name;

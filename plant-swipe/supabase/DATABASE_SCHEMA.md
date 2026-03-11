@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 6, 2026
+> **Last Updated:** March 10, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
 - **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
 - **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Removed UNIQUE constraint on `plants.name` — multiple plants can now share the same name (different varieties). Name column kept as non-unique fallback for app compatibility.
 - **Feb 28, 2026:** Added 3 new email automation triggers: `ACCOUNT_DELETION`, `FRIEND_REQUEST_REMINDER`, `GARDEN_INVITE_REMINDER`. Added `reminder_email_sent` column to `friend_requests` and `garden_invites` tables. Added server-side cron job (every 3 hours) for reminder emails. Added detailed table definitions for `friend_requests`, `garden_invites`, `admin_email_triggers`, `admin_automatic_email_sends`.
@@ -37,9 +38,6 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
 - **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users.
-- **Feb 12, 2026:** Added `plant_recipes` table with `category`, `time`, and `link` columns.
-- **Feb 10, 2026:** Added `impressions` table to track page view counts.
-- **Feb 9, 2026:** Added `plant_request_fulfilled` trigger type.
 
 ### Required Extensions
 ```sql
@@ -340,22 +338,181 @@ UNIQUE(garden_id, user_id)
 
 ### `garden_plants`
 
+Individual plant entries in a garden. Each row links a garden to a plant species with instance-specific data.
+
 ```sql
-id              UUID PRIMARY KEY
-garden_id       UUID REFERENCES gardens(id) ON DELETE CASCADE
-plant_id        TEXT REFERENCES plants(id)
-custom_name     TEXT
-location        TEXT
-quantity        INTEGER DEFAULT 1
-planting_date   DATE
+id                      UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id               UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+plant_id                TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+nickname                TEXT                     -- User-given name for this instance
+seeds_planted           INTEGER NOT NULL DEFAULT 0
+planted_at              TIMESTAMPTZ
+expected_bloom_date     TIMESTAMPTZ
+plants_on_hand          INTEGER NOT NULL DEFAULT 0
+override_water_freq_unit  TEXT                   -- CHECK: day, week, month, year
+override_water_freq_value INTEGER
+sort_index              INTEGER                  -- Custom ordering in UI
+health_status           TEXT                     -- CHECK: thriving, healthy, okay, struggling, critical
+notes                   TEXT
+last_health_update      TIMESTAMPTZ
+created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `garden_plant_events`
+
+Individual events logged against a garden plant (watering, fertilizing, etc.).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+event_type      TEXT NOT NULL                    -- CHECK: water, fertilize, prune, harvest, note
+occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 notes           TEXT
-health_status   TEXT DEFAULT 'healthy'
-last_watered    TIMESTAMPTZ
-next_watering   TIMESTAMPTZ
-watering_frequency_days INTEGER
-image_url       TEXT
-created_at      TIMESTAMPTZ DEFAULT now()
-updated_at      TIMESTAMPTZ DEFAULT now()
+next_due_at     TIMESTAMPTZ
+```
+
+### `garden_inventory`
+
+Species-level inventory tracking per garden.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id       UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+seeds_on_hand   INTEGER NOT NULL DEFAULT 0
+plants_on_hand  INTEGER NOT NULL DEFAULT 0
+UNIQUE(garden_id, plant_id)
+```
+
+### `garden_instance_inventory`
+
+Per-instance (garden_plant) inventory tracking.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id       UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+seeds_on_hand   INTEGER NOT NULL DEFAULT 0
+plants_on_hand  INTEGER NOT NULL DEFAULT 0
+UNIQUE(garden_plant_id)
+```
+
+### `garden_transactions`
+
+Inventory buy/sell transactions.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id       UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+type            TEXT NOT NULL                    -- CHECK: buy_seeds, sell_seeds, buy_plants, sell_plants
+quantity        INTEGER NOT NULL CHECK (quantity >= 0)
+occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+notes           TEXT
+```
+
+### `garden_tasks`
+
+Daily garden task summary (watering success per day).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id       UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+day             DATE NOT NULL
+task_type       TEXT NOT NULL                    -- CHECK: watering
+garden_plant_ids UUID[] NOT NULL DEFAULT '{}'
+success         BOOLEAN NOT NULL DEFAULT false
+UNIQUE(garden_id, day, task_type)
+```
+
+### `garden_plant_schedule`
+
+Watering schedule pattern per plant instance.
+
+```sql
+garden_plant_id UUID PRIMARY KEY REFERENCES garden_plants(id) ON DELETE CASCADE
+period          TEXT NOT NULL                    -- CHECK: week, month, year
+amount          INTEGER NOT NULL CHECK (amount > 0)
+weekly_days     INTEGER[]
+monthly_days    INTEGER[]
+yearly_days     TEXT[]
+monthly_nth_weekdays TEXT[]
+```
+
+### `garden_watering_schedule`
+
+Materialized watering schedule per day per plant.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+due_date        DATE NOT NULL
+completed_at    TIMESTAMPTZ
+```
+
+### `garden_plant_tasks`
+
+Generic per-plant tasks (v2 task system). Supports one-time, repeating, and pattern-based schedules.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id       UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+type            TEXT NOT NULL                    -- CHECK: water, fertilize, harvest, cut, custom
+custom_name     TEXT
+emoji           TEXT
+schedule_kind   TEXT NOT NULL                    -- CHECK: one_time_date, one_time_duration, repeat_duration, repeat_pattern
+due_at          TIMESTAMPTZ
+interval_amount INTEGER
+interval_unit   TEXT                             -- CHECK: hour, day, week, month, year
+required_count  INTEGER NOT NULL DEFAULT 1 CHECK (required_count > 0)
+period          TEXT                             -- CHECK: week, month, year
+amount          INTEGER CHECK (amount > 0)
+weekly_days     INTEGER[]
+monthly_days    INTEGER[]
+yearly_days     TEXT[]
+monthly_nth_weekdays TEXT[]
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `garden_plant_task_occurrences`
+
+Individual task instances (one per day/schedule hit). Tracks completion progress.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+task_id         UUID NOT NULL REFERENCES garden_plant_tasks(id) ON DELETE CASCADE
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+due_at          TIMESTAMPTZ NOT NULL
+required_count  INTEGER NOT NULL DEFAULT 1 CHECK (required_count > 0)
+completed_count INTEGER NOT NULL DEFAULT 0 CHECK (completed_count >= 0)
+completed_at    TIMESTAMPTZ
+```
+
+### `garden_task_user_completions`
+
+Per-user increment tracking against task occurrences (attribution of who completed what).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+occurrence_id   UUID NOT NULL REFERENCES garden_plant_task_occurrences(id) ON DELETE CASCADE
+user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+increment       INTEGER NOT NULL CHECK (increment > 0)
+occurred_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `garden_plant_images`
+
+Photos of garden plants uploaded by members.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_plant_id UUID NOT NULL REFERENCES garden_plants(id) ON DELETE CASCADE
+image_url       TEXT NOT NULL
+caption         TEXT
+taken_at        TIMESTAMPTZ
+uploaded_by     UUID REFERENCES auth.users(id) ON DELETE SET NULL
+uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 
 ### `email_verification_codes`
@@ -464,7 +621,7 @@ name                      TEXT NOT NULL           -- Canonical English name (non
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
 plant_part                TEXT[]                 -- CHECK: roots, bulbs, stems, leaves, flowers, fruits, spores
-habitat                   TEXT[]                 -- CHECK: aquatic, terrestrial, epiphytic, lithophytic, parasitic
+habitat                   TEXT[]                 -- CHECK: aquatic, hygrophytic, terrestrial, xerophytic, halophytic, epiphytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
 featured_month            TEXT[]                 -- Multi-select months for promotion
@@ -475,6 +632,7 @@ season                    TEXT[]                 -- CHECK: spring, summer, autum
 
 -- Section 2: Identity — Utility & safety
 utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
+vegetable                 BOOLEAN DEFAULT false  -- Is it a vegetable?
 edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
@@ -694,6 +852,113 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 **Category values:** `breakfast_brunch`, `starters_appetizers`, `soups_salads`, `main_courses`, `side_dishes`, `desserts`, `drinks`, `other`
 
 **Time values:** `quick` (Quick and Effortless), `30_plus` (30+ minutes Meals), `slow_cooking` (Slow Cooking), `undefined`
+
+### `plant_watering_schedules`
+
+Watering frequency data per plant per season.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+season          TEXT                             -- CHECK: spring, summer, autumn, winter, hot, cold
+quantity        INTEGER
+time_period     TEXT                             -- CHECK: week, month, year
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `plant_sources`
+
+Plant information sources (URLs/references).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+name            TEXT NOT NULL
+url             TEXT
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `plant_contributors`
+
+Contributor names per plant. Admin/editor write only; public read.
+
+```sql
+id                UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id          TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+contributor_name  TEXT NOT NULL
+created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE(plant_id, lower(contributor_name))
+```
+
+### `plant_infusion_mixes`
+
+Infusion/tea mix recipes per plant.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+mix_name        TEXT NOT NULL
+benefit         TEXT
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `plant_pro_advices`
+
+Professional growing tips contributed by admin/editor/pro users. Includes multi-language translations.
+
+```sql
+id                    UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id              TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+author_id             UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+author_display_name   TEXT
+author_username       TEXT
+author_avatar_url     TEXT
+author_roles          TEXT[] NOT NULL DEFAULT '{}'
+content               TEXT NOT NULL                    -- CHECK: not blank
+original_language     TEXT                             -- ISO code detected via DeepL
+translations          JSONB NOT NULL DEFAULT '{}'      -- {"fr": "...", "en": "..."}
+image_url             TEXT
+reference_url         TEXT
+metadata              JSONB NOT NULL DEFAULT '{}'      -- CHECK: must be object
+created_at            TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+### `plant_images`
+
+Plant image gallery. Each plant can have one `primary` and one `discovery` image (unique partial index).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+link            TEXT NOT NULL
+use             TEXT NOT NULL DEFAULT 'other'     -- CHECK: primary, discovery, other
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE(plant_id, link)
+```
+
+### `plant_colors`
+
+Association table linking plants to colors.
+
+```sql
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+color_id        UUID NOT NULL REFERENCES colors(id) ON DELETE CASCADE
+added_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+PRIMARY KEY(plant_id, color_id)
+```
+
+### `plant_reports`
+
+User-submitted reports about incorrect or outdated plant information. Admin/editor read-only; authenticated users can insert their own.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id         UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+note            TEXT NOT NULL
+image_url       TEXT
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
 
 ### `friend_requests`
 
@@ -946,6 +1211,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `get_garden_progress(uuid)` | Get task completion progress |
 | `get_gardens_today_progress_batch(uuid[])` | Batch progress for multiple gardens |
 | `get_task_occurrences_batch(uuid[])` | Get task occurrences efficiently |
+| `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` | Get occurrences pre-joined with task metadata (type, emoji) for multiple gardens in one query |
 | `ensure_task_occurrences_for_garden(uuid)` | Generate task instances |
 
 ### Shadow Ban Functions (Threat Level 3)
@@ -1043,6 +1309,27 @@ Ensure indexes exist for:
 - Foreign keys (`user_id`, `garden_id`, etc.)
 - Frequently filtered columns (`created_at`, `status`)
 - Unique constraints
+
+**Task-specific performance indexes** (defined in `11_notifications_and_tasks.sql`):
+
+| Index | Table | Columns | Purpose |
+|-------|-------|---------|---------|
+| `idx_occurrences_task_due` | `garden_plant_task_occurrences` | `(task_id, due_at)` | Task + date range lookups |
+| `idx_occurrences_incomplete` | `garden_plant_task_occurrences` | `(task_id, due_at) WHERE completed_count < required_count` | Incomplete task queries |
+| `idx_task_occurrences_due_completed` | `garden_plant_task_occurrences` | `(due_at, completed_at)` | "Incomplete tasks today" notification query |
+| `idx_task_occurrences_task_id` | `garden_plant_task_occurrences` | `(task_id)` | Inner-join to `garden_plant_tasks` |
+| `idx_garden_plant_tasks_garden_id` | `garden_plant_tasks` | `(garden_id)` | Task queries filtered by garden |
+
+**Cache table indexes** (defined in `10_garden_invites_and_cache.sql`):
+
+| Index | Table | Columns |
+|-------|-------|---------|
+| `idx_garden_task_daily_cache_garden_date` | `garden_task_daily_cache` | `(garden_id, cache_date DESC)` |
+| `idx_garden_task_weekly_cache_garden_week` | `garden_task_weekly_cache` | `(garden_id, week_start_date DESC)` |
+| `idx_garden_plant_task_counts_cache_garden` | `garden_plant_task_counts_cache` | `(garden_id)` |
+| `idx_garden_plant_task_counts_cache_plant` | `garden_plant_task_counts_cache` | `(garden_plant_id)` |
+| `idx_garden_task_occurrences_today_cache_garden_date` | `garden_task_occurrences_today_cache` | `(garden_id, cache_date DESC)` |
+| `idx_garden_task_occurrences_today_cache_plant` | `garden_task_occurrences_today_cache` | `(garden_plant_id)` |
 
 ### 6. Avoid Many Consecutive ALTER TABLE Statements
 
