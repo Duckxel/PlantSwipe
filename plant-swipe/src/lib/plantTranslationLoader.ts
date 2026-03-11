@@ -336,30 +336,49 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
     return plants.map((basePlant: Record<string, unknown>) => {
       const translation = translationMap.get(basePlant.id as string) || {}
 
-      const colorObjects = ((basePlant.plant_colors as Record<string, unknown>[]) || []).map((pc) => ({
-        id: (pc?.colors as Record<string, unknown>)?.id as string,
-        name: (pc?.colors as Record<string, unknown>)?.name as string,
-        hexCode: (pc?.colors as Record<string, unknown>)?.hex_code as string,
-      })).filter((c) => c.name)
+      const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
+      const plantColors = (basePlant.plant_colors as Record<string, unknown>[]) || []
+      for (let i = 0; i < plantColors.length; i++) {
+        const pc = plantColors[i]
+        const colors = pc?.colors as Record<string, unknown>
+        if (colors?.name) {
+          colorObjects.push({
+            id: colors.id as string,
+            name: colors.name as string,
+            hexCode: colors.hex_code as string,
+          })
+        }
+      }
 
       const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
         link: img?.link as string,
         use: img?.use as PlantImage['use'],
       }))
 
-      const schedules = ((basePlant.plant_watering_schedules as Record<string, unknown>[]) || []).map((row) => ({
-        season: row?.season ? toTitleCase(row.season as string) : undefined,
-        quantity: row?.quantity != null ? Number(row.quantity) : undefined,
-        timePeriod: (row?.time_period as string) || undefined,
-      })).filter((e) => e.season || e.quantity !== undefined || e.timePeriod)
+      const schedules: Array<{ season?: string; quantity?: number; timePeriod?: string }> = []
+      const waterSchedules = (basePlant.plant_watering_schedules as Record<string, unknown>[]) || []
+      for (let i = 0; i < waterSchedules.length; i++) {
+        const row = waterSchedules[i]
+        const season = row?.season ? toTitleCase(row.season as string) : undefined
+        const quantity = row?.quantity != null ? Number(row.quantity) : undefined
+        const timePeriod = (row?.time_period as string) || undefined
+        if (season || quantity !== undefined || timePeriod) {
+          schedules.push({ season, quantity, timePeriod })
+        }
+      }
 
-      const sourcesList = ((basePlant.plant_sources as Record<string, unknown>[]) || [])
-        .map((src) => ({
-          id: src?.id as string,
-          name: src?.name as string,
-          url: src?.url as string,
-        }))
-        .filter((src) => src.name)
+      const sourcesList: Array<{ id?: string; name: string; url?: string }> = []
+      const plantSources = (basePlant.plant_sources as Record<string, unknown>[]) || []
+      for (let i = 0; i < plantSources.length; i++) {
+        const src = plantSources[i]
+        if (src?.name) {
+          sourcesList.push({
+            id: src.id as string,
+            name: src.name as string,
+            url: src.url as string,
+          })
+        }
+      }
       if (!sourcesList.length && translation.source_name) {
         sourcesList.push({
           id: `${basePlant.id}-legacy-source`,
@@ -469,11 +488,19 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
     return plants.map((basePlant) => {
       const translation = translationMap.get(basePlant.id as string) || {}
 
-      const colorObjects = ((basePlant.plant_colors as Record<string, unknown>[]) || []).map((pc) => ({
-        id: (pc?.colors as Record<string, unknown>)?.id as string,
-        name: (pc?.colors as Record<string, unknown>)?.name as string,
-        hexCode: (pc?.colors as Record<string, unknown>)?.hex_code as string,
-      })).filter((c) => c.name)
+      const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
+      const plantColors = (basePlant.plant_colors as Record<string, unknown>[]) || []
+      for (let i = 0; i < plantColors.length; i++) {
+        const pc = plantColors[i]
+        const colors = pc?.colors as Record<string, unknown>
+        if (colors?.name) {
+          colorObjects.push({
+            id: colors.id as string,
+            name: colors.name as string,
+            hexCode: colors.hex_code as string,
+          })
+        }
+      }
 
       const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
         link: img?.link as string,
@@ -485,11 +512,17 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         return val.charAt(0).toUpperCase() + val.slice(1)
       }
 
-      const schedules = ((basePlant.plant_watering_schedules as Record<string, unknown>[]) || []).map((row) => ({
-        season: row?.season ? toTitleCase(row.season as string) : undefined,
-        quantity: row?.quantity != null ? Number(row.quantity) : undefined,
-        timePeriod: (row?.time_period as string) || undefined,
-      })).filter((e) => e.season || e.quantity !== undefined || e.timePeriod)
+      const schedules: Array<{ season?: string; quantity?: number; timePeriod?: string }> = []
+      const waterSchedules = (basePlant.plant_watering_schedules as Record<string, unknown>[]) || []
+      for (let i = 0; i < waterSchedules.length; i++) {
+        const row = waterSchedules[i]
+        const season = row?.season ? toTitleCase(row.season as string) : undefined
+        const quantity = row?.quantity != null ? Number(row.quantity) : undefined
+        const timePeriod = (row?.time_period as string) || undefined
+        if (season || quantity !== undefined || timePeriod) {
+          schedules.push({ season, quantity, timePeriod })
+        }
+      }
 
       return mapDbRowToPlant(
         basePlant,
