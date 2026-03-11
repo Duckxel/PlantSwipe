@@ -20,6 +20,7 @@ type CampaignRow = {
   body_json: Record<string, unknown> | null
   variables: unknown
   scheduled_for: string | null
+  original_scheduled_for: string | null
   timezone: string | null
   test_mode: boolean | null
   test_email: string | null
@@ -795,7 +796,10 @@ function determineNextScheduledFor(leftoverDue: RecipientPlan[], futurePlans: Re
 }
 
 function computeUserSendTime(campaign: CampaignRow, userTimezone: string | null): string {
-  const scheduled = campaign.scheduled_for
+  // Use original_scheduled_for (the admin's intended time) for timezone calculations,
+  // NOT scheduled_for which gets overwritten with cron wake-up times after partial sends.
+  // This prevents timezone offset compounding where each cron run re-applies the offset.
+  const scheduled = campaign.original_scheduled_for ?? campaign.scheduled_for
   if (!scheduled) return new Date().toISOString()
   const campaignTimezone =
     campaign.timezone && campaign.timezone.trim().length ? campaign.timezone : DEFAULT_CAMPAIGN_TIMEZONE

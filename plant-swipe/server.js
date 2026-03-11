@@ -830,7 +830,10 @@ async function processEmailCampaigns() {
 
       // 3. Filter by Timezone
       const campaignTz = campaign.timezone || 'UTC'
-      const scheduledFor = new Date(campaign.scheduled_for) // This is UTC
+      // Use original_scheduled_for (the admin's intended time) for timezone calculations,
+      // NOT scheduled_for which gets overwritten with cron wake-up times after partial sends.
+      // This prevents timezone offset compounding where each cron run re-applies the offset.
+      const scheduledFor = new Date(campaign.original_scheduled_for || campaign.scheduled_for) // This is UTC
 
       const dueRecipients = recipients.filter(r => {
         // Calculate when the campaign is due for THIS user
@@ -10731,6 +10734,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         variables,
         timezone,
         scheduled_for,
+        original_scheduled_for,
         status,
         total_recipients,
         sent_count,
@@ -10756,6 +10760,7 @@ app.post('/api/admin/email-campaigns', async (req, res) => {
         ${bodyJsonFragment},
         ${variables},
         ${timezone || 'UTC'},
+        ${scheduledFor},
         ${scheduledFor},
         'scheduled',
         ${testMode ? 1 : 0},
