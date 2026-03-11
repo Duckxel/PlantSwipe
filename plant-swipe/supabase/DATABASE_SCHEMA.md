@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 10, 2026
+> **Last Updated:** March 11, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 11, 2026:** **Email timezone bug fix.** Added `original_scheduled_for` column to `admin_email_campaigns` — stores the admin's intended send time immutably. The campaign runner edge function now uses this column for per-user timezone calculations instead of `scheduled_for`, which gets overwritten with cron wake-up times after partial sends, preventing timezone offset compounding. Added detailed column documentation for `admin_email_campaigns` and `admin_campaign_sends` tables.
 - **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
 - **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
 - **Mar 4, 2026:** Updated `plant_type` values to: herb, shrub, tree, climber, succulent, fern, moss, grass. Added new `plant_part` multi-select field (roots, bulbs, stems, leaves, flowers, fruits, spores). Added new `habitat` multi-select field (aquatic, terrestrial, epiphytic, lithophytic, parasitic). Removed UNIQUE constraint on `plants.name` — multiple plants can now share the same name (different varieties). Name column kept as non-unique fallback for app compatibility.
@@ -37,7 +38,6 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Feb 24, 2026:** **MAJOR: Complete plant database schema overhaul** to match new 9-section specification. See [plants table](#plants-master-plant-catalog) and [plant_translations table](#plant_translations-multi-language-content) for full new schema. Key changes: renamed columns for clarity (e.g. `comestible_part`→`edible_part`, `tutoring`→`staking`, `spiked`→`thorny`), converted many single-select fields to multi-select (`life_cycle`, `foliage_persistence`, `living_space`, `conservation_status`, `care_level`, `sunlight`), updated all enum values to English standards (IUCN codes for conservation, proper toxicity levels including `undetermined`), added ~40 new fields for ecology/biodiversity/consumption, added full migration logic for existing data. **Sections:** 1) Base, 2) Identity, 3) Care, 4) Growth, 5) Danger, 6) Ecology, 7) Consumption, 8) Misc, 9) Meta.
 - **Feb 19, 2026:** Added `plant_reports` table for user-submitted reports about incorrect or outdated plant information.
 - **Feb 17, 2026:** Added `user_id` column to `team_members` table for profile linking.
-- **Feb 12, 2026:** Added **Shadow Ban system** for threat level 3 users.
 
 ### Required Extensions
 ```sql
@@ -1026,6 +1026,80 @@ UNIQUE (bookmark_id, plant_id)
 ```
 
 **RLS:** Viewable if parent bookmark is public or owned by viewer. INSERT/DELETE only by bookmark owner.
+
+### `admin_email_campaigns`
+
+Stores email campaigns with scheduling, timezone-aware delivery, and recipient targeting.
+
+```sql
+id                      UUID PRIMARY KEY
+title                   TEXT NOT NULL
+description             TEXT                     -- Internal campaign notes
+status                  TEXT NOT NULL DEFAULT 'draft'
+                        -- Lifecycle: draft → scheduled → running → sent | partial | failed
+template_id             UUID REFERENCES admin_email_templates(id) ON DELETE SET NULL
+template_version        INTEGER
+template_title          TEXT
+subject                 TEXT NOT NULL
+preview_text            TEXT                     -- Email preview text
+body_html               TEXT                     -- Rendered HTML body
+body_json               JSONB                    -- Tiptap JSON document
+variables               TEXT[] DEFAULT '{}'      -- Template variables (e.g. {{user}})
+timezone                TEXT DEFAULT 'UTC'       -- Admin-selected timezone for scheduling
+scheduled_for           TIMESTAMPTZ              -- Next send window (updated by cron on partial sends)
+original_scheduled_for  TIMESTAMPTZ              -- Immutable copy of the admin's intended send time;
+                        -- prevents timezone offset compounding when scheduled_for is
+                        -- overwritten with cron wake-up times after partial sends
+total_recipients        INTEGER DEFAULT 0
+sent_count              INTEGER DEFAULT 0
+failed_count            INTEGER DEFAULT 0
+send_error              TEXT                     -- Error message on failure
+send_summary            JSONB                    -- Detailed batch results
+send_started_at         TIMESTAMPTZ
+send_completed_at       TIMESTAMPTZ
+test_mode               BOOLEAN DEFAULT false    -- Send only to test_email when true
+test_email              TEXT                     -- Target email in test mode
+is_marketing            BOOLEAN DEFAULT false    -- If true, only users with marketing_consent=true
+target_roles            TEXT[] DEFAULT '{}'      -- Empty = all users, non-empty = users with ANY role
+category                TEXT NOT NULL DEFAULT 'newsletter'
+                        CHECK (category IN ('newsletter','automation','test','marketing','legal'))
+created_by              UUID REFERENCES profiles(id) ON DELETE SET NULL
+updated_by              UUID REFERENCES profiles(id) ON DELETE SET NULL
+created_at              TIMESTAMPTZ DEFAULT now()
+updated_at              TIMESTAMPTZ DEFAULT now()
+```
+
+**Status lifecycle:**
+
+| Status | Description |
+|--------|-------------|
+| `draft` | Created but not yet scheduled (editable) |
+| `scheduled` | Waiting for send window (respects per-user timezone) |
+| `running` | Currently sending batches |
+| `sent` | All recipients received email |
+| `partial` | Some batches succeeded, some failed |
+| `failed` | Permanent error, no emails sent |
+
+**Timezone scheduling:** The `original_scheduled_for` column preserves the admin's intended local time. The edge function uses this (falling back to `scheduled_for`) to calculate per-user send times. Without it, the `scheduled_for` field gets overwritten with cron wake-up times after partial sends, causing timezone offsets to compound on each run.
+
+**RLS:** Admin-only full access.
+
+### `admin_campaign_sends`
+
+Tracks which users have been sent each campaign (deduplication and audit).
+
+```sql
+id              UUID PRIMARY KEY
+campaign_id     UUID REFERENCES admin_email_campaigns(id) ON DELETE CASCADE
+user_id         UUID REFERENCES auth.users(id) ON DELETE CASCADE
+sent_at         TIMESTAMPTZ DEFAULT now()
+status          TEXT DEFAULT 'sent'
+error           TEXT
+```
+
+**Index:** `(campaign_id, user_id)` for fast dedup lookups.
+
+**RLS:** Admin-only full access.
 
 ### `admin_email_templates`
 

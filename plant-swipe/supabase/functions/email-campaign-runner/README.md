@@ -36,6 +36,9 @@ Configure these in the Supabase dashboard under **Project Settings → Functions
 | `EMAIL_CAMPAIGN_FROM` | ❌ | From header (e.g., `Aphylia <info@aphylia.app>`) |
 | `EMAIL_CAMPAIGN_REPLY_TO` | ❌ | Reply-to email address |
 | `EMAIL_CAMPAIGN_BATCH_SIZE` | ❌ | Max recipients per batch (default: 40, max: 100) |
+| `EMAIL_CAMPAIGN_MAX_TZ_LEAD_HOURS` | ❌ | Max hours ahead to load timezone-scheduled campaigns (default: 26, range: 1-36) |
+| `EMAIL_CAMPAIGN_SEND_GRACE_MS` | ❌ | Grace period in ms for send window (default: 60000) |
+| `EMAIL_CAMPAIGN_RECHECK_DELAY_MS` | ❌ | Backoff in ms before rechecking scheduled campaigns (default: 60000) |
 
 ---
 
@@ -162,13 +165,28 @@ The function reads from `admin_email_campaigns`:
 | Column | Type | Description |
 |--------|------|-------------|
 | `id` | UUID | Campaign ID |
+| `title` | TEXT | Campaign title |
 | `subject` | TEXT | Email subject line |
-| `body_html` | TEXT | HTML email body |
-| `status` | TEXT | `draft`, `scheduled`, `sending`, `sent`, `failed` |
-| `scheduled_at` | TIMESTAMP | When to send (null = draft) |
-| `sent_at` | TIMESTAMP | When sent |
-| `recipient_count` | INTEGER | Number of recipients |
-| `created_at` | TIMESTAMP | Creation time |
+| `body_html` | TEXT | Rendered HTML body |
+| `body_json` | JSONB | Tiptap JSON document |
+| `variables` | TEXT[] | Template variables (e.g. `{{user}}`) |
+| `status` | TEXT | `draft`, `scheduled`, `running`, `sent`, `partial`, `failed` |
+| `timezone` | TEXT | Admin-selected timezone for scheduling (default: `UTC`) |
+| `scheduled_for` | TIMESTAMPTZ | Next send window (updated by cron on partial sends) |
+| `original_scheduled_for` | TIMESTAMPTZ | Immutable copy of admin's intended send time — used for per-user timezone calculations to prevent offset compounding |
+| `total_recipients` | INTEGER | Total targeted recipients |
+| `sent_count` | INTEGER | Successfully sent count |
+| `failed_count` | INTEGER | Failed send count |
+| `send_error` | TEXT | Error message on failure |
+| `send_summary` | JSONB | Detailed batch results |
+| `test_mode` | BOOLEAN | Send only to `test_email` when true |
+| `test_email` | TEXT | Target email in test mode |
+| `is_marketing` | BOOLEAN | If true, only users with `marketing_consent=true` |
+| `target_roles` | TEXT[] | Empty = all users, non-empty = users with ANY role |
+| `category` | TEXT | `newsletter`, `automation`, `test`, `marketing`, `legal` |
+| `created_at` | TIMESTAMPTZ | Creation time |
+
+> **Note:** The `original_scheduled_for` column was added to fix a timezone offset compounding bug. When a campaign has timezone-aware scheduling and only partially sends (some recipients are in future timezones), the cron runner overwrites `scheduled_for` with the next wake-up time. Subsequent runs would re-apply the timezone offset to this already-shifted time. The fix uses `original_scheduled_for` (falling back to `scheduled_for`) as the source of truth for timezone math.
 
 ---
 

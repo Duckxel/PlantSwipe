@@ -176,6 +176,7 @@ create table if not exists public.admin_email_campaigns (
   variables text[] default '{}',
   timezone text default 'UTC',
   scheduled_for timestamptz,
+  original_scheduled_for timestamptz,   -- Immutable copy of the admin's intended send time; prevents timezone offset compounding on partial-send rescheduling
   total_recipients integer default 0,
   sent_count integer default 0,
   failed_count integer default 0,
@@ -200,6 +201,7 @@ alter table public.admin_email_campaigns add column if not exists is_marketing b
 alter table public.admin_email_campaigns add column if not exists send_summary jsonb;
 alter table public.admin_email_campaigns add column if not exists target_roles text[] default '{}'; -- Empty array = all users, non-empty = only users with ANY of these roles
 alter table public.admin_email_campaigns add column if not exists category text not null default 'newsletter'; -- newsletter, automation, test, marketing, legal
+alter table public.admin_email_campaigns add column if not exists original_scheduled_for timestamptz; -- Immutable copy of the admin's intended send time; prevents timezone offset compounding
 
 alter table public.admin_email_campaigns enable row level security;
 
