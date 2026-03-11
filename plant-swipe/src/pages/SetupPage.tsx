@@ -7,11 +7,11 @@ import { useTheme, type Theme } from "@/context/ThemeContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
 import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city-country-selector"
-import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Globe, Monitor, Sun, Moon } from "lucide-react"
+import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Globe, Monitor, Sun, Moon, ShieldCheck } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, getAccentHex, type AccentKey } from "@/lib/accent"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 
-type SetupStep = 'welcome' | 'language_theme' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'notification_time' | 'notifications' | 'complete'
+type SetupStep = 'welcome' | 'language_theme' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'parent_mode' | 'notification_time' | 'notifications' | 'complete'
 
 type GardenType = 'inside' | 'outside' | 'both'
 type ExperienceLevel = 'novice' | 'intermediate' | 'expert'
@@ -27,9 +27,10 @@ interface SetupData {
   experience_level: ExperienceLevel | null
   looking_for: LookingFor | null
   notification_time: NotificationTime | null
+  parent: boolean
 }
 
-const STEPS: SetupStep[] = ['welcome', 'language_theme', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'notification_time', 'notifications', 'complete']
+const STEPS: SetupStep[] = ['welcome', 'language_theme', 'accent', 'location', 'garden_type', 'experience', 'purpose', 'parent_mode', 'notification_time', 'notifications', 'complete']
 
 // Liana/Vine Progress Bar Component with leaves and flowers
 const LianaProgressBar: React.FC<{ progress: number; accentColor?: string }> = ({ progress, accentColor }) => {
@@ -319,6 +320,7 @@ export function SetupPage() {
     experience_level: null,
     looking_for: null,
     notification_time: '10h',
+    parent: false,
   })
   const [saving, setSaving] = React.useState(false)
   const [direction, setDirection] = React.useState<1 | -1>(1)
@@ -430,6 +432,7 @@ export function SetupPage() {
           experience_level: setupData.experience_level,
           looking_for: setupData.looking_for,
           notification_time: setupData.notification_time,
+          parent: setupData.parent,
         })
         .eq('id', user.id)
 
@@ -463,6 +466,8 @@ export function SetupPage() {
         return setupData.experience_level !== null
       case 'purpose':
         return setupData.looking_for !== null
+      case 'parent_mode':
+        return true // Always can continue, it's optional
       case 'notification_time':
         return setupData.notification_time !== null
       default:
@@ -843,6 +848,71 @@ export function SetupPage() {
                 onClick={() => handlePurposeSelect('various')}
                 label={t('setup.purpose.various', 'Have as many various plants as possible!')}
                 index={2}
+              />
+            </div>
+          </motion.div>
+        )
+
+      case 'parent_mode':
+        return (
+          <motion.div
+            key="parent_mode"
+            custom={direction}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.25 }}
+            className="max-w-md mx-auto"
+          >
+            <QuestionHeader
+              icon={<ShieldCheck className="w-6 h-6 text-white" />}
+              question={t('setup.parentMode.title', 'Do you have small children or pets?')}
+            />
+
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.2 }}
+              className="text-stone-500 dark:text-stone-400 mb-4 -mt-4"
+            >
+              {t('setup.parentMode.description', 'Many common houseplants and garden plants can be harmful if ingested or touched. Parent Mode makes sure you never miss a safety warning.')}
+            </motion.p>
+
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3 }}
+              className="rounded-2xl border-2 border-amber-200 dark:border-amber-800/50 bg-amber-50/50 dark:bg-amber-900/10 p-4 mb-8"
+            >
+              <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 mb-2">
+                {t('setup.parentMode.whatItDoes', 'What does Parent Mode do?')}
+              </p>
+              <ul className="text-sm text-stone-500 dark:text-stone-400 space-y-1.5">
+                <li>
+                  {t('setup.parentMode.benefit1', 'Toxicity and danger levels are shown at the top of every plant page')}
+                </li>
+                <li>
+                  {t('setup.parentMode.benefit2', 'Clear icons indicate risks for children, cats, and dogs')}
+                </li>
+                <li>
+                  {t('setup.parentMode.benefit3', 'Ideal for parents of toddlers, pet owners, or anyone sharing space with curious little ones')}
+                </li>
+              </ul>
+            </motion.div>
+
+            <div className="flex flex-col gap-3">
+              <PillOption
+                selected={setupData.parent === true}
+                onClick={() => setSetupData(prev => ({ ...prev, parent: true }))}
+                label={t('setup.parentMode.yes', 'Yes, I have small children or pets')}
+                index={0}
+              />
+              <PillOption
+                selected={setupData.parent === false}
+                onClick={() => setSetupData(prev => ({ ...prev, parent: false }))}
+                label={t('setup.parentMode.no', 'No, not at the moment')}
+                index={1}
               />
             </div>
           </motion.div>

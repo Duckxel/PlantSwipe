@@ -2409,6 +2409,16 @@
       "various": "Un peu de tout !",
       "variousDesc": "Le plus de plantes variées possible"
     },
+    "parentMode": {
+      "title": "Avez-vous de jeunes enfants ou des animaux ?",
+      "description": "De nombreuses plantes d'intérieur et de jardin courantes peuvent être nocives en cas d'ingestion ou de contact. Le Mode Parent vous assure de ne jamais manquer un avertissement de sécurité.",
+      "whatItDoes": "Que fait le Mode Parent ?",
+      "benefit1": "Les niveaux de toxicité et de danger sont affichés en haut de chaque page de plante",
+      "benefit2": "Des icônes claires indiquent les risques pour les enfants, les chats et les chiens",
+      "benefit3": "Idéal pour les parents de jeunes enfants, les propriétaires d'animaux, ou toute personne partageant son espace avec de petits curieux",
+      "yes": "Oui, j'ai de jeunes enfants ou des animaux",
+      "no": "Non, pas pour le moment"
+    },
     "notificationTime": {
       "title": "Quand devons-nous vous rappeler ?",
       "subtitle": "Choisissez votre heure de notification préférée",

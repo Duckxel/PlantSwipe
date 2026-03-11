@@ -2409,6 +2409,16 @@
       "various": "A bit of everything!",
       "variousDesc": "As many various plants as possible"
     },
+    "parentMode": {
+      "title": "Do you have small children or pets?",
+      "description": "Many common houseplants and garden plants can be harmful if ingested or touched. Parent Mode makes sure you never miss a safety warning.",
+      "whatItDoes": "What does Parent Mode do?",
+      "benefit1": "Toxicity and danger levels are shown at the top of every plant page",
+      "benefit2": "Clear icons indicate risks for children, cats, and dogs",
+      "benefit3": "Ideal for parents of toddlers, pet owners, or anyone sharing space with curious little ones",
+      "yes": "Yes, I have small children or pets",
+      "no": "No, not at the moment"
+    },
     "notificationTime": {
       "title": "When should we remind you?",
       "subtitle": "Choose your preferred notification time",
