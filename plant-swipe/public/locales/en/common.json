@@ -2409,6 +2409,12 @@
       "various": "A bit of everything!",
       "variousDesc": "As many various plants as possible"
     },
+    "parentMode": {
+      "title": "Do you have small children or pets?",
+      "description": "Some plants can be toxic to children and animals. Enabling Parent Mode will highlight safety warnings more prominently on plant pages.",
+      "yes": "Yes, I have small children or pets",
+      "no": "No, not at the moment"
+    },
     "notificationTime": {
       "title": "When should we remind you?",
       "subtitle": "Choose your preferred notification time",
