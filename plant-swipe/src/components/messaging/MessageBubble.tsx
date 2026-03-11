@@ -333,6 +333,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       size="sm"
                       className="h-7 px-2 text-inherit hover:bg-white/20"
                       onClick={handleEditCancel}
+                      aria-label={t('common.cancel', { defaultValue: 'Cancel' })}
+                      title={t('common.cancel', { defaultValue: 'Cancel' })}
                     >
                       <X className="h-4 w-4" />
                     </Button>
@@ -341,6 +343,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       size="sm"
                       className="h-7 px-2 text-inherit hover:bg-white/20"
                       onClick={handleEditSave}
+                      aria-label={t('common.save', { defaultValue: 'Save' })}
+                      title={t('common.save', { defaultValue: 'Save' })}
                     >
                       <Check className="h-4 w-4" />
                     </Button>
@@ -419,6 +423,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                       : 'bg-white dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] border-stone-200 dark:border-[#3a3a3d]'
                   )}
+                  aria-label={data.hasOwn ? t('messages.removeReaction', { defaultValue: 'Remove reaction' }) : t('messages.addReaction', { defaultValue: 'Add reaction' })}
                 >
                   <span className="text-sm">{emoji}</span>
                   {data.count > 1 && <span className="font-medium">{data.count}</span>}
@@ -460,6 +465,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     setShowReactions(false)
                   }}
                   className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-all active:scale-110 text-xl"
+                  aria-label={t('messages.reactWith', { defaultValue: 'React with {{emoji}}', emoji })}
+                  title={t('messages.reactWith', { defaultValue: 'React with {{emoji}}', emoji })}
                 >
                   {emoji}
                 </button>
@@ -475,6 +482,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                 }}
                 className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors"
                 title={t('messages.reply', { defaultValue: 'Reply' })}
+                aria-label={t('messages.reply', { defaultValue: 'Reply' })}
               >
                 <Reply className="h-5 w-5 text-stone-600 dark:text-stone-300" />
               </button>
@@ -486,6 +494,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     setShowMenu(true)
                   }}
                   className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors"
+                  aria-label={t('messages.moreOptions', { defaultValue: 'More options' })}
+                  title={t('messages.moreOptions', { defaultValue: 'More options' })}
                 >
                   <MoreVertical className="h-5 w-5 text-stone-600 dark:text-stone-300" />
                 </button>
