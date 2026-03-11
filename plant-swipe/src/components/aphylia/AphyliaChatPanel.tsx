@@ -405,6 +405,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
+                aria-label={t('common.close', 'Close')}
                 className="w-9 h-9 md:hidden text-white/90 hover:text-white hover:bg-white/20 -ml-1"
               >
                 <X className="w-5 h-5" />
@@ -427,8 +428,9 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                   variant="ghost"
                   size="icon"
                   onClick={onClearMessages}
+                  aria-label={t('aphylia.clearChat', 'Clear chat')}
                   className="w-9 h-9 md:w-8 md:h-8 text-white/70 hover:text-white hover:bg-white/20"
-                  title="Clear chat"
+                  title={t('aphylia.clearChat', 'Clear chat')}
                 >
                   <Trash2 className="w-5 h-5 md:w-4 md:h-4" />
                 </Button>
@@ -438,6 +440,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 onClick={onToggleMinimize}
+                aria-label={isMinimized ? t('common.maximize', 'Maximize') : t('common.minimize', 'Minimize')}
                 className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -447,6 +450,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
+                aria-label={t('common.close', 'Close')}
                 className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 <X className="w-4 h-4" />
@@ -640,6 +644,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                     size="icon"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isSending}
+                    aria-label={t('aphylia.uploadFromGallery', 'Upload from gallery')}
                     className="flex-shrink-0 w-10 h-10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                     title={t('aphylia.uploadFromGallery', 'Upload from gallery')}
                   >
@@ -660,6 +665,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                     size="icon"
                     onClick={() => document.getElementById('camera-input')?.click()}
                     disabled={isSending}
+                    aria-label={t('aphylia.takePhoto', 'Take a photo')}
                     className="flex-shrink-0 w-10 h-10 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800"
                     title={t('aphylia.takePhoto', 'Take a photo')}
                   >
@@ -696,6 +702,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       variant="ghost"
                       size="icon"
                       onClick={onAbortStream}
+                      aria-label={t('common.stop', 'Stop')}
                       className="flex-shrink-0 w-10 h-10 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <StopCircle className="w-5 h-5" />
@@ -706,6 +713,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       size="icon"
                       onClick={() => onSendMessage()}
                       disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
+                      aria-label={t('common.send', 'Send message')}
                       className={cn(
                         'flex-shrink-0 w-10 h-10',
                         'bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl',
