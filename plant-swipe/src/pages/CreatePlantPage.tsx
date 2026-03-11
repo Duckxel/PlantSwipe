@@ -2744,15 +2744,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 {!fetchingExternalImages && <ImagePlus className="h-4 w-4" />}
                 {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
               </Button>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => { setManualUploadError(null); setManualUploadResults([]); setShowUploadDialog(true) }}
-                disabled={!(plant.name && typeof plant.name === 'string' && plant.name.trim())}
-              >
-                <UploadCloud className="h-4 w-4" />
-                {t('plantAdmin.uploadImages', 'Upload Images')}
-              </Button>
               {externalImagesTotal !== null && !fetchingExternalImages && (
                 <span className="text-xs text-muted-foreground self-center">
                   {externalImagesTotal === 0
@@ -3072,6 +3063,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 })
               }
             }}
+            onUploadImages={() => { setManualUploadError(null); setManualUploadResults([]); setShowUploadDialog(true) }}
             plantReports={plantReports}
             plantVarieties={plantVarieties}
           />
