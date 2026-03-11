@@ -1,11 +1,12 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud, X } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
 import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
-import { fetchExternalPlantImages, uploadPlantImageFromUrl, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
+import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
@@ -482,11 +483,16 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
       finalUse = 'other'
     }
     
-    return {
+    const row: { plant_id: string; link: string; use: string; added_by?: string } = {
       plant_id: plantId,
       link: img.link!.trim(),
       use: finalUse,
     }
+    // Include added_by if the image tracks who uploaded it
+    if (img.addedBy) {
+      row.added_by = img.addedBy
+    }
+    return row
   })
   
   // If no primary was set and we have images, set the first one as primary
@@ -804,7 +810,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   translation = translationData || null
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
-  const { data: images } = await supabase.from('plant_images').select('id,link,use').eq('plant_id', id)
+  const { data: images } = await supabase.from('plant_images').select('id,link,use,added_by').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: contributorRows } = await supabase
@@ -983,7 +989,12 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     // Translatable fields from plant_translations only
     seasons: seasonEnum.toUiArray(translation?.season) as Plant["seasons"],
     description: translation?.overview || undefined,
-    images: (images as PlantImage[]) || [],
+    images: (images || []).map((img: any) => ({
+      id: img.id,
+      link: img.link,
+      use: img.use,
+      addedBy: img.added_by || null,
+    })) as PlantImage[],
     // Flat watering fields (schedules stored in plant_watering_schedules table)
     wateringSchedules: normalizeSchedules(
       (schedules || []).map((row: any) => ({
@@ -1199,6 +1210,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     uploaded: number
     failed: number
   }>({ phase: 'idle', current: 0, total: 0, uploaded: 0, failed: 0 })
+  // Manual image upload dialog state
+  const [showUploadDialog, setShowUploadDialog] = React.useState(false)
+  const [manualUploading, setManualUploading] = React.useState(false)
+  const [manualUploadError, setManualUploadError] = React.useState<string | null>(null)
+  const [manualUploadResults, setManualUploadResults] = React.useState<Array<{ name: string; url: string; sizeKB: number }>>([])
+  const manualFileInputRef = React.useRef<HTMLInputElement | null>(null)
   const targetFields = React.useMemo(
     () =>
       Object.keys(plantSchema).filter(
@@ -2120,7 +2137,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         setImageUploadProgress((prev) => ({ ...prev, current: i + 1 }))
         try {
           const uploaded = await uploadPlantImageFromUrl(img.url, trimmedName, img.source)
-          // Add the storage URL to the plant
+          // Add the storage URL to the plant with addedBy tracking
+          const adminUserId = profile?.id || null
           setPlant((prev) => {
             const existing = prev.images || []
             const existingUrls = new Set(
@@ -2130,6 +2148,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             const newImage = {
               link: uploaded.url,
               use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+              addedBy: adminUserId,
             }
             return { ...prev, images: [...existing, newImage] }
           })
@@ -2152,6 +2171,61 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     } finally {
       setFetchingExternalImages(false)
     }
+  }
+
+  const handleManualImageUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return
+    const trimmedName = plant.name && typeof plant.name === 'string' ? plant.name.trim() : ''
+    if (!trimmedName) {
+      setManualUploadError('Please enter a plant name before uploading images.')
+      return
+    }
+    setManualUploading(true)
+    setManualUploadError(null)
+
+    const adminUserId = profile?.id || null
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i]
+      if (!file.type.startsWith('image/')) {
+        setManualUploadError(`"${file.name}" is not an image file. Skipped.`)
+        continue
+      }
+      if (file.size > 15 * 1024 * 1024) {
+        setManualUploadError(`"${file.name}" exceeds 15 MB. Skipped.`)
+        continue
+      }
+      try {
+        const uploaded = await uploadPlantImageFile(file, trimmedName)
+        // Append to plant images list with addedBy tracking
+        setPlant((prev) => {
+          const existing = prev.images || []
+          const existingUrls = new Set(
+            existing.map((im) => (im.link || im.url || '').toLowerCase()).filter(Boolean)
+          )
+          if (existingUrls.has(uploaded.url.toLowerCase())) return prev
+          const newImage = {
+            link: uploaded.url,
+            use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
+            addedBy: adminUserId,
+          }
+          return { ...prev, images: [...existing, newImage] }
+        })
+        setManualUploadResults((prev) => [...prev, {
+          name: file.name,
+          url: uploaded.url,
+          sizeKB: Math.round(uploaded.sizeBytes / 1024),
+        }])
+        console.log(`[CreatePlantPage] Manual upload: ${file.name} -> ${uploaded.url} (${Math.round(uploaded.sizeBytes / 1024)} KB, -${uploaded.compressionPercent}%)`)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed'
+        setManualUploadError(`Failed to upload "${file.name}": ${msg}`)
+        console.error(`[CreatePlantPage] Manual upload failed for ${file.name}:`, err)
+      }
+    }
+
+    setManualUploading(false)
+    if (manualFileInputRef.current) manualFileInputRef.current.value = ''
   }
 
   const runAiFill = async () => {
@@ -2670,6 +2744,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 {!fetchingExternalImages && <ImagePlus className="h-4 w-4" />}
                 {t('plantAdmin.fetchExternalImages', 'Fetch Images')}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => { setManualUploadError(null); setManualUploadResults([]); setShowUploadDialog(true) }}
+                disabled={!(plant.name && typeof plant.name === 'string' && plant.name.trim())}
+              >
+                <UploadCloud className="h-4 w-4" />
+                {t('plantAdmin.uploadImages', 'Upload Images')}
+              </Button>
               {externalImagesTotal !== null && !fetchingExternalImages && (
                 <span className="text-xs text-muted-foreground self-center">
                   {externalImagesTotal === 0
@@ -2993,6 +3076,82 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             plantVarieties={plantVarieties}
           />
         )}
+
+      {/* Manual Image Upload Dialog */}
+      <Dialog open={showUploadDialog} onOpenChange={setShowUploadDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UploadCloud className="h-5 w-5 text-emerald-600" />
+              Upload Plant Images
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Upload images for <strong>{plant.name || 'this plant'}</strong>. Images will be optimized to WebP and stored automatically.
+            </p>
+
+            {/* Drop zone / file picker */}
+            <div
+              className="relative rounded-xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] hover:border-emerald-300 dark:hover:border-emerald-700 p-8 text-center cursor-pointer transition-colors"
+              onClick={() => manualFileInputRef.current?.click()}
+            >
+              <input
+                ref={manualFileInputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/avif,image/heic,image/heif,image/gif,image/tiff,image/bmp"
+                multiple
+                hidden
+                onChange={(e) => handleManualImageUpload(e.target.files)}
+                disabled={manualUploading}
+              />
+              <div className="mx-auto mb-3 w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 flex items-center justify-center">
+                {manualUploading ? (
+                  <Loader2 className="h-7 w-7 text-emerald-600 animate-spin" />
+                ) : (
+                  <UploadCloud className="h-7 w-7 text-emerald-600" />
+                )}
+              </div>
+              <div className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                {manualUploading ? 'Uploading...' : 'Click to select images or drag & drop'}
+              </div>
+              <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP, AVIF, HEIC, GIF. Max 15 MB each.</p>
+            </div>
+
+            {/* Error */}
+            {manualUploadError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-200">
+                {manualUploadError}
+              </div>
+            )}
+
+            {/* Uploaded results */}
+            {manualUploadResults.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-semibold uppercase text-muted-foreground">Uploaded ({manualUploadResults.length})</span>
+                <div className="space-y-1 max-h-40 overflow-y-auto">
+                  {manualUploadResults.map((r, i) => (
+                    <div key={i} className="flex items-center gap-2 rounded-lg bg-emerald-50 dark:bg-emerald-900/20 px-3 py-2">
+                      <Check className="h-3.5 w-3.5 text-emerald-600 flex-shrink-0" />
+                      <span className="text-xs text-stone-700 dark:text-stone-200 truncate flex-1">{r.name}</span>
+                      <span className="text-xs text-muted-foreground flex-shrink-0">{r.sizeKB} KB</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Uploader info */}
+            {profile && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span>Uploading as:</span>
+                <span className="font-medium text-stone-700 dark:text-stone-200">{profile.display_name || profile.id}</span>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

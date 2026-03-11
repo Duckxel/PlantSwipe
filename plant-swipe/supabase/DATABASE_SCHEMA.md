@@ -932,6 +932,7 @@ id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
 plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 link            TEXT NOT NULL
 use             TEXT NOT NULL DEFAULT 'other'     -- CHECK: primary, discovery, other
+added_by        UUID REFERENCES auth.users(id) ON DELETE SET NULL
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE(plant_id, link)
 ```
