@@ -13,3 +13,8 @@
 **Vulnerability:** The `SENTRY_DSN` secret was hardcoded across multiple files including the server, frontend, and admin API, exposing it to potential misuse.
 **Learning:** Although some secrets like Sentry DSNs might seem less critical than database credentials, they still represent sensitive configuration data that should not be committed to version control. Treating them as environment variables not only enhances security but makes the configuration more robust and flexible for different deployment environments.
 **Prevention:** Always use environment variables (e.g., `process.env.SENTRY_DSN` or `import.meta.env.VITE_SENTRY_DSN`) to load sensitive keys and configuration during initialization. Additionally, ensure the application gracefully handles the absence of these variables in local or test environments by wrapping the initialization logic in conditional checks.
+
+## 2025-03-08 - Missing Authentication on Additional Admin Lookup Endpoints
+**Vulnerability:** The `/api/admin/member-visits-series` and `/api/admin/member-suggest` endpoints in `server.js` deliberately disabled the `await ensureAdmin(req, res)` authentication checks. This allowed unauthenticated users to enumerate registered emails and retrieve user visit histories.
+**Learning:** Disabling administrative checks to make features "universally accessible" or to mirror member lookup behavior exposes PII and sensitive user activity data. Such bypasses are extremely dangerous on administrative routes.
+**Prevention:** Always enforce strict authentication using `ensureAdmin(req, res)` or similar mechanisms on all `/api/admin/*` endpoints. If public access is genuinely needed, create a dedicated, rate-limited, and sanitized non-admin endpoint instead of compromising an admin route.
