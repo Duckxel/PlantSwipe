@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
@@ -1185,7 +1185,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
   const [aiCurrentField, setAiCurrentField] = React.useState<string | null>(null)
   const [aiFieldProgress, setAiFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
-  const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
+  const [aiStatus, setAiStatus] = React.useState<'idle' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [plantReports, setPlantReports] = React.useState<PlantReport[]>([])
   const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
@@ -2242,45 +2242,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setError(null)
     setAiCurrentField(null)
     setAiFieldProgress({ completed: 0, total: targetFields.length })
-    setAiStatus('translating_name')
+    setAiStatus('filling')
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
     let fieldsCompleted = 0
     // Capture current images at the start to preserve them throughout AI fill
     const currentImages = plant.images || []
-    
-    // First, get the English name of the plant (it might be in any language)
-    // Include the variety in the lookup so the AI has full context
-    const currentVariety = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
-    const nameForLookup = currentVariety ? `${trimmedName} ${currentVariety}` : trimmedName
-    let plantNameForAi = trimmedName
-    let extractedVariety: string | null = null
-    try {
-      const nameResult = await getEnglishPlantName(nameForLookup)
-      plantNameForAi = nameResult.englishName
-      extractedVariety = nameResult.variety || null
-      if (nameResult.wasTranslated) {
-        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
-        // Only update name/variety if the user hasn't already set them explicitly
-        setPlant((prev) => ({
-          ...prev,
-          // Only update name if the AI actually translated it (different language)
-          name: plantNameForAi,
-          // Only set variety if the user hasn't already entered one
-          ...(extractedVariety && !prev.variety ? { variety: extractedVariety } : {}),
-        }))
-      }
-    } catch (err) {
-      console.warn(`[CreatePlantPage] Failed to get English name for "${nameForLookup}", using original:`, err)
-      // Continue with original name if translation fails
-    }
-    // Include variety in the AI prompt so the AI knows the specific cultivar
-    // Prefer the user's explicitly-set variety over the AI-extracted one
-    const varietyForAi = currentVariety || extractedVariety || ''
-    const aiPromptName = varietyForAi ? `${plantNameForAi} '${varietyForAi}'` : plantNameForAi
-    
-    setAiStatus('filling')
+
+    // Build AI prompt name directly from form fields — name has already been set by this stage
+    const varietyForAi = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
+    const aiPromptName = varietyForAi ? `${trimmedName} '${varietyForAi}'` : trimmedName
     
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
@@ -2937,8 +2909,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                         : 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
                   }`}>
                     {aiStatus === 'filling' && <Loader2 className="h-3 w-3 animate-spin" />}
-                    {aiStatus === 'translating_name' ? 'Getting Name' : 
-                     aiStatus === 'filling' ? 'AI Filling' : 
+                    {aiStatus === 'filling' ? 'AI Filling' :
                      aiStatus === 'saving' ? 'Saving' : 'Processing'}
                   </div>
                 </div>
