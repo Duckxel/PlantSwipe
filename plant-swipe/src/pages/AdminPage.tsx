@@ -2024,6 +2024,10 @@ export const AdminPage: React.FC = () => {
     requester_email: string | null;
     /** Whether the requester has admin or editor roles (can create plants themselves) */
     requester_is_staff: boolean | null;
+    /** Number of unique users who requested this plant */
+    user_count: number;
+    /** Display name of the sole requester (only populated when user_count === 1) */
+    single_requester_name: string | null;
   };
   type BulkPlantRequestSummary = {
     totalInput: number;
@@ -2329,6 +2333,8 @@ export const AdminPage: React.FC = () => {
           requester_name: null as string | null,
           requester_email: null as string | null,
           requester_is_staff: requestedBy ? staffUserIdsRef.current.has(requestedBy) : null,
+          user_count: 0,
+          single_requester_name: null as string | null,
         };
       })
       .filter((row): row is PlantRequestRow => row !== null);
@@ -2373,6 +2379,83 @@ export const AdminPage: React.FC = () => {
           ? staffIds.has(row.requested_by)
           : null,
       }));
+    },
+    [],
+  );
+
+  /** Enrich rows with user_count and single_requester_name from plant_request_users + profiles */
+  const enrichRowsWithUserCounts = React.useCallback(
+    async (rows: PlantRequestRow[]): Promise<PlantRequestRow[]> => {
+      if (rows.length === 0) return rows;
+      try {
+        const requestIds = rows.map((r) => r.id);
+
+        // Batch-fetch all junction rows for these request IDs
+        const allJunctionRows: { requested_plant_id: string; user_id: string }[] = [];
+        const batchSize = 50;
+        for (let i = 0; i < requestIds.length; i += batchSize) {
+          const batch = requestIds.slice(i, i + batchSize);
+          const { data } = await supabase
+            .from("plant_request_users")
+            .select("requested_plant_id, user_id")
+            .in("requested_plant_id", batch);
+          if (data) allJunctionRows.push(...(data as { requested_plant_id: string; user_id: string }[]));
+        }
+
+        // Build a map: request_id -> Set of unique user_ids
+        const usersByRequest = new Map<string, Set<string>>();
+        for (const jr of allJunctionRows) {
+          const set = usersByRequest.get(jr.requested_plant_id) ?? new Set();
+          set.add(jr.user_id);
+          usersByRequest.set(jr.requested_plant_id, set);
+        }
+
+        // Collect user IDs that are the sole requester (user_count === 1)
+        const singleUserIds = new Set<string>();
+        for (const row of rows) {
+          const users = usersByRequest.get(row.id);
+          const count = users?.size ?? 0;
+          if (count === 1) {
+            singleUserIds.add([...users!][0]);
+          } else if (count === 0 && row.requested_by) {
+            // Fallback: if no junction rows exist, use requested_by
+            singleUserIds.add(row.requested_by);
+          }
+        }
+
+        // Fetch display_name for single-requester user IDs
+        const profileMap = new Map<string, string>();
+        if (singleUserIds.size > 0) {
+          const userIdArr = [...singleUserIds];
+          for (let i = 0; i < userIdArr.length; i += batchSize) {
+            const batch = userIdArr.slice(i, i + batchSize);
+            const { data: profiles } = await supabase
+              .from("profiles")
+              .select("id, display_name")
+              .in("id", batch);
+            if (profiles) {
+              for (const p of profiles as { id: string; display_name: string | null }[]) {
+                if (p.display_name) profileMap.set(p.id, p.display_name);
+              }
+            }
+          }
+        }
+
+        // Enrich rows
+        return rows.map((row) => {
+          const users = usersByRequest.get(row.id);
+          const userCount = users?.size ?? (row.requested_by ? 1 : 0);
+          let singleName: string | null = null;
+          if (userCount === 1) {
+            const userId = users ? [...users][0] : row.requested_by;
+            if (userId) singleName = profileMap.get(userId) ?? null;
+          }
+          return { ...row, user_count: userCount, single_requester_name: singleName };
+        });
+      } catch (err) {
+        console.error("Failed to enrich request rows with user counts:", err);
+        return rows;
+      }
     },
     [],
   );
@@ -2464,7 +2547,8 @@ export const AdminPage: React.FC = () => {
           if (nonStaffCount >= targetVisible) break;
         }
 
-        setPlantRequests(allRows);
+        const enrichedRows = await enrichRowsWithUserCounts(allRows);
+        setPlantRequests(enrichedRows);
         setPlantRequestsHasMore(!exhausted && fetchOffset < accurateCount);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -2481,7 +2565,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests],
+    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests, enrichRowsWithUserCounts],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2526,7 +2610,8 @@ export const AdminPage: React.FC = () => {
         if (newNonStaff >= targetNew) break;
       }
 
-      setPlantRequests((prev) => [...prev, ...newRows]);
+      const enrichedNewRows = await enrichRowsWithUserCounts(newRows);
+      setPlantRequests((prev) => [...prev, ...enrichedNewRows]);
       setPlantRequestsHasMore(
         !exhausted && startOffset + newRows.length < plantRequestsTotalCount,
       );
@@ -2544,6 +2629,7 @@ export const AdminPage: React.FC = () => {
     parseRequestRows,
     enrichRowsWithStaffStatus,
     hideStaffRequests,
+    enrichRowsWithUserCounts,
   ]);
 
   const loadRequestUsers = React.useCallback(
@@ -10556,15 +10642,25 @@ export const AdminPage: React.FC = () => {
                                         </Button>
                                       </div>
                                       <div className="flex items-center gap-3">
-                                        <Badge
-                                          variant="secondary"
-                                          className="rounded-xl px-2 py-1 text-xs"
-                                        >
-                                          {req.request_count}{" "}
-                                          {req.request_count === 1
-                                            ? "request"
-                                            : "requests"}
-                                        </Badge>
+                                        <div className="flex flex-col items-end gap-1">
+                                          <Badge
+                                            variant="secondary"
+                                            className="rounded-xl px-2 py-1 text-xs"
+                                          >
+                                            {req.request_count}{" "}
+                                            {req.request_count === 1
+                                              ? "request"
+                                              : "requests"}
+                                          </Badge>
+                                          {req.user_count > 0 && (
+                                            <span className="text-[10px] text-stone-500 dark:text-stone-400 flex items-center gap-1">
+                                              <Users className="h-3 w-3" />
+                                              {req.user_count === 1 && req.single_requester_name
+                                                ? req.single_requester_name
+                                                : `${req.user_count} ${req.user_count === 1 ? "user" : "users"}`}
+                                            </span>
+                                          )}
+                                        </div>
                                         <Button
                                           variant="default"
                                           className="rounded-2xl"
