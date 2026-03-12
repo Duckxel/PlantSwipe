@@ -5,7 +5,7 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
-import { fetchAiPlantFill, fetchAiPlantFillField, getEnglishPlantName } from "@/lib/aiPlantFill"
+import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
@@ -15,7 +15,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
-import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
@@ -87,7 +87,7 @@ const ALLOWED_SUBSTRATE = new Set(['garden_soil','topsoil','loam','clay_soil','s
 const ALLOWED_MULCH_TYPE = new Set(['straw','hay','dead_leaves','dried_grass_clippings','pine_needles','dried_fern','crushed_miscanthus','flax_straw','hemp','untreated_wood_shavings','pine_bark','hardwood_bark','ramial_chipped_wood','fresh_grass_clippings','shredded_garden_waste','shredded_pruning_waste','cocoa_shells','buckwheat_hulls','flax_mulch','hemp_mulch','unprinted_brown_cardboard','kraft_paper','newspaper_vegetal_ink','forest_litter','fragmented_deadwood','oak_leaves','hazel_leaves','beech_leaves','gravel','pebbles','pozzolane','crushed_slate','schist','crushed_brick','decorative_sand','volcanic_rock','surface_clay_pebbles','clover','ivy','bugle','creeping_thyme','strawberry','vinca','sedum','natural_lawn','cardboard','kraft','burlap','biodegradable_fabric','crushed_eggshell','walnut_shells','hazelnut_shells','mixed_coffee_grounds'])
 const ALLOWED_ECOLOGICAL_STATUS = new Set(['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile'])
 const ALLOWED_BIOTOPES = new Set(['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory'])
-const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
+const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','greenhouse','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
 const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'])
 
 const AI_EXCLUDED_FIELDS = new Set([
@@ -1185,7 +1185,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
   const [aiCurrentField, setAiCurrentField] = React.useState<string | null>(null)
   const [aiFieldProgress, setAiFieldProgress] = React.useState<{ completed: number; total: number }>({ completed: 0, total: 0 })
-  const [aiStatus, setAiStatus] = React.useState<'idle' | 'translating_name' | 'filling' | 'saving'>('idle')
+  const [aiStatus, setAiStatus] = React.useState<'idle' | 'filling' | 'saving'>('idle')
   const [existingLoaded, setExistingLoaded] = React.useState(false)
   const [plantReports, setPlantReports] = React.useState<PlantReport[]>([])
   const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
@@ -1704,6 +1704,29 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         let savedId = plantId
         let payloadUpdatedTime: string | null = null
         const normalizedStatus = (plantToSave.status || plantToSave.meta?.status || 'in_progress').toLowerCase().replace(' ', '_')
+
+        // Pre-save cleanup: clear fields that are gated off by boolean toggles or missing utility values
+        // This prevents stale data from being saved when a user disables a toggle (e.g., Medicinal Use)
+        const pRaw = plantToSave as any
+        // Boolean gates: if the gate field is false, clear all dependent fields
+        for (const [gate, deps] of Object.entries(BOOLEAN_GATE_DEPS)) {
+          if (pRaw[gate] === false) {
+            for (const dep of deps) {
+              pRaw[dep] = null
+            }
+          }
+        }
+        // Utility gates: if the utility array doesn't include the value, clear dependent fields
+        const utilityArr = Array.isArray(pRaw.utility) ? (pRaw.utility as string[]) : []
+        const utilityNormalized = new Set(utilityArr.map(u => typeof u === 'string' ? u.toLowerCase().replace(/[_\s-]/g, '') : ''))
+        for (const [utilVal, deps] of Object.entries(UTILITY_GATE_DEPS)) {
+          const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+          if (!utilityNormalized.has(needle)) {
+            for (const dep of deps) {
+              pRaw[dep] = null
+            }
+          }
+        }
 
         // STEP 1: Save/update the base plant record (non-translatable fields)
         // For English (first save): create the plant record with all base data
@@ -2242,42 +2265,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     setError(null)
     setAiCurrentField(null)
     setAiFieldProgress({ completed: 0, total: targetFields.length })
-    setAiStatus('translating_name')
+    setAiStatus('filling')
 
     let aiSucceeded = false
     let finalPlant: Plant | null = null
     let fieldsCompleted = 0
     // Capture current images at the start to preserve them throughout AI fill
     const currentImages = plant.images || []
-    
-    // First, get the English name of the plant (it might be in any language)
-    // The endpoint now returns name and variety separately
-    let plantNameForAi = trimmedName
-    let extractedVariety: string | null = null
-    try {
-      const nameResult = await getEnglishPlantName(trimmedName)
-      plantNameForAi = nameResult.englishName
-      extractedVariety = nameResult.variety || null
-      if (nameResult.wasTranslated) {
-        console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
-        // Update the plant name to the English version (base name only, without variety)
-        setPlant((prev) => ({
-          ...prev,
-          name: plantNameForAi,
-          // Set variety if AI extracted one and plant doesn't already have one
-          ...(extractedVariety && !prev.variety ? { variety: extractedVariety } : {}),
-        }))
-      }
-    } catch (err) {
-      console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
-      // Continue with original name if translation fails
-    }
-    // Include variety in the AI prompt so the AI knows the specific cultivar,
-    // but keep it separate from plantNameForAi so it doesn't contaminate the name field
-    const varietyForAi = extractedVariety || (plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : '') || ''
-    const aiPromptName = varietyForAi ? `${plantNameForAi} (variety: '${varietyForAi}')` : plantNameForAi
-    
-    setAiStatus('filling')
+
+    // Build AI prompt name directly from form fields — name has already been set by this stage
+    const varietyForAi = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
+    const aiPromptName = varietyForAi ? `${trimmedName} '${varietyForAi}'` : trimmedName
     
     const applyWithStatus = (candidate: Plant): Plant => ({
       ...candidate,
@@ -2934,8 +2932,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                         : 'bg-violet-100 dark:bg-violet-900/30 text-violet-700 dark:text-violet-300'
                   }`}>
                     {aiStatus === 'filling' && <Loader2 className="h-3 w-3 animate-spin" />}
-                    {aiStatus === 'translating_name' ? 'Getting Name' : 
-                     aiStatus === 'filling' ? 'AI Filling' : 
+                    {aiStatus === 'filling' ? 'AI Filling' :
                      aiStatus === 'saving' ? 'Saving' : 'Processing'}
                   </div>
                 </div>

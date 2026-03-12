@@ -703,7 +703,7 @@ ecological_status         TEXT[]                 -- CHECK (28 values): indigenou
 
 -- Section 6: Ecology — Habitats
 biotopes                  TEXT[]                 -- CHECK (67 values): Forest, prairie, wetland, dry/mineral, coastal, mountain, tropical biotopes
-urban_biotopes            TEXT[]                 -- CHECK (11 values): urban_garden, periurban_garden, park, urban_wasteland, green_wall, green_roof, balcony, agricultural_hedge, cultivated_orchard, vegetable_garden, roadside
+urban_biotopes            TEXT[]                 -- CHECK (12 values): urban_garden, periurban_garden, park, urban_wasteland, green_wall, green_roof, balcony, greenhouse, agricultural_hedge, cultivated_orchard, vegetable_garden, roadside
 
 -- Section 6: Ecology — Tolerance & roles
 ecological_tolerance      TEXT[]                 -- CHECK: drought, scorching_sun, permanent_shade, excess_water, frost, heatwave, wind

@@ -131,7 +131,7 @@ const normalizeMonthArray = (value: unknown): string[] => {
 
 // Fields that AI should never overwrite
 const IGNORED_FIELDS = new Set([
-  'id', 'name', 'images', 'image', 'status',
+  'id', 'name', 'variety', 'images', 'image', 'status',
   'createdBy', 'createdTime', 'updatedBy', 'updatedTime',
   // Plant relation fields are suggestion-only — AI must not write IDs directly
   'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',

@@ -39,9 +39,10 @@ import {
   recipeCategoryEnum,
   recipeTimeEnum,
 } from "@/lib/composition"
+import { BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS } from "@/lib/plantFormCategories"
 
 const AI_EXCLUDED_FIELDS = new Set([
-  'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
+  'name', 'variety', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
   'meta', 'adminCommentary', 'contributors', 'status',
   // Featured months — curated by admin
@@ -683,6 +684,27 @@ export async function processPlantRequest(
     const requestContributors = await fetchRequestContributors(requestId)
     const contributors = mergeContributorNames(requestContributors, [createdBy])
     
+    // Pre-save cleanup: clear fields that are gated off by boolean toggles or missing utility values
+    // This prevents AI-filled data from being saved when its gate is disabled
+    const pRaw = plant as any
+    for (const [gate, deps] of Object.entries(BOOLEAN_GATE_DEPS)) {
+      if (pRaw[gate] === false) {
+        for (const dep of deps) {
+          pRaw[dep] = null
+        }
+      }
+    }
+    const utilityArr = Array.isArray(pRaw.utility) ? (pRaw.utility as string[]) : []
+    const utilityNormalized = new Set(utilityArr.map((u: string) => typeof u === 'string' ? u.toLowerCase().replace(/[_\s-]/g, '') : ''))
+    for (const [utilVal, deps] of Object.entries(UTILITY_GATE_DEPS)) {
+      const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+      if (!utilityNormalized.has(needle)) {
+        for (const dep of deps) {
+          pRaw[dep] = null
+        }
+      }
+    }
+
     // Save base plant record — maps flat Plant fields to snake_case DB columns
     const basePayload = {
       id: plantId,
