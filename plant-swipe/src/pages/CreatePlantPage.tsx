@@ -2251,31 +2251,34 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const currentImages = plant.images || []
     
     // First, get the English name of the plant (it might be in any language)
-    // The endpoint now returns name and variety separately
+    // Include the variety in the lookup so the AI has full context
+    const currentVariety = plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : ''
+    const nameForLookup = currentVariety ? `${trimmedName} ${currentVariety}` : trimmedName
     let plantNameForAi = trimmedName
     let extractedVariety: string | null = null
     try {
-      const nameResult = await getEnglishPlantName(trimmedName)
+      const nameResult = await getEnglishPlantName(nameForLookup)
       plantNameForAi = nameResult.englishName
       extractedVariety = nameResult.variety || null
       if (nameResult.wasTranslated) {
         console.log(`[CreatePlantPage] Translated plant name: "${trimmedName}" -> "${plantNameForAi}"${extractedVariety ? ` (variety: ${extractedVariety})` : ''}`)
-        // Update the plant name to the English version (base name only, without variety)
+        // Only update name/variety if the user hasn't already set them explicitly
         setPlant((prev) => ({
           ...prev,
+          // Only update name if the AI actually translated it (different language)
           name: plantNameForAi,
-          // Set variety if AI extracted one and plant doesn't already have one
+          // Only set variety if the user hasn't already entered one
           ...(extractedVariety && !prev.variety ? { variety: extractedVariety } : {}),
         }))
       }
     } catch (err) {
-      console.warn(`[CreatePlantPage] Failed to get English name for "${trimmedName}", using original:`, err)
+      console.warn(`[CreatePlantPage] Failed to get English name for "${nameForLookup}", using original:`, err)
       // Continue with original name if translation fails
     }
-    // Include variety in the AI prompt so the AI knows the specific cultivar,
-    // but keep it separate from plantNameForAi so it doesn't contaminate the name field
-    const varietyForAi = extractedVariety || (plant.variety && typeof plant.variety === 'string' ? plant.variety.trim() : '') || ''
-    const aiPromptName = varietyForAi ? `${plantNameForAi} (variety: '${varietyForAi}')` : plantNameForAi
+    // Include variety in the AI prompt so the AI knows the specific cultivar
+    // Prefer the user's explicitly-set variety over the AI-extracted one
+    const varietyForAi = currentVariety || extractedVariety || ''
+    const aiPromptName = varietyForAi ? `${plantNameForAi} '${varietyForAi}'` : plantNameForAi
     
     setAiStatus('filling')
     

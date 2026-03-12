@@ -41,7 +41,7 @@ import {
 } from "@/lib/composition"
 
 const AI_EXCLUDED_FIELDS = new Set([
-  'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
+  'name', 'variety', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
   'meta', 'adminCommentary', 'contributors', 'status',
   // Featured months — curated by admin

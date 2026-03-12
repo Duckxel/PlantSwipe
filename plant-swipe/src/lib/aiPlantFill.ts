@@ -198,7 +198,7 @@ export async function fetchAiPlantFill({
     return payload.data
   }
 
-  const disallowedFields = new Set(['name', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
+  const disallowedFields = new Set(['name', 'variety', 'image', 'imageurl', 'image_url', 'imageURL', 'images', 'meta'])
   const allowedSet = Array.isArray(fields) && fields.length ? new Set(fields) : null
   const schemaKeys = Object.keys(schemaObject)
   const filteredKeys = allowedSet
