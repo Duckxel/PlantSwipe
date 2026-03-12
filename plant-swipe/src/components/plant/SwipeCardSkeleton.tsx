@@ -1,7 +1,8 @@
 import { Card } from "@/components/ui/card"
+import React from "react"
 import { Skeleton } from "@/components/ui/skeleton"
 
-export const SwipeCardSkeleton = () => {
+const SwipeCardSkeletonComponent = () => {
   const desktopCardHeight = "min(720px, calc(100vh - 12rem))"
 
   return (
@@ -67,3 +68,6 @@ export const SwipeCardSkeleton = () => {
     </>
   )
 }
+
+// ⚡ Bolt Optimization: Memoize the skeleton to prevent unnecessary re-renders during loading state transitions
+export const SwipeCardSkeleton = React.memo(SwipeCardSkeletonComponent)
