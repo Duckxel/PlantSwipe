@@ -92,7 +92,21 @@ import {
   Zap,
   Trophy,
   CheckCircle2,
+  SlidersHorizontal,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuCheckboxItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { SearchInput } from "@/components/ui/search-input";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
@@ -422,6 +436,69 @@ const FEATURED_MONTH_LABELS: Record<FeaturedMonthSlug, string> = {
   december: "Dec",
 };
 
+// -- Quick-action label maps --------------------------------------------------
+
+const LIVING_SPACE_OPTIONS = [
+  { value: "indoor", label: "Indoor" },
+  { value: "outdoor", label: "Outdoor" },
+  { value: "terrarium", label: "Terrarium" },
+  { value: "greenhouse", label: "Greenhouse" },
+] as const;
+
+const PLANT_TYPE_OPTIONS = [
+  { value: "herb", label: "Herb" },
+  { value: "shrub", label: "Shrub" },
+  { value: "tree", label: "Tree" },
+  { value: "climber", label: "Climber" },
+  { value: "succulent", label: "Succulent" },
+  { value: "fern", label: "Fern" },
+  { value: "moss", label: "Moss" },
+  { value: "grass", label: "Grass" },
+] as const;
+
+const CLIMATE_OPTIONS = [
+  { value: "polar", label: "Polar" },
+  { value: "montane", label: "Montane" },
+  { value: "oceanic", label: "Oceanic" },
+  { value: "degraded_oceanic", label: "Degraded Oceanic" },
+  { value: "temperate_continental", label: "Temperate Continental" },
+  { value: "mediterranean", label: "Mediterranean" },
+  { value: "tropical_dry", label: "Tropical Dry" },
+  { value: "tropical_humid", label: "Tropical Humid" },
+  { value: "tropical_volcanic", label: "Tropical Volcanic" },
+  { value: "tropical_cyclonic", label: "Tropical Cyclonic" },
+  { value: "humid_insular", label: "Humid Insular" },
+  { value: "subtropical_humid", label: "Subtropical Humid" },
+  { value: "equatorial", label: "Equatorial" },
+  { value: "windswept_coastal", label: "Windswept Coastal" },
+] as const;
+
+const TOXICITY_OPTIONS = [
+  { value: "non_toxic", label: "Non-toxic" },
+  { value: "slightly_toxic", label: "Slightly Toxic" },
+  { value: "very_toxic", label: "Very Toxic" },
+  { value: "deadly", label: "Deadly" },
+  { value: "undetermined", label: "Undetermined" },
+] as const;
+
+const SUNLIGHT_OPTIONS = [
+  { value: "full_sun", label: "Full Sun" },
+  { value: "partial_sun", label: "Partial Sun" },
+  { value: "partial_shade", label: "Partial Shade" },
+  { value: "light_shade", label: "Light Shade" },
+  { value: "deep_shade", label: "Deep Shade" },
+  { value: "direct_light", label: "Direct Light" },
+  { value: "bright_indirect_light", label: "Bright Indirect Light" },
+  { value: "medium_light", label: "Medium Light" },
+  { value: "low_light", label: "Low Light" },
+] as const;
+
+const CARE_LEVEL_OPTIONS = [
+  { value: "easy", label: "Easy" },
+  { value: "moderate", label: "Moderate" },
+  { value: "complex", label: "Complex" },
+] as const;
+
 type PlantDashboardRow = {
   id: string;
   name: string;
@@ -437,6 +514,14 @@ type PlantDashboardRow = {
   likesCount: number;
   viewsCount: number;
   imagesCount: number;
+  // Quick-action fields
+  livingSpace: string[];
+  plantType: string | null;
+  climate: string[];
+  toxicityHuman: string | null;
+  toxicityPets: string | null;
+  sunlight: string[];
+  careLevel: string[];
 };
 
 type PlantSortOption = "status" | "updated" | "created" | "name" | "gardens" | "likes" | "views" | "images";
@@ -3185,6 +3270,13 @@ export const AdminPage: React.FC = () => {
             featured_month,
             updated_time,
             created_time,
+            living_space,
+            plant_type,
+            climate,
+            toxicity_human,
+            toxicity_pets,
+            sunlight,
+            care_level,
             plant_images (
               link,
               use
@@ -3349,6 +3441,13 @@ export const AdminPage: React.FC = () => {
               likesCount: likesCountMap.get(plantId) ?? 0,
               viewsCount: viewsCountMap.get(plantId) ?? 0,
               imagesCount: images.length,
+              livingSpace: Array.isArray(r?.living_space) ? (r.living_space as string[]) : [],
+              plantType: r?.plant_type ? String(r.plant_type) : null,
+              climate: Array.isArray(r?.climate) ? (r.climate as string[]) : [],
+              toxicityHuman: r?.toxicity_human ? String(r.toxicity_human) : null,
+              toxicityPets: r?.toxicity_pets ? String(r.toxicity_pets) : null,
+              sunlight: Array.isArray(r?.sunlight) ? (r.sunlight as string[]) : [],
+              careLevel: Array.isArray(r?.care_level) ? (r.care_level as string[]) : [],
             } as PlantDashboardRow;
         })
         .filter((row): row is PlantDashboardRow => row !== null);
@@ -3517,6 +3616,55 @@ export const AdminPage: React.FC = () => {
       setBulkActionLoading(false);
     }
   }, [selectedPlantIds]);
+
+  // Quick-action: update a single plant field (single value or array toggle)
+  const handleQuickPlantUpdate = React.useCallback(
+    async (
+      plantId: string,
+      dbColumn: string,
+      localKey: keyof PlantDashboardRow,
+      value: unknown,
+      mode: "set" | "toggle-array",
+    ) => {
+      try {
+        let newValue: unknown;
+        if (mode === "set") {
+          newValue = value;
+        } else {
+          // toggle inside array
+          const current = (() => {
+            const row = plantDashboardRows.find((p) => p.id === plantId);
+            if (!row) return [];
+            const v = row[localKey];
+            return Array.isArray(v) ? [...v] : [];
+          })();
+          const strVal = String(value);
+          if (current.includes(strVal)) {
+            newValue = current.filter((v: string) => v !== strVal);
+          } else {
+            newValue = [...current, strVal];
+          }
+        }
+        const { error } = await supabase
+          .from("plants")
+          .update({ [dbColumn]: newValue })
+          .eq("id", plantId);
+        if (error) throw new Error(error.message);
+        // Update local state
+        setPlantDashboardRows((prev) =>
+          prev.map((p) =>
+            p.id === plantId ? { ...p, [localKey]: newValue } : p,
+          ),
+        );
+      } catch (err) {
+        console.error("Quick plant update error:", err);
+        setPlantDashboardError(
+          err instanceof Error ? err.message : "Failed to update plant",
+        );
+      }
+    },
+    [plantDashboardRows],
+  );
 
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
@@ -9239,6 +9387,220 @@ export const AdminPage: React.FC = () => {
                                           />
                                           {PLANT_STATUS_LABELS[plant.status]}
                                         </span>
+
+                                        {/* Quick Actions Dropdown */}
+                                        <DropdownMenu>
+                                          <DropdownMenuTrigger asChild>
+                                            <button
+                                              type="button"
+                                              onClick={(e) => e.stopPropagation()}
+                                              className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-violet-100 dark:hover:bg-violet-900/30 text-stone-400 hover:text-violet-600 dark:hover:text-violet-400 transition-all"
+                                              title="Quick actions"
+                                            >
+                                              <SlidersHorizontal className="h-4 w-4" />
+                                            </button>
+                                          </DropdownMenuTrigger>
+                                          <DropdownMenuContent
+                                            align="end"
+                                            className="w-56 max-h-[70vh] overflow-y-auto"
+                                            onClick={(e) => e.stopPropagation()}
+                                          >
+                                            <DropdownMenuLabel>Quick Edit</DropdownMenuLabel>
+                                            <DropdownMenuSeparator />
+
+                                            {/* Living Space (array) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Living Space
+                                                {plant.livingSpace.length > 0 && (
+                                                  <span className="ml-auto text-[10px] text-stone-400">{plant.livingSpace.length}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent>
+                                                {LIVING_SPACE_OPTIONS.map((opt) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={opt.value}
+                                                    checked={plant.livingSpace.includes(opt.value)}
+                                                    onCheckedChange={() =>
+                                                      handleQuickPlantUpdate(plant.id, "living_space", "livingSpace", opt.value, "toggle-array")
+                                                    }
+                                                  >
+                                                    {opt.label}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            {/* Plant Type (single) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Plant Type
+                                                {plant.plantType && (
+                                                  <span className="ml-auto text-[10px] text-stone-400 capitalize">{plant.plantType}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent>
+                                                <DropdownMenuRadioGroup
+                                                  value={plant.plantType ?? ""}
+                                                  onValueChange={(v) =>
+                                                    handleQuickPlantUpdate(plant.id, "plant_type", "plantType", v, "set")
+                                                  }
+                                                >
+                                                  {PLANT_TYPE_OPTIONS.map((opt) => (
+                                                    <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                      {opt.label}
+                                                    </DropdownMenuRadioItem>
+                                                  ))}
+                                                </DropdownMenuRadioGroup>
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            {/* Climate (array) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Climate
+                                                {plant.climate.length > 0 && (
+                                                  <span className="ml-auto text-[10px] text-stone-400">{plant.climate.length}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                                {CLIMATE_OPTIONS.map((opt) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={opt.value}
+                                                    checked={plant.climate.includes(opt.value)}
+                                                    onCheckedChange={() =>
+                                                      handleQuickPlantUpdate(plant.id, "climate", "climate", opt.value, "toggle-array")
+                                                    }
+                                                  >
+                                                    {opt.label}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            {/* Featured Month (array) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Featured Month
+                                                {plant.featuredMonths.length > 0 && (
+                                                  <span className="ml-auto text-[10px] text-stone-400">{plant.featuredMonths.length}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                                {FEATURED_MONTH_SLUGS.map((slug) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={slug}
+                                                    checked={plant.featuredMonths.includes(slug)}
+                                                    onCheckedChange={() =>
+                                                      handleQuickPlantUpdate(plant.id, "featured_month", "featuredMonths", slug, "toggle-array")
+                                                    }
+                                                  >
+                                                    {FEATURED_MONTH_LABELS[slug]}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            <DropdownMenuSeparator />
+
+                                            {/* Toxicity - Human (single) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Toxicity (Human)
+                                                {plant.toxicityHuman && (
+                                                  <span className="ml-auto text-[10px] text-stone-400 capitalize">{plant.toxicityHuman.replace(/_/g, " ")}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent>
+                                                <DropdownMenuRadioGroup
+                                                  value={plant.toxicityHuman ?? ""}
+                                                  onValueChange={(v) =>
+                                                    handleQuickPlantUpdate(plant.id, "toxicity_human", "toxicityHuman", v, "set")
+                                                  }
+                                                >
+                                                  {TOXICITY_OPTIONS.map((opt) => (
+                                                    <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                      {opt.label}
+                                                    </DropdownMenuRadioItem>
+                                                  ))}
+                                                </DropdownMenuRadioGroup>
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            {/* Toxicity - Pets (single) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Toxicity (Pets)
+                                                {plant.toxicityPets && (
+                                                  <span className="ml-auto text-[10px] text-stone-400 capitalize">{plant.toxicityPets.replace(/_/g, " ")}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent>
+                                                <DropdownMenuRadioGroup
+                                                  value={plant.toxicityPets ?? ""}
+                                                  onValueChange={(v) =>
+                                                    handleQuickPlantUpdate(plant.id, "toxicity_pets", "toxicityPets", v, "set")
+                                                  }
+                                                >
+                                                  {TOXICITY_OPTIONS.map((opt) => (
+                                                    <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                      {opt.label}
+                                                    </DropdownMenuRadioItem>
+                                                  ))}
+                                                </DropdownMenuRadioGroup>
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            <DropdownMenuSeparator />
+
+                                            {/* Sunlight Exposure (array) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Sunlight
+                                                {plant.sunlight.length > 0 && (
+                                                  <span className="ml-auto text-[10px] text-stone-400">{plant.sunlight.length}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                                {SUNLIGHT_OPTIONS.map((opt) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={opt.value}
+                                                    checked={plant.sunlight.includes(opt.value)}
+                                                    onCheckedChange={() =>
+                                                      handleQuickPlantUpdate(plant.id, "sunlight", "sunlight", opt.value, "toggle-array")
+                                                    }
+                                                  >
+                                                    {opt.label}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+
+                                            {/* Care Level (array) */}
+                                            <DropdownMenuSub>
+                                              <DropdownMenuSubTrigger>
+                                                Care Level
+                                                {plant.careLevel.length > 0 && (
+                                                  <span className="ml-auto text-[10px] text-stone-400">{plant.careLevel.length}</span>
+                                                )}
+                                              </DropdownMenuSubTrigger>
+                                              <DropdownMenuSubContent>
+                                                {CARE_LEVEL_OPTIONS.map((opt) => (
+                                                  <DropdownMenuCheckboxItem
+                                                    key={opt.value}
+                                                    checked={plant.careLevel.includes(opt.value)}
+                                                    onCheckedChange={() =>
+                                                      handleQuickPlantUpdate(plant.id, "care_level", "careLevel", opt.value, "toggle-array")
+                                                    }
+                                                  >
+                                                    {opt.label}
+                                                  </DropdownMenuCheckboxItem>
+                                                ))}
+                                              </DropdownMenuSubContent>
+                                            </DropdownMenuSub>
+                                          </DropdownMenuContent>
+                                        </DropdownMenu>
+
                                         <a
                                           href={`/plants/${plant.id}`}
                                           target="_blank"
