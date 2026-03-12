@@ -3666,6 +3666,74 @@ export const AdminPage: React.FC = () => {
     [plantDashboardRows],
   );
 
+  // Bulk quick-action: update a field for all selected plants
+  const handleBulkQuickUpdate = React.useCallback(
+    async (
+      dbColumn: string,
+      localKey: keyof PlantDashboardRow,
+      value: unknown,
+      mode: "set" | "toggle-array",
+    ) => {
+      if (selectedPlantIds.size === 0) return;
+      setBulkActionLoading(true);
+      try {
+        const ids = Array.from(selectedPlantIds);
+        if (mode === "set") {
+          // Same value for all selected plants
+          const batchSize = 50;
+          for (let i = 0; i < ids.length; i += batchSize) {
+            const batch = ids.slice(i, i + batchSize);
+            const { error } = await supabase
+              .from("plants")
+              .update({ [dbColumn]: value })
+              .in("id", batch);
+            if (error) throw new Error(error.message);
+          }
+          setPlantDashboardRows((prev) =>
+            prev.map((p) =>
+              selectedPlantIds.has(p.id) ? { ...p, [localKey]: value } : p,
+            ),
+          );
+        } else {
+          // Toggle array: for each plant, toggle the value in the array individually
+          const strVal = String(value);
+          const updates: { id: string; newValue: string[] }[] = [];
+          for (const id of ids) {
+            const row = plantDashboardRows.find((p) => p.id === id);
+            if (!row) continue;
+            const current = Array.isArray(row[localKey]) ? [...(row[localKey] as string[])] : [];
+            const newValue = current.includes(strVal)
+              ? current.filter((v) => v !== strVal)
+              : [...current, strVal];
+            updates.push({ id, newValue });
+          }
+          // Batch update each plant individually for array toggles
+          for (const { id, newValue } of updates) {
+            const { error } = await supabase
+              .from("plants")
+              .update({ [dbColumn]: newValue })
+              .eq("id", id);
+            if (error) throw new Error(error.message);
+          }
+          setPlantDashboardRows((prev) =>
+            prev.map((p) => {
+              const upd = updates.find((u) => u.id === p.id);
+              return upd ? { ...p, [localKey]: upd.newValue } : p;
+            }),
+          );
+        }
+      } catch (err) {
+        console.error("Bulk quick update error:", err);
+        setPlantDashboardError(
+          err instanceof Error ? err.message : "Failed to bulk update plants",
+        );
+      } finally {
+        setBulkActionLoading(false);
+      }
+    },
+    [selectedPlantIds, plantDashboardRows],
+  );
+
   const plantStatusCounts = React.useMemo(() => {
     return plantDashboardRows.reduce(
       (acc, plant) => {
@@ -9212,6 +9280,178 @@ export const AdminPage: React.FC = () => {
                                       <Pencil className="h-3.5 w-3.5" />
                                       Change Status
                                     </button>
+
+                                    {/* Bulk Quick Edit Dropdown */}
+                                    <DropdownMenu>
+                                      <DropdownMenuTrigger asChild>
+                                        <button
+                                          type="button"
+                                          className="flex items-center gap-1.5 rounded-lg border border-violet-300 dark:border-violet-700 bg-white dark:bg-[#1a1a1d] px-3 py-1.5 text-xs font-medium text-violet-700 dark:text-violet-300 hover:bg-violet-100 dark:hover:bg-violet-900/40 transition-colors"
+                                          disabled={bulkActionLoading}
+                                        >
+                                          <SlidersHorizontal className="h-3.5 w-3.5" />
+                                          Quick Edit
+                                        </button>
+                                      </DropdownMenuTrigger>
+                                      <DropdownMenuContent align="end" className="w-56 max-h-[70vh] overflow-y-auto">
+                                        <DropdownMenuLabel>
+                                          Edit {selectedPlantIds.size} {selectedPlantIds.size === 1 ? "plant" : "plants"}
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+
+                                        {/* Living Space */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Living Space</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            {LIVING_SPACE_OPTIONS.map((opt) => (
+                                              <DropdownMenuCheckboxItem
+                                                key={opt.value}
+                                                checked={false}
+                                                onCheckedChange={() =>
+                                                  handleBulkQuickUpdate("living_space", "livingSpace", opt.value, "toggle-array")
+                                                }
+                                              >
+                                                {opt.label}
+                                              </DropdownMenuCheckboxItem>
+                                            ))}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        {/* Plant Type */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Plant Type</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            <DropdownMenuRadioGroup
+                                              value=""
+                                              onValueChange={(v) =>
+                                                handleBulkQuickUpdate("plant_type", "plantType", v, "set")
+                                              }
+                                            >
+                                              {PLANT_TYPE_OPTIONS.map((opt) => (
+                                                <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                  {opt.label}
+                                                </DropdownMenuRadioItem>
+                                              ))}
+                                            </DropdownMenuRadioGroup>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        {/* Climate */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Climate</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                            {CLIMATE_OPTIONS.map((opt) => (
+                                              <DropdownMenuCheckboxItem
+                                                key={opt.value}
+                                                checked={false}
+                                                onCheckedChange={() =>
+                                                  handleBulkQuickUpdate("climate", "climate", opt.value, "toggle-array")
+                                                }
+                                              >
+                                                {opt.label}
+                                              </DropdownMenuCheckboxItem>
+                                            ))}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        {/* Featured Month */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Featured Month</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                            {FEATURED_MONTH_SLUGS.map((slug) => (
+                                              <DropdownMenuCheckboxItem
+                                                key={slug}
+                                                checked={false}
+                                                onCheckedChange={() =>
+                                                  handleBulkQuickUpdate("featured_month", "featuredMonths", slug, "toggle-array")
+                                                }
+                                              >
+                                                {FEATURED_MONTH_LABELS[slug]}
+                                              </DropdownMenuCheckboxItem>
+                                            ))}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        <DropdownMenuSeparator />
+
+                                        {/* Toxicity Human */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Toxicity (Human)</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            <DropdownMenuRadioGroup
+                                              value=""
+                                              onValueChange={(v) =>
+                                                handleBulkQuickUpdate("toxicity_human", "toxicityHuman", v, "set")
+                                              }
+                                            >
+                                              {TOXICITY_OPTIONS.map((opt) => (
+                                                <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                  {opt.label}
+                                                </DropdownMenuRadioItem>
+                                              ))}
+                                            </DropdownMenuRadioGroup>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        {/* Toxicity Pets */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Toxicity (Pets)</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            <DropdownMenuRadioGroup
+                                              value=""
+                                              onValueChange={(v) =>
+                                                handleBulkQuickUpdate("toxicity_pets", "toxicityPets", v, "set")
+                                              }
+                                            >
+                                              {TOXICITY_OPTIONS.map((opt) => (
+                                                <DropdownMenuRadioItem key={opt.value} value={opt.value}>
+                                                  {opt.label}
+                                                </DropdownMenuRadioItem>
+                                              ))}
+                                            </DropdownMenuRadioGroup>
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        <DropdownMenuSeparator />
+
+                                        {/* Sunlight */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Sunlight</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent className="max-h-60 overflow-y-auto">
+                                            {SUNLIGHT_OPTIONS.map((opt) => (
+                                              <DropdownMenuCheckboxItem
+                                                key={opt.value}
+                                                checked={false}
+                                                onCheckedChange={() =>
+                                                  handleBulkQuickUpdate("sunlight", "sunlight", opt.value, "toggle-array")
+                                                }
+                                              >
+                                                {opt.label}
+                                              </DropdownMenuCheckboxItem>
+                                            ))}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+
+                                        {/* Care Level */}
+                                        <DropdownMenuSub>
+                                          <DropdownMenuSubTrigger>Care Level</DropdownMenuSubTrigger>
+                                          <DropdownMenuSubContent>
+                                            {CARE_LEVEL_OPTIONS.map((opt) => (
+                                              <DropdownMenuCheckboxItem
+                                                key={opt.value}
+                                                checked={false}
+                                                onCheckedChange={() =>
+                                                  handleBulkQuickUpdate("care_level", "careLevel", opt.value, "toggle-array")
+                                                }
+                                              >
+                                                {opt.label}
+                                              </DropdownMenuCheckboxItem>
+                                            ))}
+                                          </DropdownMenuSubContent>
+                                        </DropdownMenuSub>
+                                      </DropdownMenuContent>
+                                    </DropdownMenu>
+
                                     <button
                                       type="button"
                                       onClick={() => setBulkDeleteDialogOpen(true)}
