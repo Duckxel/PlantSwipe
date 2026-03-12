@@ -112,6 +112,8 @@ export interface PlantImage {
   url?: string
   isPrimary?: boolean
   isVertical?: boolean
+  /** UUID of the admin user who uploaded this image */
+  addedBy?: string | null
   [key: string]: unknown
 }
 

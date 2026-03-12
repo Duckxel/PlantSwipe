@@ -5363,11 +5363,10 @@ app.post('/api/admin/plant-images/upload-from-url', async (req, res) => {
         if (supabaseServiceClient) {
           const { data: profile } = await supabaseServiceClient
             .from('profiles')
-            .select('display_name, email')
+            .select('display_name')
             .eq('id', userId)
             .maybeSingle()
           if (profile) {
-            adminEmail = profile.email || null
             adminName = profile.display_name || null
           }
         }
@@ -5392,6 +5391,65 @@ app.post('/api/admin/plant-images/upload-from-url', async (req, res) => {
   }
 })
 app.options('/api/admin/plant-images/upload-from-url', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Upload a plant image from a local file (optimizes to WebP, stores in PLANTS bucket)
+app.post('/api/admin/plant-images/upload-file', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    let adminId = null, adminEmail = null, adminName = null
+    try {
+      const userId = await getUserIdFromRequest(req)
+      if (userId) {
+        adminId = userId
+        if (supabaseServiceClient) {
+          const { data: profile } = await supabaseServiceClient
+            .from('profiles')
+            .select('display_name')
+            .eq('id', userId)
+            .maybeSingle()
+          if (profile) {
+            adminName = profile.display_name || null
+          }
+        }
+      }
+    } catch {}
+
+    await handleScopedImageUpload(req, res, {
+      actorId: caller,
+      auditLabel: 'plant_image',
+      uploaderInfo: {
+        id: adminId || null,
+        email: adminEmail || null,
+        name: adminName || null,
+      },
+      prefixBuilder: ({ req: r }) => {
+        const plantName = typeof r.body?.plantName === 'string' ? r.body.plantName.trim() : ''
+        const safePlantName = (plantName || 'plant').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plant'
+        return `${plantImageUploadPrefix}/${safePlantName}`
+      },
+      bucket: plantImageUploadBucket,
+      webpQuality: plantImageWebpQuality,
+      maxDimension: plantImageMaxDimension,
+      extraMetadataBuilder: ({ req: r }) => ({
+        scope: 'plant_image',
+        plantName: r.body?.plantName || null,
+        adminId: adminId || null,
+      }),
+    })
+  } catch (err) {
+    console.error('[server] Plant image upload-file failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to upload plant image' })
+    }
+  }
+})
+app.options('/api/admin/plant-images/upload-file', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()

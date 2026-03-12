@@ -9,7 +9,7 @@ import type { TFunction } from "i18next"
 import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X, UploadCloud } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
@@ -44,6 +44,8 @@ export type PlantProfileFormProps = {
   language?: string
   /** Called when an image is removed. Use to delete from storage if needed. */
   onImageRemove?: (imageUrl: string) => void
+  /** Called when the user clicks "Upload" in the image section. Opens the upload dialog in the parent. */
+  onUploadImages?: () => void
   /** Plant reports submitted by users (displayed read-only in the Meta section) */
   plantReports?: PlantReport[]
   /** Auto-detected varieties (same species, different variety) */
@@ -1480,7 +1482,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   return <div key={field.key}>{body}</div>
 }
 
-function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void }) {
+function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void; onUpload?: () => void }) {
   const { t } = useTranslation('plantAdmin')
   const list = Array.isArray(images) ? images : []
   const [previewErrors, setPreviewErrors] = React.useState<Record<string, boolean>>({})
@@ -1565,9 +1567,17 @@ function ImageEditor({ images, onChange, onRemove }: { images: PlantImage[]; onC
         </div>
         <div className="flex items-center gap-2">
           {!isCollapsed && (
-            <Button type="button" variant="outline" onClick={addImage}>
-              {t('plantAdmin.images.addImage', 'Add image')}
-            </Button>
+            <>
+              <Button type="button" variant="outline" onClick={addImage}>
+                {t('plantAdmin.images.addImage', 'Add image')}
+              </Button>
+              {onUpload && (
+                <Button type="button" variant="outline" onClick={onUpload}>
+                  <UploadCloud className="h-4 w-4" />
+                  {t('plantAdmin.images.uploadImages', 'Upload')}
+                </Button>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -2481,7 +2491,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, plantReports, plantVarieties }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties }: PlantProfileFormProps) {
   const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
@@ -2635,7 +2645,7 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
       {renderField(value, setPath, baseFields.find(f => f.key === 'featuredMonth')!, t)}
 
       <SectionDivider title={t('plantAdmin.sections.images', 'Images')} />
-      <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} />
+      <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} onUpload={onUploadImages} />
     </div>
   )
 

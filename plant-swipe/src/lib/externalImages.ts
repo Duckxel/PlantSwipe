@@ -273,6 +273,47 @@ export async function uploadPlantImageFromUrl(
 }
 
 /**
+ * Upload a local file to the PLANTS bucket.
+ * The server optimizes to WebP, stores, and records in DB.
+ */
+export async function uploadPlantImageFile(
+  file: File,
+  plantName: string,
+  signal?: AbortSignal
+): Promise<PlantImageUploadResult> {
+  const headers = await buildAuthHeaders()
+  // Remove Content-Type so the browser sets multipart/form-data with boundary
+  delete headers["Content-Type"]
+
+  const form = new FormData()
+  form.append("file", file)
+  form.append("plantName", plantName)
+  form.append("optimize", "true")
+
+  const response = await fetch("/api/admin/plant-images/upload-file", {
+    method: "POST",
+    headers,
+    body: form,
+    signal,
+  })
+
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}))
+    throw new Error(data.error || `Upload failed (${response.status})`)
+  }
+
+  const data = await response.json()
+  return {
+    url: data.url,
+    bucket: data.bucket,
+    path: data.path,
+    sizeBytes: data.size ?? data.sizeBytes,
+    originalSizeBytes: data.originalSize ?? data.originalSizeBytes,
+    compressionPercent: data.compressionPercent ?? 0,
+  }
+}
+
+/**
  * Delete a plant image from storage and DB.
  * Only deletes images hosted in the PLANTS bucket.
  * External URLs (not managed) are silently skipped.

@@ -1996,9 +1996,12 @@ create table if not exists public.plant_images (
   plant_id text not null references public.plants(id) on delete cascade,
   link text not null,
   use text not null default 'other' check (use in ('primary','discovery','other')),
+  added_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (plant_id, link)
 );
+alter table public.plant_images add column if not exists added_by uuid references auth.users(id) on delete set null;
+create index if not exists plant_images_added_by_idx on public.plant_images (added_by) where added_by is not null;
 alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
 create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);
 drop index if exists public.plant_images_use_unique;
