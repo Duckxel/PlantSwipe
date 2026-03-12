@@ -377,6 +377,8 @@ export function LegalUpdateModal({
                 size="icon"
                 className="rounded-xl"
                 onClick={() => setStep('review')}
+                aria-label={t('common.back', { defaultValue: 'Back' })}
+                title={t('common.back', { defaultValue: 'Back' })}
               >
                 <ArrowLeft className="w-5 h-5" />
               </Button>
