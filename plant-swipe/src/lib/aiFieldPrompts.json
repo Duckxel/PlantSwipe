@@ -93,7 +93,7 @@
     "- `conservationStatus`: array from ONLY: [\"least_concern\",\"near_threatened\",\"vulnerable\",\"endangered\",\"critically_endangered\",\"extinct_in_wild\",\"extinct\",\"data_deficient\",\"not_evaluated\"]",
     "- `ecologicalStatus`: array of status tags (e.g. [\"indigenous\",\"pioneer_species\",\"nitrogen_fixer\"])",
     "- `biotopes`: array of natural biotope keys (e.g. [\"temperate_deciduous_forest\",\"wet_meadow\"])",
-    "- `urbanBiotopes`: array from [\"urban_garden\",\"periurban_garden\",\"park\",\"urban_wasteland\",\"green_wall\",\"green_roof\",\"balcony\",\"agricultural_hedge\",\"cultivated_orchard\",\"vegetable_garden\",\"roadside\"]",
+    "- `urbanBiotopes`: array from [\"urban_garden\",\"periurban_garden\",\"park\",\"urban_wasteland\",\"green_wall\",\"green_roof\",\"balcony\",\"greenhouse\",\"agricultural_hedge\",\"cultivated_orchard\",\"vegetable_garden\",\"roadside\"]",
     "- `ecologicalTolerance`: array from [\"drought\",\"scorching_sun\",\"permanent_shade\",\"excess_water\",\"frost\",\"heatwave\",\"wind\"]",
     "- `biodiversityRole`: array of roles (e.g. [\"melliferous\",\"insect_refuge\",\"nitrogen_fixer\"])",
     "- `pollinatorsAttracted`: short array (e.g. [\"Bees\",\"Butterflies\"])",

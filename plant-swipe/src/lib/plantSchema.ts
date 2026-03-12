@@ -252,7 +252,7 @@ export const plantSchema = {
   },
   urbanBiotopes: {
     type: 'tag[]',
-    description: 'Urban/anthropized biotopes (e.g. ["urban_garden", "balcony", "park"])',
+    description: 'Urban/anthropized biotopes (e.g. ["urban_garden", "balcony", "greenhouse", "park"])',
   },
   ecologicalTolerance: {
     type: 'enum[]',
