@@ -15,7 +15,7 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
-import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
+import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
 import { monthSlugsToNumbers, normalizeMonthsToSlugs } from "@/lib/months"
@@ -1704,6 +1704,29 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         let savedId = plantId
         let payloadUpdatedTime: string | null = null
         const normalizedStatus = (plantToSave.status || plantToSave.meta?.status || 'in_progress').toLowerCase().replace(' ', '_')
+
+        // Pre-save cleanup: clear fields that are gated off by boolean toggles or missing utility values
+        // This prevents stale data from being saved when a user disables a toggle (e.g., Medicinal Use)
+        const pRaw = plantToSave as any
+        // Boolean gates: if the gate field is false, clear all dependent fields
+        for (const [gate, deps] of Object.entries(BOOLEAN_GATE_DEPS)) {
+          if (pRaw[gate] === false) {
+            for (const dep of deps) {
+              pRaw[dep] = null
+            }
+          }
+        }
+        // Utility gates: if the utility array doesn't include the value, clear dependent fields
+        const utilityArr = Array.isArray(pRaw.utility) ? (pRaw.utility as string[]) : []
+        const utilityNormalized = new Set(utilityArr.map(u => typeof u === 'string' ? u.toLowerCase().replace(/[_\s-]/g, '') : ''))
+        for (const [utilVal, deps] of Object.entries(UTILITY_GATE_DEPS)) {
+          const needle = utilVal.toLowerCase().replace(/[_\s-]/g, '')
+          if (!utilityNormalized.has(needle)) {
+            for (const dep of deps) {
+              pRaw[dep] = null
+            }
+          }
+        }
 
         // STEP 1: Save/update the base plant record (non-translatable fields)
         // For English (first save): create the plant record with all base data
