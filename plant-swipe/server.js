@@ -10956,6 +10956,10 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
     const bodyJsonFragment = bodyJsonSnapshot == null ? null : sql.json(bodyJsonSnapshot)
     const adminUuid = toAdminUuid(adminId)
 
+    // When the admin edits the schedule, update original_scheduled_for too so that
+    // timezone calculations use the correct base time (prevents sending at wrong times
+    // after a campaign schedule edit).
+    const scheduledForChanged = scheduledFor !== current.scheduled_for
     const updated = await sql`
       update public.admin_email_campaigns
       set title = ${title},
@@ -10969,6 +10973,7 @@ app.put('/api/admin/email-campaigns/:id', async (req, res) => {
           template_version = ${templateVersion},
           timezone = ${timezone},
           scheduled_for = ${scheduledFor},
+          original_scheduled_for = ${scheduledForChanged ? scheduledFor : (current.original_scheduled_for || scheduledFor)},
           status = ${status},
           updated_by = ${adminUuid},
           updated_at = now()

@@ -26,6 +26,7 @@ type CampaignRow = {
   test_email: string | null
   is_marketing: boolean | null // If true, only send to users with marketing_consent=true
   target_roles: string[] | null // Empty/null = all users, non-empty = only users with ANY of these roles
+  send_started_at: string | null
 }
 
 type Recipient = {
@@ -209,13 +210,40 @@ serve(async (req) => {
   }
 
   try {
+    // Recover campaigns stuck in "running" state (e.g., from edge function timeouts/crashes).
+    // If a campaign has been "running" for more than 5 minutes without completing, reset it
+    // to "scheduled" so the cron can pick it up again.
+    await recoverStuckCampaigns(supabase)
+
     const dueCampaigns = await loadCampaigns(supabase, options)
     if (!dueCampaigns.length) {
       return jsonResponse(200, { processed: 0, campaigns: [] })
     }
 
+    // Filter out campaigns that aren't actually due yet.
+    // loadCampaigns uses a 26h horizon to catch campaigns whose earliest recipients
+    // (in far-ahead timezones) might be due before scheduled_for. But once a campaign
+    // has been claimed at least once (send_started_at is set), scheduled_for is updated
+    // to the actual next-due-recipient time. In that case, only process when scheduled_for
+    // is actually reached, to avoid unnecessary claim/release cycles that can timeout and
+    // leave the campaign permanently stuck in "running".
+    const now = Date.now()
+    const campaignsToProcess = options.forceCampaignId
+      ? dueCampaigns // Manual trigger: always process
+      : dueCampaigns.filter((c) => {
+          // Fresh campaign (never processed yet) - always process
+          if (!c.send_started_at) return true
+          // Previously processed campaign - only process when scheduled_for is due
+          if (!c.scheduled_for) return true
+          return new Date(c.scheduled_for).getTime() <= now + SEND_WINDOW_GRACE_MS
+        })
+
+    if (!campaignsToProcess.length) {
+      return jsonResponse(200, { processed: 0, campaigns: [] })
+    }
+
     const summaries: CampaignSummary[] = []
-    for (const campaign of dueCampaigns) {
+    for (const campaign of campaignsToProcess) {
       const summary = await processCampaign(supabase, campaign, options)
       summaries.push(summary)
     }
@@ -260,6 +288,35 @@ async function loadCampaigns(
 
   if (error) throw error
   return (data ?? []) as CampaignRow[]
+}
+
+const STUCK_CAMPAIGN_THRESHOLD_MS = 5 * 60 * 1000 // 5 minutes
+
+async function recoverStuckCampaigns(client: SupabaseClient): Promise<void> {
+  try {
+    const cutoff = new Date(Date.now() - STUCK_CAMPAIGN_THRESHOLD_MS).toISOString()
+    const { data, error } = await client
+      .from("admin_email_campaigns")
+      .update({
+        status: "scheduled",
+        send_error: "Auto-recovered: campaign was stuck in running state (likely edge function timeout)",
+      })
+      .eq("status", "running")
+      .lt("send_started_at", cutoff)
+      .select("id, title")
+
+    if (error) {
+      console.warn("[email-campaign-runner] failed to recover stuck campaigns", error.message)
+      return
+    }
+    if (data && data.length > 0) {
+      for (const row of data) {
+        console.warn(`[email-campaign-runner] Recovered stuck campaign: ${row.id} (${row.title})`)
+      }
+    }
+  } catch (err) {
+    console.warn("[email-campaign-runner] recoverStuckCampaigns error", err)
+  }
 }
 
 async function processCampaign(
@@ -826,6 +883,7 @@ function convertCampaignTimeToUserUtc(scheduledUtc: string, campaignTimezone: st
       minute: "2-digit",
       second: "2-digit",
       hour12: false,
+      hourCycle: "h23",
     })
     const campaignParts = campaignFormatter.formatToParts(scheduledDate)
     const getPart = (type: string) => parseInt(campaignParts.find((p) => p.type === type)?.value ?? "0", 10)
@@ -852,6 +910,7 @@ function convertCampaignTimeToUserUtc(scheduledUtc: string, campaignTimezone: st
         minute: "2-digit",
         second: "2-digit",
         hour12: false,
+        hourCycle: "h23",
       })
       const userParts = userFormatter.formatToParts(candidateUtc)
       const getUserPart = (type: string) => parseInt(userParts.find((p) => p.type === type)?.value ?? "0", 10)
