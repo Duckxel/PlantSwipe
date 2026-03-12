@@ -46,6 +46,7 @@ import {
   EyeOff,
   Copy,
   ArrowUpRight,
+  ArrowDownUp,
   Info,
   Plus,
   LayoutDashboard,
@@ -2067,6 +2068,8 @@ export const AdminPage: React.FC = () => {
 
   // Toggle to hide requests made by admins/editors (who can create plants themselves)
   const [hideStaffRequests, setHideStaffRequests] = React.useState<boolean>(true);
+  /** Sort order for plant requests: "newest" (default) or "oldest" */
+  const [requestSortOrder, setRequestSortOrder] = React.useState<"newest" | "oldest">("newest");
   // Cache of staff (admin/editor) user IDs for filtering
   const staffUserIdsRef = React.useRef<Set<string>>(new Set());
 
@@ -2524,8 +2527,7 @@ export const AdminPage: React.FC = () => {
               "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
             )
             .is("completed_at", null)
-            .order("request_count", { ascending: false })
-            .order("updated_at", { ascending: false })
+            .order("created_at", { ascending: requestSortOrder === "oldest" })
             .range(fetchOffset, fetchOffset + batchSize - 1);
 
           if (error) throw new Error(error.message);
@@ -2565,7 +2567,7 @@ export const AdminPage: React.FC = () => {
         }
       }
     },
-    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests, enrichRowsWithUserCounts],
+    [parseRequestRows, enrichRowsWithStaffStatus, loadStaffUserIds, hideStaffRequests, enrichRowsWithUserCounts, requestSortOrder],
   );
 
   const loadMorePlantRequests = React.useCallback(async () => {
@@ -2587,8 +2589,7 @@ export const AdminPage: React.FC = () => {
             "id, plant_name, plant_name_normalized, request_count, created_at, updated_at, requested_by",
           )
           .is("completed_at", null)
-          .order("request_count", { ascending: false })
-          .order("updated_at", { ascending: false })
+          .order("created_at", { ascending: requestSortOrder === "oldest" })
           .range(fetchOffset, fetchOffset + batchSize - 1);
 
         if (error) throw new Error(error.message);
@@ -2630,6 +2631,7 @@ export const AdminPage: React.FC = () => {
     enrichRowsWithStaffStatus,
     hideStaffRequests,
     enrichRowsWithUserCounts,
+    requestSortOrder,
   ]);
 
   const loadRequestUsers = React.useCallback(
@@ -5404,6 +5406,16 @@ export const AdminPage: React.FC = () => {
       loadPlantRequests({ initial: false });
     }
   }, [hideStaffRequests, plantRequestsInitialized, loadPlantRequests]);
+
+  // Re-fetch when sort order changes
+  const requestSortPrevRef = React.useRef(requestSortOrder);
+  React.useEffect(() => {
+    if (requestSortPrevRef.current === requestSortOrder) return;
+    requestSortPrevRef.current = requestSortOrder;
+    if (plantRequestsInitialized) {
+      loadPlantRequests({ initial: false });
+    }
+  }, [requestSortOrder, plantRequestsInitialized, loadPlantRequests]);
 
   React.useEffect(() => {
     if (
@@ -10504,6 +10516,19 @@ export const AdminPage: React.FC = () => {
                           >
                             <ShieldX className={`h-3.5 w-3.5 ${hideStaffRequests ? "text-purple-600 dark:text-purple-400" : "opacity-50"}`} />
                             {hideStaffRequests ? "Staff hidden" : "Show all"}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setRequestSortOrder((prev) => prev === "newest" ? "oldest" : "newest")}
+                            className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-medium transition-all whitespace-nowrap border ${
+                              requestSortOrder === "oldest"
+                                ? "bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50 text-amber-700 dark:text-amber-300"
+                                : "bg-stone-50 dark:bg-[#252528] border-stone-200 dark:border-[#3e3e42] text-stone-500 dark:text-stone-400"
+                            }`}
+                            title={requestSortOrder === "newest" ? "Showing newest first — click to show oldest first" : "Showing oldest first — click to show newest first"}
+                          >
+                            <ArrowDownUp className={`h-3.5 w-3.5 ${requestSortOrder === "oldest" ? "text-amber-600 dark:text-amber-400" : "opacity-50"}`} />
+                            {requestSortOrder === "newest" ? "Newest first" : "Oldest first"}
                           </button>
                         </div>
 
