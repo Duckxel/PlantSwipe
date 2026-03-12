@@ -245,7 +245,7 @@ create table if not exists public.plants (
   ]),
   urban_biotopes text[] not null default '{}'::text[] check (urban_biotopes <@ array[
     'urban_garden','periurban_garden','park','urban_wasteland',
-    'green_wall','green_roof','balcony','agricultural_hedge',
+    'green_wall','green_roof','balcony','greenhouse','agricultural_hedge',
     'cultivated_orchard','vegetable_garden','roadside'
   ]),
 
