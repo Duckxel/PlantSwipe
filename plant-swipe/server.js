@@ -30225,6 +30225,8 @@ async function generateCrawlerHtml(req, pagePath) {
   let resourceFound = true
   // Flag to indicate if this route expects a dynamic resource
   let isDynamicRoute = false
+  // Track if a query error/timeout occurred (distinct from "not found" — should return 503, not 404)
+  let queryErrorOccurred = false
 
   // Parse language from path BEFORE try block so it's always available for HTML template
   const pathParts = pagePath.split('/').filter(Boolean)
@@ -30692,7 +30694,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (!supabaseServer) {
         console.log(`[ssr] WARNING: Supabase not available, using defaults`)
-        resourceFound = false
+        queryErrorOccurred = true
       } else {
         // Query NON-TRANSLATABLE plant data from plants table only.
         // Translatable fields (scientific_name, family, level_sun, maintenance_level,
@@ -30816,7 +30818,7 @@ async function generateCrawlerHtml(req, pagePath) {
         if (plantError) {
           req._ssrDebug.errors.push({ type: 'plant_query', error: plantError.message || JSON.stringify(plantError) })
           console.log(`[ssr] ✗ Plant query error: ${plantError.message || JSON.stringify(plantError)}`)
-          resourceFound = false
+          queryErrorOccurred = true
         } else if (!plant) {
           req._ssrDebug.errors.push({ type: 'plant_not_found', plantId })
           console.log(`[ssr] ✗ Plant not found in database: ${plantId}`)
@@ -31250,7 +31252,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (postError) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
-        resourceFound = false
+        queryErrorOccurred = true
       } else if (!post) {
         console.log(`[ssr] ✗ Blog post not found: ${slugOrId}`)
         resourceFound = false
@@ -31399,7 +31401,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (profileError) {
         console.log(`[ssr] Profile query error: ${profileError.message}`)
-        resourceFound = false
+        queryErrorOccurred = true
       } else if (!profile) {
         console.log(`[ssr] ✗ Profile not found: ${username}`)
         resourceFound = false
@@ -31667,7 +31669,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (gardenError) {
         console.log(`[ssr] Garden query error: ${gardenError.message}`)
-        resourceFound = false
+        queryErrorOccurred = true
       } else if (!garden) {
         console.log(`[ssr] ✗ Garden not found: ${gardenId}`)
         resourceFound = false
@@ -32400,7 +32402,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
       if (bookmarkError) {
         console.log(`[ssr] Bookmark list query error: ${bookmarkError.message}`)
-        resourceFound = false
+        queryErrorOccurred = true
       } else if (!bookmarkList) {
         console.log(`[ssr] ✗ Bookmark list not found or private: ${listId}`)
         resourceFound = false
@@ -33231,8 +33233,9 @@ ${safeJsonStringify(jsonLdSchema)}
 
   // Determine HTTP status code:
   // - 200 for static pages and found dynamic resources
-  // - 404 for dynamic routes where the resource wasn't found
-  const statusCode = (isDynamicRoute && !resourceFound) ? 404 : 200
+  // - 404 for dynamic routes where the resource genuinely doesn't exist
+  // - 503 for query errors/timeouts (tells Google to retry later, not mark as broken)
+  const statusCode = queryErrorOccurred ? 503 : (isDynamicRoute && !resourceFound) ? 404 : 200
   
   return { html, statusCode }
 }
@@ -33409,8 +33412,12 @@ app.get('*', async (req, res) => {
       const ssrDuration = Date.now() - ssrStartTime
       console.log(`[ssr] ✓ Generated HTML for ${pathWithoutQuery} in ${ssrDuration}ms (${html.length} bytes) [status: ${statusCode}]`)
       res.setHeader('Content-Type', 'text/html; charset=utf-8')
-      // Use shorter cache for 404 pages
-      if (statusCode === 404) {
+      // Set cache and robots headers based on status
+      if (statusCode === 503) {
+        // Query error/timeout — tell crawlers to retry later, don't cache the error
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+        res.setHeader('Retry-After', '600')
+      } else if (statusCode === 404) {
         res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
         res.setHeader('X-Robots-Tag', 'noindex, follow')
       } else if (isNonProductionHost(req.hostname)) {
