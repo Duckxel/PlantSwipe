@@ -3,7 +3,7 @@
 import dotenv from 'dotenv'
 import { fileURLToPath } from 'url'
 import path from 'path'
-import { wrapEmailHtmlShared } from './src/lib/emailTemplateShared.ts'
+import { wrapEmailHtmlShared } from './src/lib/emailTemplateShared.mjs'
 
 // Get __dirname equivalent for ESM
 const __filename_early = fileURLToPath(import.meta.url)
