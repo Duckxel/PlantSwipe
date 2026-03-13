@@ -7750,52 +7750,52 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                           {/* Action buttons */}
-                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div className="mt-4 grid grid-cols-2 gap-2">
                           <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             onClick={restartServer}
                             disabled={restarting}
                           >
-                            <Server className="h-4 w-4" />
-                            <RefreshCw className="h-4 w-4" />
-                            <span>
-                              {restarting ? "Restarting?" : "Restart Services"}
+                            <RefreshCw className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {restarting ? "Restarting..." : "Restart"}
                             </span>
                           </Button>
                           <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             variant="secondary"
                             onClick={pullLatest}
                             disabled={pulling}
                           >
-                            <Github className="h-4 w-4" />
-                            <RefreshCw className="h-4 w-4" />
-                            <span>
+                            <Github className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
                               {pulling ? "Pulling..." : "Pull & Build"}
                             </span>
                           </Button>
                           <Button
-                              className="rounded-2xl w-full"
-                              variant="outline"
-                              onClick={deployEdgeFunctions}
-                              disabled={deployingEdge}
-                            >
-                              <CloudUpload className="h-4 w-4" />
-                                <span>
-                                  {deployingEdge
-                                    ? "Deploying..."
-                                    : "Deploy Edge"}
-                                </span>
-                            </Button>
-                            <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
+                            variant="outline"
+                            onClick={deployEdgeFunctions}
+                            disabled={deployingEdge}
+                          >
+                            <CloudUpload className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {deployingEdge ? "Deploying..." : "Deploy Edge"}
+                            </span>
+                          </Button>
+                          <Button
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             variant="destructive"
                             onClick={runSyncSchema}
                             disabled={syncing}
                           >
-                            <Database className="h-4 w-4" />
-                            <span>
-                              {syncing ? "Syncing..." : "Sync DB Schema"}
+                            <Database className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {syncing ? "Syncing..." : "Sync DB"}
                             </span>
                           </Button>
                         </div>
