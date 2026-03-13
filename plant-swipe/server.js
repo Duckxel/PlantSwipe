@@ -30140,7 +30140,11 @@ function isCrawler(userAgent) {
 // Returns: { html: string, statusCode: number } - statusCode is 200 for found pages, 404 for not-found
 async function generateCrawlerHtml(req, pagePath) {
   const siteUrl = process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app'
-  const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pagePath}`
+  // Strip language prefix from canonical URL so /fr/bookmarks/ID and /bookmarks/ID
+  // both resolve to the same canonical (avoids "Duplicate, Google chose different canonical")
+  const langPrefixPattern = /^\/(en|fr)(\/|$)/
+  const pathWithoutLang = pagePath.replace(langPrefixPattern, '/')
+  const canonicalUrl = `${siteUrl.replace(/\/+$/, '')}${pathWithoutLang}`
 
   // Internal debug tracking (attached to req for debugging)
   req._ssrDebug = {
@@ -33029,7 +33033,10 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="author" content="Aphylia">
   <meta name="robots" content="${isNonProductionHost(req.hostname) ? 'noindex, nofollow' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
-  
+  <link rel="alternate" hreflang="en" href="${escapeHtml(canonicalUrl)}">
+  <link rel="alternate" hreflang="fr" href="${escapeHtml(`${siteUrl.replace(/\/+$/, '')}/fr${pathWithoutLang}`)}">
+  <link rel="alternate" hreflang="x-default" href="${escapeHtml(canonicalUrl)}">
+
   <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
   <meta property="og:type" content="${req._ssrDebug?.matchedRoute === 'blog_post' ? 'article' : 'website'}">
   <meta property="og:url" content="${escapeHtml(canonicalUrl)}">
