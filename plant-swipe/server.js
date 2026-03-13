@@ -19247,7 +19247,6 @@ app.get('/api/admin/ga/geo', async (req, res) => {
         dimensions: [{ name: 'country' }],
         metrics: [{ name: 'totalUsers' }, { name: 'sessions' }],
         orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
-        limit: 20,
       }),
       runGaReport({
         dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
