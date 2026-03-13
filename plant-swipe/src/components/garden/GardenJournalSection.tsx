@@ -776,6 +776,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 }}
                 className="absolute -top-12 right-0 text-white/80 hover:text-white transition-colors"
                 aria-label={t("common.close", "Close")}
+                title={t("common.close", "Close")}
               >
                 <X className="w-8 h-8" />
               </button>
@@ -832,6 +833,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   onClick={() => setTimelapseIndex((prev) => Math.max(0, prev - 1))}
                   disabled={timelapseIndex === 0}
                   aria-label={t("common.previous", "Previous")}
+                  title={t("common.previous", "Previous")}
                 >
                   <ChevronLeft className="w-6 h-6" />
                 </Button>
@@ -843,6 +845,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   className="text-white hover:bg-white/20 rounded-full w-14 h-14"
                   onClick={() => setIsPlaying(!isPlaying)}
                   aria-label={isPlaying ? t("common.pause", "Pause") : t("common.play", "Play")}
+                  title={isPlaying ? t("common.pause", "Pause") : t("common.play", "Play")}
                 >
                   {isPlaying ? (
                     <Pause className="w-8 h-8" />
@@ -859,6 +862,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   onClick={() => setTimelapseIndex((prev) => Math.min(allPhotos.length - 1, prev + 1))}
                   disabled={timelapseIndex === allPhotos.length - 1}
                   aria-label={t("common.next", "Next")}
+                  title={t("common.next", "Next")}
                 >
                   <ChevronRight className="w-6 h-6" />
                 </Button>
@@ -1019,6 +1023,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         : "border-transparent opacity-60 hover:opacity-100"
                     }`}
                     aria-label={t("gardenDashboard.journalSection.viewPhoto", { count: idx + 1, defaultValue: `View photo ${idx + 1}` })}
+                    title={t("gardenDashboard.journalSection.viewPhoto", { count: idx + 1, defaultValue: `View photo ${idx + 1}` })}
                   >
                     <img
                       src={photo.url}
@@ -1063,6 +1068,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     setShowNewEntry(false);
                   }}
                   aria-label={t("common.close", "Close")}
+                  title={t("common.close", "Close")}
                 >
                   <X className="w-5 h-5" />
                 </Button>
@@ -1162,6 +1168,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       className="w-24 h-24 border-2 border-dashed border-stone-300 dark:border-stone-600 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:border-amber-400 hover:text-amber-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                      aria-label={t("gardenDashboard.journalSection.addPhoto", "Add photo")}
+                      title={t("gardenDashboard.journalSection.addPhoto", "Add photo")}
                     >
                       <Upload className="w-6 h-6" />
                       <span className="text-xs">{t("gardenDashboard.journalSection.addPhoto", "Add")}</span>
@@ -1195,6 +1203,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                           onClick={() => handleRemoveTag(tag)}
                           className="hover:text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
                           aria-label={`${t("common.remove", "Remove")} ${tag}`}
+                          title={`${t("common.remove", "Remove")} ${tag}`}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -1215,6 +1224,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         className="h-8 w-8 p-0 rounded-full"
                         onClick={handleAddTag}
                         aria-label={t("common.add", "Add")}
+                        title={t("common.add", "Add")}
                       >
                         <Plus className="w-4 h-4" />
                       </Button>
@@ -1390,6 +1400,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                                 className="rounded-full h-8 w-8 p-0"
                                 onClick={() => startEditEntry(entry)}
                                 aria-label={t("common.edit", "Edit")}
+                                title={t("common.edit", "Edit")}
                               >
                                 <Pencil className="w-4 h-4" />
                               </Button>
@@ -1399,6 +1410,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                                 className="rounded-full h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
                                 onClick={() => handleDeleteEntry(entry.id)}
                                 aria-label={t("common.delete", "Delete")}
+                                title={t("common.delete", "Delete")}
                               >
                                 <Trash2 className="w-4 h-4" />
                               </Button>
@@ -1555,6 +1567,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       type="button"
                       onClick={() => libraryViewer.openGallery(libraryViewerImages, idx)}
                       className="w-full h-full cursor-zoom-in focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
+                      aria-label={t("gardenDashboard.journalSection.viewPhoto", { count: idx + 1, defaultValue: `View photo ${idx + 1}` })}
+                      title={t("gardenDashboard.journalSection.viewPhoto", { count: idx + 1, defaultValue: `View photo ${idx + 1}` })}
                     >
                       <img
                         src={photo.thumbnailUrl || photo.url}
@@ -1589,6 +1603,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                         disabled={deletingPhotoId === photo.id}
                         className="absolute top-2 right-2 w-7 h-7 rounded-full bg-black/50 backdrop-blur-sm text-white/80 hover:text-white hover:bg-red-600/80 flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                         aria-label={t("common.delete", "Delete")}
+                        title={t("common.delete", "Delete")}
                       >
                         {deletingPhotoId === photo.id
                           ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
