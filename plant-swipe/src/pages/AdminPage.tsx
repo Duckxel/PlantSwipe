@@ -1885,7 +1885,6 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const [onlineUsers, setOnlineUsers] = React.useState<number>(0);
     const [registeredCount, setRegisteredCount] = React.useState<number | null>(
       null,
     );
@@ -1903,23 +1902,6 @@ export const AdminPage: React.FC = () => {
     const [plantsUpdatedAt, setPlantsUpdatedAt] = React.useState<number | null>(
       null,
     );
-  const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true);
-  const [onlineRefreshing, setOnlineRefreshing] =
-    React.useState<boolean>(false);
-  const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(
-    null,
-  );
-  const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true);
-  const [visitorsRefreshing, setVisitorsRefreshing] =
-    React.useState<boolean>(false);
-  const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<
-    number | null
-  >(null);
-  const [visitorsSeries, setVisitorsSeries] = React.useState<
-    Array<{ date: string; uniqueVisitors: number }>
-  >([]);
-  const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] =
-    React.useState<number>(0);
   // Distinct, high-contrast palette for readability
   const countryColors = [
     "#10b981",
@@ -4559,23 +4541,11 @@ export const AdminPage: React.FC = () => {
         );
         setRegisteredLoading(false);
       }
-      if (onlineLoading) {
-        console.warn(
-          "[AdminPage] Online users loading timeout - clearing loading state only",
-        );
-        setOnlineLoading(false);
-      }
       if (ipsLoading) {
         console.warn(
           "[AdminPage] IPs loading timeout - clearing loading state only",
         );
         setIpsLoading(false);
-      }
-      if (visitorsLoading) {
-        console.warn(
-          "[AdminPage] Visitors loading timeout - clearing loading state only",
-        );
-        setVisitorsLoading(false);
       }
     }, MAX_LOADING_TIMEOUT);
 
@@ -4583,9 +4553,7 @@ export const AdminPage: React.FC = () => {
   }, [
     branchesLoading,
     registeredLoading,
-    onlineLoading,
     ipsLoading,
-    visitorsLoading,
   ]);
 
   const loadBranches = React.useCallback(
@@ -5000,63 +4968,6 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id);
   }, [loadRegisteredCount]);
 
-  // Loader for "Currently online" (unique IPs in the last 60 minutes, DB-only)
-  const loadOnlineUsers = React.useCallback(
-    async (opts?: { initial?: boolean }) => {
-      const isInitial = !!opts?.initial;
-      if (isInitial) setOnlineLoading(true);
-      else setOnlineRefreshing(true);
-      try {
-        // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
-        const token = (await supabase.auth.getSession()).data.session
-          ?.access_token;
-        const resp = await fetchWithRetry("/api/admin/online-users", {
-          headers: (() => {
-            const h: Record<string, string> = { Accept: "application/json" };
-            if (token) h["Authorization"] = `Bearer ${token}`;
-            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
-              ?.VITE_ADMIN_STATIC_TOKEN;
-            if (adminToken) h["X-Admin-Token"] = String(adminToken);
-            return h;
-          })(),
-          credentials: "same-origin",
-        }).catch(() => null);
-        if (resp && resp.ok) {
-          const data = await safeJson(resp);
-          const num = Number(data?.onlineUsers ?? data?.count);
-          if (Number.isFinite(num) && num >= 0) {
-            setOnlineUsers(num);
-            setOnlineUpdatedAt(Date.now());
-            return;
-          }
-        }
-        // Don't set to 0 on error - keep last known value
-      } catch (e) {
-        console.error("[AdminPage] Failed to load online users:", e);
-        // Keep last known value on error - don't set to 0
-      } finally {
-        if (isInitial) setOnlineLoading(false);
-        else setOnlineRefreshing(false);
-      }
-    },
-    [fetchWithRetry, safeJson],
-  );
-
-  // Initial load (page load only) - staggered
-  React.useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadOnlineUsers({ initial: true });
-    }, 250);
-    return () => clearTimeout(timeoutId);
-  }, [loadOnlineUsers]);
-
-  // Auto-refresh the "Currently online" count every minute
-  React.useEffect(() => {
-    const intervalId = setInterval(() => {
-      loadOnlineUsers({ initial: false });
-    }, 60_000);
-    return () => clearInterval(intervalId);
-  }, [loadOnlineUsers]);
 
   // Loader for list of connected IPs (unique IPs past N minutes; default 60)
   const loadOnlineIpsList = React.useCallback(
@@ -5117,94 +5028,6 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id);
   }, [loadOnlineIpsList]);
 
-  // Load visitors stats (last 7 days)
-  const [visitorsWindowDays, setVisitorsWindowDays] = React.useState<7 | 30>(7);
-  const loadVisitorsStats = React.useCallback(
-    async (opts?: { initial?: boolean }) => {
-      const isInitial = !!opts?.initial;
-      if (isInitial) setVisitorsLoading(true);
-      else setVisitorsRefreshing(true);
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        try {
-          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-        } catch {}
-        const resp = await fetchWithRetry(
-          `/api/admin/visitors-stats?days=${visitorsWindowDays}`,
-          {
-            headers,
-            credentials: "same-origin",
-          },
-        ).catch(() => null);
-        if (!resp || !resp.ok) {
-          // Keep last known value on error
-          return;
-        }
-        const data = await safeJson(resp);
-        const series: Array<{ date: string; uniqueVisitors: number }> =
-          Array.isArray(data?.series7d)
-            ? data.series7d.map((d: unknown) => {
-                const dd = d as Record<string, unknown>;
-                return {
-                date: String(dd.date),
-                uniqueVisitors: Number(
-                  dd.uniqueVisitors ?? dd.unique_visitors ?? 0,
-                ),
-              };
-              })
-            : [];
-        setVisitorsSeries(series);
-        // Fetch weekly unique total from dedicated endpoint to keep requests separate
-        try {
-          const totalResp = await fetchWithRetry(
-            "/api/admin/visitors-unique-7d",
-            {
-              headers,
-              credentials: "same-origin",
-            },
-          ).catch(() => null);
-          if (totalResp && totalResp.ok) {
-            const totalData = await safeJson(totalResp);
-            const total7d = Number(
-              totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0,
-            );
-            if (Number.isFinite(total7d) && total7d >= 0) {
-              setVisitorsTotalUnique7d(total7d);
-            }
-          }
-        } catch {}
-        setVisitorsUpdatedAt(Date.now());
-      } catch (e) {
-        console.error("[AdminPage] Failed to load visitors stats:", e);
-        // keep last known value
-      } finally {
-        if (isInitial) setVisitorsLoading(false);
-        else setVisitorsRefreshing(false);
-      }
-    },
-    [visitorsWindowDays, safeJson, fetchWithRetry],
-  );
-
-  React.useEffect(() => {
-    // Stagger initial load to avoid blocking - visitors stats are heavy
-    const timeoutId = setTimeout(() => {
-      loadVisitorsStats({ initial: true });
-    }, 400);
-    return () => clearTimeout(timeoutId);
-  }, [loadVisitorsStats]);
-
-  // Auto-refresh visitors graph every 60 seconds
-  React.useEffect(() => {
-    const id = setInterval(() => {
-      loadVisitorsStats({ initial: false });
-    }, 60_000);
-    return () => clearInterval(id);
-  }, [loadVisitorsStats]);
 
   // --- Google Analytics Data API loaders ---
   const gaAuthHeaders = React.useCallback(() => {
@@ -7118,7 +6941,7 @@ export const AdminPage: React.FC = () => {
 
                       {/* Quick Stats Cards */}
                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        {/* Currently Online Card */}
+                        {/* Currently Online Card — powered by GA Realtime */}
                         <div className="group relative rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-emerald-500/8 transition-all duration-200 overflow-hidden">
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2.5">
@@ -7128,7 +6951,7 @@ export const AdminPage: React.FC = () => {
                               <div>
                                 <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Currently Online</div>
                                 <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">
-                                  {onlineUpdatedAt ? formatTimeAgo(onlineUpdatedAt) : "Updating..."}
+                                  {gaRealtimeUpdatedAt ? formatTimeAgo(gaRealtimeUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
                             </div>
@@ -7136,22 +6959,22 @@ export const AdminPage: React.FC = () => {
                               variant="ghost"
                               size="icon"
                               aria-label="Refresh currently online"
-                              onClick={() => { loadOnlineUsers({ initial: false }); loadOnlineIpsList({ initial: false }); }}
-                              disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
+                              onClick={() => { loadGaRealtime(); loadOnlineIpsList({ initial: false }); }}
+                              disabled={ipsLoading || ipsRefreshing}
                               className="h-7 w-7 rounded-lg text-emerald-600 dark:text-emerald-400"
                             >
-                              <RefreshCw className={`h-3.5 w-3.5 ${onlineLoading || onlineRefreshing ? "animate-spin" : ""}`} />
+                              <RefreshCw className={`h-3.5 w-3.5 ${ipsRefreshing ? "animate-spin" : ""}`} />
                             </Button>
                           </div>
                           <div className="flex items-baseline gap-2">
                             <div className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                              {onlineLoading ? (
+                              {gaRealtime === null ? (
                                 <span className="inline-block w-10 h-8 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
                               ) : (
-                                onlineUsers
+                                gaRealtime.activeUsers
                               )}
                               </div>
-                              {!onlineLoading && onlineUsers > 0 && (
+                              {gaRealtime && gaRealtime.activeUsers > 0 && (
                                 <div className="flex items-center gap-1">
                                   <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
@@ -7161,6 +6984,25 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               )}
                             </div>
+                            {/* GA realtime breakdown: countries + devices */}
+                            {gaRealtime && (gaRealtime.countries.length > 0 || gaRealtime.devices.length > 0) && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {gaRealtime.countries.slice(0, 4).map((c) => (
+                                  <span key={c.country} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-[10px]">
+                                    <Globe className="h-2.5 w-2.5 opacity-50" />
+                                    <span className="font-medium">{c.country}</span>
+                                    <span className="opacity-50">{c.users}</span>
+                                  </span>
+                                ))}
+                                {gaRealtime.devices.map((d) => (
+                                  <span key={d.device} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-[10px]">
+                                    {d.device === "desktop" ? <Monitor className="h-2.5 w-2.5 opacity-50" /> : d.device === "tablet" ? <Tablet className="h-2.5 w-2.5 opacity-50" /> : <Smartphone className="h-2.5 w-2.5 opacity-50" />}
+                                    <span className="font-medium capitalize">{d.device}</span>
+                                    <span className="opacity-50">{d.users}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             {/* Connected IPs toggle */}
                             <div className="mt-3 pt-2 border-t border-emerald-200/40 dark:border-emerald-800/30">
                               <button
@@ -7760,354 +7602,7 @@ export const AdminPage: React.FC = () => {
                         </Card>
                       </div>
 
-                      {/* ═══ TRAFFIC & ANALYTICS ═══ */}
-                      <div className="flex items-center gap-2 mt-2">
-                        <TrendingUp className="h-3.5 w-3.5 opacity-40" />
-                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Traffic & Analytics</span>
-                      </div>
 
-                      <Card className={glassCardClass}>
-                        <CardContent className="p-4">
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-sm font-medium">
-                                  Unique visitors - last {visitorsWindowDays}{" "}
-                                  days
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                    onClick={() => setVisitorsWindowDays(7)}
-                                    aria-pressed={visitorsWindowDays === 7}
-                                  >
-                                    7d
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                    onClick={() => setVisitorsWindowDays(30)}
-                                    aria-pressed={visitorsWindowDays === 30}
-                                  >
-                                    30d
-                                  </button>
-                                </div>
-                              </div>
-                              <div className="text-xs opacity-60">
-                                {visitorsUpdatedAt
-                                  ? `Updated ? ${formatTimeAgo(visitorsUpdatedAt)}`
-                                  : "Updated -"}
-                              </div>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              aria-label="Refresh visitors"
-                              onClick={() =>
-                                loadVisitorsStats({ initial: false })
-                              }
-                              disabled={visitorsLoading || visitorsRefreshing}
-                              className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                            >
-                              <RefreshCw
-                                className={`h-4 w-4 ? ${visitorsLoading || visitorsRefreshing ? "animate-spin" : ""}`}
-                              />
-                            </Button>
-                          </div>
-
-                          {visitorsLoading ? (
-                            <div className="flex items-center gap-2 text-sm opacity-60">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Loading...</span>
-                            </div>
-                          ) : visitorsSeries.length === 0 ? (
-                            <div className="text-sm opacity-60">
-                              No data yet.
-                            </div>
-                          ) : (
-                            (() => {
-                              const values = visitorsSeries.map(
-                                (d) => d.uniqueVisitors,
-                              );
-                              const maxVal = Math.max(...values, 1);
-                              // Prefer unique total across the full week from API; fallback to sum
-                              const totalVal =
-                                visitorsTotalUnique7d &&
-                                Number.isFinite(visitorsTotalUnique7d)
-                                  ? visitorsTotalUnique7d
-                                  : values.reduce((acc, val) => acc + val, 0);
-                              const avgVal = Math.round(
-                                totalVal / values.length,
-                              );
-
-                              const formatDow = (isoDate: string) => {
-                                try {
-                                  if (visitorsWindowDays === 30) return "";
-                                  const dt = new Date(isoDate + "T00:00:00Z");
-                                  return [
-                                    "Sun",
-                                    "Mon",
-                                    "Tue",
-                                    "Wed",
-                                    "Thu",
-                                    "Fri",
-                                    "Sat",
-                                  ][dt.getUTCDay()];
-                                } catch {
-                                  return isoDate;
-                                }
-                              };
-
-                              const formatFullDate = (isoDate: string) => {
-                                try {
-                                  const dt = new Date(isoDate + "T00:00:00Z");
-                                  return new Intl.DateTimeFormat(undefined, {
-                                    weekday: "short",
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    timeZone: "UTC",
-                                  }).format(dt);
-                                } catch {
-                                  return isoDate;
-                                }
-                              };
-
-                              const TooltipContent = ({
-                                active,
-                                payload,
-                                label,
-                              }: { active?: boolean; payload?: Array<{ value?: number }>; label?: string }) => {
-                                if (!active || !payload || payload.length === 0)
-                                  return null;
-                                const current = payload[0]?.value as number;
-                                const idx = visitorsSeries.findIndex(
-                                  (d) => d.date === label,
-                                );
-                                const prev =
-                                  idx > 0
-                                    ? (visitorsSeries[idx - 1]
-                                        ?.uniqueVisitors ?? 0)
-                                    : 0;
-                                const delta = current - prev;
-                                const pct =
-                                  prev > 0
-                                    ? Math.round((delta / prev) * 100)
-                                    : null;
-                                const up = delta > 0;
-                                const down = delta < 0;
-                                return (
-                                  <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
-                                    <div className="text-xs opacity-60 dark:opacity-70">
-                                      {formatFullDate(label)}
-                                    </div>
-                                    <div className="mt-1 text-base font-semibold tabular-nums">
-                                      {current}
-                                    </div>
-                                    <div className="text-xs mt-0.5">
-                                      <span
-                                        className={
-                                          up
-                                            ? "text-emerald-600 dark:text-emerald-400"
-                                            : down
-                                              ? "text-rose-600 dark:text-rose-400"
-                                              : "text-neutral-600 dark:text-neutral-400"
-                                        }
-                                      >
-                                        {delta === 0
-                                          ? "No change"
-                                          : `${up ? "+" : ""}${delta}${pct !== null ? ` (${pct}%)` : ""}`}
-                                      </span>
-                                      <span className="opacity-60 dark:opacity-70">
-                                        {" "}
-                                        vs previous day
-                                      </span>
-                                    </div>
-                                    <div className="text-[11px] opacity-70 dark:opacity-80 mt-1">
-                                      7-day avg:{" "}
-                                      <span className="font-medium">
-                                        {avgVal}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              };
-
-                              return (
-                                <div>
-                                  <div className="text-sm font-medium mb-2">
-                                    Total for the whole week:{" "}
-                                    <span className="tabular-nums">
-                                      {totalVal}
-                                    </span>
-                                  </div>
-                                  <div className="h-72 w-full max-w-none mx-0">
-                                    <ChartSuspense
-                                      fallback={
-                                        <div className="h-full w-full flex items-center justify-center text-sm text-gray-400">
-                                          Loading chart...
-                                        </div>
-                                      }
-                                    >
-                                      <ResponsiveContainer
-                                        width="100%"
-                                        height="100%"
-                                      >
-                                        <ComposedChart
-                                          data={visitorsSeries}
-                                          margin={{
-                                            top: 10,
-                                            right: 8,
-                                            bottom: 14,
-                                            left: 8,
-                                          }}
-                                        >
-                                          <defs>
-                                            <linearGradient
-                                              id="visitsLineGrad"
-                                              x1="0"
-                                              y1="0"
-                                              x2="1"
-                                              y2="0"
-                                            >
-                                              <stop
-                                                offset="0%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                              />
-                                              <stop
-                                                offset="100%"
-                                                stopColor={
-                                                  isDark ? "#a78bfa" : "#6b7280"
-                                                }
-                                              />
-                                            </linearGradient>
-                                            <linearGradient
-                                              id="visitsAreaGrad"
-                                              x1="0"
-                                              y1="0"
-                                              x2="0"
-                                              y2="1"
-                                            >
-                                              <stop
-                                                offset="0%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                                stopOpacity={
-                                                  isDark ? 0.4 : 0.35
-                                                }
-                                              />
-                                              <stop
-                                                offset="100%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                                stopOpacity={
-                                                  isDark ? 0.1 : 0.05
-                                                }
-                                              />
-                                            </linearGradient>
-                                          </defs>
-
-                                          <CartesianGrid
-                                            strokeDasharray="3 3"
-                                            stroke={
-                                              isDark
-                                                ? "rgba(255,255,255,0.1)"
-                                                : "rgba(0,0,0,0.06)"
-                                            }
-                                          />
-                                          <XAxis
-                                            dataKey="date"
-                                            tickFormatter={formatDow}
-                                            tick={{
-                                              fontSize: 11,
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#525252",
-                                            }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            interval={0}
-                                            padding={{ left: 0, right: 0 }}
-                                          />
-                                          <YAxis
-                                            allowDecimals={false}
-                                            domain={[0, Math.max(maxVal, 5)]}
-                                            tick={{
-                                              fontSize: 11,
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#525252",
-                                            }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            width={28}
-                                          />
-                                          <Tooltip
-                                            content={<TooltipContent />}
-                                            cursor={{
-                                              stroke: isDark
-                                                ? "rgba(255,255,255,0.2)"
-                                                : "rgba(0,0,0,0.1)",
-                                            }}
-                                          />
-                                          <ReferenceLine
-                                            y={avgVal}
-                                            stroke={
-                                              isDark ? "#9ca3af" : "#a3a3a3"
-                                            }
-                                            strokeDasharray="4 4"
-                                            ifOverflow="extendDomain"
-                                            label={{
-                                              value: "avg",
-                                              position: "insideRight",
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#737373",
-                                              fontSize: 11,
-                                              dx: -6,
-                                            }}
-                                          />
-
-                                          <Area
-                                            type="monotone"
-                                            dataKey="uniqueVisitors"
-                                            fill="url(#visitsAreaGrad)"
-                                            stroke="none"
-                                            animationDuration={600}
-                                          />
-                                          <Line
-                                            type="monotone"
-                                            dataKey="uniqueVisitors"
-                                            stroke="url(#visitsLineGrad)"
-                                            strokeWidth={3}
-                                            dot={false}
-                                            activeDot={{
-                                              r: 5,
-                                              strokeWidth: 2,
-                                              stroke: isDark
-                                                ? "#60a5fa"
-                                                : "#111827",
-                                              fill: isDark
-                                                ? "#1e1e1e"
-                                                : "#ffffff",
-                                            }}
-                                            animationDuration={700}
-                                          />
-                                        </ComposedChart>
-                                      </ResponsiveContainer>
-                                    </ChartSuspense>
-                                  </div>
-                                </div>
-                              );
-                            })()
-                          )}
-                        </CardContent>
-                      </Card>
                     {/* ─── Google Analytics Dashboard ─── */}
                     {gaConfigured !== false && (
                       <Card className={glassCardClass}>
@@ -8183,51 +7678,6 @@ export const AdminPage: React.FC = () => {
                               {gaError && (
                                 <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
                                   {gaError}
-                                </div>
-                              )}
-
-                              {/* Real-time active users banner */}
-                              {gaRealtime && (
-                                <div className="rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200/60 dark:border-emerald-800/40 p-4">
-                                  <div className="flex items-center justify-between mb-3">
-                                    <div className="flex items-center gap-2">
-                                      <span className="relative flex h-2.5 w-2.5">
-                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
-                                      </span>
-                                      <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Right now on the site</span>
-                                    </div>
-                                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
-                                      {gaRealtime.activeUsers}
-                                    </div>
-                                  </div>
-                                  {gaRealtime.countries.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5">
-                                      {gaRealtime.countries.slice(0, 8).map((c) => (
-                                        <span key={c.country} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/70 dark:bg-emerald-900/40 text-xs">
-                                          <Globe className="h-3 w-3 opacity-60" />
-                                          <span className="font-medium">{c.country}</span>
-                                          <span className="opacity-60">{c.users}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {gaRealtime.devices.length > 0 && (
-                                    <div className="flex flex-wrap gap-1.5 mt-2">
-                                      {gaRealtime.devices.map((d) => (
-                                        <span key={d.device} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/70 dark:bg-emerald-900/40 text-xs">
-                                          {d.device === "desktop" ? <Monitor className="h-3 w-3 opacity-60" /> : d.device === "tablet" ? <Tablet className="h-3 w-3 opacity-60" /> : <Smartphone className="h-3 w-3 opacity-60" />}
-                                          <span className="font-medium capitalize">{d.device}</span>
-                                          <span className="opacity-60">{d.users}</span>
-                                        </span>
-                                      ))}
-                                    </div>
-                                  )}
-                                  {gaRealtimeUpdatedAt && (
-                                    <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/50 mt-2">
-                                      Updated {formatTimeAgo(gaRealtimeUpdatedAt)}
-                                    </div>
-                                  )}
                                 </div>
                               )}
 
