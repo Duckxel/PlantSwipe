@@ -616,6 +616,13 @@ if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
 fi
 fi
 
+# Sync email template (generates .mjs for Node.js + copies to Supabase _shared)
+SYNC_EMAIL_SCRIPT="$NODE_DIR/scripts/sync-email-template.sh"
+if [[ -f "$SYNC_EMAIL_SCRIPT" ]]; then
+  log "Syncing email template…"
+  bash "$SYNC_EMAIL_SCRIPT"
+fi
+
 # Install and build Node app using Bun
 log "Installing dependencies with Bun…"
 cd "$NODE_DIR"
