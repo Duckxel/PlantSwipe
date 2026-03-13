@@ -1928,7 +1928,7 @@ export const AdminPage: React.FC = () => {
   const [gaConfigured, setGaConfigured] = React.useState<boolean | null>(null);
   const [gaLoading, setGaLoading] = React.useState<boolean>(false);
   const [gaError, setGaError] = React.useState<string | null>(null);
-  const [gaDays, setGaDays] = React.useState<7 | 14 | 30>(7);
+  const [gaDays, setGaDays] = React.useState<7 | 14 | 30>(30);
   const [gaRealtime, setGaRealtime] = React.useState<{
     activeUsers: number;
     countries: Array<{ country: string; users: number }>;
@@ -7376,9 +7376,19 @@ export const AdminPage: React.FC = () => {
                           Changing branch takes effect when you run Pull &
                           Build.
                         </div>
+                          </CardContent>
+                        </Card>
+                      </div>
 
+                      {/* Full-width Action Buttons + Console */}
+                      <Card className={glassCardClass}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Zap className="h-4 w-4 text-amber-500" />
+                            <span className="text-sm font-semibold">Quick Actions</span>
+                          </div>
                           {/* Action buttons */}
-                          <div className="mt-4 grid grid-cols-2 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           <Button
                             className="rounded-xl w-full text-xs px-2 py-2 h-auto"
                             size="sm"
@@ -7553,9 +7563,8 @@ export const AdminPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                          </CardContent>
-                        </Card>
-                      </div>
+                        </CardContent>
+                      </Card>
 
 
                     {/* ─── Google Analytics Dashboard ─── */}
@@ -8011,35 +8020,18 @@ export const AdminPage: React.FC = () => {
                                     <div className="rounded-xl border p-3">
                                       <div className="text-sm font-medium mb-2">Top Countries</div>
 
-                                      {/* Dot Map with world outline */}
+                                      {/* World Map with country dots */}
                                       {gaGeo.countries.length > 0 && (
                                         <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "2 / 1" }}>
+                                          {/* SVG world map background */}
+                                          <img
+                                            src="https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg"
+                                            alt="World map"
+                                            className="absolute inset-0 w-full h-full object-contain"
+                                            style={{ opacity: isDark ? 0.25 : 0.18 }}
+                                          />
+                                          {/* Country dots overlay */}
                                           <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid meet">
-                                            {/* Simplified world land masses — equirectangular projection, viewBox 0-100 x 0-50 */}
-                                            {/* North America */}
-                                            <path d="M5,8 L12,7 L17,9 L20,7 L24,8 L27,11 L28,15 L30,17 L28,20 L25,22 L22,22 L19,25 L16,25 L14,28 L12,27 L10,24 L7,22 L5,18 L4,14 L5,10Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* South America */}
-                                            <path d="M20,28 L24,27 L28,29 L30,32 L31,35 L30,38 L28,41 L25,44 L22,45 L20,43 L19,39 L18,35 L19,31Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Europe */}
-                                            <path d="M47,8 L50,7 L53,8 L55,9 L56,11 L55,13 L53,15 L50,16 L48,15 L46,13 L45,11 L46,9Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Africa */}
-                                            <path d="M46,17 L50,16 L54,17 L57,19 L58,23 L57,27 L55,31 L53,34 L50,36 L47,35 L45,32 L44,28 L43,24 L44,20Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Asia */}
-                                            <path d="M56,5 L62,4 L68,5 L74,6 L80,8 L84,10 L86,13 L85,16 L82,18 L78,20 L74,21 L70,22 L66,21 L62,19 L58,17 L56,14 L55,10 L56,7Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Southeast Asia / Indonesia */}
-                                            <path d="M78,22 L82,21 L86,23 L88,25 L86,27 L82,27 L79,26 L78,24Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Australia */}
-                                            <path d="M82,32 L88,31 L92,33 L93,36 L91,39 L87,40 L84,39 L82,36 L81,34Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Greenland */}
-                                            <path d="M30,4 L35,3 L38,5 L37,8 L34,9 L31,8 L29,6Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
-                                            {/* Grid lines */}
-                                            {[10, 20, 30, 40].map(v => (
-                                              <line key={`h${v}`} x1="0" y1={v} x2="100" y2={v} stroke="currentColor" opacity={0.05} strokeWidth="0.1" />
-                                            ))}
-                                            {[20, 40, 60, 80].map(v => (
-                                              <line key={`v${v}`} x1={v} y1="0" x2={v} y2="50" stroke="currentColor" opacity={0.05} strokeWidth="0.1" />
-                                            ))}
-                                            {/* Country dots */}
                                             {gaGeo.countries.map((c, i) => {
                                               const coords = countryCoords[c.country];
                                               if (!coords) return null;
