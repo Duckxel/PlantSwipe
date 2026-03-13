@@ -1976,7 +1976,7 @@ export const AdminPage: React.FC = () => {
   const [gaUpdatedAt, setGaUpdatedAt] = React.useState<number | null>(null);
   const [gaRealtimeUpdatedAt, setGaRealtimeUpdatedAt] = React.useState<number | null>(null);
   const [gaOpen, setGaOpen] = React.useState<boolean>(true);
-  const [gaChartMetric, setGaChartMetric] = React.useState<"users" | "pageViews" | "sessions" | "newUsers">("users");
+  const [gaChartMetrics, setGaChartMetrics] = React.useState<Set<string>>(() => new Set(["users", "pageViews", "sessions", "newUsers"]));
   const gaDeviceColors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
   const gaChannelColors = ["#111827", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#d946ef"];
 
@@ -8304,45 +8304,63 @@ export const AdminPage: React.FC = () => {
 
                               {/* Daily traffic chart */}
                               {gaSeries.length > 0 && (() => {
-                                  const metricOpts: Array<{ key: "users" | "pageViews" | "sessions" | "newUsers"; label: string; color: string }> = [
+                                  const metricOpts: Array<{ key: string; label: string; color: string }> = [
                                     { key: "users", label: "Users", color: "#3b82f6" },
                                     { key: "pageViews", label: "Page Views", color: "#f59e0b" },
                                     { key: "sessions", label: "Sessions", color: "#10b981" },
                                     { key: "newUsers", label: "New Users", color: "#8b5cf6" },
                                   ];
-                                  const active = metricOpts.find(m => m.key === gaChartMetric) || metricOpts[0];
+                                  const visibleMetrics = metricOpts.filter(m => gaChartMetrics.has(m.key));
+                                  const toggleMetric = (key: string) => {
+                                    setGaChartMetrics(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) {
+                                        if (next.size > 1) next.delete(key);
+                                      } else {
+                                        next.add(key);
+                                      }
+                                      return next;
+                                    });
+                                  };
+                                  // Area fill only when a single metric is active
+                                  const soloMetric = visibleMetrics.length === 1 ? visibleMetrics[0] : null;
                                   return (
                                     <div className="rounded-xl border p-3">
                                       <div className="flex items-center justify-between mb-2">
                                         <div className="text-sm font-medium">Daily Traffic - last {gaDays} days</div>
                                         <div className="flex items-center gap-1">
-                                          {metricOpts.map((m) => (
-                                            <button
-                                              key={m.key}
-                                              type="button"
-                                              onClick={() => setGaChartMetric(m.key)}
-                                              className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
-                                                gaChartMetric === m.key
-                                                  ? "text-white font-medium"
-                                                  : "bg-stone-100 dark:bg-stone-800 opacity-60 hover:opacity-100"
-                                              }`}
-                                              style={gaChartMetric === m.key ? { backgroundColor: m.color } : undefined}
-                                            >
-                                              {m.label}
-                                            </button>
-                                          ))}
+                                          {metricOpts.map((m) => {
+                                            const on = gaChartMetrics.has(m.key);
+                                            return (
+                                              <button
+                                                key={m.key}
+                                                type="button"
+                                                onClick={() => toggleMetric(m.key)}
+                                                className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+                                                  on
+                                                    ? "text-white font-medium"
+                                                    : "bg-stone-100 dark:bg-stone-800 opacity-40 hover:opacity-80"
+                                                }`}
+                                                style={on ? { backgroundColor: m.color } : undefined}
+                                              >
+                                                {m.label}
+                                              </button>
+                                            );
+                                          })}
                                         </div>
                                       </div>
                                       <div className="h-56 w-full">
                                         <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
                                           <ResponsiveContainer width="100%" height="100%">
                                             <ComposedChart data={gaSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                                              <defs>
-                                                <linearGradient id="gaMetricGrad" x1="0" y1="0" x2="0" y2="1">
-                                                  <stop offset="0%" stopColor={active.color} stopOpacity={0.3} />
-                                                  <stop offset="100%" stopColor={active.color} stopOpacity={0.05} />
-                                                </linearGradient>
-                                              </defs>
+                                              {soloMetric && (
+                                                <defs>
+                                                  <linearGradient id="gaMetricGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={soloMetric.color} stopOpacity={0.3} />
+                                                    <stop offset="100%" stopColor={soloMetric.color} stopOpacity={0.05} />
+                                                  </linearGradient>
+                                                </defs>
+                                              )}
                                               <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
                                               <XAxis
                                                 dataKey="date"
@@ -8361,21 +8379,26 @@ export const AdminPage: React.FC = () => {
                                               <Tooltip
                                                 content={({ active: tActive, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
                                                   if (!tActive || !payload?.length) return null;
-                                                  const p = payload[0];
                                                   return (
                                                     <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
                                                       <div className="font-medium opacity-70 mb-1">{label}</div>
-                                                      <div className="flex items-center gap-2">
-                                                        <span className="w-2 h-2 rounded-full" style={{ background: active.color }} />
-                                                        <span>{active.label}</span>
-                                                        <span className="font-bold tabular-nums ml-auto">{p?.value?.toLocaleString()}</span>
-                                                      </div>
+                                                      {payload.map((p) => (
+                                                        <div key={p.dataKey} className="flex items-center gap-2">
+                                                          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                          <span className="capitalize">{p.dataKey === "pageViews" ? "Page Views" : p.dataKey === "newUsers" ? "New Users" : p.dataKey}</span>
+                                                          <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                                                        </div>
+                                                      ))}
                                                     </div>
                                                   );
                                                 }}
                                               />
-                                              <Area type="monotone" dataKey={gaChartMetric} fill="url(#gaMetricGrad)" stroke="none" />
-                                              <Line type="monotone" dataKey={gaChartMetric} stroke={active.color} strokeWidth={2} dot={false} />
+                                              {soloMetric && (
+                                                <Area type="monotone" dataKey={soloMetric.key} fill="url(#gaMetricGrad)" stroke="none" />
+                                              )}
+                                              {visibleMetrics.map((m) => (
+                                                <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} strokeWidth={2} dot={false} />
+                                              ))}
                                             </ComposedChart>
                                           </ResponsiveContainer>
                                         </ChartSuspense>
