@@ -495,9 +495,9 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   const strings = EMAIL_WRAPPER_STRINGS[language] || EMAIL_WRAPPER_STRINGS['en']
   const copyrightText = strings.copyright.replace('{{year}}', String(currentYear))
 
-  // Aphylia logo URL for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
+  // Aphylia logo URLs for emails (using PNG for Gmail compatibility - Gmail doesn't support SVG or WebP)
   const logoUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/png/icon-500_transparent_white.png'
-  const logoImg = `<img src="${logoUrl}" alt="Aphylia" width="32" height="32" style="display:block;border:0;outline:none;text-decoration:none;" />`
+  const bannerUrl = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260-ae7e1e2d-ea1d-4944-be95-84cc4b8a29ed.png'
   const logoImgLarge = `<img src="${logoUrl}" alt="Aphylia" width="40" height="40" style="display:block;border:0;outline:none;text-decoration:none;" />`
 
   return `<!DOCTYPE html>
@@ -508,10 +508,9 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="x-apple-disable-message-reformatting">
   <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
-  <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
   <title>${subject || 'Aphylia'}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <!--[if mso]>
   <noscript>
     <xml>
@@ -565,22 +564,6 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
     /* Strong/Bold */
     strong, b { font-weight: 600; color: #111827; }
     
-    /* Dark mode */
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
-      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #0f0f0f 100%) !important; }
-      .email-container { background: linear-gradient(135deg, rgba(16, 185, 129, 0.06) 0%, rgba(24, 24, 27, 0.98) 50%, rgba(251, 191, 36, 0.03) 100%) !important; border-color: rgba(63, 63, 70, 0.5) !important; }
-      .email-body { color: #f4f4f5 !important; }
-      .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
-      .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
-      .email-body a { color: #34d399 !important; }
-      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
-      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
-      .signature-section { background: rgba(16, 185, 129, 0.08) !important; border-color: rgba(16, 185, 129, 0.15) !important; }
-      .footer-section { border-color: rgba(63, 63, 70, 0.3) !important; }
-      .footer-section p { color: #71717a !important; }
-    }
-    
     /* Responsive */
     @media screen and (max-width: 640px) {
       .email-container { width: 100% !important; margin: 0 !important; border-radius: 0 !important; border-left: none !important; border-right: none !important; }
@@ -598,25 +581,10 @@ function wrapEmailHtml(bodyHtml, subject, language = 'en') {
       <td align="center" style="padding:48px 20px;">
         <table role="presentation" class="email-container" width="640" cellpadding="0" cellspacing="0" style="max-width:640px;width:100%;background:linear-gradient(135deg, rgba(16, 185, 129, 0.04) 0%, rgba(255, 255, 255, 0.99) 50%, rgba(251, 191, 36, 0.03) 100%);border-radius:32px;border:1px solid rgba(16, 185, 129, 0.12);box-shadow:0 32px 64px -16px rgba(16, 185, 129, 0.18), 0 0 0 1px rgba(255, 255, 255, 0.8) inset;overflow:hidden;">
           <tr>
-            <td class="email-header" style="background:linear-gradient(135deg, #059669 0%, #10b981 50%, #34d399 100%);padding:32px 48px;text-align:center;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td align="center">
-                    <div style="display:inline-block;background:rgba(255,255,255,0.15);border-radius:20px;padding:14px 28px;">
-                      <table role="presentation" cellpadding="0" cellspacing="0">
-                        <tr>
-                          <td style="vertical-align:middle;padding-right:12px;">
-                            ${logoImg}
-                          </td>
-                          <td style="vertical-align:middle;">
-                            <span style="font-size:26px;font-weight:700;color:#ffffff;letter-spacing:-0.5px;font-family:'Quicksand',-apple-system,BlinkMacSystemFont,sans-serif;">Aphylia</span>
-                          </td>
-                        </tr>
-                      </table>
-                    </div>
-                  </td>
-                </tr>
-              </table>
+            <td class="email-header" style="background-color:#059669;background:linear-gradient(135deg, #047857 0%, #059669 30%, #10b981 65%, #34d399 100%);padding:28px 48px;text-align:center;">
+              <div style="display:inline-block;background-color:rgba(255,255,255,0.18);border-radius:18px;padding:12px 28px;">
+                <img src="${bannerUrl}" alt="Aphylia" height="48" style="display:block;border:0;outline:none;text-decoration:none;height:48px;width:auto;" />
+              </div>
             </td>
           </tr>
           <tr>

@@ -136,10 +136,9 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="x-apple-disable-message-reformatting">
   <meta name="format-detection" content="telephone=no,address=no,email=no,date=no,url=no">
-  <meta name="color-scheme" content="light dark">
-  <meta name="supported-color-schemes" content="light dark">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
   <title>${options.subject || 'Aphylia'}</title>
-  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap" rel="stylesheet">
   <!--[if mso]>
   <noscript>
     <xml>
@@ -192,23 +191,6 @@ export function wrapEmailHtmlShared(bodyHtml: string, options: EmailWrapperOptio
     
     /* Strong/Bold */
     strong, b { font-weight: 600; color: #111827; }
-    
-    /* Dark mode */
-    @media (prefers-color-scheme: dark) {
-      body { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #1a1409 100%) !important; }
-      .email-wrapper { background: linear-gradient(180deg, #0b1220 0%, #0a0f1a 30%, #0a0f1a 70%, #1a1409 100%) !important; }
-      .email-container { background: linear-gradient(170deg, rgba(16,185,129,0.06) 0%, #18181b 12%, #18181b 75%, rgba(251,191,36,0.03) 100%) !important; border-color: rgba(63,63,70,0.5) !important; }
-      .email-body { color: #f4f4f5 !important; }
-      .email-body p, .email-body li, .email-body span, .email-body td { color: #e4e4e7 !important; }
-      .email-body h1, .email-body h2, .email-body h3, .email-body h4 { color: #ffffff !important; }
-      .email-body a { color: #34d399 !important; }
-      .email-body code { background: #374151 !important; color: #fca5a5 !important; }
-      .email-body mark { background: #854d0e !important; color: #fef08a !important; }
-      .signature-section { background: rgba(16,185,129,0.08) !important; border-color: rgba(16,185,129,0.15) !important; }
-      .signature-section p { color: #d4d4d8 !important; }
-      .email-footer { background: rgba(24,24,27,0.5) !important; border-color: rgba(63,63,70,0.3) !important; }
-      .email-footer p, .email-footer a { color: #a1a1aa !important; }
-    }
     
     /* Responsive */
     @media screen and (max-width: 640px) {
