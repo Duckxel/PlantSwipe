@@ -17,12 +17,16 @@ DEST_FILE="$DEST_DIR/emailTemplateShared.ts"
 # Create destination directory if it doesn't exist
 mkdir -p "$DEST_DIR"
 
-# Copy the file
+# Copy the file to Supabase
 cp "$SOURCE_FILE" "$DEST_FILE"
 
 echo "✅ Synced email template to Supabase functions"
 echo "   Source: $SOURCE_FILE"
 echo "   Dest:   $DEST_FILE"
+
+echo ""
+echo "⚠️  Remember to also update the Node.js version if you changed exports:"
+echo "   src/lib/emailTemplateShared.mjs  (plain JS for server.js)"
 echo ""
 echo "⚠️  Remember to redeploy the edge function after syncing:"
 echo "   supabase functions deploy email-campaign-runner"
