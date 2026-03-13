@@ -25,6 +25,8 @@ echo "   Source: $SOURCE_FILE"
 echo "   Dest:   $DEST_FILE"
 
 # ── 2. Generate .mjs for Node.js (strip TypeScript syntax) ───────────────────
+# Ensure the output file exists and is writable (fix Permission denied when running as www-data)
+touch "$MJS_FILE" 2>/dev/null || true
 node -e "
 const fs = require('fs');
 let code = fs.readFileSync('$SOURCE_FILE', 'utf8');

@@ -956,6 +956,21 @@ for gen_file in "$NODE_DIR/public/sitemap.xml" "$NODE_DIR/public/llms.txt"; do
   $SUDO chmod 0644 "$gen_file" 2>/dev/null || true
 done
 
+# Ensure generated email template (.mjs) and scripts are writable/executable by service user
+# The sync-email-template.sh script runs as www-data during refresh and writes to src/lib/
+log "Ensuring email template sync files are writable by $SERVICE_USER…"
+MJS_GEN="$NODE_DIR/src/lib/emailTemplateShared.mjs"
+$SUDO touch "$MJS_GEN" 2>/dev/null || true
+$SUDO chown "$SERVICE_USER:$SERVICE_USER" "$MJS_GEN" 2>/dev/null || true
+$SUDO chmod 0644 "$MJS_GEN" 2>/dev/null || true
+if [[ -d "$NODE_DIR/scripts" ]]; then
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/scripts" || true
+  $SUDO chmod -R u+rwX "$NODE_DIR/scripts" || true
+fi
+# Supabase _shared directory (sync target)
+$SUDO mkdir -p "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
+$SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
+
 # Ask about SSL setup BEFORE installing nginx config
 WANT_SSL=""
 if [[ ! -f "$REPO_DIR/domain.json" ]]; then
