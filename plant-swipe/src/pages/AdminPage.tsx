@@ -94,6 +94,14 @@ import {
   Trophy,
   CheckCircle2,
   SlidersHorizontal,
+  Globe,
+  Smartphone,
+  Monitor,
+  Tablet,
+  Activity,
+  Eye,
+  MousePointer,
+  ArrowDownRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1877,7 +1885,6 @@ export const AdminPage: React.FC = () => {
     }
   };
 
-  const [onlineUsers, setOnlineUsers] = React.useState<number>(0);
     const [registeredCount, setRegisteredCount] = React.useState<number | null>(
       null,
     );
@@ -1895,43 +1902,6 @@ export const AdminPage: React.FC = () => {
     const [plantsUpdatedAt, setPlantsUpdatedAt] = React.useState<number | null>(
       null,
     );
-  const [onlineLoading, setOnlineLoading] = React.useState<boolean>(true);
-  const [onlineRefreshing, setOnlineRefreshing] =
-    React.useState<boolean>(false);
-  const [onlineUpdatedAt, setOnlineUpdatedAt] = React.useState<number | null>(
-    null,
-  );
-  const [visitorsLoading, setVisitorsLoading] = React.useState<boolean>(true);
-  const [visitorsRefreshing, setVisitorsRefreshing] =
-    React.useState<boolean>(false);
-  const [visitorsUpdatedAt, setVisitorsUpdatedAt] = React.useState<
-    number | null
-  >(null);
-  const [visitorsSeries, setVisitorsSeries] = React.useState<
-    Array<{ date: string; uniqueVisitors: number }>
-  >([]);
-  const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] =
-    React.useState<number>(0);
-  const [topCountries, setTopCountries] = React.useState<
-    Array<{ country: string; visits: number; pct?: number }>
-  >([]);
-  type OtherCountriesBucket = {
-    count: number;
-    visits: number;
-    pct?: number;
-    codes?: string[];
-    items?: Array<{ country: string; visits: number }>;
-  };
-  const [otherCountries, setOtherCountries] =
-    React.useState<OtherCountriesBucket | null>(null);
-  const [topReferrers, setTopReferrers] = React.useState<
-    Array<{ source: string; visits: number; pct?: number }>
-  >([]);
-  const [otherReferrers, setOtherReferrers] = React.useState<{
-    count: number;
-    visits: number;
-    pct?: number;
-  } | null>(null);
   // Distinct, high-contrast palette for readability
   const countryColors = [
     "#10b981",
@@ -1947,52 +1917,53 @@ export const AdminPage: React.FC = () => {
     "#fb7185",
     "#f97316",
   ];
-  const referrerColors = [
-    "#111827",
-    "#3b82f6",
-    "#ef4444",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-  ];
-  // Floating tooltip for the "Other countries" legend item
-  const [otherCountriesTooltip, setOtherCountriesTooltip] = React.useState<{
-    top: number;
-    left: number;
-    names: string[];
-  } | null>(null);
-  const showOtherCountriesTooltip = React.useCallback(
-    (el: HTMLElement) => {
-      try {
-        if (
-          !otherCountries ||
-          !Array.isArray(otherCountries.codes) ||
-          otherCountries.codes.length === 0
-        )
-          return;
-        const rect = el.getBoundingClientRect();
-        const names = otherCountries.codes
-          .map((c) => countryCodeToName(c))
-          .filter((n) => !!n)
-          .sort((a, b) => a.localeCompare(b));
-        setOtherCountriesTooltip({
-          top: Math.max(8, rect.top - 8),
-          left: rect.left + rect.width / 2,
-          names,
-        });
-      } catch {}
-    },
-    [otherCountries, countryCodeToName],
-  );
-  const hideOtherCountriesTooltip = React.useCallback(
-    () => setOtherCountriesTooltip(null),
-    [],
-  );
-  // Connected IPs (last 60 minutes)
-  const [ips, setIps] = React.useState<string[]>([]);
+  // Connected IPs (last 60 minutes) — enriched with visits, RPM, country, account linkage
+  type EnrichedIp = { ip: string; visits: number; country: string | null; hasAccount: boolean; rpm: number };
+  const [enrichedIps, setEnrichedIps] = React.useState<EnrichedIp[]>([]);
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true);
   const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false);
-  const [ipsOpen, setIpsOpen] = React.useState<boolean>(false);
+  const [ipsUpdatedAt, setIpsUpdatedAt] = React.useState<number | null>(null);
+
+  // --- Google Analytics Data API state ---
+  const [gaConfigured, setGaConfigured] = React.useState<boolean | null>(null);
+  const [gaLoading, setGaLoading] = React.useState<boolean>(false);
+  const [gaError, setGaError] = React.useState<string | null>(null);
+  const [gaDays, setGaDays] = React.useState<7 | 14 | 30>(30);
+  const [gaRealtime, setGaRealtime] = React.useState<{
+    activeUsers: number;
+    countries: Array<{ country: string; users: number }>;
+    devices: Array<{ device: string; users: number }>;
+  } | null>(null);
+  const [gaOverview, setGaOverview] = React.useState<{
+    metrics: Record<string, number>;
+    deltas: Record<string, number | null>;
+  } | null>(null);
+  const [gaSeries, setGaSeries] = React.useState<
+    Array<{ date: string; users: number; pageViews: number; sessions: number; newUsers: number }>
+  >([]);
+  const [gaTopPages, setGaTopPages] = React.useState<
+    Array<{ path: string; views: number; users: number; avgDuration: number }>
+  >([]);
+  const [gaDevices, setGaDevices] = React.useState<{
+    devices: Array<{ device: string; users: number; sessions: number }>;
+    browsers: Array<{ browser: string; users: number }>;
+  } | null>(null);
+  const [gaAcquisition, setGaAcquisition] = React.useState<{
+    channels: Array<{ channel: string; sessions: number; users: number; newUsers: number }>;
+    sources: Array<{ source: string; sessions: number; users: number }>;
+  } | null>(null);
+  const [gaGeo, setGaGeo] = React.useState<{
+    countries: Array<{ country: string; users: number; sessions: number }>;
+    cities: Array<{ city: string; users: number }>;
+  } | null>(null);
+  const [gaUpdatedAt, setGaUpdatedAt] = React.useState<number | null>(null);
+  const [mapTooltip, setMapTooltip] = React.useState<{ country: string; users: number; sessions: number; pct: number; color: string; x: number; y: number } | null>(null);
+  const [gaRealtimeUpdatedAt, setGaRealtimeUpdatedAt] = React.useState<number | null>(null);
+  const [gaOpen, setGaOpen] = React.useState<boolean>(true);
+  const [gaChartMetrics, setGaChartMetrics] = React.useState<Set<string>>(() => new Set(["users", "pageViews", "sessions", "newUsers"]));
+  const gaDeviceColors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+  const gaChannelColors = ["#111827", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#d946ef"];
+
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
   React.useEffect(() => {
@@ -4572,23 +4543,11 @@ export const AdminPage: React.FC = () => {
         );
         setRegisteredLoading(false);
       }
-      if (onlineLoading) {
-        console.warn(
-          "[AdminPage] Online users loading timeout - clearing loading state only",
-        );
-        setOnlineLoading(false);
-      }
       if (ipsLoading) {
         console.warn(
           "[AdminPage] IPs loading timeout - clearing loading state only",
         );
         setIpsLoading(false);
-      }
-      if (visitorsLoading) {
-        console.warn(
-          "[AdminPage] Visitors loading timeout - clearing loading state only",
-        );
-        setVisitorsLoading(false);
       }
     }, MAX_LOADING_TIMEOUT);
 
@@ -4596,9 +4555,7 @@ export const AdminPage: React.FC = () => {
   }, [
     branchesLoading,
     registeredLoading,
-    onlineLoading,
     ipsLoading,
-    visitorsLoading,
   ]);
 
   const loadBranches = React.useCallback(
@@ -5013,73 +4970,11 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id);
   }, [loadRegisteredCount]);
 
-  // Loader for "Currently online" (unique IPs in the last 60 minutes, DB-only)
-  const loadOnlineUsers = React.useCallback(
-    async (opts?: { initial?: boolean }) => {
-      const isInitial = !!opts?.initial;
-      if (isInitial) setOnlineLoading(true);
-      else setOnlineRefreshing(true);
-      try {
-        // Use dedicated endpoint backed by DB counts; forward Authorization so REST fallback can pass RLS
-        const token = (await supabase.auth.getSession()).data.session
-          ?.access_token;
-        const resp = await fetchWithRetry("/api/admin/online-users", {
-          headers: (() => {
-            const h: Record<string, string> = { Accept: "application/json" };
-            if (token) h["Authorization"] = `Bearer ${token}`;
-            const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
-              ?.VITE_ADMIN_STATIC_TOKEN;
-            if (adminToken) h["X-Admin-Token"] = String(adminToken);
-            return h;
-          })(),
-          credentials: "same-origin",
-        }).catch(() => null);
-        if (resp && resp.ok) {
-          const data = await safeJson(resp);
-          const num = Number(data?.onlineUsers ?? data?.count);
-          if (Number.isFinite(num) && num >= 0) {
-            setOnlineUsers(num);
-            setOnlineUpdatedAt(Date.now());
-            return;
-          }
-        }
-        // Don't set to 0 on error - keep last known value
-      } catch (e) {
-        console.error("[AdminPage] Failed to load online users:", e);
-        // Keep last known value on error - don't set to 0
-      } finally {
-        if (isInitial) setOnlineLoading(false);
-        else setOnlineRefreshing(false);
-      }
-    },
-    [fetchWithRetry, safeJson],
-  );
-
-  // Initial load (page load only) - staggered
-  React.useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadOnlineUsers({ initial: true });
-    }, 250);
-    return () => clearTimeout(timeoutId);
-  }, [loadOnlineUsers]);
-
-  // Auto-refresh the "Currently online" count every minute
-  React.useEffect(() => {
-    const intervalId = setInterval(() => {
-      loadOnlineUsers({ initial: false });
-    }, 60_000);
-    return () => clearInterval(intervalId);
-  }, [loadOnlineUsers]);
 
   // Loader for list of connected IPs (unique IPs past N minutes; default 60)
-  const loadOnlineIpsList = React.useCallback(
-    async (opts?: { initial?: boolean; minutes?: number }) => {
+  const loadEnrichedIps = React.useCallback(
+    async (opts?: { initial?: boolean }) => {
       const isInitial = !!opts?.initial;
-      const minutes =
-        Number.isFinite(opts?.minutes as number) &&
-        (opts?.minutes as number)! > 0
-          ? Math.floor(opts!.minutes as number)
-          : 60;
       if (isInitial) setIpsLoading(true);
       else setIpsRefreshing(true);
       try {
@@ -5093,21 +4988,25 @@ export const AdminPage: React.FC = () => {
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
         const resp = await fetchWithRetry(
-          `/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}`,
+          "/api/admin/online-ips-enriched",
           { headers, credentials: "same-origin" },
         ).catch(() => null);
         if (resp && resp.ok) {
           const data = await safeJson(resp);
-          const list: string[] = Array.isArray(data?.ips)
-            ? data.ips.map((s: unknown) => String(s)).filter(Boolean)
+          const list: EnrichedIp[] = Array.isArray(data?.ips)
+            ? data.ips.map((r: Record<string, unknown>) => ({
+                ip: String(r.ip || ""),
+                visits: Number(r.visits || 0),
+                country: r.country ? String(r.country) : null,
+                hasAccount: !!r.hasAccount,
+                rpm: Number(r.rpm || 0),
+              })).filter((r: EnrichedIp) => !!r.ip)
             : [];
-          setIps(list);
-          return;
+          setEnrichedIps(list);
+          setIpsUpdatedAt(Date.now());
         }
-        // Don't clear IPs on error - keep last known value
       } catch (e) {
-        console.error("[AdminPage] Failed to load IPs:", e);
-        // keep last known value
+        console.error("[AdminPage] Failed to load enriched IPs:", e);
       } finally {
         if (isInitial) setIpsLoading(false);
         else setIpsRefreshing(false);
@@ -5116,217 +5015,139 @@ export const AdminPage: React.FC = () => {
     [safeJson, fetchWithRetry],
   );
 
-  // Initial load and auto-refresh every 60s - staggered
+  // Initial load and auto-refresh every 60s
   React.useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadOnlineIpsList({ initial: true });
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [loadOnlineIpsList]);
+    const t = setTimeout(() => loadEnrichedIps({ initial: true }), 300);
+    return () => clearTimeout(t);
+  }, [loadEnrichedIps]);
   React.useEffect(() => {
-    const id = setInterval(() => {
-      loadOnlineIpsList({ initial: false });
-    }, 60_000);
+    const id = setInterval(() => loadEnrichedIps({ initial: false }), 60_000);
     return () => clearInterval(id);
-  }, [loadOnlineIpsList]);
+  }, [loadEnrichedIps]);
 
-  // Load visitors stats (last 7 days)
-  const [visitorsWindowDays, setVisitorsWindowDays] = React.useState<7 | 30>(7);
-  const loadVisitorsStats = React.useCallback(
-    async (opts?: { initial?: boolean }) => {
-      const isInitial = !!opts?.initial;
-      if (isInitial) setVisitorsLoading(true);
-      else setVisitorsRefreshing(true);
-      try {
-        const session = (await supabase.auth.getSession()).data.session;
-        const token = session?.access_token;
-        const headers: Record<string, string> = { Accept: "application/json" };
-        if (token) headers["Authorization"] = `Bearer ${token}`;
-        try {
-          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
-            ?.VITE_ADMIN_STATIC_TOKEN;
-          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
-        } catch {}
-        const resp = await fetchWithRetry(
-          `/api/admin/visitors-stats?days=${visitorsWindowDays}`,
-          {
-            headers,
-            credentials: "same-origin",
-          },
-        ).catch(() => null);
-        if (!resp || !resp.ok) {
-          // Keep last known value on error
-          return;
-        }
+
+  // --- Google Analytics Data API loaders ---
+  const gaAuthHeaders = React.useCallback(() => {
+    const h: Record<string, string> = { Accept: "application/json" };
+    const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    if (adminToken) h["X-Admin-Token"] = String(adminToken);
+    return h;
+  }, []);
+
+  // Check if GA is configured on the server
+  const checkGaStatus = React.useCallback(async () => {
+    try {
+      const resp = await fetchWithRetry("/api/admin/ga/status", {
+        headers: gaAuthHeaders(),
+        credentials: "same-origin",
+      }).catch(() => null);
+      if (resp?.ok) {
         const data = await safeJson(resp);
-        const series: Array<{ date: string; uniqueVisitors: number }> =
-          Array.isArray(data?.series7d)
-            ? data.series7d.map((d: unknown) => {
-                const dd = d as Record<string, unknown>;
-                return {
-                date: String(dd.date),
-                uniqueVisitors: Number(
-                  dd.uniqueVisitors ?? dd.unique_visitors ?? 0,
-                ),
-              };
-              })
-            : [];
-        setVisitorsSeries(series);
-        // Fetch weekly unique total from dedicated endpoint to keep requests separate
-        try {
-          const totalResp = await fetchWithRetry(
-            "/api/admin/visitors-unique-7d",
-            {
-              headers,
-              credentials: "same-origin",
-            },
-          ).catch(() => null);
-          if (totalResp && totalResp.ok) {
-            const totalData = await safeJson(totalResp);
-            const total7d = Number(
-              totalData?.uniqueIps7d ?? totalData?.weeklyUniqueIps7d ?? 0,
-            );
-            if (Number.isFinite(total7d) && total7d >= 0) {
-              setVisitorsTotalUnique7d(total7d);
-            }
-          }
-        } catch {}
-        // Load sources breakdown in parallel
-        try {
-          const sb = await fetchWithRetry(
-            `/api/admin/sources-breakdown?days=${visitorsWindowDays}`,
-            {
-              headers,
-              credentials: "same-origin",
-            },
-          ).catch(() => null);
-          if (sb && sb.ok) {
-            const sbd = await safeJson(sb);
-            const tc = Array.isArray(sbd?.topCountries)
-              ? sbd.topCountries
-                  .map((r: { country?: string; visits?: number }) => ({
-                    country: String(r.country || ""),
-                    visits: Number(r.visits || 0),
-                  }))
-                  .filter((x: { country: string }) => !!x.country)
-              : [];
-            const oc =
-              sbd?.otherCountries && typeof sbd.otherCountries === "object"
-                ? {
-                    count: Number(sbd.otherCountries.count || 0),
-                    visits: Number(sbd.otherCountries.visits || 0),
-                    codes: Array.isArray(sbd.otherCountries.codes)
-                      ? sbd.otherCountries.codes
-                          .map((x: unknown) => String(x || ""))
-                          .filter(Boolean)
-                      : undefined,
-                    items: Array.isArray(sbd.otherCountries.items)
-                      ? sbd.otherCountries.items
-                          .map((it: unknown) => {
-                            const item = it as Record<string, unknown>;
-                            return {
-                              country: String(item?.country || ""),
-                              visits: Number(item?.visits || 0),
-                            };
-                          })
-                          .filter((it: { country: string }) => !!it.country)
-                      : undefined,
-                  }
-                : null;
-            const totalCountryVisits =
-              tc.reduce((a: number, b: { country: string; visits: number }) => a + (b.visits || 0), 0) +
-              (oc?.visits || 0);
-            const countriesWithPct =
-              totalCountryVisits > 0
-                ? tc.map((x: { country: string; visits: number }) => ({
-                    ...x,
-                    pct: (x.visits / totalCountryVisits) * 100,
-                  }))
-                : tc.map((x: { country: string; visits: number }) => ({
-                    ...x,
-                    pct: 0,
-                  }));
-            const ocWithPct = oc
-              ? {
-                  ...oc,
-                  pct:
-                    totalCountryVisits > 0
-                      ? (oc.visits / totalCountryVisits) * 100
-                      : 0,
-                }
-              : null;
-
-            const tr = Array.isArray(sbd?.topReferrers)
-              ? sbd.topReferrers.map(
-                  (r: { source?: string; visits?: number }) => ({
-                    source: String(r.source || "direct"),
-                    visits: Number(r.visits || 0),
-                  }),
-                )
-              : [];
-            const orf =
-              sbd?.otherReferrers && typeof sbd.otherReferrers === "object"
-                ? {
-                    count: Number(sbd.otherReferrers.count || 0),
-                    visits: Number(sbd.otherReferrers.visits || 0),
-                  }
-                : null;
-            const totalRefVisits =
-              tr.reduce((a: number, b: { source: string; visits: number }) => a + (b.visits || 0), 0) +
-              (orf?.visits || 0);
-            const refsWithPct =
-              totalRefVisits > 0
-                ? tr.map((x: { source: string; visits: number }) => ({
-                    ...x,
-                    pct: (x.visits / totalRefVisits) * 100,
-                  }))
-                : tr.map((x: { source: string; visits: number }) => ({
-                    ...x,
-                    pct: 0,
-                  }));
-            const orfWithPct = orf
-              ? {
-                  ...orf,
-                  pct:
-                    totalRefVisits > 0
-                      ? (orf.visits / totalRefVisits) * 100
-                      : 0,
-                }
-              : null;
-
-            setTopCountries(countriesWithPct);
-            setOtherCountries(ocWithPct);
-            setTopReferrers(refsWithPct);
-            setOtherReferrers(orfWithPct);
-          }
-        } catch {}
-        setVisitorsUpdatedAt(Date.now());
-      } catch (e) {
-        console.error("[AdminPage] Failed to load visitors stats:", e);
-        // keep last known value
-      } finally {
-        if (isInitial) setVisitorsLoading(false);
-        else setVisitorsRefreshing(false);
+        setGaConfigured(!!data?.configured);
+      } else {
+        setGaConfigured(false);
       }
-    },
-    [visitorsWindowDays, safeJson, fetchWithRetry],
-  );
+    } catch {
+      setGaConfigured(false);
+    }
+  }, [fetchWithRetry, safeJson, gaAuthHeaders]);
 
+  // Load GA realtime data
+  const loadGaRealtime = React.useCallback(async () => {
+    if (gaConfigured === false) return;
+    try {
+      const resp = await fetchWithRetry("/api/admin/ga/realtime", {
+        headers: gaAuthHeaders(),
+        credentials: "same-origin",
+      }).catch(() => null);
+      if (resp?.ok) {
+        const data = await safeJson(resp);
+        if (data?.ok) {
+          setGaRealtime({
+            activeUsers: data.activeUsers ?? 0,
+            countries: data.countries ?? [],
+            devices: data.devices ?? [],
+          });
+          setGaRealtimeUpdatedAt(Date.now());
+        }
+      }
+    } catch (e) {
+      console.error("[AdminPage] GA realtime error:", e);
+    }
+  }, [gaConfigured, fetchWithRetry, safeJson, gaAuthHeaders]);
+
+  // Load all GA reports (overview, daily series, top pages, devices, acquisition, geo)
+  const loadGaReports = React.useCallback(async (opts?: { initial?: boolean }) => {
+    if (gaConfigured === false) return;
+    if (opts?.initial) setGaLoading(true);
+    setGaError(null);
+    try {
+      const days = gaDays;
+      const headers = gaAuthHeaders();
+      const fetchOpts = { headers, credentials: "same-origin" as RequestCredentials };
+      const [overviewResp, seriesResp, pagesResp, devicesResp, acqResp, geoResp] = await Promise.all([
+        fetchWithRetry(`/api/admin/ga/overview?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/daily-series?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/top-pages?days=${days}&limit=15`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/devices?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/acquisition?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/geo?days=${days}`, fetchOpts).catch(() => null),
+      ]);
+      const [overviewData, seriesData, pagesData, devicesData, acqData, geoData] = await Promise.all([
+        overviewResp?.ok ? safeJson(overviewResp) : null,
+        seriesResp?.ok ? safeJson(seriesResp) : null,
+        pagesResp?.ok ? safeJson(pagesResp) : null,
+        devicesResp?.ok ? safeJson(devicesResp) : null,
+        acqResp?.ok ? safeJson(acqResp) : null,
+        geoResp?.ok ? safeJson(geoResp) : null,
+      ]);
+      if (overviewData?.ok) setGaOverview({ metrics: overviewData.metrics, deltas: overviewData.deltas });
+      if (seriesData?.ok) setGaSeries(seriesData.series ?? []);
+      if (pagesData?.ok) setGaTopPages(pagesData.pages ?? []);
+      if (devicesData?.ok) setGaDevices({ devices: devicesData.devices ?? [], browsers: devicesData.browsers ?? [] });
+      if (acqData?.ok) setGaAcquisition({ channels: acqData.channels ?? [], sources: acqData.sources ?? [] });
+      if (geoData?.ok) setGaGeo({ countries: geoData.countries ?? [], cities: geoData.cities ?? [] });
+      setGaUpdatedAt(Date.now());
+      // Check for errors
+      const firstError = [overviewData, seriesData, pagesData, devicesData, acqData, geoData].find(d => d && !d.ok);
+      if (firstError) setGaError(firstError.error || "Some GA reports failed");
+    } catch (e) {
+      console.error("[AdminPage] GA reports error:", e);
+      setGaError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGaLoading(false);
+    }
+  }, [gaConfigured, gaDays, fetchWithRetry, safeJson, gaAuthHeaders]);
+
+  // Initial GA check + load
   React.useEffect(() => {
-    // Stagger initial load to avoid blocking - visitors stats are heavy
     const timeoutId = setTimeout(() => {
-      loadVisitorsStats({ initial: true });
-    }, 400);
+      checkGaStatus();
+    }, 500);
     return () => clearTimeout(timeoutId);
-  }, [loadVisitorsStats]);
+  }, [checkGaStatus]);
 
-  // Auto-refresh visitors graph every 60 seconds
+  // Once GA is confirmed configured, load data
   React.useEffect(() => {
-    const id = setInterval(() => {
-      loadVisitorsStats({ initial: false });
-    }, 60_000);
+    if (gaConfigured === true) {
+      loadGaRealtime();
+      loadGaReports({ initial: true });
+    }
+  }, [gaConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload GA reports when days change
+  React.useEffect(() => {
+    if (gaConfigured === true && gaUpdatedAt !== null) {
+      loadGaReports({ initial: false });
+    }
+  }, [gaDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh GA realtime every 60s
+  React.useEffect(() => {
+    if (gaConfigured !== true) return;
+    const id = setInterval(() => loadGaRealtime(), 60_000);
     return () => clearInterval(id);
-  }, [loadVisitorsStats]);
+  }, [gaConfigured, loadGaRealtime]);
 
   // ---- Members tab state ----
   // Check if user has full admin access (not just editor)
@@ -7069,543 +6890,255 @@ export const AdminPage: React.FC = () => {
             )}
 
             <section className="space-y-6">
-                <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute -top-8 -right-4 h-48 w-48 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl" />
-                    <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" />
-                </div>
-                  <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <div className="text-2xl font-semibold tracking-tight">
-                        Admin Controls
-                      </div>
-                        <div className="text-sm text-stone-600 dark:text-stone-300 mt-1 max-w-2xl">
-                        Monitor services, manage members, and handle requests all in one place.
-                      </div>
-                    </div>
-                  </div>
+                <div className="space-y-4">
 
                   {/* Overview Tab */}
                   {activeTab === "overview" && (
                     <>
-                      {/* Health monitor */}
-                      <Card className={glassCardClass}>
-                        <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-medium">
-                              Health monitor
-                            </div>
-                            <div className="text-xs opacity-60">
-                              Auto?ping every 60s
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Refresh health"
-                            onClick={refreshHealth}
-                            disabled={healthRefreshing}
-                            className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                          >
-                            <RefreshCw
-                              className={`h-4 w-4 ? ${healthRefreshing ? "animate-spin" : ""}`}
-                            />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Server className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">API</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {apiProbe.latencyMs !== null
-                                  ? `${apiProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={apiProbe.ok}
-                                title={
-                                  !apiProbe.ok
-                                    ? apiProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!apiProbe?.ok && (
-                                <ErrorBadge code={apiProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <ShieldCheck className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">Admin API</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {adminProbe.latencyMs !== null
-                                  ? `${adminProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={adminProbe.ok}
-                                title={
-                                  !adminProbe.ok
-                                    ? adminProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!adminProbe?.ok && (
-                                <ErrorBadge code={adminProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Database className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">Database</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {dbProbe.latencyMs !== null
-                                  ? `${dbProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={dbProbe.ok}
-                                title={
-                                  !dbProbe.ok
-                                    ? dbProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!dbProbe?.ok && (
-                                <ErrorBadge code={dbProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      {/* ═══ AT A GLANCE ═══ */}
 
-                    {/* App Version Card */}
-                    <Card className={`${glassCardClass} relative overflow-hidden`}>
-                      {/* Subtle decorative glow from the badge */}
-                      <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
-                      
-                      <CardContent className="p-4 relative">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            {/* Icon with enhanced styling */}
-                            <div className="relative">
-                              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
-                              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
-                                <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold">
-                                App Version
-                              </div>
-                              <div className="text-xs text-violet-600/70 dark:text-violet-300/60">
-                                Aphylia Release
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Version badge section */}
-                          <div className="flex flex-col items-end gap-1.5">
-                            <div className="relative group">
-                              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
-                              <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
-                                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs opacity-60">
-                              <GitBranch className="h-3.5 w-3.5" />
-                              <span className="font-mono tracking-tight">
-                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
-                              </span>
-                            </div>
-                          </div>
+                      {/* Compact health status strip */}
+                      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200/60 dark:border-[#3e3e42]/60 bg-white/80 dark:bg-[#1a1a1d]/80 backdrop-blur px-4 py-2.5">
+                        <div className="flex items-center gap-2 mr-auto">
+                          <Activity className="h-4 w-4 opacity-50" />
+                          <span className="text-xs font-medium opacity-60">Services</span>
                         </div>
-                      </CardContent>
-                    </Card>
+                        {[
+                          { label: "API", probe: apiProbe, icon: Server },
+                          { label: "Admin", probe: adminProbe, icon: ShieldCheck },
+                          { label: "Database", probe: dbProbe, icon: Database },
+                        ].map(({ label, probe, icon: Icon }) => (
+                          <div key={label} className="flex items-center gap-1.5 text-xs">
+                            <StatusDot ok={probe.ok} title={!probe.ok ? probe.errorCode || undefined : undefined} />
+                            <Icon className="h-3 w-3 opacity-50" />
+                            <span className="font-medium">{label}</span>
+                            {probe.latencyMs !== null && (
+                              <span className="tabular-nums opacity-40">{probe.latencyMs}ms</span>
+                            )}
+                            {!probe.ok && <ErrorBadge code={probe.errorCode} />}
+                          </div>
+                        ))}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Refresh health"
+                          onClick={refreshHealth}
+                          disabled={healthRefreshing}
+                          className="h-6 w-6 rounded-lg ml-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${healthRefreshing ? "animate-spin" : ""}`} />
+                        </Button>
+                        <div className="hidden sm:flex items-center gap-1.5 text-xs border-l border-stone-200 dark:border-[#3e3e42] pl-3 ml-1">
+                          <span className="font-mono text-[10px] opacity-40">v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}</span>
+                          <span className="opacity-20">·</span>
+                          <GitBranch className="h-3 w-3 opacity-30" />
+                          <span className="font-mono text-[10px] opacity-40">{((import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev').slice(0, 7)}</span>
+                        </div>
+                      </div>
 
-                    {/* Quick Stats Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                        {/* Currently Online Card */}
-                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                  <Wifi className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                                    Currently Online
-                                  </div>
-                                  <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
-                                    {onlineUpdatedAt
-                                      ? `${formatTimeAgo(onlineUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
+                      {/* Quick Stats Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        {/* Currently Online Card — powered by GA Realtime */}
+                        <div className="group relative rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-emerald-500/8 transition-all duration-200 overflow-hidden">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
+                                <Wifi className="h-4.5 w-4.5 text-white" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Currently Online</div>
+                                <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">
+                                  {gaRealtimeUpdatedAt ? formatTimeAgo(gaRealtimeUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh currently online"
-                                onClick={() => {
-                                  loadOnlineUsers({ initial: false });
-                                  loadOnlineIpsList({ initial: false });
-                                }}
-                                disabled={
-                                  onlineLoading ||
-                                  onlineRefreshing ||
-                                  ipsLoading ||
-                                  ipsRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-emerald-900/30 hover:bg-white dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                                {onlineLoading ? (
-                                  <span className="inline-block w-12 h-10 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
-                                ) : (
-                                  onlineUsers
-                                )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Refresh currently online"
+                              onClick={() => { loadGaRealtime(); loadEnrichedIps({ initial: false }); }}
+                              disabled={ipsLoading || ipsRefreshing}
+                              className="h-7 w-7 rounded-lg text-emerald-600 dark:text-emerald-400"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${ipsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <div className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                              {gaRealtime === null ? (
+                                <span className="inline-block w-10 h-8 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
+                              ) : (
+                                gaRealtime.activeUsers
+                              )}
                               </div>
-                              {!onlineLoading && onlineUsers > 0 && (
+                              {gaRealtime && gaRealtime.activeUsers > 0 && (
                                 <div className="flex items-center gap-1">
-                                  <span className="relative flex h-2.5 w-2.5">
+                                  <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                                   </span>
-                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">live</span>
+                                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">live</span>
                                 </div>
                               )}
                             </div>
-                            {/* Collapsible Connected IPs */}
-                            <div className="mt-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-800/30">
-                              <button
-                                type="button"
-                                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
-                                onClick={() => setIpsOpen((o) => !o)}
-                                aria-expanded={ipsOpen}
-                                aria-controls="connected-ips"
-                              >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${ipsOpen ? "rotate-180" : ""}`}
-                                />
-                                Connected IPs
-                                {ips.length > 0 && (
-                                  <span className="text-xs bg-emerald-200 dark:bg-emerald-800/50 px-2 py-0.5 rounded-full">
-                                    {ips.length}
+                            {/* GA realtime breakdown: countries + devices */}
+                            {gaRealtime && (gaRealtime.countries.length > 0 || gaRealtime.devices.length > 0) && (
+                              <div className="mt-2 flex flex-wrap gap-1">
+                                {gaRealtime.countries.slice(0, 4).map((c) => (
+                                  <span key={c.country} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-[10px]">
+                                    <Globe className="h-2.5 w-2.5 opacity-50" />
+                                    <span className="font-medium">{c.country}</span>
+                                    <span className="opacity-50">{c.users}</span>
                                   </span>
-                                )}
-                              </button>
-                              {ipsOpen && (
-                                <div className="mt-3" id="connected-ips">
-                                  <div className="rounded-xl bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/50 dark:border-emerald-800/30 p-3 max-h-48 overflow-auto">
-                                    {ipsLoading ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        Loading...
-                                      </div>
-                                    ) : ips.length === 0 ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        No IPs connected.
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-2">
-                                        {ips.map((ip) => (
-                                          <Badge
-                                            key={ip}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => jumpToIpLookup(ip)}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                jumpToIpLookup(ip);
-                                              }
-                                            }}
-                                            title={`Lookup members for ${ip}`}
-                                            aria-label={`Lookup members for ${ip}`}
-                                            className="rounded-full px-2.5 py-1 text-xs font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
-                                          >
-                                            {ip}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+                                ))}
+                                {gaRealtime.devices.map((d) => (
+                                  <span key={d.device} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-emerald-100/70 dark:bg-emerald-900/40 text-[10px]">
+                                    {d.device === "desktop" ? <Monitor className="h-2.5 w-2.5 opacity-50" /> : d.device === "tablet" ? <Tablet className="h-2.5 w-2.5 opacity-50" /> : <Smartphone className="h-2.5 w-2.5 opacity-50" />}
+                                    <span className="font-medium capitalize">{d.device}</span>
+                                    <span className="opacity-50">{d.users}</span>
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        </div>
 
                         {/* Registered Accounts Card */}
-                        <div className="group relative rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-fuchsia-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-200/40 to-purple-200/40 dark:from-violet-800/20 dark:to-purple-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                                  <Users className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-violet-900 dark:text-violet-100">
-                                    Registered Accounts
-                                  </div>
-                                  <div className="text-xs text-violet-600/70 dark:text-violet-400/70">
-                                    {registeredUpdatedAt
-                                      ? `${formatTimeAgo(registeredUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
+                        <div className="group relative rounded-2xl border border-violet-200/70 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/80 to-purple-50/50 dark:from-violet-950/30 dark:to-purple-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-violet-500/8 transition-all duration-200 overflow-hidden cursor-pointer" onClick={() => navigate("/admin/members/list")}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm shadow-violet-500/20">
+                                <Users className="h-4.5 w-4.5 text-white" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-violet-900 dark:text-violet-100">Registered</div>
+                                <div className="text-[10px] text-violet-600/60 dark:text-violet-400/60">
+                                  {registeredUpdatedAt ? formatTimeAgo(registeredUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh registered accounts"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={
-                                  registeredLoading || registeredRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-violet-900/30 hover:bg-white dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                                {registeredLoading ? (
-                                  <span className="inline-block w-16 h-10 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
-                                ) : registeredUpdatedAt !== null ? (
-                                  registeredCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-violet-500 dark:text-violet-400">
-                                users
-                              </span>
+                            <Button variant="ghost" size="icon" aria-label="Refresh registered accounts" onClick={(e) => { e.stopPropagation(); loadRegisteredCount({ initial: false }); }} disabled={registeredLoading || registeredRefreshing} className="h-7 w-7 rounded-lg text-violet-600 dark:text-violet-400">
+                              <RefreshCw className={`h-3.5 w-3.5 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="text-3xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                              {registeredLoading ? (
+                                <span className="inline-block w-12 h-8 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
+                              ) : registeredUpdatedAt !== null ? (registeredCount ?? "-") : "-"}
                             </div>
-                            {/* Progress indicator */}
-                            <div className="mt-4 pt-3 border-t border-violet-200/50 dark:border-violet-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-violet-600/70 dark:text-violet-400/70">Total registered members</span>
-                                <span className="font-medium text-violet-700 dark:text-violet-300">
-                                  {registeredCount !== null && registeredCount > 0 ? "Active" : "—"}
-                                </span>
-                              </div>
-                            </div>
+                            <span className="text-xs font-medium text-violet-500 dark:text-violet-400">users</span>
                           </div>
                         </div>
 
                         {/* Total Plants Card */}
-                        <div className="group relative rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-yellow-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-amber-200/40 to-orange-200/40 dark:from-amber-800/20 dark:to-orange-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
-                                  <Leaf className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                                    Total Plants
-                                  </div>
-                                  <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                                    {plantsUpdatedAt
-                                      ? `${formatTimeAgo(plantsUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
-                                </div>
+                        <div className="group relative rounded-2xl border border-amber-200/70 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-amber-500/8 transition-all duration-200 overflow-hidden cursor-pointer" onClick={() => navigate("/admin/plants")}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/20">
+                                <Leaf className="h-4.5 w-4.5 text-white" />
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh total plants"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={plantsLoading || plantsRefreshing}
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-amber-900/30 hover:bg-white dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
-                                {plantsLoading ? (
-                                  <span className="inline-block w-14 h-10 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
-                                ) : plantsUpdatedAt !== null ? (
-                                  plantsCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-amber-500 dark:text-amber-400">
-                                plants
-                              </span>
-                            </div>
-                            {/* Database indicator */}
-                            <div className="mt-4 pt-3 border-t border-amber-200/50 dark:border-amber-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-amber-600/70 dark:text-amber-400/70">In database</span>
-                                <div className="flex items-center gap-1.5">
-                                  <Database className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                                  <span className="font-medium text-amber-700 dark:text-amber-300">Synced</span>
+                              <div>
+                                <div className="text-xs font-semibold text-amber-900 dark:text-amber-100">Plants</div>
+                                <div className="text-[10px] text-amber-600/60 dark:text-amber-400/60">
+                                  {plantsUpdatedAt ? formatTimeAgo(plantsUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
                             </div>
+                            <Button variant="ghost" size="icon" aria-label="Refresh total plants" onClick={(e) => { e.stopPropagation(); loadRegisteredCount({ initial: false }); }} disabled={plantsLoading || plantsRefreshing} className="h-7 w-7 rounded-lg text-amber-600 dark:text-amber-400">
+                              <RefreshCw className={`h-3.5 w-3.5 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="text-3xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                              {plantsLoading ? (
+                                <span className="inline-block w-10 h-8 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
+                              ) : plantsUpdatedAt !== null ? (plantsCount ?? "-") : "-"}
+                            </div>
+                            <span className="text-xs font-medium text-amber-500 dark:text-amber-400">plants</span>
                           </div>
                         </div>
                       </div>
 
-                    {/* System Health Stats */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40 flex items-center justify-center">
-                              <Server className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                      {/* ═══ SYSTEM & SERVER ═══ */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Server className="h-3.5 w-3.5 opacity-40" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">System & Server</span>
+                      </div>
+
+                      {/* System health + Server controls in a 2-column layout */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* System Health - Compact */}
+                        <Card className={glassCardClass}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Server className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                <span className="text-sm font-semibold">System Health</span>
+                                <span className="text-[10px] opacity-40">{systemHealth.platform || ""}</span>
+                              </div>
+                              <Button variant="ghost" size="icon" aria-label="Refresh system health" onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }} disabled={systemHealthLoading} className="h-7 w-7 rounded-lg">
+                                <RefreshCw className={`h-3.5 w-3.5 ${systemHealthLoading ? "animate-spin" : ""}`} />
+                              </Button>
                             </div>
+
+                            {systemHealthError && !systemHealth.uptime && (
+                              <div className="text-[10px] text-amber-600 dark:text-amber-400 mb-2 p-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                                {systemHealthError}
+                              </div>
+                            )}
+
+                            {/* Uptime & Connections - inline */}
+                            <div className="flex items-center gap-3 mb-3 text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-emerald-500" />
+                                <span className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatUptime(systemHealth.uptime)}</span>
+                              </div>
+                              <span className="opacity-20">|</span>
+                              <div className="flex items-center gap-1.5">
+                                <Users className="h-3 w-3 text-violet-500" />
+                                <span className="font-bold tabular-nums text-violet-600 dark:text-violet-400">{systemHealth.connections !== null ? systemHealth.connections : "-"}</span>
+                                <span className="opacity-50">conn</span>
+                              </div>
+                            </div>
+
+                            {/* CPU */}
+                            <div className="mb-2.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-medium">CPU</span>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
+                                  {systemHealth.cpu?.cores && <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores}c)</span>}
+                                </span>
+                              </div>
+                              <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
+                              {systemHealth.loadAvg && (
+                                <div className="text-[9px] text-stone-400 mt-0.5">Load: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}</div>
+                              )}
+                            </div>
+
+                            {/* Memory */}
+                            <div className="mb-2.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-medium">Memory</span>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.memory ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}` : "-"}
+                                </span>
+                              </div>
+                              <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
+                            </div>
+
+                            {/* Disk */}
                             <div>
-                              <div className="text-sm font-semibold">System Health</div>
-                              <div className="text-xs text-stone-500 dark:text-stone-400">
-                                {systemHealth.platform || "Server"} • {systemHealth.nodeVersion || "Node.js"}
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] font-medium">Disk</span>
+                                  {systemHealth.disk?.path && <span className="text-[9px] text-stone-400 font-mono">{systemHealth.disk.path}</span>}
+                                </div>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.disk ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}` : "-"}
+                                </span>
                               </div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Refresh system health"
-                            onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }}
-                            disabled={systemHealthLoading}
-                            className="h-8 w-8 rounded-xl"
-                          >
-                            <RefreshCw className={`h-4 w-4 ${systemHealthLoading ? "animate-spin" : ""}`} />
-                          </Button>
-                        </div>
-
-                        {systemHealthError && !systemHealth.uptime && (
-                          <div className="text-xs text-amber-600 dark:text-amber-400 mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-                            ⚠️ {systemHealthError}
-                          </div>
-                        )}
-
-                        {/* Uptime & Connections Row - Compact */}
-                        <div className="flex items-center gap-4 mb-4 py-2 px-3 rounded-xl bg-stone-50/80 dark:bg-stone-900/30 border border-stone-200/60 dark:border-stone-700/40">
-                          <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
-                              <Clock className="h-4 w-4 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Uptime</span>
-                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                {formatUptime(systemHealth.uptime)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-px h-8 bg-stone-200 dark:bg-stone-700" />
-                          <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm">
-                              <Users className="h-4 w-4 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Connections</span>
-                              <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">
-                                {systemHealth.connections !== null ? systemHealth.connections : "-"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* CPU Usage */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                                <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <span className="text-xs font-medium">CPU</span>
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
-                              {systemHealth.cpu?.cores && (
-                                <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores} cores)</span>
-                              )}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
-                          {systemHealth.loadAvg && (
-                            <div className="text-[10px] text-stone-400 mt-1">
-                              Load avg: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Memory Usage */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-                                <Database className="h-3 w-3 text-violet-600 dark:text-violet-400" />
-                              </div>
-                              <span className="text-xs font-medium">Memory</span>
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.memory
-                                ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}`
-                                : "-"}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
-                        </div>
-
-                        {/* Disk Usage */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                                <Server className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                              </div>
-                              <span className="text-xs font-medium">Disk</span>
-                              {systemHealth.disk?.path && (
-                                <span className="text-[10px] text-stone-400 font-mono">{systemHealth.disk.path}</span>
-                              )}
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.disk
-                                ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}`
-                                : "-"}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
+                              <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
                         </div>
 
                         {/* Collapsible: Server Controls */}
@@ -7726,18 +7259,17 @@ export const AdminPage: React.FC = () => {
                               </div>
                             </form>
                           )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                    {/* Actions */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium truncate">
-                            Actions
-                          </div>
-                        </div>
+                        {/* Server Controls + Actions - Right column */}
+                        <Card className={glassCardClass}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Zap className="h-4 w-4 text-amber-500" />
+                              <span className="text-sm font-semibold">Broadcast & Branch</span>
+                            </div>
 
                         {/* Collapsible: Broadcast message creation */}
                         <div className="mt-2">
@@ -7845,54 +7377,64 @@ export const AdminPage: React.FC = () => {
                           Changing branch takes effect when you run Pull &
                           Build.
                         </div>
+                          </CardContent>
+                        </Card>
+                      </div>
 
+                      {/* Full-width Action Buttons + Console */}
+                      <Card className={glassCardClass}>
+                        <CardContent className="p-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <Zap className="h-4 w-4 text-amber-500" />
+                            <span className="text-sm font-semibold">Quick Actions</span>
+                          </div>
                           {/* Action buttons */}
-                          <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             onClick={restartServer}
                             disabled={restarting}
                           >
-                            <Server className="h-4 w-4" />
-                            <RefreshCw className="h-4 w-4" />
-                            <span>
-                              {restarting ? "Restarting?" : "Restart Services"}
+                            <RefreshCw className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {restarting ? "Restarting..." : "Restart"}
                             </span>
                           </Button>
                           <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             variant="secondary"
                             onClick={pullLatest}
                             disabled={pulling}
                           >
-                            <Github className="h-4 w-4" />
-                            <RefreshCw className="h-4 w-4" />
-                            <span>
+                            <Github className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
                               {pulling ? "Pulling..." : "Pull & Build"}
                             </span>
                           </Button>
                           <Button
-                              className="rounded-2xl w-full"
-                              variant="outline"
-                              onClick={deployEdgeFunctions}
-                              disabled={deployingEdge}
-                            >
-                              <CloudUpload className="h-4 w-4" />
-                                <span>
-                                  {deployingEdge
-                                    ? "Deploying..."
-                                    : "Deploy Edge"}
-                                </span>
-                            </Button>
-                            <Button
-                            className="rounded-2xl w-full"
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
+                            variant="outline"
+                            onClick={deployEdgeFunctions}
+                            disabled={deployingEdge}
+                          >
+                            <CloudUpload className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {deployingEdge ? "Deploying..." : "Deploy Edge"}
+                            </span>
+                          </Button>
+                          <Button
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
                             variant="destructive"
                             onClick={runSyncSchema}
                             disabled={syncing}
                           >
-                            <Database className="h-4 w-4" />
-                            <span>
-                              {syncing ? "Syncing..." : "Sync DB Schema"}
+                            <Database className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {syncing ? "Syncing..." : "Sync DB"}
                             </span>
                           </Button>
                         </div>
@@ -8022,779 +7564,742 @@ export const AdminPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
+                        </CardContent>
+                      </Card>
+
+
+                    {/* ─── Google Analytics Dashboard ─── */}
+                    {gaConfigured !== false && (
                       <Card className={glassCardClass}>
                         <CardContent className="p-4">
-                          <div className="flex items-center justify-between gap-2 mb-2">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <div className="text-sm font-medium">
-                                  Unique visitors - last {visitorsWindowDays}{" "}
-                                  days
+                          <button
+                            type="button"
+                            className="flex items-center justify-between w-full"
+                            onClick={() => setGaOpen((o) => !o)}
+                            aria-expanded={gaOpen}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/40 dark:to-amber-900/40 flex items-center justify-center">
+                                <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                              </div>
+                              <div className="text-left">
+                                <div className="text-sm font-semibold">Google Analytics</div>
+                                <div className="text-xs text-stone-500 dark:text-stone-400">
+                                  {gaConfigured === null ? "Checking..." : gaConfigured ? "GA4 Data API connected" : "Not configured"}
                                 </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {gaRealtime && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                                    {gaRealtime.activeUsers}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400">live</span>
+                                </div>
+                              )}
+                              <ChevronDown className={`h-4 w-4 transition-transform ${gaOpen ? "rotate-180" : ""}`} />
+                            </div>
+                          </button>
+
+                          {gaOpen && gaConfigured === true && (
+                            <div className="mt-4 space-y-4">
+                              {/* Period selector + refresh */}
+                              <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
-                                  <button
-                                    type="button"
-                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 7 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                    onClick={() => setVisitorsWindowDays(7)}
-                                    aria-pressed={visitorsWindowDays === 7}
+                                  {([7, 14, 30] as const).map((d) => (
+                                    <button
+                                      key={d}
+                                      type="button"
+                                      className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${gaDays === d ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white" : "bg-white dark:bg-[#2d2d30] border-stone-200 dark:border-[#3e3e42] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
+                                      onClick={() => setGaDays(d)}
+                                      aria-pressed={gaDays === d}
+                                    >
+                                      {d}d
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {gaUpdatedAt && (
+                                    <span className="text-[10px] opacity-50">{formatTimeAgo(gaUpdatedAt)}</span>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    aria-label="Refresh GA data"
+                                    onClick={() => { loadGaRealtime(); loadGaReports({ initial: false }); }}
+                                    disabled={gaLoading}
+                                    className="h-7 w-7 rounded-lg"
                                   >
-                                    7d
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className={`text-xs px-2 py-1 rounded-lg border ${visitorsWindowDays === 30 ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30]"}`}
-                                    onClick={() => setVisitorsWindowDays(30)}
-                                    aria-pressed={visitorsWindowDays === 30}
-                                  >
-                                    30d
-                                  </button>
+                                    <RefreshCw className={`h-3.5 w-3.5 ${gaLoading ? "animate-spin" : ""}`} />
+                                  </Button>
                                 </div>
                               </div>
-                              <div className="text-xs opacity-60">
-                                {visitorsUpdatedAt
-                                  ? `Updated ? ${formatTimeAgo(visitorsUpdatedAt)}`
-                                  : "Updated -"}
-                              </div>
-                            </div>
-                            <Button
-                              variant="outline"
-                              size="icon"
-                              aria-label="Refresh visitors"
-                              onClick={() =>
-                                loadVisitorsStats({ initial: false })
-                              }
-                              disabled={visitorsLoading || visitorsRefreshing}
-                              className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                            >
-                              <RefreshCw
-                                className={`h-4 w-4 ? ${visitorsLoading || visitorsRefreshing ? "animate-spin" : ""}`}
-                              />
-                            </Button>
-                          </div>
 
-                          {visitorsLoading ? (
-                            <div className="flex items-center gap-2 text-sm opacity-60">
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                              <span>Loading...</span>
-                            </div>
-                          ) : visitorsSeries.length === 0 ? (
-                            <div className="text-sm opacity-60">
-                              No data yet.
-                            </div>
-                          ) : (
-                            (() => {
-                              const values = visitorsSeries.map(
-                                (d) => d.uniqueVisitors,
-                              );
-                              const maxVal = Math.max(...values, 1);
-                              // Prefer unique total across the full week from API; fallback to sum
-                              const totalVal =
-                                visitorsTotalUnique7d &&
-                                Number.isFinite(visitorsTotalUnique7d)
-                                  ? visitorsTotalUnique7d
-                                  : values.reduce((acc, val) => acc + val, 0);
-                              const avgVal = Math.round(
-                                totalVal / values.length,
-                              );
+                              {gaError && (
+                                <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                                  {gaError}
+                                </div>
+                              )}
 
-                              const formatDow = (isoDate: string) => {
-                                try {
-                                  if (visitorsWindowDays === 30) return "";
-                                  const dt = new Date(isoDate + "T00:00:00Z");
-                                  return [
-                                    "Sun",
-                                    "Mon",
-                                    "Tue",
-                                    "Wed",
-                                    "Thu",
-                                    "Fri",
-                                    "Sat",
-                                  ][dt.getUTCDay()];
-                                } catch {
-                                  return isoDate;
-                                }
-                              };
-
-                              const formatFullDate = (isoDate: string) => {
-                                try {
-                                  const dt = new Date(isoDate + "T00:00:00Z");
-                                  return new Intl.DateTimeFormat(undefined, {
-                                    weekday: "short",
-                                    month: "short",
-                                    day: "numeric",
-                                    year: "numeric",
-                                    timeZone: "UTC",
-                                  }).format(dt);
-                                } catch {
-                                  return isoDate;
-                                }
-                              };
-
-                              const TooltipContent = ({
-                                active,
-                                payload,
-                                label,
-                              }: { active?: boolean; payload?: Array<{ value?: number }>; label?: string }) => {
-                                if (!active || !payload || payload.length === 0)
-                                  return null;
-                                const current = payload[0]?.value as number;
-                                const idx = visitorsSeries.findIndex(
-                                  (d) => d.date === label,
-                                );
-                                const prev =
-                                  idx > 0
-                                    ? (visitorsSeries[idx - 1]
-                                        ?.uniqueVisitors ?? 0)
-                                    : 0;
-                                const delta = current - prev;
-                                const pct =
-                                  prev > 0
-                                    ? Math.round((delta / prev) * 100)
-                                    : null;
-                                const up = delta > 0;
-                                const down = delta < 0;
-                                return (
-                                  <div className="rounded-xl border bg-white/90 dark:bg-[#252526] dark:border-[#3e3e42] backdrop-blur p-3 shadow-lg">
-                                    <div className="text-xs opacity-60 dark:opacity-70">
-                                      {formatFullDate(label)}
-                                    </div>
-                                    <div className="mt-1 text-base font-semibold tabular-nums">
-                                      {current}
-                                    </div>
-                                    <div className="text-xs mt-0.5">
-                                      <span
-                                        className={
-                                          up
-                                            ? "text-emerald-600 dark:text-emerald-400"
-                                            : down
-                                              ? "text-rose-600 dark:text-rose-400"
-                                              : "text-neutral-600 dark:text-neutral-400"
-                                        }
-                                      >
-                                        {delta === 0
-                                          ? "No change"
-                                          : `${up ? "+" : ""}${delta}${pct !== null ? ` (${pct}%)` : ""}`}
-                                      </span>
-                                      <span className="opacity-60 dark:opacity-70">
-                                        {" "}
-                                        vs previous day
-                                      </span>
-                                    </div>
-                                    <div className="text-[11px] opacity-70 dark:opacity-80 mt-1">
-                                      7-day avg:{" "}
-                                      <span className="font-medium">
-                                        {avgVal}
-                                      </span>
-                                    </div>
-                                  </div>
-                                );
-                              };
-
-                              return (
-                                <div>
-                                  <div className="text-sm font-medium mb-2">
-                                    Total for the whole week:{" "}
-                                    <span className="tabular-nums">
-                                      {totalVal}
-                                    </span>
-                                  </div>
-                                  <div className="h-72 w-full max-w-none mx-0">
-                                    <ChartSuspense
-                                      fallback={
-                                        <div className="h-full w-full flex items-center justify-center text-sm text-gray-400">
-                                          Loading chart...
+                              {/* Key metrics cards */}
+                              {gaOverview && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {[
+                                    { key: "totalUsers", label: "Users", icon: Users, color: "blue" },
+                                    { key: "sessions", label: "Sessions", icon: MousePointer, color: "violet" },
+                                    { key: "pageViews", label: "Page Views", icon: Eye, color: "amber" },
+                                    { key: "newUsers", label: "New Users", icon: Sparkles, color: "emerald" },
+                                  ].map(({ key, label, icon: Icon, color }) => {
+                                    const value = gaOverview.metrics[key] ?? 0;
+                                    const delta = gaOverview.deltas[key];
+                                    return (
+                                      <div key={key} className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <Icon className={`h-4 w-4 text-${color}-500`} />
+                                          <span className="text-xs text-stone-500 dark:text-stone-400">{label}</span>
                                         </div>
-                                      }
-                                    >
-                                      <ResponsiveContainer
-                                        width="100%"
-                                        height="100%"
-                                      >
-                                        <ComposedChart
-                                          data={visitorsSeries}
-                                          margin={{
-                                            top: 10,
-                                            right: 8,
-                                            bottom: 14,
-                                            left: 8,
-                                          }}
-                                        >
-                                          <defs>
-                                            <linearGradient
-                                              id="visitsLineGrad"
-                                              x1="0"
-                                              y1="0"
-                                              x2="1"
-                                              y2="0"
-                                            >
-                                              <stop
-                                                offset="0%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                              />
-                                              <stop
-                                                offset="100%"
-                                                stopColor={
-                                                  isDark ? "#a78bfa" : "#6b7280"
-                                                }
-                                              />
-                                            </linearGradient>
-                                            <linearGradient
-                                              id="visitsAreaGrad"
-                                              x1="0"
-                                              y1="0"
-                                              x2="0"
-                                              y2="1"
-                                            >
-                                              <stop
-                                                offset="0%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                                stopOpacity={
-                                                  isDark ? 0.4 : 0.35
-                                                }
-                                              />
-                                              <stop
-                                                offset="100%"
-                                                stopColor={
-                                                  isDark ? "#60a5fa" : "#111827"
-                                                }
-                                                stopOpacity={
-                                                  isDark ? 0.1 : 0.05
-                                                }
-                                              />
-                                            </linearGradient>
-                                          </defs>
-
-                                          <CartesianGrid
-                                            strokeDasharray="3 3"
-                                            stroke={
-                                              isDark
-                                                ? "rgba(255,255,255,0.1)"
-                                                : "rgba(0,0,0,0.06)"
-                                            }
-                                          />
-                                          <XAxis
-                                            dataKey="date"
-                                            tickFormatter={formatDow}
-                                            tick={{
-                                              fontSize: 11,
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#525252",
-                                            }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            interval={0}
-                                            padding={{ left: 0, right: 0 }}
-                                          />
-                                          <YAxis
-                                            allowDecimals={false}
-                                            domain={[0, Math.max(maxVal, 5)]}
-                                            tick={{
-                                              fontSize: 11,
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#525252",
-                                            }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            width={28}
-                                          />
-                                          <Tooltip
-                                            content={<TooltipContent />}
-                                            cursor={{
-                                              stroke: isDark
-                                                ? "rgba(255,255,255,0.2)"
-                                                : "rgba(0,0,0,0.1)",
-                                            }}
-                                          />
-                                          <ReferenceLine
-                                            y={avgVal}
-                                            stroke={
-                                              isDark ? "#9ca3af" : "#a3a3a3"
-                                            }
-                                            strokeDasharray="4 4"
-                                            ifOverflow="extendDomain"
-                                            label={{
-                                              value: "avg",
-                                              position: "insideRight",
-                                              fill: isDark
-                                                ? "#d1d5db"
-                                                : "#737373",
-                                              fontSize: 11,
-                                              dx: -6,
-                                            }}
-                                          />
-
-                                          <Area
-                                            type="monotone"
-                                            dataKey="uniqueVisitors"
-                                            fill="url(#visitsAreaGrad)"
-                                            stroke="none"
-                                            animationDuration={600}
-                                          />
-                                          <Line
-                                            type="monotone"
-                                            dataKey="uniqueVisitors"
-                                            stroke="url(#visitsLineGrad)"
-                                            strokeWidth={3}
-                                            dot={false}
-                                            activeDot={{
-                                              r: 5,
-                                              strokeWidth: 2,
-                                              stroke: isDark
-                                                ? "#60a5fa"
-                                                : "#111827",
-                                              fill: isDark
-                                                ? "#1e1e1e"
-                                                : "#ffffff",
-                                            }}
-                                            animationDuration={700}
-                                          />
-                                        </ComposedChart>
-                                      </ResponsiveContainer>
-                                    </ChartSuspense>
-                                  </div>
-                                  {/* Sources breakdown */}
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                                    <div className="rounded-xl border p-3 md:col-span-2">
-                                      <div className="text-sm font-medium mb-2">
-                                        Top countries
+                                        <div className="text-xl font-bold tabular-nums">
+                                          {key === "avgSessionDuration" ? `${Math.round(value)}s` : value.toLocaleString()}
+                                        </div>
+                                        {delta !== null && delta !== undefined && (
+                                          <div className={`text-[10px] font-medium flex items-center gap-0.5 ${delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-rose-600 dark:text-rose-400" : "text-stone-400"}`}>
+                                            {delta > 0 ? <ArrowUpRight className="h-3 w-3" /> : delta < 0 ? <ArrowDownRight className="h-3 w-3" /> : null}
+                                            {delta > 0 ? "+" : ""}{delta}% vs prev
+                                          </div>
+                                        )}
                                       </div>
-                                      {topCountries.length === 0 ? (
-                                        <div className="text-sm opacity-60">
-                                          No data.
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Engagement metrics row */}
+                              {gaOverview && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Avg Session Duration</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {(() => {
+                                        const secs = Math.round(gaOverview.metrics.avgSessionDuration ?? 0);
+                                        const m = Math.floor(secs / 60);
+                                        const s = secs % 60;
+                                        return m > 0 ? `${m}m ${s}s` : `${s}s`;
+                                      })()}
+                                    </div>
+                                    {gaOverview.deltas.avgSessionDuration !== null && gaOverview.deltas.avgSessionDuration !== undefined && (
+                                      <div className={`text-[10px] ${(gaOverview.deltas.avgSessionDuration ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {(gaOverview.deltas.avgSessionDuration ?? 0) > 0 ? "+" : ""}{gaOverview.deltas.avgSessionDuration}%
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Bounce Rate</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {((gaOverview.metrics.bounceRate ?? 0) * 100).toFixed(1)}%
+                                    </div>
+                                    {gaOverview.deltas.bounceRate !== null && gaOverview.deltas.bounceRate !== undefined && (
+                                      <div className={`text-[10px] ${(gaOverview.deltas.bounceRate ?? 0) <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {(gaOverview.deltas.bounceRate ?? 0) > 0 ? "+" : ""}{gaOverview.deltas.bounceRate}%
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Engaged Sessions</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {(gaOverview.metrics.engagedSessions ?? 0).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Daily traffic chart */}
+                              {gaSeries.length > 0 && (() => {
+                                  const metricOpts: Array<{ key: string; label: string; color: string }> = [
+                                    { key: "users", label: "Users", color: "#3b82f6" },
+                                    { key: "pageViews", label: "Page Views", color: "#f59e0b" },
+                                    { key: "sessions", label: "Sessions", color: "#10b981" },
+                                    { key: "newUsers", label: "New Users", color: "#8b5cf6" },
+                                  ];
+                                  const visibleMetrics = metricOpts.filter(m => gaChartMetrics.has(m.key));
+                                  const toggleMetric = (key: string) => {
+                                    setGaChartMetrics(prev => {
+                                      const next = new Set(prev);
+                                      if (next.has(key)) {
+                                        if (next.size > 1) next.delete(key);
+                                      } else {
+                                        next.add(key);
+                                      }
+                                      return next;
+                                    });
+                                  };
+                                  // Area fill only when a single metric is active
+                                  const soloMetric = visibleMetrics.length === 1 ? visibleMetrics[0] : null;
+                                  return (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-sm font-medium">Daily Traffic - last {gaDays} days</div>
+                                        <div className="flex items-center gap-1">
+                                          {metricOpts.map((m) => {
+                                            const on = gaChartMetrics.has(m.key);
+                                            return (
+                                              <button
+                                                key={m.key}
+                                                type="button"
+                                                onClick={() => toggleMetric(m.key)}
+                                                className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+                                                  on
+                                                    ? "text-white font-medium"
+                                                    : "bg-stone-100 dark:bg-stone-800 opacity-40 hover:opacity-80"
+                                                }`}
+                                                style={on ? { backgroundColor: m.color } : undefined}
+                                              >
+                                                {m.label}
+                                              </button>
+                                            );
+                                          })}
                                         </div>
-                                      ) : (
+                                      </div>
+                                      <div className="h-56 w-full">
+                                        <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <ComposedChart data={gaSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                              {soloMetric && (
+                                                <defs>
+                                                  <linearGradient id="gaMetricGrad" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="0%" stopColor={soloMetric.color} stopOpacity={0.3} />
+                                                    <stop offset="100%" stopColor={soloMetric.color} stopOpacity={0.05} />
+                                                  </linearGradient>
+                                                </defs>
+                                              )}
+                                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                              <XAxis
+                                                dataKey="date"
+                                                tickFormatter={(d: string) => {
+                                                  try {
+                                                    const dt = new Date(d + "T00:00:00Z");
+                                                    return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
+                                                  } catch { return d; }
+                                                }}
+                                                tick={{ fontSize: 10 }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
+                                              />
+                                              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+                                              <Tooltip
+                                                content={({ active: tActive, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
+                                                  if (!tActive || !payload?.length) return null;
+                                                  return (
+                                                    <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
+                                                      <div className="font-medium opacity-70 mb-1">{label}</div>
+                                                      {payload.map((p) => (
+                                                        <div key={p.dataKey} className="flex items-center gap-2">
+                                                          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                          <span className="capitalize">{p.dataKey === "pageViews" ? "Page Views" : p.dataKey === "newUsers" ? "New Users" : p.dataKey}</span>
+                                                          <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  );
+                                                }}
+                                              />
+                                              {soloMetric && (
+                                                <Area type="monotone" dataKey={soloMetric.key} fill="url(#gaMetricGrad)" stroke="none" />
+                                              )}
+                                              {visibleMetrics.map((m) => (
+                                                <Line key={m.key} type="monotone" dataKey={m.key} stroke={m.color} strokeWidth={2} dot={false} />
+                                              ))}
+                                            </ComposedChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
+
+                              {/* Bottom grid: Top pages, Devices, Acquisition, Geo */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Top Pages */}
+                                {gaTopPages.length > 0 && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Top Pages</div>
+                                    <div className="space-y-1.5 max-h-64 overflow-auto">
+                                      {gaTopPages.map((p, i) => {
+                                        const maxViews = gaTopPages[0]?.views || 1;
+                                        return (
+                                          <div key={p.path} className="flex items-center gap-2 text-xs">
+                                            <span className="text-stone-400 w-4 text-right tabular-nums">{i + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                <span className="truncate font-mono text-[11px]" title={p.path}>{p.path}</span>
+                                                <span className="text-stone-400 tabular-nums flex-shrink-0">{p.views.toLocaleString()}</span>
+                                              </div>
+                                              <div className="h-1 rounded-full bg-stone-100 dark:bg-stone-800 mt-0.5">
+                                                <div className="h-full rounded-full bg-blue-500/70" style={{ width: `${(p.views / maxViews) * 100}%` }} />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Acquisition: Channels + Top Referrers */}
+                                {gaAcquisition && (gaAcquisition.channels.length > 0 || gaAcquisition.sources.length > 0) && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Traffic Channels</div>
+                                    {gaAcquisition.channels.length > 0 && (
+                                      <>
+                                        <div className="h-40">
+                                          <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <PieChart>
+                                                <Pie
+                                                  data={gaAcquisition.channels.map(c => ({ name: c.channel, value: c.sessions }))}
+                                                  dataKey="value"
+                                                  nameKey="name"
+                                                  cx="50%"
+                                                  cy="50%"
+                                                  outerRadius={55}
+                                                  innerRadius={30}
+                                                  paddingAngle={2}
+                                                >
+                                                  {gaAcquisition.channels.map((_, i) => (
+                                                    <Cell key={i} fill={gaChannelColors[i % gaChannelColors.length]} />
+                                                  ))}
+                                                </Pie>
+                                                <Tooltip
+                                                  content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                      <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                        <div className="font-medium">{payload[0]?.name}</div>
+                                                        <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} sessions</div>
+                                                      </div>
+                                                    );
+                                                  }}
+                                                />
+                                              </PieChart>
+                                            </ResponsiveContainer>
+                                          </ChartSuspense>
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                          {gaAcquisition.channels.slice(0, 6).map((c, i) => (
+                                            <span key={c.channel} className="flex items-center gap-1">
+                                              <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
+                                              {c.channel} ({c.sessions})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+                                    {gaAcquisition.sources.length > 0 && (
+                                      <div className={gaAcquisition.channels.length > 0 ? "mt-3 pt-2 border-t" : ""}>
+                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Referrers</div>
+                                        <div className="space-y-1">
+                                          {gaAcquisition.sources.slice(0, 8).map((s, i) => {
+                                            const maxSessions = gaAcquisition!.sources[0]?.sessions || 1;
+                                            return (
+                                              <div key={s.source} className="flex items-center gap-2 text-xs">
+                                                <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
+                                                <span className="flex-1 truncate">{s.source}</span>
+                                                <span className="tabular-nums text-stone-500">{s.sessions}</span>
+                                                <div className="w-16 h-1 rounded-full bg-stone-100 dark:bg-stone-800">
+                                                  <div className="h-full rounded-full" style={{ width: `${(s.sessions / maxSessions) * 100}%`, background: gaChannelColors[i % gaChannelColors.length] }} />
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Device Breakdown */}
+                                {gaDevices && gaDevices.devices.length > 0 && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Devices</div>
+                                    <div className="h-40">
+                                      <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                          <PieChart>
+                                            <Pie
+                                              data={gaDevices.devices.map(d => ({ name: d.device, value: d.users }))}
+                                              dataKey="value"
+                                              nameKey="name"
+                                              cx="50%"
+                                              cy="50%"
+                                              outerRadius={55}
+                                              innerRadius={30}
+                                              paddingAngle={2}
+                                            >
+                                              {gaDevices.devices.map((_, i) => (
+                                                <Cell key={i} fill={gaDeviceColors[i % gaDeviceColors.length]} />
+                                              ))}
+                                            </Pie>
+                                            <Tooltip
+                                              content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                if (!active || !payload?.length) return null;
+                                                return (
+                                                  <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                    <div className="font-medium capitalize">{payload[0]?.name}</div>
+                                                    <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} users</div>
+                                                  </div>
+                                                );
+                                              }}
+                                            />
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </ChartSuspense>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                      {gaDevices.devices.map((d, i) => (
+                                        <span key={d.device} className="flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full" style={{ background: gaDeviceColors[i % gaDeviceColors.length] }} />
+                                          <span className="capitalize">{d.device}</span> ({d.users})
+                                        </span>
+                                      ))}
+                                    </div>
+                                    {gaDevices.browsers.length > 0 && (
+                                      <div className="mt-3 pt-2 border-t">
+                                        <div className="text-[10px] font-medium mb-1 opacity-60">Top Browsers</div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {gaDevices.browsers.slice(0, 5).map((b) => (
+                                            <span key={b.browser} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
+                                              {b.browser} ({b.users})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Geographic Breakdown: Dot Map + Donut + Cities */}
+                                {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (() => {
+                                  // Country name → SVG [x, y] coordinates (centroids extracted from the actual SVG map)
+                                  const countryCoords: Record<string, [number, number]> = {
+                                    "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
+                                    Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
+                                    Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
+                                    "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
+                                    Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
+                                    Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
+                                    Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
+                                    "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
+                                    Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
+                                    Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
+                                    "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
+                                    Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
+                                    Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
+                                    Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
+                                    Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
+                                    Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
+                                    Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
+                                    "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
+                                    Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
+                                    // Additional countries
+                                    "Côte d'Ivoire": [464.0, 385.3], Cameroon: [504.0, 391.0], "Democratic Republic of the Congo": [542.0, 415.0],
+                                    Angola: [524.0, 446.0], Mozambique: [570.0, 470.0], Zimbabwe: [553.0, 468.0], Uganda: [570.3, 408.6],
+                                    Rwanda: [565.0, 415.0], "Ivory Coast": [464.0, 385.3], Mali: [475.0, 355.0], "Burkina Faso": [478.0, 368.0],
+                                    Niger: [500.0, 355.0], Chad: [520.0, 360.0], Sudan: [560.0, 355.0], Libya: [520.0, 320.0],
+                                    Venezuela: [298.0, 381.0], Ecuador: [265.0, 415.0], Bolivia: [304.0, 465.0], Paraguay: [318.0, 480.0],
+                                    Uruguay: [326.0, 508.0], "Costa Rica": [237.0, 370.0], Panama: [250.0, 375.0], Guatemala: [220.0, 350.0],
+                                    Honduras: [230.0, 354.0], "El Salvador": [223.0, 358.0], Nicaragua: [235.0, 362.0], Cuba: [252.0, 330.0],
+                                    "Dominican Republic": [278.0, 338.0], Jamaica: [261.0, 340.0], "Puerto Rico": [286.0, 338.0],
+                                    "Trinidad and Tobago": [298.0, 368.0], Haiti: [273.0, 338.0],
+                                    Iraq: [590.0, 305.0], Iran: [618.0, 308.0], Afghanistan: [644.0, 305.0], Myanmar: [733.0, 348.0],
+                                    Cambodia: [756.0, 370.0], Laos: [750.0, 348.0], "North Korea": [801.0, 280.0], Mongolia: [740.0, 264.0],
+                                    Kazakhstan: [645.0, 260.0], Uzbekistan: [635.0, 275.0], Turkmenistan: [625.0, 285.0],
+                                    Kyrgyzstan: [658.0, 275.0], Tajikistan: [650.0, 285.0], Georgia: [568.0, 275.0], Armenia: [575.0, 280.0],
+                                    Azerbaijan: [580.0, 278.0], Jordan: [568.0, 318.0], Lebanon: [565.0, 305.0], Syria: [573.0, 298.0],
+                                    Kuwait: [600.0, 320.0], Bahrain: [607.0, 325.0], Qatar: [610.0, 328.0], Oman: [620.0, 345.0],
+                                    Yemen: [600.0, 350.0], "Papua New Guinea": [868.0, 430.0], Fiji: [920.0, 465.0],
+                                    Madagascar: [585.0, 470.0], Mauritius: [605.0, 468.0], Réunion: [600.0, 472.0],
+                                    "Bosnia and Herzegovina": [521.0, 272.0], Slovenia: [513.0, 264.0], "North Macedonia": [533.0, 275.0],
+                                    Albania: [529.0, 278.0], Montenegro: [525.0, 274.0], Kosovo: [530.0, 273.0], Moldova: [545.0, 258.0],
+                                    Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
+                                  };
+                                  const top6 = gaGeo.countries.slice(0, 6);
+                                  const rest = gaGeo.countries.slice(6);
+                                  const otherUsers = rest.reduce((s, c) => s + c.users, 0);
+                                  const pieData = top6.map((c) => ({ name: c.country, value: c.users }));
+                                  if (otherUsers > 0) pieData.push({ name: `Other (${rest.length})`, value: otherUsers });
+                                  const totalUsers = pieData.reduce((s, d) => s + d.value, 0);
+                                  const maxUsers = gaGeo.countries[0]?.users || 1;
+
+                                  return (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="text-sm font-medium mb-2">Top Countries</div>
+
+                                      {/* World Map with country dots — single SVG, coordinates from actual SVG centroids */}
+                                      {gaGeo.countries.length > 0 && (() => {
+                                        const totalGeoUsers = gaGeo.countries.reduce((s, c) => s + c.users, 0);
+                                        return (
+                                        <div
+                                          className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border"
+                                          style={{ aspectRatio: "820.44 / 501.3" }}
+                                          onMouseLeave={() => setMapTooltip(null)}
+                                        >
+                                          <svg className="absolute inset-0 w-full h-full" viewBox="103.51 165.78 820.44 501.3" preserveAspectRatio="xMidYMid meet" role="img" aria-label="World map showing user locations">
+                                            {/* SVG world map background — themed fill via CSS filter */}
+                                            <image
+                                              href="https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg"
+                                              x="103.51" y="165.78" width="820.44" height="501.3"
+                                              opacity={isDark ? 0.3 : 0.15}
+                                              preserveAspectRatio="xMidYMid meet"
+                                              style={{ filter: isDark ? "invert(1) brightness(0.6)" : "none" }}
+                                            />
+                                            {/* Country dots — using exact SVG coordinates from the map */}
+                                            {gaGeo.countries.map((c, i) => {
+                                              const coords = countryCoords[c.country];
+                                              if (!coords) return null;
+                                              const ratio = c.users / maxUsers;
+                                              const r = 3 + ratio * 10;
+                                              const color = i < countryColors.length ? countryColors[i] : "#9ca3af";
+                                              const pct = totalGeoUsers > 0 ? Math.round((c.users / totalGeoUsers) * 100) : 0;
+                                              return (
+                                                <g
+                                                  key={c.country}
+                                                  style={{ cursor: "pointer" }}
+                                                  onMouseEnter={(e) => {
+                                                    setMapTooltip({ country: c.country, users: c.users, sessions: c.sessions, pct, color, x: e.clientX, y: e.clientY });
+                                                  }}
+                                                  onMouseMove={(e) => {
+                                                    setMapTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
+                                                  }}
+                                                  onMouseLeave={() => setMapTooltip(null)}
+                                                >
+                                                  <circle cx={coords[0]} cy={coords[1]} r={r + 4} fill={color} opacity={0.2} />
+                                                  <circle cx={coords[0]} cy={coords[1]} r={r} fill={color} opacity={0.9} />
+                                                  {/* Larger invisible hit area for easier hover */}
+                                                  <circle cx={coords[0]} cy={coords[1]} r={Math.max(r + 8, 14)} fill="transparent" />
+                                                </g>
+                                              );
+                                            })}
+                                          </svg>
+                                          {/* HTML tooltip rendered via portal so it floats above all cards */}
+                                          {mapTooltip && createPortal(
+                                            <div
+                                              className="fixed z-[9999] pointer-events-none rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#252526] shadow-lg px-3 py-2 whitespace-nowrap"
+                                              style={{ left: mapTooltip.x, top: mapTooltip.y, transform: "translate(-50%, calc(-100% - 12px))" }}
+                                            >
+                                              <div className="text-xs font-semibold mb-0.5" style={{ color: mapTooltip.color }}>{mapTooltip.country}</div>
+                                              <div className="text-xs text-stone-600 dark:text-stone-300">
+                                                {mapTooltip.users.toLocaleString()} user{mapTooltip.users !== 1 ? "s" : ""} · {mapTooltip.sessions.toLocaleString()} session{mapTooltip.sessions !== 1 ? "s" : ""} · {mapTooltip.pct}%
+                                              </div>
+                                            </div>,
+                                            document.body
+                                          )}
+                                        </div>
+                                        );
+                                      })()}
+
+                                      {/* Donut + Legend */}
+                                      {gaGeo.countries.length > 0 && (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
                                           <div className="col-span-2 min-h-[150px]">
-                                            <ChartSuspense
-                                              fallback={
-                                                <div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">
-                                                  Loading chart...
-                                                </div>
-                                              }
-                                            >
-                                              <ResponsiveContainer
-                                                width="100%"
-                                                height={150}
-                                              >
-                                                <PieChart
-                                                  margin={{
-                                                    top: 0,
-                                                    right: 0,
-                                                    bottom: 0,
-                                                    left: 0,
-                                                  }}
-                                                >
-                                                  {(() => {
-                                                    const pieData: Array<{
-                                                      country: string;
-                                                      visits: number;
-                                                      pct?: number;
-                                                      isOther?: boolean;
-                                                      fill?: string;
-                                                    }> = topCountries
-                                                      .slice(0, 5)
-                                                      .map((c, idx) => ({
-                                                        ...c,
-                                                        fill: countryColors[
-                                                          idx %
-                                                            countryColors.length
-                                                        ],
-                                                      }));
-                                                    if (
-                                                      otherCountries &&
-                                                      otherCountries.visits > 0
-                                                    ) {
-                                                      pieData.push({
-                                                        country: "Other",
-                                                        visits:
-                                                          otherCountries.visits,
-                                                        pct: otherCountries.pct,
-                                                        isOther: true,
-                                                        fill: countryColors[
-                                                          5 %
-                                                            countryColors.length
-                                                        ],
-                                                      });
-                                                    }
-                                                    const totalVisits =
-                                                      pieData.reduce(
-                                                        (s, x) =>
-                                                          s + (x.visits || 0),
-                                                        0,
-                                                      );
-                                                    const CountryPieTooltip = ({
-                                                      active,
-                                                      payload,
-                                                    }: {
-                                                      active?: boolean;
-                                                      payload?: Array<{ payload?: { country: string; visits: number; pct?: number; isOther?: boolean } }>;
-                                                    }) => {
-                                                      if (
-                                                        !active ||
-                                                        !payload ||
-                                                        !payload.length
-                                                      )
-                                                        return null;
-                                                      const d = payload[0]
-                                                        ?.payload as {
-                                                        country: string;
-                                                        visits: number;
-                                                        pct?: number;
-                                                        isOther?: boolean;
-                                                      };
-                                                      if (!d) return null;
-                                                      if (d.isOther) {
-                                                        const items: Array<{
-                                                          country: string;
-                                                          visits: number;
-                                                        }> = Array.isArray(
-                                                          otherCountries?.items,
-                                                        )
-                                                          ? (otherCountries!
-                                                              .items as Array<{
-                                                              country: string;
-                                                              visits: number;
-                                                            }>)
-                                                          : [];
-                                                        const otherTotal =
-                                                          Math.max(
-                                                            0,
-                                                            otherCountries?.visits ||
-                                                              0,
-                                                          );
-                                                        const rows: Array<{
-                                                          name: string;
-                                                          visits: number;
-                                                          pctTotal: number;
-                                                          pctOther: number;
-                                                        }> = items
-                                                          .map(
-                                                            (it: {
-                                                              country: string;
-                                                              visits: number;
-                                                            }) => ({
-                                                              name: countryCodeToName(
-                                                                it.country,
-                                                              ),
-                                                              visits: it.visits,
-                                                              pctTotal:
-                                                                totalVisits > 0
-                                                                  ? (it.visits /
-                                                                      totalVisits) *
-                                                                    100
-                                                                  : 0,
-                                                              pctOther:
-                                                                otherTotal > 0
-                                                                  ? (it.visits /
-                                                                      otherTotal) *
-                                                                    100
-                                                                  : 0,
-                                                            }),
-                                                          )
-                                                          .sort(
-                                                            (
-                                                              a: {
-                                                                visits: number;
-                                                              },
-                                                              b: {
-                                                                visits: number;
-                                                              },
-                                                            ) =>
-                                                              (b.visits || 0) -
-                                                              (a.visits || 0),
-                                                          );
-                                                        return (
-                                                          <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2 max-w-[480px]">
-                                                            <div className="text-xs font-medium mb-1">
-                                                              Countries in Other
-                                                            </div>
-                                                            <div className="text-[11px] opacity-80 dark:opacity-70 space-y-0.5">
-                                                              {rows.map(
-                                                                (
-                                                                  r: {
-                                                                    name: string;
-                                                                    visits: number;
-                                                                    pctTotal: number;
-                                                                    pctOther: number;
-                                                                  },
-                                                                  idx: number,
-                                                                ) => (
-                                                                  <div
-                                                                    key={`${r.name}-${idx}`}
-                                                                    className="flex items-center justify-between gap-3"
-                                                                  >
-                                                                    <div className="truncate">
-                                                                      {r.name}
-                                                                    </div>
-                                                                    <div className="text-[11px] tabular-nums whitespace-nowrap">
-                                                                      {Math.round(
-                                                                        r.pctOther,
-                                                                      )}
-                                                                      % of Other
-                                                                      ?{" "}
-                                                                      {Math.round(
-                                                                        r.pctTotal,
-                                                                      )}
-                                                                      % ?{" "}
-                                                                      {r.visits}
-                                                                    </div>
-                                                                  </div>
-                                                                ),
-                                                              )}
-                                                            </div>
-                                                          </div>
-                                                        );
-                                                      }
-                                                      const name =
-                                                        countryCodeToName(
-                                                          d.country,
-                                                        );
-                                                      const pct = Math.round(
-                                                        d.pct ??
-                                                          (totalVisits > 0
-                                                            ? (d.visits /
-                                                                totalVisits) *
-                                                              100
-                                                            : 0),
-                                                      );
+                                            <ChartSuspense fallback={<div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                              <ResponsiveContainer width="100%" height={150}>
+                                                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                                  <Pie
+                                                    data={pieData}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    innerRadius={36}
+                                                    outerRadius={64}
+                                                    paddingAngle={3}
+                                                    cx="40%"
+                                                    cy="50%"
+                                                    isAnimationActive={false}
+                                                  >
+                                                    {pieData.map((_, i) => (
+                                                      <Cell key={i} fill={countryColors[i % countryColors.length]} strokeWidth={isDark ? 0 : 2} stroke={countryColors[i % countryColors.length]} />
+                                                    ))}
+                                                  </Pie>
+                                                  <Tooltip
+                                                    content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                      if (!active || !payload?.length) return null;
+                                                      const pct = totalUsers > 0 ? Math.round(((payload[0]?.value || 0) / totalUsers) * 100) : 0;
                                                       return (
-                                                        <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2">
-                                                          <div className="text-xs font-medium">
-                                                            {name}
-                                                          </div>
-                                                          <div className="text-[11px] opacity-80 dark:opacity-70">
-                                                            {pct}% ? {d.visits}
-                                                          </div>
+                                                        <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                          <div className="font-medium">{payload[0]?.name}</div>
+                                                          <div className="tabular-nums">{pct}% &middot; {payload[0]?.value?.toLocaleString()} users</div>
                                                         </div>
                                                       );
-                                                    };
-                                                    return (
-                                                      <>
-                                                        <Pie
-                                                          data={pieData}
-                                                          dataKey="visits"
-                                                          nameKey="country"
-                                                          innerRadius={36}
-                                                          outerRadius={64}
-                                                          paddingAngle={3}
-                                                          cx="40%"
-                                                          cy="50%"
-                                                          isAnimationActive={
-                                                            false
-                                                          }
-                                                        >
-                                                          {pieData.map(
-                                                            (entry, index) => {
-                                                              // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
-                                                              const colorIndex =
-                                                                entry.isOther
-                                                                  ? 5
-                                                                  : index;
-                                                              const color =
-                                                                entry.fill ||
-                                                                countryColors[
-                                                                  colorIndex %
-                                                                    countryColors.length
-                                                                ];
-                                                              return (
-                                                                <Cell
-                                                                  key={`cell-${entry.country}-${index}-${color}`}
-                                                                  fill={color}
-                                                                  stroke={
-                                                                    isDark
-                                                                      ? color
-                                                                      : color
-                                                                  }
-                                                                  strokeWidth={
-                                                                    isDark
-                                                                      ? 0
-                                                                      : 2
-                                                                  }
-                                                                />
-                                                              );
-                                                            },
-                                                          )}
-                                                        </Pie>
-                                                        <Tooltip
-                                                          content={
-                                                            <CountryPieTooltip />
-                                                          }
-                                                          cursor={{
-                                                            stroke: isDark
-                                                              ? "rgba(255,255,255,0.2)"
-                                                              : "rgba(0,0,0,0.1)",
-                                                          }}
-                                                        />
-                                                      </>
-                                                    );
-                                                  })()}
+                                                    }}
+                                                  />
                                                 </PieChart>
                                               </ResponsiveContainer>
                                             </ChartSuspense>
                                           </div>
-                                          <div className="flex flex-col gap-1">
-                                            {topCountries
-                                              .slice(0, 5)
-                                              .map((c, idx) => (
-                                                <div
-                                                  key={c.country}
-                                                  className="flex items-center justify-between"
-                                                >
+                                          <div className="flex flex-col gap-1 justify-center">
+                                            {pieData.map((d, i) => {
+                                              const pct = totalUsers > 0 ? Math.round((d.value / totalUsers) * 100) : 0;
+                                              return (
+                                                <div key={d.name} className="flex items-center justify-between">
                                                   <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                                                    <span
-                                                      className="inline-block h-3 w-3 rounded-full"
-                                                      style={{
-                                                        backgroundColor:
-                                                          countryColors[
-                                                            idx %
-                                                              countryColors.length
-                                                          ],
-                                                      }}
-                                                    />
-                                                    <span className="text-sm truncate">
-                                                      {countryCodeToName(
-                                                        c.country,
-                                                      )}
-                                                    </span>
+                                                    <span className="inline-block h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: countryColors[i % countryColors.length] }} />
+                                                    <span className="text-xs truncate">{d.name}</span>
                                                   </div>
-                                                  <span className="text-sm tabular-nums">
-                                                    {Math.round(c.pct || 0)}%
-                                                  </span>
+                                                  <span className="text-xs tabular-nums ml-2">{pct}%</span>
                                                 </div>
-                                              ))}
-                                            {otherCountries &&
-                                              otherCountries.visits > 0 && (
-                                                <div className="flex items-center justify-between">
-                                                  <div
-                                                    className="flex-1 flex items-center gap-1.5 min-w-0"
-                                                    onMouseEnter={(e) =>
-                                                      showOtherCountriesTooltip(
-                                                        e.currentTarget as HTMLElement,
-                                                      )
-                                                    }
-                                                    onMouseLeave={
-                                                      hideOtherCountriesTooltip
-                                                    }
-                                                    onFocus={(e) =>
-                                                      showOtherCountriesTooltip(
-                                                        e.currentTarget as HTMLElement,
-                                                      )
-                                                    }
-                                                    onBlur={
-                                                      hideOtherCountriesTooltip
-                                                    }
-                                                  >
-                                                    <span
-                                                      className="inline-block h-3 w-3 rounded-full"
-                                                      style={{
-                                                        backgroundColor:
-                                                          countryColors[
-                                                            5 %
-                                                              countryColors.length
-                                                          ],
-                                                      }}
-                                                    />
-                                                    <span className="text-sm truncate">
-                                                      Other (
-                                                      {otherCountries.count})
-                                                    </span>
-                                                  </div>
-                                                  <span className="text-sm tabular-nums">
-                                                    {Math.round(
-                                                      otherCountries?.pct || 0,
-                                                    )}
-                                                    %
-                                                  </span>
-                                                </div>
-                                              )}
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Top Cities */}
+                                      {gaGeo.cities.length > 0 && (
+                                        <div className="mt-3 pt-2 border-t">
+                                          <div className="text-[10px] font-medium opacity-60 mb-1">Top Cities</div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {gaGeo.cities.slice(0, 10).map((c) => (
+                                              <span key={c.city} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
+                                                {c.city} ({c.users})
+                                              </span>
+                                            ))}
                                           </div>
                                         </div>
                                       )}
                                     </div>
-                                    <div className="rounded-xl border p-3 md:col-span-1">
-                                      <div className="text-sm font-medium mb-2">
-                                        Top referrers
-                                      </div>
-                                      {topReferrers.length === 0 ? (
-                                        <div className="text-sm opacity-60">
-                                          No data.
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-col gap-2">
-                                          {topReferrers
-                                            .slice(0, 5)
-                                            .map((r, idx) => (
-                                              <div
-                                                key={r.source}
-                                                className="flex items-center justify-between"
-                                              >
-                                                <div className="flex-1 flex items-center gap-2 min-w-0">
-                                                  <span
-                                                    className="inline-block h-3 w-3 rounded-full"
-                                                    style={{
-                                                      backgroundColor:
-                                                        referrerColors[
-                                                          idx %
-                                                            referrerColors.length
-                                                        ],
-                                                    }}
-                                                  />
-                                                  <span className="text-sm truncate">
-                                                    {r.source}
-                                                  </span>
-                                                </div>
-                                                <span className="text-sm tabular-nums">
-                                                  {Math.round(r.pct || 0)}%
-                                                </span>
-                                              </div>
-                                            ))}
-                                          {otherReferrers &&
-                                            otherReferrers.visits > 0 && (
-                                              <div className="flex items-center justify-between">
-                                                <div className="flex-1 flex items-center gap-2 min-w-0">
-                                                  <span
-                                                    className="inline-block h-3 w-3 rounded-full"
-                                                    style={{
-                                                      backgroundColor:
-                                                        referrerColors[
-                                                          4 %
-                                                            referrerColors.length
-                                                        ],
-                                                    }}
-                                                  />
-                                                  <span className="text-sm truncate">
-                                                    Other (
-                                                    {otherReferrers.count})
-                                                  </span>
-                                                </div>
-                                                <span className="text-sm tabular-nums">
-                                                  {Math.round(
-                                                    otherReferrers.pct || 0,
-                                                  )}
-                                                  %
-                                                </span>
-                                              </div>
-                                            )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
+                                  );
+                                })()}
+                              </div>
+
+                              {/* Loading state */}
+                              {gaLoading && !gaOverview && (
+                                <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Loading Google Analytics data...</span>
                                 </div>
-                              );
-                            })()
+                              )}
+                            </div>
+                          )}
+
+                          {gaOpen && gaConfigured === null && (
+                            <div className="mt-3 flex items-center gap-2 text-xs opacity-50">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Checking GA configuration...
+                            </div>
+                          )}
+
+                          {gaOpen && gaConfigured === false && (
+                            <div className="mt-3 text-xs text-stone-500 dark:text-stone-400 space-y-1">
+                              <p>To enable Google Analytics, set these environment variables on the server:</p>
+                              <ul className="list-disc list-inside space-y-0.5 font-mono text-[10px]">
+                                <li>GA4_PROPERTY_ID (numeric property ID)</li>
+                                <li>GOOGLE_APPLICATION_CREDENTIALS or GA_SERVICE_ACCOUNT_JSON</li>
+                              </ul>
+                            </div>
                           )}
                         </CardContent>
                       </Card>
-                      <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">
-                        Quick Links
+                    )}
+
+                    {/* ─── Connected IPs Table ─── */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Wifi className="h-4 w-4 opacity-50" />
+                            <span className="text-sm font-semibold">Connected IPs</span>
+                            {enrichedIps.length > 0 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 tabular-nums">{enrichedIps.length}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ipsUpdatedAt && (
+                              <span className="text-[10px] opacity-40">{formatTimeAgo(ipsUpdatedAt)}</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Refresh IPs"
+                              onClick={() => loadEnrichedIps({ initial: false })}
+                              disabled={ipsLoading || ipsRefreshing}
+                              className="h-7 w-7 rounded-lg"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${ipsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                        </div>
+                        {ipsLoading ? (
+                          <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Loading connected IPs...</span>
+                          </div>
+                        ) : enrichedIps.length === 0 ? (
+                          <div className="text-sm opacity-50 text-center py-4">No connected IPs in the last 60 minutes.</div>
+                        ) : (
+                          <div className="overflow-x-auto -mx-4">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b text-left">
+                                  <th className="px-4 py-2 font-medium opacity-50">IP Address</th>
+                                  <th className="px-4 py-2 font-medium opacity-50">Country</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-center">Account</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-right">Visits</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-right">RPM (5m)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {enrichedIps.map((row) => (
+                                  <tr
+                                    key={row.ip}
+                                    className="border-b border-stone-100 dark:border-stone-800/50 hover:bg-stone-50 dark:hover:bg-stone-800/30 cursor-pointer transition-colors"
+                                    onClick={() => jumpToIpLookup(row.ip)}
+                                    title={`Lookup members for ${row.ip}`}
+                                  >
+                                    <td className="px-4 py-2 font-mono tabular-nums">{row.ip}</td>
+                                    <td className="px-4 py-2">
+                                      {row.country ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Globe className="h-3 w-3 opacity-40" />
+                                          {countryCodeToName(row.country)}
+                                        </span>
+                                      ) : (
+                                        <span className="opacity-30">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {row.hasAccount ? (
+                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400">
+                                          <Check className="h-3 w-3" />
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 opacity-40">
+                                          <X className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-right tabular-nums">{row.visits}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">
+                                      <span className={row.rpm >= 10 ? "text-amber-600 dark:text-amber-400 font-medium" : row.rpm >= 30 ? "text-rose-600 dark:text-rose-400 font-bold" : ""}>
+                                        {row.rpm}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                      {/* ═══ QUICK LINKS ═══ */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <ExternalLink className="h-3.5 w-3.5 opacity-40" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Quick Links</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -13444,36 +12949,6 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   )}
                                 </div>
-                                {otherCountriesTooltip &&
-                                  createPortal(
-                                    <div
-                                      className="fixed z-[70] pointer-events-none"
-                                      style={{
-                                        top: otherCountriesTooltip.top,
-                                        left: otherCountriesTooltip.left,
-                                        transform: "translate(-50%, -100%)",
-                                      }}
-                                    >
-                                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
-                                        <div className="text-xs font-medium mb-1">
-                                          Countries in Other
-                                        </div>
-                                        <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
-                                          {otherCountriesTooltip.names.map(
-                                            (n, idx) => (
-                                              <div
-                                                key={`${n}-${idx}`}
-                                                className="truncate"
-                                              >
-                                                {n}
-                                              </div>
-                                            ),
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>,
-                                    document.body,
-                                  )}
                               </div>
                               <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                                 <div className="text-[11px] opacity-60 mb-1">
@@ -13779,8 +13254,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                 )}
 
-                </CardContent>
-              </Card>
+                </div>
             </section>
           </div>
         </main>

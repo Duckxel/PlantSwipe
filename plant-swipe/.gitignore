@@ -25,6 +25,7 @@ package-lock.json
 .env.*
 .env.server
 .env.server.*
+ga4_keyfile.json
 
 # Generated files
 public/sitemap.xml
