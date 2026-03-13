@@ -184,6 +184,48 @@ const setCanonicalHref = (element: HTMLLinkElement | null, href: string) => {
   element.setAttribute('href', href)
 }
 
+/**
+ * Manage hreflang alternate link elements in the document head.
+ * Returns created elements so they can be cleaned up on unmount.
+ */
+const SUPPORTED_HREFLANG = ['en', 'fr'] as const
+const setHreflangLinks = (canonicalUrl: string): HTMLLinkElement[] => {
+  if (typeof document === 'undefined') return []
+  const siteUrl = SEO_DEFAULT_URL.replace(/\/+$/, '')
+  // Extract the path from the canonical URL
+  const path = canonicalUrl.startsWith(siteUrl)
+    ? canonicalUrl.slice(siteUrl.length) || '/'
+    : '/'
+
+  const created: HTMLLinkElement[] = []
+  for (const lang of SUPPORTED_HREFLANG) {
+    const href = lang === 'en' ? `${siteUrl}${path}` : `${siteUrl}/${lang}${path}`
+    const selector = `link[rel="alternate"][hreflang="${lang}"]`
+    let el = document.head?.querySelector(selector) as HTMLLinkElement | null
+    if (!el && document.head) {
+      el = document.createElement('link')
+      el.setAttribute('rel', 'alternate')
+      el.setAttribute('hreflang', lang)
+      document.head.appendChild(el)
+      created.push(el)
+    }
+    if (el) el.setAttribute('href', href)
+  }
+  // x-default
+  const xSelector = 'link[rel="alternate"][hreflang="x-default"]'
+  let xEl = document.head?.querySelector(xSelector) as HTMLLinkElement | null
+  if (!xEl && document.head) {
+    xEl = document.createElement('link')
+    xEl.setAttribute('rel', 'alternate')
+    xEl.setAttribute('hreflang', 'x-default')
+    document.head.appendChild(xEl)
+    created.push(xEl)
+  }
+  if (xEl) xEl.setAttribute('href', canonicalUrl)
+
+  return created
+}
+
 type Snapshot = {
   element: HTMLMetaElement
   previousContent: string | null
@@ -248,7 +290,8 @@ export function usePageMetadata({ title, description, image, url, canonicalUrl, 
     IMAGE_TARGETS.forEach((target) => applyTarget(target, resolvedImage))
     URL_TARGETS.forEach((target) => applyTarget(target, resolvedUrl))
 
-    // Set canonical URL
+    // Set canonical URL and hreflang alternate links
+    let hreflangElements: HTMLLinkElement[] = []
     if (resolvedCanonical) {
       const { element, created } = ensureCanonicalLink()
       if (element) {
@@ -259,6 +302,7 @@ export function usePageMetadata({ title, description, image, url, canonicalUrl, 
         }
         setCanonicalHref(element, resolvedCanonical)
       }
+      hreflangElements = setHreflangLinks(resolvedCanonical)
     }
 
     return () => {
@@ -287,6 +331,8 @@ export function usePageMetadata({ title, description, image, url, canonicalUrl, 
           element.setAttribute('href', previousHref)
         }
       }
+      // Remove hreflang links we created
+      hreflangElements.forEach(el => el.remove())
     }
   }, [title, description, image, url, canonicalUrl, noCanonical])
 }
