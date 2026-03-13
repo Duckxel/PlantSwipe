@@ -1920,26 +1920,6 @@ export const AdminPage: React.FC = () => {
   >([]);
   const [visitorsTotalUnique7d, setVisitorsTotalUnique7d] =
     React.useState<number>(0);
-  const [topCountries, setTopCountries] = React.useState<
-    Array<{ country: string; visits: number; pct?: number }>
-  >([]);
-  type OtherCountriesBucket = {
-    count: number;
-    visits: number;
-    pct?: number;
-    codes?: string[];
-    items?: Array<{ country: string; visits: number }>;
-  };
-  const [otherCountries, setOtherCountries] =
-    React.useState<OtherCountriesBucket | null>(null);
-  const [topReferrers, setTopReferrers] = React.useState<
-    Array<{ source: string; visits: number; pct?: number }>
-  >([]);
-  const [otherReferrers, setOtherReferrers] = React.useState<{
-    count: number;
-    visits: number;
-    pct?: number;
-  } | null>(null);
   // Distinct, high-contrast palette for readability
   const countryColors = [
     "#10b981",
@@ -1955,47 +1935,6 @@ export const AdminPage: React.FC = () => {
     "#fb7185",
     "#f97316",
   ];
-  const referrerColors = [
-    "#111827",
-    "#3b82f6",
-    "#ef4444",
-    "#10b981",
-    "#f59e0b",
-    "#8b5cf6",
-  ];
-  // Floating tooltip for the "Other countries" legend item
-  const [otherCountriesTooltip, setOtherCountriesTooltip] = React.useState<{
-    top: number;
-    left: number;
-    names: string[];
-  } | null>(null);
-  const showOtherCountriesTooltip = React.useCallback(
-    (el: HTMLElement) => {
-      try {
-        if (
-          !otherCountries ||
-          !Array.isArray(otherCountries.codes) ||
-          otherCountries.codes.length === 0
-        )
-          return;
-        const rect = el.getBoundingClientRect();
-        const names = otherCountries.codes
-          .map((c) => countryCodeToName(c))
-          .filter((n) => !!n)
-          .sort((a, b) => a.localeCompare(b));
-        setOtherCountriesTooltip({
-          top: Math.max(8, rect.top - 8),
-          left: rect.left + rect.width / 2,
-          names,
-        });
-      } catch {}
-    },
-    [otherCountries, countryCodeToName],
-  );
-  const hideOtherCountriesTooltip = React.useCallback(
-    () => setOtherCountriesTooltip(null),
-    [],
-  );
   // Connected IPs (last 60 minutes)
   const [ips, setIps] = React.useState<string[]>([]);
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true);
@@ -5238,115 +5177,6 @@ export const AdminPage: React.FC = () => {
             }
           }
         } catch {}
-        // Load sources breakdown in parallel
-        try {
-          const sb = await fetchWithRetry(
-            `/api/admin/sources-breakdown?days=${visitorsWindowDays}`,
-            {
-              headers,
-              credentials: "same-origin",
-            },
-          ).catch(() => null);
-          if (sb && sb.ok) {
-            const sbd = await safeJson(sb);
-            const tc = Array.isArray(sbd?.topCountries)
-              ? sbd.topCountries
-                  .map((r: { country?: string; visits?: number }) => ({
-                    country: String(r.country || ""),
-                    visits: Number(r.visits || 0),
-                  }))
-                  .filter((x: { country: string }) => !!x.country)
-              : [];
-            const oc =
-              sbd?.otherCountries && typeof sbd.otherCountries === "object"
-                ? {
-                    count: Number(sbd.otherCountries.count || 0),
-                    visits: Number(sbd.otherCountries.visits || 0),
-                    codes: Array.isArray(sbd.otherCountries.codes)
-                      ? sbd.otherCountries.codes
-                          .map((x: unknown) => String(x || ""))
-                          .filter(Boolean)
-                      : undefined,
-                    items: Array.isArray(sbd.otherCountries.items)
-                      ? sbd.otherCountries.items
-                          .map((it: unknown) => {
-                            const item = it as Record<string, unknown>;
-                            return {
-                              country: String(item?.country || ""),
-                              visits: Number(item?.visits || 0),
-                            };
-                          })
-                          .filter((it: { country: string }) => !!it.country)
-                      : undefined,
-                  }
-                : null;
-            const totalCountryVisits =
-              tc.reduce((a: number, b: { country: string; visits: number }) => a + (b.visits || 0), 0) +
-              (oc?.visits || 0);
-            const countriesWithPct =
-              totalCountryVisits > 0
-                ? tc.map((x: { country: string; visits: number }) => ({
-                    ...x,
-                    pct: (x.visits / totalCountryVisits) * 100,
-                  }))
-                : tc.map((x: { country: string; visits: number }) => ({
-                    ...x,
-                    pct: 0,
-                  }));
-            const ocWithPct = oc
-              ? {
-                  ...oc,
-                  pct:
-                    totalCountryVisits > 0
-                      ? (oc.visits / totalCountryVisits) * 100
-                      : 0,
-                }
-              : null;
-
-            const tr = Array.isArray(sbd?.topReferrers)
-              ? sbd.topReferrers.map(
-                  (r: { source?: string; visits?: number }) => ({
-                    source: String(r.source || "direct"),
-                    visits: Number(r.visits || 0),
-                  }),
-                )
-              : [];
-            const orf =
-              sbd?.otherReferrers && typeof sbd.otherReferrers === "object"
-                ? {
-                    count: Number(sbd.otherReferrers.count || 0),
-                    visits: Number(sbd.otherReferrers.visits || 0),
-                  }
-                : null;
-            const totalRefVisits =
-              tr.reduce((a: number, b: { source: string; visits: number }) => a + (b.visits || 0), 0) +
-              (orf?.visits || 0);
-            const refsWithPct =
-              totalRefVisits > 0
-                ? tr.map((x: { source: string; visits: number }) => ({
-                    ...x,
-                    pct: (x.visits / totalRefVisits) * 100,
-                  }))
-                : tr.map((x: { source: string; visits: number }) => ({
-                    ...x,
-                    pct: 0,
-                  }));
-            const orfWithPct = orf
-              ? {
-                  ...orf,
-                  pct:
-                    totalRefVisits > 0
-                      ? (orf.visits / totalRefVisits) * 100
-                      : 0,
-                }
-              : null;
-
-            setTopCountries(countriesWithPct);
-            setOtherCountries(ocWithPct);
-            setTopReferrers(refsWithPct);
-            setOtherReferrers(orfWithPct);
-          }
-        } catch {}
         setVisitorsUpdatedAt(Date.now());
       } catch (e) {
         console.error("[AdminPage] Failed to load visitors stats:", e);
@@ -8271,433 +8101,6 @@ export const AdminPage: React.FC = () => {
                                       </ResponsiveContainer>
                                     </ChartSuspense>
                                   </div>
-                                  {/* Sources breakdown */}
-                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-                                    <div className="rounded-xl border p-3 md:col-span-2">
-                                      <div className="text-sm font-medium mb-2">
-                                        Top countries
-                                      </div>
-                                      {topCountries.length === 0 ? (
-                                        <div className="text-sm opacity-60">
-                                          No data.
-                                        </div>
-                                      ) : (
-                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
-                                          <div className="col-span-2 min-h-[150px]">
-                                            <ChartSuspense
-                                              fallback={
-                                                <div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">
-                                                  Loading chart...
-                                                </div>
-                                              }
-                                            >
-                                              <ResponsiveContainer
-                                                width="100%"
-                                                height={150}
-                                              >
-                                                <PieChart
-                                                  margin={{
-                                                    top: 0,
-                                                    right: 0,
-                                                    bottom: 0,
-                                                    left: 0,
-                                                  }}
-                                                >
-                                                  {(() => {
-                                                    const pieData: Array<{
-                                                      country: string;
-                                                      visits: number;
-                                                      pct?: number;
-                                                      isOther?: boolean;
-                                                      fill?: string;
-                                                    }> = topCountries
-                                                      .slice(0, 5)
-                                                      .map((c, idx) => ({
-                                                        ...c,
-                                                        fill: countryColors[
-                                                          idx %
-                                                            countryColors.length
-                                                        ],
-                                                      }));
-                                                    if (
-                                                      otherCountries &&
-                                                      otherCountries.visits > 0
-                                                    ) {
-                                                      pieData.push({
-                                                        country: "Other",
-                                                        visits:
-                                                          otherCountries.visits,
-                                                        pct: otherCountries.pct,
-                                                        isOther: true,
-                                                        fill: countryColors[
-                                                          5 %
-                                                            countryColors.length
-                                                        ],
-                                                      });
-                                                    }
-                                                    const totalVisits =
-                                                      pieData.reduce(
-                                                        (s, x) =>
-                                                          s + (x.visits || 0),
-                                                        0,
-                                                      );
-                                                    const CountryPieTooltip = ({
-                                                      active,
-                                                      payload,
-                                                    }: {
-                                                      active?: boolean;
-                                                      payload?: Array<{ payload?: { country: string; visits: number; pct?: number; isOther?: boolean } }>;
-                                                    }) => {
-                                                      if (
-                                                        !active ||
-                                                        !payload ||
-                                                        !payload.length
-                                                      )
-                                                        return null;
-                                                      const d = payload[0]
-                                                        ?.payload as {
-                                                        country: string;
-                                                        visits: number;
-                                                        pct?: number;
-                                                        isOther?: boolean;
-                                                      };
-                                                      if (!d) return null;
-                                                      if (d.isOther) {
-                                                        const items: Array<{
-                                                          country: string;
-                                                          visits: number;
-                                                        }> = Array.isArray(
-                                                          otherCountries?.items,
-                                                        )
-                                                          ? (otherCountries!
-                                                              .items as Array<{
-                                                              country: string;
-                                                              visits: number;
-                                                            }>)
-                                                          : [];
-                                                        const otherTotal =
-                                                          Math.max(
-                                                            0,
-                                                            otherCountries?.visits ||
-                                                              0,
-                                                          );
-                                                        const rows: Array<{
-                                                          name: string;
-                                                          visits: number;
-                                                          pctTotal: number;
-                                                          pctOther: number;
-                                                        }> = items
-                                                          .map(
-                                                            (it: {
-                                                              country: string;
-                                                              visits: number;
-                                                            }) => ({
-                                                              name: countryCodeToName(
-                                                                it.country,
-                                                              ),
-                                                              visits: it.visits,
-                                                              pctTotal:
-                                                                totalVisits > 0
-                                                                  ? (it.visits /
-                                                                      totalVisits) *
-                                                                    100
-                                                                  : 0,
-                                                              pctOther:
-                                                                otherTotal > 0
-                                                                  ? (it.visits /
-                                                                      otherTotal) *
-                                                                    100
-                                                                  : 0,
-                                                            }),
-                                                          )
-                                                          .sort(
-                                                            (
-                                                              a: {
-                                                                visits: number;
-                                                              },
-                                                              b: {
-                                                                visits: number;
-                                                              },
-                                                            ) =>
-                                                              (b.visits || 0) -
-                                                              (a.visits || 0),
-                                                          );
-                                                        return (
-                                                          <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2 max-w-[480px]">
-                                                            <div className="text-xs font-medium mb-1">
-                                                              Countries in Other
-                                                            </div>
-                                                            <div className="text-[11px] opacity-80 dark:opacity-70 space-y-0.5">
-                                                              {rows.map(
-                                                                (
-                                                                  r: {
-                                                                    name: string;
-                                                                    visits: number;
-                                                                    pctTotal: number;
-                                                                    pctOther: number;
-                                                                  },
-                                                                  idx: number,
-                                                                ) => (
-                                                                  <div
-                                                                    key={`${r.name}-${idx}`}
-                                                                    className="flex items-center justify-between gap-3"
-                                                                  >
-                                                                    <div className="truncate">
-                                                                      {r.name}
-                                                                    </div>
-                                                                    <div className="text-[11px] tabular-nums whitespace-nowrap">
-                                                                      {Math.round(
-                                                                        r.pctOther,
-                                                                      )}
-                                                                      % of Other
-                                                                      ?{" "}
-                                                                      {Math.round(
-                                                                        r.pctTotal,
-                                                                      )}
-                                                                      % ?{" "}
-                                                                      {r.visits}
-                                                                    </div>
-                                                                  </div>
-                                                                ),
-                                                              )}
-                                                            </div>
-                                                          </div>
-                                                        );
-                                                      }
-                                                      const name =
-                                                        countryCodeToName(
-                                                          d.country,
-                                                        );
-                                                      const pct = Math.round(
-                                                        d.pct ??
-                                                          (totalVisits > 0
-                                                            ? (d.visits /
-                                                                totalVisits) *
-                                                              100
-                                                            : 0),
-                                                      );
-                                                      return (
-                                                        <div className="rounded-xl border bg-white dark:bg-[#252526] dark:border-[#3e3e42] shadow px-3 py-2">
-                                                          <div className="text-xs font-medium">
-                                                            {name}
-                                                          </div>
-                                                          <div className="text-[11px] opacity-80 dark:opacity-70">
-                                                            {pct}% ? {d.visits}
-                                                          </div>
-                                                        </div>
-                                                      );
-                                                    };
-                                                    return (
-                                                      <>
-                                                        <Pie
-                                                          data={pieData}
-                                                          dataKey="visits"
-                                                          nameKey="country"
-                                                          innerRadius={36}
-                                                          outerRadius={64}
-                                                          paddingAngle={3}
-                                                          cx="40%"
-                                                          cy="50%"
-                                                          isAnimationActive={
-                                                            false
-                                                          }
-                                                        >
-                                                          {pieData.map(
-                                                            (entry, index) => {
-                                                              // Use color index 5 for "Other", otherwise use the index (0-4 for top countries)
-                                                              const colorIndex =
-                                                                entry.isOther
-                                                                  ? 5
-                                                                  : index;
-                                                              const color =
-                                                                entry.fill ||
-                                                                countryColors[
-                                                                  colorIndex %
-                                                                    countryColors.length
-                                                                ];
-                                                              return (
-                                                                <Cell
-                                                                  key={`cell-${entry.country}-${index}-${color}`}
-                                                                  fill={color}
-                                                                  stroke={
-                                                                    isDark
-                                                                      ? color
-                                                                      : color
-                                                                  }
-                                                                  strokeWidth={
-                                                                    isDark
-                                                                      ? 0
-                                                                      : 2
-                                                                  }
-                                                                />
-                                                              );
-                                                            },
-                                                          )}
-                                                        </Pie>
-                                                        <Tooltip
-                                                          content={
-                                                            <CountryPieTooltip />
-                                                          }
-                                                          cursor={{
-                                                            stroke: isDark
-                                                              ? "rgba(255,255,255,0.2)"
-                                                              : "rgba(0,0,0,0.1)",
-                                                          }}
-                                                        />
-                                                      </>
-                                                    );
-                                                  })()}
-                                                </PieChart>
-                                              </ResponsiveContainer>
-                                            </ChartSuspense>
-                                          </div>
-                                          <div className="flex flex-col gap-1">
-                                            {topCountries
-                                              .slice(0, 5)
-                                              .map((c, idx) => (
-                                                <div
-                                                  key={c.country}
-                                                  className="flex items-center justify-between"
-                                                >
-                                                  <div className="flex-1 flex items-center gap-1.5 min-w-0">
-                                                    <span
-                                                      className="inline-block h-3 w-3 rounded-full"
-                                                      style={{
-                                                        backgroundColor:
-                                                          countryColors[
-                                                            idx %
-                                                              countryColors.length
-                                                          ],
-                                                      }}
-                                                    />
-                                                    <span className="text-sm truncate">
-                                                      {countryCodeToName(
-                                                        c.country,
-                                                      )}
-                                                    </span>
-                                                  </div>
-                                                  <span className="text-sm tabular-nums">
-                                                    {Math.round(c.pct || 0)}%
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            {otherCountries &&
-                                              otherCountries.visits > 0 && (
-                                                <div className="flex items-center justify-between">
-                                                  <div
-                                                    className="flex-1 flex items-center gap-1.5 min-w-0"
-                                                    onMouseEnter={(e) =>
-                                                      showOtherCountriesTooltip(
-                                                        e.currentTarget as HTMLElement,
-                                                      )
-                                                    }
-                                                    onMouseLeave={
-                                                      hideOtherCountriesTooltip
-                                                    }
-                                                    onFocus={(e) =>
-                                                      showOtherCountriesTooltip(
-                                                        e.currentTarget as HTMLElement,
-                                                      )
-                                                    }
-                                                    onBlur={
-                                                      hideOtherCountriesTooltip
-                                                    }
-                                                  >
-                                                    <span
-                                                      className="inline-block h-3 w-3 rounded-full"
-                                                      style={{
-                                                        backgroundColor:
-                                                          countryColors[
-                                                            5 %
-                                                              countryColors.length
-                                                          ],
-                                                      }}
-                                                    />
-                                                    <span className="text-sm truncate">
-                                                      Other (
-                                                      {otherCountries.count})
-                                                    </span>
-                                                  </div>
-                                                  <span className="text-sm tabular-nums">
-                                                    {Math.round(
-                                                      otherCountries?.pct || 0,
-                                                    )}
-                                                    %
-                                                  </span>
-                                                </div>
-                                              )}
-                                          </div>
-                                        </div>
-                                      )}
-                                    </div>
-                                    <div className="rounded-xl border p-3 md:col-span-1">
-                                      <div className="text-sm font-medium mb-2">
-                                        Top referrers
-                                      </div>
-                                      {topReferrers.length === 0 ? (
-                                        <div className="text-sm opacity-60">
-                                          No data.
-                                        </div>
-                                      ) : (
-                                        <div className="flex flex-col gap-2">
-                                          {topReferrers
-                                            .slice(0, 5)
-                                            .map((r, idx) => (
-                                              <div
-                                                key={r.source}
-                                                className="flex items-center justify-between"
-                                              >
-                                                <div className="flex-1 flex items-center gap-2 min-w-0">
-                                                  <span
-                                                    className="inline-block h-3 w-3 rounded-full"
-                                                    style={{
-                                                      backgroundColor:
-                                                        referrerColors[
-                                                          idx %
-                                                            referrerColors.length
-                                                        ],
-                                                    }}
-                                                  />
-                                                  <span className="text-sm truncate">
-                                                    {r.source}
-                                                  </span>
-                                                </div>
-                                                <span className="text-sm tabular-nums">
-                                                  {Math.round(r.pct || 0)}%
-                                                </span>
-                                              </div>
-                                            ))}
-                                          {otherReferrers &&
-                                            otherReferrers.visits > 0 && (
-                                              <div className="flex items-center justify-between">
-                                                <div className="flex-1 flex items-center gap-2 min-w-0">
-                                                  <span
-                                                    className="inline-block h-3 w-3 rounded-full"
-                                                    style={{
-                                                      backgroundColor:
-                                                        referrerColors[
-                                                          4 %
-                                                            referrerColors.length
-                                                        ],
-                                                    }}
-                                                  />
-                                                  <span className="text-sm truncate">
-                                                    Other (
-                                                    {otherReferrers.count})
-                                                  </span>
-                                                </div>
-                                                <span className="text-sm tabular-nums">
-                                                  {Math.round(
-                                                    otherReferrers.pct || 0,
-                                                  )}
-                                                  %
-                                                </span>
-                                              </div>
-                                            )}
-                                        </div>
-                                      )}
-                                    </div>
-                                  </div>
                                 </div>
                               );
                             })()
@@ -8988,51 +8391,75 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Acquisition Channels */}
-                                {gaAcquisition && gaAcquisition.channels.length > 0 && (
+                                {/* Acquisition: Channels + Top Referrers */}
+                                {gaAcquisition && (gaAcquisition.channels.length > 0 || gaAcquisition.sources.length > 0) && (
                                   <div className="rounded-xl border p-3">
                                     <div className="text-sm font-medium mb-2">Traffic Channels</div>
-                                    <div className="h-40">
-                                      <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
-                                        <ResponsiveContainer width="100%" height="100%">
-                                          <PieChart>
-                                            <Pie
-                                              data={gaAcquisition.channels.map(c => ({ name: c.channel, value: c.sessions }))}
-                                              dataKey="value"
-                                              nameKey="name"
-                                              cx="50%"
-                                              cy="50%"
-                                              outerRadius={55}
-                                              innerRadius={30}
-                                              paddingAngle={2}
-                                            >
-                                              {gaAcquisition.channels.map((_, i) => (
-                                                <Cell key={i} fill={gaChannelColors[i % gaChannelColors.length]} />
-                                              ))}
-                                            </Pie>
-                                            <Tooltip
-                                              content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
-                                                if (!active || !payload?.length) return null;
-                                                return (
-                                                  <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
-                                                    <div className="font-medium">{payload[0]?.name}</div>
-                                                    <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} sessions</div>
-                                                  </div>
-                                                );
-                                              }}
-                                            />
-                                          </PieChart>
-                                        </ResponsiveContainer>
-                                      </ChartSuspense>
-                                    </div>
-                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
-                                      {gaAcquisition.channels.slice(0, 6).map((c, i) => (
-                                        <span key={c.channel} className="flex items-center gap-1">
-                                          <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
-                                          {c.channel} ({c.sessions})
-                                        </span>
-                                      ))}
-                                    </div>
+                                    {gaAcquisition.channels.length > 0 && (
+                                      <>
+                                        <div className="h-40">
+                                          <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
+                                            <ResponsiveContainer width="100%" height="100%">
+                                              <PieChart>
+                                                <Pie
+                                                  data={gaAcquisition.channels.map(c => ({ name: c.channel, value: c.sessions }))}
+                                                  dataKey="value"
+                                                  nameKey="name"
+                                                  cx="50%"
+                                                  cy="50%"
+                                                  outerRadius={55}
+                                                  innerRadius={30}
+                                                  paddingAngle={2}
+                                                >
+                                                  {gaAcquisition.channels.map((_, i) => (
+                                                    <Cell key={i} fill={gaChannelColors[i % gaChannelColors.length]} />
+                                                  ))}
+                                                </Pie>
+                                                <Tooltip
+                                                  content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                    if (!active || !payload?.length) return null;
+                                                    return (
+                                                      <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                        <div className="font-medium">{payload[0]?.name}</div>
+                                                        <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} sessions</div>
+                                                      </div>
+                                                    );
+                                                  }}
+                                                />
+                                              </PieChart>
+                                            </ResponsiveContainer>
+                                          </ChartSuspense>
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                          {gaAcquisition.channels.slice(0, 6).map((c, i) => (
+                                            <span key={c.channel} className="flex items-center gap-1">
+                                              <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
+                                              {c.channel} ({c.sessions})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </>
+                                    )}
+                                    {gaAcquisition.sources.length > 0 && (
+                                      <div className={gaAcquisition.channels.length > 0 ? "mt-3 pt-2 border-t" : ""}>
+                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Referrers</div>
+                                        <div className="space-y-1">
+                                          {gaAcquisition.sources.slice(0, 8).map((s, i) => {
+                                            const maxSessions = gaAcquisition!.sources[0]?.sessions || 1;
+                                            return (
+                                              <div key={s.source} className="flex items-center gap-2 text-xs">
+                                                <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
+                                                <span className="flex-1 truncate">{s.source}</span>
+                                                <span className="tabular-nums text-stone-500">{s.sessions}</span>
+                                                <div className="w-16 h-1 rounded-full bg-stone-100 dark:bg-stone-800">
+                                                  <div className="h-full rounded-full" style={{ width: `${(s.sessions / maxSessions) * 100}%`, background: gaChannelColors[i % gaChannelColors.length] }} />
+                                                </div>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </div>
+                                    )}
                                   </div>
                                 )}
 
@@ -9096,30 +8523,73 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Geographic Breakdown */}
+                                {/* Geographic Breakdown with Donut */}
                                 {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (
                                   <div className="rounded-xl border p-3">
-                                    <div className="text-sm font-medium mb-2">Geography</div>
-                                    {gaGeo.countries.length > 0 && (
-                                      <div className="space-y-1 mb-3">
-                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Countries</div>
-                                        {gaGeo.countries.slice(0, 8).map((c, i) => {
-                                          const maxUsers = gaGeo!.countries[0]?.users || 1;
-                                          return (
-                                            <div key={c.country} className="flex items-center gap-2 text-xs">
-                                              <span className="w-2 h-2 rounded-full" style={{ background: countryColors[i % countryColors.length] }} />
-                                              <span className="flex-1 truncate">{c.country}</span>
-                                              <span className="tabular-nums text-stone-500">{c.users}</span>
-                                              <div className="w-16 h-1 rounded-full bg-stone-100 dark:bg-stone-800">
-                                                <div className="h-full rounded-full" style={{ width: `${(c.users / maxUsers) * 100}%`, background: countryColors[i % countryColors.length] }} />
-                                              </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
+                                    <div className="text-sm font-medium mb-2">Top Countries</div>
+                                    {gaGeo.countries.length > 0 && (() => {
+                                      const top6 = gaGeo.countries.slice(0, 6);
+                                      const rest = gaGeo.countries.slice(6);
+                                      const otherUsers = rest.reduce((s, c) => s + c.users, 0);
+                                      const pieData = top6.map((c) => ({ name: c.country, value: c.users }));
+                                      if (otherUsers > 0) pieData.push({ name: `Other (${rest.length})`, value: otherUsers });
+                                      const totalUsers = pieData.reduce((s, d) => s + d.value, 0);
+                                      return (
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
+                                          <div className="col-span-2 min-h-[150px]">
+                                            <ChartSuspense fallback={<div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                              <ResponsiveContainer width="100%" height={150}>
+                                                <PieChart margin={{ top: 0, right: 0, bottom: 0, left: 0 }}>
+                                                  <Pie
+                                                    data={pieData}
+                                                    dataKey="value"
+                                                    nameKey="name"
+                                                    innerRadius={36}
+                                                    outerRadius={64}
+                                                    paddingAngle={3}
+                                                    cx="40%"
+                                                    cy="50%"
+                                                    isAnimationActive={false}
+                                                  >
+                                                    {pieData.map((_, i) => (
+                                                      <Cell key={i} fill={countryColors[i % countryColors.length]} strokeWidth={isDark ? 0 : 2} stroke={countryColors[i % countryColors.length]} />
+                                                    ))}
+                                                  </Pie>
+                                                  <Tooltip
+                                                    content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                      if (!active || !payload?.length) return null;
+                                                      const pct = totalUsers > 0 ? Math.round(((payload[0]?.value || 0) / totalUsers) * 100) : 0;
+                                                      return (
+                                                        <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                          <div className="font-medium">{payload[0]?.name}</div>
+                                                          <div className="tabular-nums">{pct}% &middot; {payload[0]?.value?.toLocaleString()} users</div>
+                                                        </div>
+                                                      );
+                                                    }}
+                                                  />
+                                                </PieChart>
+                                              </ResponsiveContainer>
+                                            </ChartSuspense>
+                                          </div>
+                                          <div className="flex flex-col gap-1 justify-center">
+                                            {pieData.map((d, i) => {
+                                              const pct = totalUsers > 0 ? Math.round((d.value / totalUsers) * 100) : 0;
+                                              return (
+                                                <div key={d.name} className="flex items-center justify-between">
+                                                  <div className="flex-1 flex items-center gap-1.5 min-w-0">
+                                                    <span className="inline-block h-3 w-3 rounded-full flex-shrink-0" style={{ backgroundColor: countryColors[i % countryColors.length] }} />
+                                                    <span className="text-xs truncate">{d.name}</span>
+                                                  </div>
+                                                  <span className="text-xs tabular-nums ml-2">{pct}%</span>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                        </div>
+                                      );
+                                    })()}
                                     {gaGeo.cities.length > 0 && (
-                                      <div>
+                                      <div className="mt-3 pt-2 border-t">
                                         <div className="text-[10px] font-medium opacity-60 mb-1">Top Cities</div>
                                         <div className="flex flex-wrap gap-1">
                                           {gaGeo.cities.slice(0, 10).map((c) => (
@@ -13817,36 +13287,6 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   )}
                                 </div>
-                                {otherCountriesTooltip &&
-                                  createPortal(
-                                    <div
-                                      className="fixed z-[70] pointer-events-none"
-                                      style={{
-                                        top: otherCountriesTooltip.top,
-                                        left: otherCountriesTooltip.left,
-                                        transform: "translate(-50%, -100%)",
-                                      }}
-                                    >
-                                      <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow px-3 py-2 max-w-[280px]">
-                                        <div className="text-xs font-medium mb-1">
-                                          Countries in Other
-                                        </div>
-                                        <div className="text-[11px] opacity-80 space-y-0.5 max-h-48 overflow-auto">
-                                          {otherCountriesTooltip.names.map(
-                                            (n, idx) => (
-                                              <div
-                                                key={`${n}-${idx}`}
-                                                className="truncate"
-                                              >
-                                                {n}
-                                              </div>
-                                            ),
-                                          )}
-                                        </div>
-                                      </div>
-                                    </div>,
-                                    document.body,
-                                  )}
                               </div>
                               <div className="rounded-xl border border-stone-300 dark:border-[#3e3e42] p-3 bg-white dark:bg-[#252526]">
                                 <div className="text-[11px] opacity-60 mb-1">
