@@ -8523,18 +8523,80 @@ export const AdminPage: React.FC = () => {
                                   </div>
                                 )}
 
-                                {/* Geographic Breakdown with Donut */}
-                                {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (
-                                  <div className="rounded-xl border p-3">
-                                    <div className="text-sm font-medium mb-2">Top Countries</div>
-                                    {gaGeo.countries.length > 0 && (() => {
-                                      const top6 = gaGeo.countries.slice(0, 6);
-                                      const rest = gaGeo.countries.slice(6);
-                                      const otherUsers = rest.reduce((s, c) => s + c.users, 0);
-                                      const pieData = top6.map((c) => ({ name: c.country, value: c.users }));
-                                      if (otherUsers > 0) pieData.push({ name: `Other (${rest.length})`, value: otherUsers });
-                                      const totalUsers = pieData.reduce((s, d) => s + d.value, 0);
-                                      return (
+                                {/* Geographic Breakdown: Dot Map + Donut + Cities */}
+                                {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (() => {
+                                  // Country name → approximate [lat, lng] centroids for dot map
+                                  const countryCoords: Record<string, [number, number]> = {
+                                    "United States": [39, -98], "United Kingdom": [54, -2], France: [46.6, 2.3],
+                                    Germany: [51, 10], Netherlands: [52.2, 5.3], Canada: [56, -96], Australia: [-25, 134],
+                                    Brazil: [-10, -55], India: [22, 78], China: [35, 103], Japan: [36, 138],
+                                    "South Korea": [36, 127.8], Russia: [60, 100], Italy: [42, 12.5], Spain: [40, -3.7],
+                                    Mexico: [23, -102], Argentina: [-34, -64], Sweden: [62, 15], Norway: [62, 10],
+                                    Denmark: [56, 10], Finland: [64, 26], Poland: [52, 20], Switzerland: [47, 8.2],
+                                    Austria: [47.5, 14], Belgium: [50.8, 4.4], Portugal: [39.5, -8], Ireland: [53.4, -8],
+                                    "Czech Republic": [49.8, 15.5], Czechia: [49.8, 15.5], Romania: [46, 25], Greece: [39, 22],
+                                    Turkey: [39, 35], "South Africa": [-30, 25], Nigeria: [10, 8], Egypt: [27, 30],
+                                    Kenya: [-1, 38], Morocco: [32, -5], Israel: [31.5, 34.8], "Saudi Arabia": [24, 45],
+                                    "United Arab Emirates": [24, 54], Thailand: [15, 101], Vietnam: [16, 108],
+                                    Indonesia: [-2, 118], Philippines: [13, 122], Malaysia: [4, 109.5],
+                                    Singapore: [1.3, 103.8], "New Zealand": [-41, 174], Colombia: [4, -72],
+                                    Chile: [-33, -71], Peru: [-10, -76], Ukraine: [49, 32], Hungary: [47, 19],
+                                    Croatia: [45.2, 15.5], Bulgaria: [43, 25], Serbia: [44, 21], Slovakia: [48.7, 19.7],
+                                    Lithuania: [55.2, 24], Latvia: [57, 25], Estonia: [59, 26], Iceland: [65, -18],
+                                    Luxembourg: [49.6, 6.1], Taiwan: [23.7, 121], Pakistan: [30, 70], Bangladesh: [24, 90],
+                                    "Sri Lanka": [7.9, 80.8], Nepal: [28, 84], Algeria: [28, 3], Tunisia: [34, 9],
+                                    Ghana: [8, -1.2], Senegal: [14.5, -14.4], Ethiopia: [9, 38.7], Tanzania: [-6, 35],
+                                  };
+                                  // Equirectangular projection: lng → x, lat → y
+                                  const projX = (lng: number) => ((lng + 180) / 360) * 100;
+                                  const projY = (lat: number) => ((90 - lat) / 180) * 100;
+                                  const top6 = gaGeo.countries.slice(0, 6);
+                                  const rest = gaGeo.countries.slice(6);
+                                  const otherUsers = rest.reduce((s, c) => s + c.users, 0);
+                                  const pieData = top6.map((c) => ({ name: c.country, value: c.users }));
+                                  if (otherUsers > 0) pieData.push({ name: `Other (${rest.length})`, value: otherUsers });
+                                  const totalUsers = pieData.reduce((s, d) => s + d.value, 0);
+                                  const maxUsers = gaGeo.countries[0]?.users || 1;
+
+                                  return (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="text-sm font-medium mb-2">Top Countries</div>
+
+                                      {/* Dot Map */}
+                                      {gaGeo.countries.length > 0 && (
+                                        <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "2 / 1" }}>
+                                          {/* Grid lines */}
+                                          <svg className="absolute inset-0 w-full h-full opacity-[0.07]" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                            {[20, 40, 60, 80].map(v => (
+                                              <line key={`h${v}`} x1="0" y1={v} x2="100" y2={v} stroke="currentColor" strokeWidth="0.2" />
+                                            ))}
+                                            {[20, 40, 60, 80].map(v => (
+                                              <line key={`v${v}`} x1={v} y1="0" x2={v} y2="100" stroke="currentColor" strokeWidth="0.2" />
+                                            ))}
+                                          </svg>
+                                          {/* Country dots */}
+                                          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                            {gaGeo.countries.map((c, i) => {
+                                              const coords = countryCoords[c.country];
+                                              if (!coords) return null;
+                                              const x = projX(coords[1]);
+                                              const y = projY(coords[0]);
+                                              const ratio = c.users / maxUsers;
+                                              const r = 0.6 + ratio * 1.8;
+                                              const color = countryColors[Math.min(i, countryColors.length - 1)];
+                                              return (
+                                                <g key={c.country}>
+                                                  <circle cx={x} cy={y} r={r + 0.8} fill={color} opacity={0.15} />
+                                                  <circle cx={x} cy={y} r={r} fill={color} opacity={0.85} />
+                                                </g>
+                                              );
+                                            })}
+                                          </svg>
+                                        </div>
+                                      )}
+
+                                      {/* Donut + Legend */}
+                                      {gaGeo.countries.length > 0 && (
                                         <div className="grid grid-cols-1 md:grid-cols-3 gap-1">
                                           <div className="col-span-2 min-h-[150px]">
                                             <ChartSuspense fallback={<div className="h-[150px] w-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
@@ -8586,22 +8648,24 @@ export const AdminPage: React.FC = () => {
                                             })}
                                           </div>
                                         </div>
-                                      );
-                                    })()}
-                                    {gaGeo.cities.length > 0 && (
-                                      <div className="mt-3 pt-2 border-t">
-                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Cities</div>
-                                        <div className="flex flex-wrap gap-1">
-                                          {gaGeo.cities.slice(0, 10).map((c) => (
-                                            <span key={c.city} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
-                                              {c.city} ({c.users})
-                                            </span>
-                                          ))}
+                                      )}
+
+                                      {/* Top Cities */}
+                                      {gaGeo.cities.length > 0 && (
+                                        <div className="mt-3 pt-2 border-t">
+                                          <div className="text-[10px] font-medium opacity-60 mb-1">Top Cities</div>
+                                          <div className="flex flex-wrap gap-1">
+                                            {gaGeo.cities.slice(0, 10).map((c) => (
+                                              <span key={c.city} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
+                                                {c.city} ({c.users})
+                                              </span>
+                                            ))}
+                                          </div>
                                         </div>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                      )}
+                                    </div>
+                                  );
+                                })()}
                               </div>
 
                               {/* Loading state */}
