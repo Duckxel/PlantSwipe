@@ -7983,31 +7983,28 @@ export const AdminPage: React.FC = () => {
 
                                 {/* Geographic Breakdown: Dot Map + Donut + Cities */}
                                 {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (() => {
-                                  // Country name → approximate [lat, lng] centroids for dot map
+                                  // Country name → SVG [x, y] coordinates (centroids extracted from the actual SVG map)
                                   const countryCoords: Record<string, [number, number]> = {
-                                    "United States": [39, -98], "United Kingdom": [54, -2], France: [46.6, 2.3],
-                                    Germany: [51, 10], Netherlands: [52.2, 5.3], Canada: [56, -96], Australia: [-25, 134],
-                                    Brazil: [-10, -55], India: [22, 78], China: [35, 103], Japan: [36, 138],
-                                    "South Korea": [36, 127.8], Russia: [60, 100], Italy: [42, 12.5], Spain: [40, -3.7],
-                                    Mexico: [23, -102], Argentina: [-34, -64], Sweden: [62, 15], Norway: [62, 10],
-                                    Denmark: [56, 10], Finland: [64, 26], Poland: [52, 20], Switzerland: [47, 8.2],
-                                    Austria: [47.5, 14], Belgium: [50.8, 4.4], Portugal: [39.5, -8], Ireland: [53.4, -8],
-                                    "Czech Republic": [49.8, 15.5], Czechia: [49.8, 15.5], Romania: [46, 25], Greece: [39, 22],
-                                    Turkey: [39, 35], "South Africa": [-30, 25], Nigeria: [10, 8], Egypt: [27, 30],
-                                    Kenya: [-1, 38], Morocco: [32, -5], Israel: [31.5, 34.8], "Saudi Arabia": [24, 45],
-                                    "United Arab Emirates": [24, 54], Thailand: [15, 101], Vietnam: [16, 108],
-                                    Indonesia: [-2, 118], Philippines: [13, 122], Malaysia: [4, 109.5],
-                                    Singapore: [1.3, 103.8], "New Zealand": [-41, 174], Colombia: [4, -72],
-                                    Chile: [-33, -71], Peru: [-10, -76], Ukraine: [49, 32], Hungary: [47, 19],
-                                    Croatia: [45.2, 15.5], Bulgaria: [43, 25], Serbia: [44, 21], Slovakia: [48.7, 19.7],
-                                    Lithuania: [55.2, 24], Latvia: [57, 25], Estonia: [59, 26], Iceland: [65, -18],
-                                    Luxembourg: [49.6, 6.1], Taiwan: [23.7, 121], Pakistan: [30, 70], Bangladesh: [24, 90],
-                                    "Sri Lanka": [7.9, 80.8], Nepal: [28, 84], Algeria: [28, 3], Tunisia: [34, 9],
-                                    Ghana: [8, -1.2], Senegal: [14.5, -14.4], Ethiopia: [9, 38.7], Tanzania: [-6, 35],
+                                    "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
+                                    Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
+                                    Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
+                                    "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
+                                    Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
+                                    Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
+                                    Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
+                                    "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
+                                    Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
+                                    Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
+                                    "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
+                                    Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
+                                    Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
+                                    Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
+                                    Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
+                                    Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
+                                    Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
+                                    "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
+                                    Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
                                   };
-                                  // Equirectangular projection: lng → x, lat → y
-                                  const projX = (lng: number) => ((lng + 180) / 360) * 100;
-                                  const projY = (lat: number) => ((90 - lat) / 180) * 100;
                                   const top6 = gaGeo.countries.slice(0, 6);
                                   const rest = gaGeo.countries.slice(6);
                                   const otherUsers = rest.reduce((s, c) => s + c.users, 0);
@@ -8020,32 +8017,29 @@ export const AdminPage: React.FC = () => {
                                     <div className="rounded-xl border p-3">
                                       <div className="text-sm font-medium mb-2">Top Countries</div>
 
-                                      {/* World Map with country dots — single SVG so both layers share coordinates */}
+                                      {/* World Map with country dots — single SVG, coordinates from actual SVG centroids */}
                                       {gaGeo.countries.length > 0 && (
                                         <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "820.44 / 501.3" }}>
                                           <svg className="absolute inset-0 w-full h-full" viewBox="103.51 165.78 820.44 501.3" preserveAspectRatio="xMidYMid meet" role="img" aria-label="World map showing user locations">
-                                            {/* SVG world map background */}
+                                            {/* SVG world map background — themed fill via CSS filter */}
                                             <image
                                               href="https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg"
                                               x="103.51" y="165.78" width="820.44" height="501.3"
-                                              opacity={isDark ? 0.25 : 0.18}
+                                              opacity={isDark ? 0.3 : 0.15}
                                               preserveAspectRatio="xMidYMid meet"
+                                              style={{ filter: isDark ? "invert(1) brightness(0.6)" : "none" }}
                                             />
-                                            {/* Country dots — equirectangular projection calibrated to SVG bounds */}
+                                            {/* Country dots — using exact SVG coordinates from the map */}
                                             {gaGeo.countries.map((c, i) => {
                                               const coords = countryCoords[c.country];
                                               if (!coords) return null;
-                                              // Longitude -180..180 → x 103.51..923.95
-                                              const x = 103.51 + ((coords[1] + 180) / 360) * 820.44;
-                                              // Latitude 83..-60 → y 165.78..667.08
-                                              const y = 165.78 + ((83 - coords[0]) / 143) * 501.3;
                                               const ratio = c.users / maxUsers;
                                               const r = 3 + ratio * 10;
                                               const color = countryColors[Math.min(i, countryColors.length - 1)];
                                               return (
                                                 <g key={c.country}>
-                                                  <circle cx={x} cy={y} r={r + 4} fill={color} opacity={0.2} />
-                                                  <circle cx={x} cy={y} r={r} fill={color} opacity={0.9} />
+                                                  <circle cx={coords[0]} cy={coords[1]} r={r + 4} fill={color} opacity={0.2} />
+                                                  <circle cx={coords[0]} cy={coords[1]} r={r} fill={color} opacity={0.9} />
                                                 </g>
                                               );
                                             })}
