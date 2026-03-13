@@ -2186,6 +2186,19 @@ else
   $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX" --no-pager || true
 fi
 
+# --- Environment & credential file checks ---
+if [[ ! -f "$NODE_DIR/.env" ]]; then
+  log "[WARN] Missing $NODE_DIR/.env — the app will not start without it."
+  log "       Copy .env.example or create .env with your Supabase/API keys."
+fi
+
+if [[ ! -f "$NODE_DIR/ga4_keyfile.json" ]]; then
+  log "[WARN] Missing $NODE_DIR/ga4_keyfile.json — Google Analytics dashboard will be disabled."
+  log "       To enable: download a GA4 service account key from Google Cloud Console"
+  log "       and place it at $NODE_DIR/ga4_keyfile.json"
+  log "       Then set GA4_PROPERTY_ID in .env.server"
+fi
+
 cat <<'NOTE'
 
 Next steps:
@@ -2205,7 +2218,12 @@ Next steps:
      * staging: Set to true to use Let's Encrypt staging (for testing)
    - For wildcard certificates (*.domain), set dns_plugin and dns_credentials in cert-info.json
    - Certificates auto-renew via certbot.timer (enabled by default)
-3) Then run:
+3) Google Analytics (optional):
+   - Place your GA4 service account key at plant-swipe/ga4_keyfile.json
+   - Add to plant-swipe/.env.server:
+     GA4_PROPERTY_ID=<your-numeric-property-id>
+     GOOGLE_APPLICATION_CREDENTIALS=./ga4_keyfile.json
+4) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
 
 Admin API endpoints are proxied at /admin/* per nginx snippet.
