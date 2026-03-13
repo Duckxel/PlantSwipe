@@ -7267,7 +7267,7 @@ export const AdminPage: React.FC = () => {
                           <CardContent className="p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <Zap className="h-4 w-4 text-amber-500" />
-                              <span className="text-sm font-semibold">Actions & Controls</span>
+                              <span className="text-sm font-semibold">Broadcast & Branch</span>
                             </div>
 
                         {/* Collapsible: Broadcast message creation */}
@@ -8020,29 +8020,31 @@ export const AdminPage: React.FC = () => {
                                     <div className="rounded-xl border p-3">
                                       <div className="text-sm font-medium mb-2">Top Countries</div>
 
-                                      {/* World Map with country dots */}
+                                      {/* World Map with country dots — single SVG so both layers share coordinates */}
                                       {gaGeo.countries.length > 0 && (
-                                        <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "2 / 1" }}>
-                                          {/* SVG world map background */}
-                                          <img
-                                            src="https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg"
-                                            alt="World map"
-                                            className="absolute inset-0 w-full h-full object-contain"
-                                            style={{ opacity: isDark ? 0.25 : 0.18 }}
-                                          />
-                                          {/* Country dots overlay */}
-                                          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid meet">
+                                        <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "820.44 / 501.3" }}>
+                                          <svg className="absolute inset-0 w-full h-full" viewBox="103.51 165.78 820.44 501.3" preserveAspectRatio="xMidYMid meet" role="img" aria-label="World map showing user locations">
+                                            {/* SVG world map background */}
+                                            <image
+                                              href="https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg"
+                                              x="103.51" y="165.78" width="820.44" height="501.3"
+                                              opacity={isDark ? 0.25 : 0.18}
+                                              preserveAspectRatio="xMidYMid meet"
+                                            />
+                                            {/* Country dots — equirectangular projection calibrated to SVG bounds */}
                                             {gaGeo.countries.map((c, i) => {
                                               const coords = countryCoords[c.country];
                                               if (!coords) return null;
-                                              const x = ((coords[1] + 180) / 360) * 100;
-                                              const y = ((90 - coords[0]) / 180) * 50;
+                                              // Longitude -180..180 → x 103.51..923.95
+                                              const x = 103.51 + ((coords[1] + 180) / 360) * 820.44;
+                                              // Latitude 83..-60 → y 165.78..667.08
+                                              const y = 165.78 + ((83 - coords[0]) / 143) * 501.3;
                                               const ratio = c.users / maxUsers;
-                                              const r = 0.4 + ratio * 1.2;
+                                              const r = 3 + ratio * 10;
                                               const color = countryColors[Math.min(i, countryColors.length - 1)];
                                               return (
                                                 <g key={c.country}>
-                                                  <circle cx={x} cy={y} r={r + 0.5} fill={color} opacity={0.2} />
+                                                  <circle cx={x} cy={y} r={r + 4} fill={color} opacity={0.2} />
                                                   <circle cx={x} cy={y} r={r} fill={color} opacity={0.9} />
                                                 </g>
                                               );
