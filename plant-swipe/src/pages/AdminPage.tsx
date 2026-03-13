@@ -7003,7 +7003,7 @@ export const AdminPage: React.FC = () => {
                           </div>
 
                         {/* Registered Accounts Card */}
-                        <div className="group relative rounded-2xl border border-violet-200/70 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/80 to-purple-50/50 dark:from-violet-950/30 dark:to-purple-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-violet-500/8 transition-all duration-200 overflow-hidden">
+                        <div className="group relative rounded-2xl border border-violet-200/70 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/80 to-purple-50/50 dark:from-violet-950/30 dark:to-purple-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-violet-500/8 transition-all duration-200 overflow-hidden cursor-pointer" onClick={() => navigate("/admin/members/list")}>
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2.5">
                               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm shadow-violet-500/20">
@@ -7016,7 +7016,7 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               </div>
                             </div>
-                            <Button variant="ghost" size="icon" aria-label="Refresh registered accounts" onClick={() => loadRegisteredCount({ initial: false })} disabled={registeredLoading || registeredRefreshing} className="h-7 w-7 rounded-lg text-violet-600 dark:text-violet-400">
+                            <Button variant="ghost" size="icon" aria-label="Refresh registered accounts" onClick={(e) => { e.stopPropagation(); loadRegisteredCount({ initial: false }); }} disabled={registeredLoading || registeredRefreshing} className="h-7 w-7 rounded-lg text-violet-600 dark:text-violet-400">
                               <RefreshCw className={`h-3.5 w-3.5 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`} />
                             </Button>
                           </div>
@@ -7031,7 +7031,7 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                         {/* Total Plants Card */}
-                        <div className="group relative rounded-2xl border border-amber-200/70 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-amber-500/8 transition-all duration-200 overflow-hidden">
+                        <div className="group relative rounded-2xl border border-amber-200/70 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-amber-500/8 transition-all duration-200 overflow-hidden cursor-pointer" onClick={() => navigate("/admin/plants")}>
                           <div className="flex items-center justify-between mb-3">
                             <div className="flex items-center gap-2.5">
                               <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/20">
@@ -7044,7 +7044,7 @@ export const AdminPage: React.FC = () => {
                                 </div>
                               </div>
                             </div>
-                            <Button variant="ghost" size="icon" aria-label="Refresh total plants" onClick={() => loadRegisteredCount({ initial: false })} disabled={plantsLoading || plantsRefreshing} className="h-7 w-7 rounded-lg text-amber-600 dark:text-amber-400">
+                            <Button variant="ghost" size="icon" aria-label="Refresh total plants" onClick={(e) => { e.stopPropagation(); loadRegisteredCount({ initial: false }); }} disabled={plantsLoading || plantsRefreshing} className="h-7 w-7 rounded-lg text-amber-600 dark:text-amber-400">
                               <RefreshCw className={`h-3.5 w-3.5 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`} />
                             </Button>
                           </div>
