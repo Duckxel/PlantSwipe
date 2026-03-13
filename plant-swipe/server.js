@@ -308,6 +308,7 @@ import sharp from 'sharp'
 import webpush from 'web-push'
 import cron from 'node-cron'
 import helmet from 'helmet'
+import { BetaAnalyticsDataClient } from '@google-analytics/data'
 
 // Note: dotenv already loaded at top of file before Sentry init
 
@@ -331,6 +332,35 @@ preferEnv('ADMIN_STATIC_TOKEN', ['VITE_ADMIN_STATIC_TOKEN'])
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// --- Google Analytics Data API (GA4) ---
+// Requires: GA4_PROPERTY_ID env var (numeric property ID, e.g. "123456789")
+// Auth: Either GOOGLE_APPLICATION_CREDENTIALS pointing to a service account JSON file,
+//       or GA_SERVICE_ACCOUNT_JSON containing the JSON content directly.
+const GA4_PROPERTY_ID = process.env.GA4_PROPERTY_ID || ''
+let gaClient = null
+try {
+  if (GA4_PROPERTY_ID) {
+    const gaOpts = {}
+    // Support inline JSON credentials (useful for Docker/Heroku secrets)
+    if (process.env.GA_SERVICE_ACCOUNT_JSON) {
+      try {
+        const creds = JSON.parse(process.env.GA_SERVICE_ACCOUNT_JSON)
+        gaOpts.credentials = { client_email: creds.client_email, private_key: creds.private_key }
+        gaOpts.projectId = creds.project_id
+      } catch (e) {
+        console.warn('[GA] Failed to parse GA_SERVICE_ACCOUNT_JSON:', e?.message)
+      }
+    }
+    // Falls back to GOOGLE_APPLICATION_CREDENTIALS if gaOpts.credentials not set
+    gaClient = new BetaAnalyticsDataClient(gaOpts)
+    console.log(`[GA] Analytics Data API client initialized for property ${GA4_PROPERTY_ID}`)
+  } else {
+    console.log('[GA] GA4_PROPERTY_ID not set — Google Analytics endpoints disabled')
+  }
+} catch (e) {
+  console.warn('[GA] Failed to initialize Analytics Data API client:', e?.message)
+}
 
 // Read primary domain from domain.json (server-specific, gitignored)
 // Format: {"domains": ["dev.aphylia.app", "other.aphylia.app"]}
@@ -18952,6 +18982,294 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
   } catch (e) {
     console.error('[sources-breakdown] Query failed, returning empty:', e?.message)
     res.json({ ok: true, topCountries: [], otherCountries: { count: 0, visits: 0 }, topReferrers: [], otherReferrers: { count: 0, visits: 0 }, via: 'memory', error: e?.message })
+  }
+})
+
+// ─── Google Analytics Data API endpoints ────────────────────────────────────
+// All GA endpoints require admin auth and a configured gaClient.
+
+// Helper: run a GA4 report with error handling
+async function runGaReport(reportReq) {
+  if (!gaClient || !GA4_PROPERTY_ID) return null
+  const [response] = await gaClient.runReport({ property: `properties/${GA4_PROPERTY_ID}`, ...reportReq })
+  return response
+}
+
+// Helper: run a GA4 realtime report
+async function runGaRealtimeReport(reportReq) {
+  if (!gaClient || !GA4_PROPERTY_ID) return null
+  const [response] = await gaClient.runRealtimeReport({ property: `properties/${GA4_PROPERTY_ID}`, ...reportReq })
+  return response
+}
+
+// GA: Check if GA is configured (no auth required for this check)
+app.get('/api/admin/ga/status', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  res.json({ ok: true, configured: !!(gaClient && GA4_PROPERTY_ID), propertyId: GA4_PROPERTY_ID || null })
+})
+
+// GA: Real-time active users (right now on site)
+app.get('/api/admin/ga/realtime', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const response = await runGaRealtimeReport({
+      metrics: [{ name: 'activeUsers' }],
+      dimensions: [{ name: 'country' }, { name: 'deviceCategory' }],
+    })
+    let totalActiveUsers = 0
+    const byCountry = {}
+    const byDevice = {}
+    for (const row of (response?.rows || [])) {
+      const country = row.dimensionValues?.[0]?.value || 'unknown'
+      const device = row.dimensionValues?.[1]?.value || 'unknown'
+      const users = Number(row.metricValues?.[0]?.value || 0)
+      totalActiveUsers += users
+      byCountry[country] = (byCountry[country] || 0) + users
+      byDevice[device] = (byDevice[device] || 0) + users
+    }
+    // Sort by count descending
+    const countries = Object.entries(byCountry).map(([country, users]) => ({ country, users })).sort((a, b) => b.users - a.users)
+    const devices = Object.entries(byDevice).map(([device, users]) => ({ device, users })).sort((a, b) => b.users - a.users)
+    res.json({ ok: true, activeUsers: totalActiveUsers, countries, devices, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Realtime report error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA realtime failed' })
+  }
+})
+
+// GA: Overview metrics (sessions, pageviews, users, engagement, bounce rate)
+app.get('/api/admin/ga/overview', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const response = await runGaReport({
+      dateRanges: [
+        { startDate: `${days}daysAgo`, endDate: 'today' },
+        { startDate: `${days * 2}daysAgo`, endDate: `${days + 1}daysAgo` },
+      ],
+      metrics: [
+        { name: 'totalUsers' },
+        { name: 'newUsers' },
+        { name: 'sessions' },
+        { name: 'screenPageViews' },
+        { name: 'averageSessionDuration' },
+        { name: 'bounceRate' },
+        { name: 'engagedSessions' },
+        { name: 'userEngagementDuration' },
+      ],
+    })
+    // First row = current period, rows with dateRange "date_range_1" = previous period
+    const rows = response?.rows || []
+    const current = rows[0]?.metricValues?.map(v => Number(v.value || 0)) || Array(8).fill(0)
+    const previous = rows[1]?.metricValues?.map(v => Number(v.value || 0)) || Array(8).fill(0)
+    const metricNames = ['totalUsers', 'newUsers', 'sessions', 'pageViews', 'avgSessionDuration', 'bounceRate', 'engagedSessions', 'engagementDuration']
+    const metrics = {}
+    const deltas = {}
+    for (let i = 0; i < metricNames.length; i++) {
+      metrics[metricNames[i]] = current[i]
+      const prev = previous[i]
+      deltas[metricNames[i]] = prev > 0 ? Math.round(((current[i] - prev) / prev) * 100) : null
+    }
+    res.json({ ok: true, metrics, deltas, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Overview report error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA overview failed' })
+  }
+})
+
+// GA: Daily time series (users + pageviews per day)
+app.get('/api/admin/ga/daily-series', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const response = await runGaReport({
+      dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+      dimensions: [{ name: 'date' }],
+      metrics: [
+        { name: 'totalUsers' },
+        { name: 'screenPageViews' },
+        { name: 'sessions' },
+        { name: 'newUsers' },
+      ],
+      orderBys: [{ dimension: { dimensionName: 'date', orderType: 'ALPHANUMERIC' } }],
+    })
+    const series = (response?.rows || []).map(row => {
+      const raw = row.dimensionValues?.[0]?.value || ''
+      const date = raw.length === 8 ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}` : raw
+      return {
+        date,
+        users: Number(row.metricValues?.[0]?.value || 0),
+        pageViews: Number(row.metricValues?.[1]?.value || 0),
+        sessions: Number(row.metricValues?.[2]?.value || 0),
+        newUsers: Number(row.metricValues?.[3]?.value || 0),
+      }
+    })
+    res.json({ ok: true, series, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Daily series error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA daily series failed' })
+  }
+})
+
+// GA: Top pages by views
+app.get('/api/admin/ga/top-pages', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const limitParam = Math.min(Math.max(Number(req.query.limit || 20), 1), 50)
+    const response = await runGaReport({
+      dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+      dimensions: [{ name: 'pagePath' }],
+      metrics: [
+        { name: 'screenPageViews' },
+        { name: 'totalUsers' },
+        { name: 'averageSessionDuration' },
+      ],
+      orderBys: [{ metric: { metricName: 'screenPageViews' }, desc: true }],
+      limit: limitParam,
+    })
+    const pages = (response?.rows || []).map(row => ({
+      path: row.dimensionValues?.[0]?.value || '',
+      views: Number(row.metricValues?.[0]?.value || 0),
+      users: Number(row.metricValues?.[1]?.value || 0),
+      avgDuration: Number(row.metricValues?.[2]?.value || 0),
+    }))
+    res.json({ ok: true, pages, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Top pages error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA top pages failed' })
+  }
+})
+
+// GA: Device & browser breakdown
+app.get('/api/admin/ga/devices', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const [deviceResp, browserResp] = await Promise.all([
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'deviceCategory' }],
+        metrics: [{ name: 'totalUsers' }, { name: 'sessions' }],
+        orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+      }),
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'browser' }],
+        metrics: [{ name: 'totalUsers' }],
+        orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+        limit: 10,
+      }),
+    ])
+    const devices = (deviceResp?.rows || []).map(row => ({
+      device: row.dimensionValues?.[0]?.value || 'unknown',
+      users: Number(row.metricValues?.[0]?.value || 0),
+      sessions: Number(row.metricValues?.[1]?.value || 0),
+    }))
+    const browsers = (browserResp?.rows || []).map(row => ({
+      browser: row.dimensionValues?.[0]?.value || 'unknown',
+      users: Number(row.metricValues?.[0]?.value || 0),
+    }))
+    res.json({ ok: true, devices, browsers, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Devices report error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA devices failed' })
+  }
+})
+
+// GA: User acquisition (traffic sources / channels)
+app.get('/api/admin/ga/acquisition', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const [channelResp, sourceResp] = await Promise.all([
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'sessionDefaultChannelGroup' }],
+        metrics: [{ name: 'sessions' }, { name: 'totalUsers' }, { name: 'newUsers' }],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+      }),
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'sessionSource' }],
+        metrics: [{ name: 'sessions' }, { name: 'totalUsers' }],
+        orderBys: [{ metric: { metricName: 'sessions' }, desc: true }],
+        limit: 10,
+      }),
+    ])
+    const channels = (channelResp?.rows || []).map(row => ({
+      channel: row.dimensionValues?.[0]?.value || 'unknown',
+      sessions: Number(row.metricValues?.[0]?.value || 0),
+      users: Number(row.metricValues?.[1]?.value || 0),
+      newUsers: Number(row.metricValues?.[2]?.value || 0),
+    }))
+    const sources = (sourceResp?.rows || []).map(row => ({
+      source: row.dimensionValues?.[0]?.value || 'unknown',
+      sessions: Number(row.metricValues?.[0]?.value || 0),
+      users: Number(row.metricValues?.[1]?.value || 0),
+    }))
+    res.json({ ok: true, channels, sources, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Acquisition report error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA acquisition failed' })
+  }
+})
+
+// GA: Geographic breakdown (users by country + city)
+app.get('/api/admin/ga/geo', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  if (!gaClient || !GA4_PROPERTY_ID) return res.json({ ok: false, error: 'GA not configured' })
+  try {
+    const daysParam = Number(req.query.days || 7)
+    const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 7
+    const [countryResp, cityResp] = await Promise.all([
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'country' }],
+        metrics: [{ name: 'totalUsers' }, { name: 'sessions' }],
+        orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+        limit: 20,
+      }),
+      runGaReport({
+        dateRanges: [{ startDate: `${days}daysAgo`, endDate: 'today' }],
+        dimensions: [{ name: 'city' }],
+        metrics: [{ name: 'totalUsers' }],
+        orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }],
+        limit: 15,
+      }),
+    ])
+    const countries = (countryResp?.rows || []).map(row => ({
+      country: row.dimensionValues?.[0]?.value || 'unknown',
+      users: Number(row.metricValues?.[0]?.value || 0),
+      sessions: Number(row.metricValues?.[1]?.value || 0),
+    }))
+    const cities = (cityResp?.rows || []).map(row => ({
+      city: row.dimensionValues?.[0]?.value || 'unknown',
+      users: Number(row.metricValues?.[0]?.value || 0),
+    })).filter(c => c.city !== '(not set)')
+    res.json({ ok: true, countries, cities, days, updatedAt: Date.now() })
+  } catch (e) {
+    console.error('[GA] Geo report error:', e?.message)
+    res.json({ ok: false, error: e?.message || 'GA geo failed' })
   }
 })
 

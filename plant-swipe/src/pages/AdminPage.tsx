@@ -94,6 +94,15 @@ import {
   Trophy,
   CheckCircle2,
   SlidersHorizontal,
+  Globe,
+  Smartphone,
+  Monitor,
+  Tablet,
+  Activity,
+  Eye,
+  MousePointer,
+  ArrowUpRight,
+  ArrowDownRight,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1993,6 +2002,45 @@ export const AdminPage: React.FC = () => {
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true);
   const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false);
   const [ipsOpen, setIpsOpen] = React.useState<boolean>(false);
+
+  // --- Google Analytics Data API state ---
+  const [gaConfigured, setGaConfigured] = React.useState<boolean | null>(null);
+  const [gaLoading, setGaLoading] = React.useState<boolean>(false);
+  const [gaError, setGaError] = React.useState<string | null>(null);
+  const [gaDays, setGaDays] = React.useState<7 | 14 | 30>(7);
+  const [gaRealtime, setGaRealtime] = React.useState<{
+    activeUsers: number;
+    countries: Array<{ country: string; users: number }>;
+    devices: Array<{ device: string; users: number }>;
+  } | null>(null);
+  const [gaOverview, setGaOverview] = React.useState<{
+    metrics: Record<string, number>;
+    deltas: Record<string, number | null>;
+  } | null>(null);
+  const [gaSeries, setGaSeries] = React.useState<
+    Array<{ date: string; users: number; pageViews: number; sessions: number; newUsers: number }>
+  >([]);
+  const [gaTopPages, setGaTopPages] = React.useState<
+    Array<{ path: string; views: number; users: number; avgDuration: number }>
+  >([]);
+  const [gaDevices, setGaDevices] = React.useState<{
+    devices: Array<{ device: string; users: number; sessions: number }>;
+    browsers: Array<{ browser: string; users: number }>;
+  } | null>(null);
+  const [gaAcquisition, setGaAcquisition] = React.useState<{
+    channels: Array<{ channel: string; sessions: number; users: number; newUsers: number }>;
+    sources: Array<{ source: string; sessions: number; users: number }>;
+  } | null>(null);
+  const [gaGeo, setGaGeo] = React.useState<{
+    countries: Array<{ country: string; users: number; sessions: number }>;
+    cities: Array<{ city: string; users: number }>;
+  } | null>(null);
+  const [gaUpdatedAt, setGaUpdatedAt] = React.useState<number | null>(null);
+  const [gaRealtimeUpdatedAt, setGaRealtimeUpdatedAt] = React.useState<number | null>(null);
+  const [gaOpen, setGaOpen] = React.useState<boolean>(true);
+  const gaDeviceColors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
+  const gaChannelColors = ["#111827", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#d946ef"];
+
   // Tick every minute to update the "Updated X ago" label without refetching
   const [nowMs, setNowMs] = React.useState<number>(() => Date.now());
   React.useEffect(() => {
@@ -5327,6 +5375,129 @@ export const AdminPage: React.FC = () => {
     }, 60_000);
     return () => clearInterval(id);
   }, [loadVisitorsStats]);
+
+  // --- Google Analytics Data API loaders ---
+  const gaAuthHeaders = React.useCallback(() => {
+    const h: Record<string, string> = { Accept: "application/json" };
+    const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    if (adminToken) h["X-Admin-Token"] = String(adminToken);
+    return h;
+  }, []);
+
+  // Check if GA is configured on the server
+  const checkGaStatus = React.useCallback(async () => {
+    try {
+      const resp = await fetchWithRetry("/api/admin/ga/status", {
+        headers: gaAuthHeaders(),
+        credentials: "same-origin",
+      }).catch(() => null);
+      if (resp?.ok) {
+        const data = await safeJson(resp);
+        setGaConfigured(!!data?.configured);
+      } else {
+        setGaConfigured(false);
+      }
+    } catch {
+      setGaConfigured(false);
+    }
+  }, [fetchWithRetry, safeJson, gaAuthHeaders]);
+
+  // Load GA realtime data
+  const loadGaRealtime = React.useCallback(async () => {
+    if (gaConfigured === false) return;
+    try {
+      const resp = await fetchWithRetry("/api/admin/ga/realtime", {
+        headers: gaAuthHeaders(),
+        credentials: "same-origin",
+      }).catch(() => null);
+      if (resp?.ok) {
+        const data = await safeJson(resp);
+        if (data?.ok) {
+          setGaRealtime({
+            activeUsers: data.activeUsers ?? 0,
+            countries: data.countries ?? [],
+            devices: data.devices ?? [],
+          });
+          setGaRealtimeUpdatedAt(Date.now());
+        }
+      }
+    } catch (e) {
+      console.error("[AdminPage] GA realtime error:", e);
+    }
+  }, [gaConfigured, fetchWithRetry, safeJson, gaAuthHeaders]);
+
+  // Load all GA reports (overview, daily series, top pages, devices, acquisition, geo)
+  const loadGaReports = React.useCallback(async (opts?: { initial?: boolean }) => {
+    if (gaConfigured === false) return;
+    if (opts?.initial) setGaLoading(true);
+    setGaError(null);
+    try {
+      const days = gaDays;
+      const headers = gaAuthHeaders();
+      const fetchOpts = { headers, credentials: "same-origin" as RequestCredentials };
+      const [overviewResp, seriesResp, pagesResp, devicesResp, acqResp, geoResp] = await Promise.all([
+        fetchWithRetry(`/api/admin/ga/overview?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/daily-series?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/top-pages?days=${days}&limit=15`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/devices?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/acquisition?days=${days}`, fetchOpts).catch(() => null),
+        fetchWithRetry(`/api/admin/ga/geo?days=${days}`, fetchOpts).catch(() => null),
+      ]);
+      const [overviewData, seriesData, pagesData, devicesData, acqData, geoData] = await Promise.all([
+        overviewResp?.ok ? safeJson(overviewResp) : null,
+        seriesResp?.ok ? safeJson(seriesResp) : null,
+        pagesResp?.ok ? safeJson(pagesResp) : null,
+        devicesResp?.ok ? safeJson(devicesResp) : null,
+        acqResp?.ok ? safeJson(acqResp) : null,
+        geoResp?.ok ? safeJson(geoResp) : null,
+      ]);
+      if (overviewData?.ok) setGaOverview({ metrics: overviewData.metrics, deltas: overviewData.deltas });
+      if (seriesData?.ok) setGaSeries(seriesData.series ?? []);
+      if (pagesData?.ok) setGaTopPages(pagesData.pages ?? []);
+      if (devicesData?.ok) setGaDevices({ devices: devicesData.devices ?? [], browsers: devicesData.browsers ?? [] });
+      if (acqData?.ok) setGaAcquisition({ channels: acqData.channels ?? [], sources: acqData.sources ?? [] });
+      if (geoData?.ok) setGaGeo({ countries: geoData.countries ?? [], cities: geoData.cities ?? [] });
+      setGaUpdatedAt(Date.now());
+      // Check for errors
+      const firstError = [overviewData, seriesData, pagesData, devicesData, acqData, geoData].find(d => d && !d.ok);
+      if (firstError) setGaError(firstError.error || "Some GA reports failed");
+    } catch (e) {
+      console.error("[AdminPage] GA reports error:", e);
+      setGaError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setGaLoading(false);
+    }
+  }, [gaConfigured, gaDays, fetchWithRetry, safeJson, gaAuthHeaders]);
+
+  // Initial GA check + load
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      checkGaStatus();
+    }, 500);
+    return () => clearTimeout(timeoutId);
+  }, [checkGaStatus]);
+
+  // Once GA is confirmed configured, load data
+  React.useEffect(() => {
+    if (gaConfigured === true) {
+      loadGaRealtime();
+      loadGaReports({ initial: true });
+    }
+  }, [gaConfigured]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Reload GA reports when days change
+  React.useEffect(() => {
+    if (gaConfigured === true && gaUpdatedAt !== null) {
+      loadGaReports({ initial: false });
+    }
+  }, [gaDays]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-refresh GA realtime every 60s
+  React.useEffect(() => {
+    if (gaConfigured !== true) return;
+    const id = setInterval(() => loadGaRealtime(), 60_000);
+    return () => clearInterval(id);
+  }, [gaConfigured, loadGaRealtime]);
 
   // ---- Members tab state ----
   // Check if user has full admin access (not just editor)
@@ -8793,6 +8964,466 @@ export const AdminPage: React.FC = () => {
                           )}
                         </CardContent>
                       </Card>
+                    {/* ─── Google Analytics Dashboard ─── */}
+                    {gaConfigured !== false && (
+                      <Card className={glassCardClass}>
+                        <CardContent className="p-4">
+                          <button
+                            type="button"
+                            className="flex items-center justify-between w-full"
+                            onClick={() => setGaOpen((o) => !o)}
+                            aria-expanded={gaOpen}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/40 dark:to-amber-900/40 flex items-center justify-center">
+                                <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
+                              </div>
+                              <div className="text-left">
+                                <div className="text-sm font-semibold">Google Analytics</div>
+                                <div className="text-xs text-stone-500 dark:text-stone-400">
+                                  {gaConfigured === null ? "Checking..." : gaConfigured ? "GA4 Data API connected" : "Not configured"}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              {gaRealtime && (
+                                <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                                  </span>
+                                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                                    {gaRealtime.activeUsers}
+                                  </span>
+                                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400">live</span>
+                                </div>
+                              )}
+                              <ChevronDown className={`h-4 w-4 transition-transform ${gaOpen ? "rotate-180" : ""}`} />
+                            </div>
+                          </button>
+
+                          {gaOpen && gaConfigured === true && (
+                            <div className="mt-4 space-y-4">
+                              {/* Period selector + refresh */}
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-1">
+                                  {([7, 14, 30] as const).map((d) => (
+                                    <button
+                                      key={d}
+                                      type="button"
+                                      className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${gaDays === d ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white" : "bg-white dark:bg-[#2d2d30] border-stone-200 dark:border-[#3e3e42] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
+                                      onClick={() => setGaDays(d)}
+                                      aria-pressed={gaDays === d}
+                                    >
+                                      {d}d
+                                    </button>
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  {gaUpdatedAt && (
+                                    <span className="text-[10px] opacity-50">{formatTimeAgo(gaUpdatedAt)}</span>
+                                  )}
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    aria-label="Refresh GA data"
+                                    onClick={() => { loadGaRealtime(); loadGaReports({ initial: false }); }}
+                                    disabled={gaLoading}
+                                    className="h-7 w-7 rounded-lg"
+                                  >
+                                    <RefreshCw className={`h-3.5 w-3.5 ${gaLoading ? "animate-spin" : ""}`} />
+                                  </Button>
+                                </div>
+                              </div>
+
+                              {gaError && (
+                                <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                                  {gaError}
+                                </div>
+                              )}
+
+                              {/* Real-time active users banner */}
+                              {gaRealtime && (
+                                <div className="rounded-xl bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-950/30 dark:to-teal-950/30 border border-emerald-200/60 dark:border-emerald-800/40 p-4">
+                                  <div className="flex items-center justify-between mb-3">
+                                    <div className="flex items-center gap-2">
+                                      <span className="relative flex h-2.5 w-2.5">
+                                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                                      </span>
+                                      <span className="text-sm font-semibold text-emerald-800 dark:text-emerald-200">Right now on the site</span>
+                                    </div>
+                                    <div className="text-3xl font-bold text-emerald-700 dark:text-emerald-300 tabular-nums">
+                                      {gaRealtime.activeUsers}
+                                    </div>
+                                  </div>
+                                  {gaRealtime.countries.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5">
+                                      {gaRealtime.countries.slice(0, 8).map((c) => (
+                                        <span key={c.country} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/70 dark:bg-emerald-900/40 text-xs">
+                                          <Globe className="h-3 w-3 opacity-60" />
+                                          <span className="font-medium">{c.country}</span>
+                                          <span className="opacity-60">{c.users}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {gaRealtime.devices.length > 0 && (
+                                    <div className="flex flex-wrap gap-1.5 mt-2">
+                                      {gaRealtime.devices.map((d) => (
+                                        <span key={d.device} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/70 dark:bg-emerald-900/40 text-xs">
+                                          {d.device === "desktop" ? <Monitor className="h-3 w-3 opacity-60" /> : d.device === "tablet" ? <Tablet className="h-3 w-3 opacity-60" /> : <Smartphone className="h-3 w-3 opacity-60" />}
+                                          <span className="font-medium capitalize">{d.device}</span>
+                                          <span className="opacity-60">{d.users}</span>
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                  {gaRealtimeUpdatedAt && (
+                                    <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/50 mt-2">
+                                      Updated {formatTimeAgo(gaRealtimeUpdatedAt)}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+
+                              {/* Key metrics cards */}
+                              {gaOverview && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                  {[
+                                    { key: "totalUsers", label: "Users", icon: Users, color: "blue" },
+                                    { key: "sessions", label: "Sessions", icon: MousePointer, color: "violet" },
+                                    { key: "pageViews", label: "Page Views", icon: Eye, color: "amber" },
+                                    { key: "newUsers", label: "New Users", icon: Sparkles, color: "emerald" },
+                                  ].map(({ key, label, icon: Icon, color }) => {
+                                    const value = gaOverview.metrics[key] ?? 0;
+                                    const delta = gaOverview.deltas[key];
+                                    return (
+                                      <div key={key} className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                        <div className="flex items-center gap-2 mb-1">
+                                          <Icon className={`h-4 w-4 text-${color}-500`} />
+                                          <span className="text-xs text-stone-500 dark:text-stone-400">{label}</span>
+                                        </div>
+                                        <div className="text-xl font-bold tabular-nums">
+                                          {key === "avgSessionDuration" ? `${Math.round(value)}s` : value.toLocaleString()}
+                                        </div>
+                                        {delta !== null && delta !== undefined && (
+                                          <div className={`text-[10px] font-medium flex items-center gap-0.5 ${delta > 0 ? "text-emerald-600 dark:text-emerald-400" : delta < 0 ? "text-rose-600 dark:text-rose-400" : "text-stone-400"}`}>
+                                            {delta > 0 ? <ArrowUpRight className="h-3 w-3" /> : delta < 0 ? <ArrowDownRight className="h-3 w-3" /> : null}
+                                            {delta > 0 ? "+" : ""}{delta}% vs prev
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Engagement metrics row */}
+                              {gaOverview && (
+                                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Avg Session Duration</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {(() => {
+                                        const secs = Math.round(gaOverview.metrics.avgSessionDuration ?? 0);
+                                        const m = Math.floor(secs / 60);
+                                        const s = secs % 60;
+                                        return m > 0 ? `${m}m ${s}s` : `${s}s`;
+                                      })()}
+                                    </div>
+                                    {gaOverview.deltas.avgSessionDuration !== null && gaOverview.deltas.avgSessionDuration !== undefined && (
+                                      <div className={`text-[10px] ${(gaOverview.deltas.avgSessionDuration ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {(gaOverview.deltas.avgSessionDuration ?? 0) > 0 ? "+" : ""}{gaOverview.deltas.avgSessionDuration}%
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Bounce Rate</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {((gaOverview.metrics.bounceRate ?? 0) * 100).toFixed(1)}%
+                                    </div>
+                                    {gaOverview.deltas.bounceRate !== null && gaOverview.deltas.bounceRate !== undefined && (
+                                      <div className={`text-[10px] ${(gaOverview.deltas.bounceRate ?? 0) <= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                                        {(gaOverview.deltas.bounceRate ?? 0) > 0 ? "+" : ""}{gaOverview.deltas.bounceRate}%
+                                      </div>
+                                    )}
+                                  </div>
+                                  <div className="rounded-xl border p-3 bg-white/80 dark:bg-[#1e1e20]/80">
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 mb-1">Engaged Sessions</div>
+                                    <div className="text-lg font-bold tabular-nums">
+                                      {(gaOverview.metrics.engagedSessions ?? 0).toLocaleString()}
+                                    </div>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Daily traffic chart */}
+                              {gaSeries.length > 0 && (
+                                <div className="rounded-xl border p-3">
+                                  <div className="text-sm font-medium mb-2">Daily Traffic - last {gaDays} days</div>
+                                  <div className="h-56 w-full">
+                                    <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                      <ResponsiveContainer width="100%" height="100%">
+                                        <ComposedChart data={gaSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                          <defs>
+                                            <linearGradient id="gaUsersGrad" x1="0" y1="0" x2="0" y2="1">
+                                              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                                              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+                                            </linearGradient>
+                                          </defs>
+                                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                          <XAxis
+                                            dataKey="date"
+                                            tickFormatter={(d: string) => {
+                                              try {
+                                                const dt = new Date(d + "T00:00:00Z");
+                                                return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
+                                              } catch { return d; }
+                                            }}
+                                            tick={{ fontSize: 10 }}
+                                            axisLine={false}
+                                            tickLine={false}
+                                            interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
+                                          />
+                                          <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+                                          <Tooltip
+                                            content={({ active, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
+                                              if (!active || !payload?.length) return null;
+                                              return (
+                                                <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
+                                                  <div className="font-medium opacity-70 mb-1">{label}</div>
+                                                  {payload.map((p) => (
+                                                    <div key={p.dataKey} className="flex items-center gap-2">
+                                                      <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                      <span className="capitalize">{p.dataKey}</span>
+                                                      <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                                                    </div>
+                                                  ))}
+                                                </div>
+                                              );
+                                            }}
+                                          />
+                                          <Area type="monotone" dataKey="users" fill="url(#gaUsersGrad)" stroke="none" />
+                                          <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                                          <Line type="monotone" dataKey="pageViews" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="4 2" />
+                                          <Line type="monotone" dataKey="sessions" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="2 2" />
+                                        </ComposedChart>
+                                      </ResponsiveContainer>
+                                    </ChartSuspense>
+                                  </div>
+                                  <div className="flex items-center gap-4 mt-2 text-[10px]">
+                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-500 rounded" /> Users</span>
+                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-500 rounded" style={{ borderTop: "1px dashed" }} /> Page Views</span>
+                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-emerald-500 rounded" style={{ borderTop: "1px dotted" }} /> Sessions</span>
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* Bottom grid: Top pages, Devices, Acquisition, Geo */}
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                {/* Top Pages */}
+                                {gaTopPages.length > 0 && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Top Pages</div>
+                                    <div className="space-y-1.5 max-h-64 overflow-auto">
+                                      {gaTopPages.map((p, i) => {
+                                        const maxViews = gaTopPages[0]?.views || 1;
+                                        return (
+                                          <div key={p.path} className="flex items-center gap-2 text-xs">
+                                            <span className="text-stone-400 w-4 text-right tabular-nums">{i + 1}</span>
+                                            <div className="flex-1 min-w-0">
+                                              <div className="flex items-center gap-2">
+                                                <span className="truncate font-mono text-[11px]" title={p.path}>{p.path}</span>
+                                                <span className="text-stone-400 tabular-nums flex-shrink-0">{p.views.toLocaleString()}</span>
+                                              </div>
+                                              <div className="h-1 rounded-full bg-stone-100 dark:bg-stone-800 mt-0.5">
+                                                <div className="h-full rounded-full bg-blue-500/70" style={{ width: `${(p.views / maxViews) * 100}%` }} />
+                                              </div>
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Acquisition Channels */}
+                                {gaAcquisition && gaAcquisition.channels.length > 0 && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Traffic Channels</div>
+                                    <div className="h-40">
+                                      <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                          <PieChart>
+                                            <Pie
+                                              data={gaAcquisition.channels.map(c => ({ name: c.channel, value: c.sessions }))}
+                                              dataKey="value"
+                                              nameKey="name"
+                                              cx="50%"
+                                              cy="50%"
+                                              outerRadius={55}
+                                              innerRadius={30}
+                                              paddingAngle={2}
+                                            >
+                                              {gaAcquisition.channels.map((_, i) => (
+                                                <Cell key={i} fill={gaChannelColors[i % gaChannelColors.length]} />
+                                              ))}
+                                            </Pie>
+                                            <Tooltip
+                                              content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                if (!active || !payload?.length) return null;
+                                                return (
+                                                  <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                    <div className="font-medium">{payload[0]?.name}</div>
+                                                    <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} sessions</div>
+                                                  </div>
+                                                );
+                                              }}
+                                            />
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </ChartSuspense>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                      {gaAcquisition.channels.slice(0, 6).map((c, i) => (
+                                        <span key={c.channel} className="flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full" style={{ background: gaChannelColors[i % gaChannelColors.length] }} />
+                                          {c.channel} ({c.sessions})
+                                        </span>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                {/* Device Breakdown */}
+                                {gaDevices && gaDevices.devices.length > 0 && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Devices</div>
+                                    <div className="h-40">
+                                      <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading...</div>}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                          <PieChart>
+                                            <Pie
+                                              data={gaDevices.devices.map(d => ({ name: d.device, value: d.users }))}
+                                              dataKey="value"
+                                              nameKey="name"
+                                              cx="50%"
+                                              cy="50%"
+                                              outerRadius={55}
+                                              innerRadius={30}
+                                              paddingAngle={2}
+                                            >
+                                              {gaDevices.devices.map((_, i) => (
+                                                <Cell key={i} fill={gaDeviceColors[i % gaDeviceColors.length]} />
+                                              ))}
+                                            </Pie>
+                                            <Tooltip
+                                              content={({ active, payload }: { active?: boolean; payload?: Array<{ name?: string; value?: number }> }) => {
+                                                if (!active || !payload?.length) return null;
+                                                return (
+                                                  <div className="rounded-lg border bg-white/95 dark:bg-[#252526] backdrop-blur p-2 shadow-lg text-xs">
+                                                    <div className="font-medium capitalize">{payload[0]?.name}</div>
+                                                    <div className="tabular-nums">{payload[0]?.value?.toLocaleString()} users</div>
+                                                  </div>
+                                                );
+                                              }}
+                                            />
+                                          </PieChart>
+                                        </ResponsiveContainer>
+                                      </ChartSuspense>
+                                    </div>
+                                    <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-[10px]">
+                                      {gaDevices.devices.map((d, i) => (
+                                        <span key={d.device} className="flex items-center gap-1">
+                                          <span className="w-2 h-2 rounded-full" style={{ background: gaDeviceColors[i % gaDeviceColors.length] }} />
+                                          <span className="capitalize">{d.device}</span> ({d.users})
+                                        </span>
+                                      ))}
+                                    </div>
+                                    {gaDevices.browsers.length > 0 && (
+                                      <div className="mt-3 pt-2 border-t">
+                                        <div className="text-[10px] font-medium mb-1 opacity-60">Top Browsers</div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {gaDevices.browsers.slice(0, 5).map((b) => (
+                                            <span key={b.browser} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
+                                              {b.browser} ({b.users})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Geographic Breakdown */}
+                                {gaGeo && (gaGeo.countries.length > 0 || gaGeo.cities.length > 0) && (
+                                  <div className="rounded-xl border p-3">
+                                    <div className="text-sm font-medium mb-2">Geography</div>
+                                    {gaGeo.countries.length > 0 && (
+                                      <div className="space-y-1 mb-3">
+                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Countries</div>
+                                        {gaGeo.countries.slice(0, 8).map((c, i) => {
+                                          const maxUsers = gaGeo!.countries[0]?.users || 1;
+                                          return (
+                                            <div key={c.country} className="flex items-center gap-2 text-xs">
+                                              <span className="w-2 h-2 rounded-full" style={{ background: countryColors[i % countryColors.length] }} />
+                                              <span className="flex-1 truncate">{c.country}</span>
+                                              <span className="tabular-nums text-stone-500">{c.users}</span>
+                                              <div className="w-16 h-1 rounded-full bg-stone-100 dark:bg-stone-800">
+                                                <div className="h-full rounded-full" style={{ width: `${(c.users / maxUsers) * 100}%`, background: countryColors[i % countryColors.length] }} />
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                    {gaGeo.cities.length > 0 && (
+                                      <div>
+                                        <div className="text-[10px] font-medium opacity-60 mb-1">Top Cities</div>
+                                        <div className="flex flex-wrap gap-1">
+                                          {gaGeo.cities.slice(0, 10).map((c) => (
+                                            <span key={c.city} className="text-[10px] px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800">
+                                              {c.city} ({c.users})
+                                            </span>
+                                          ))}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Loading state */}
+                              {gaLoading && !gaOverview && (
+                                <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                  <span>Loading Google Analytics data...</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {gaOpen && gaConfigured === null && (
+                            <div className="mt-3 flex items-center gap-2 text-xs opacity-50">
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                              Checking GA configuration...
+                            </div>
+                          )}
+
+                          {gaOpen && gaConfigured === false && (
+                            <div className="mt-3 text-xs text-stone-500 dark:text-stone-400 space-y-1">
+                              <p>To enable Google Analytics, set these environment variables on the server:</p>
+                              <ul className="list-disc list-inside space-y-0.5 font-mono text-[10px]">
+                                <li>GA4_PROPERTY_ID (numeric property ID)</li>
+                                <li>GOOGLE_APPLICATION_CREDENTIALS or GA_SERVICE_ACCOUNT_JSON</li>
+                              </ul>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    )}
+
                       <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">
                         Quick Links
                       </div>
