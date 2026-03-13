@@ -1976,6 +1976,7 @@ export const AdminPage: React.FC = () => {
   const [gaUpdatedAt, setGaUpdatedAt] = React.useState<number | null>(null);
   const [gaRealtimeUpdatedAt, setGaRealtimeUpdatedAt] = React.useState<number | null>(null);
   const [gaOpen, setGaOpen] = React.useState<boolean>(true);
+  const [gaChartMetric, setGaChartMetric] = React.useState<"users" | "pageViews" | "sessions" | "newUsers">("users");
   const gaDeviceColors = ["#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6"];
   const gaChannelColors = ["#111827", "#3b82f6", "#10b981", "#f59e0b", "#ef4444", "#8b5cf6", "#06b6d4", "#d946ef"];
 
@@ -8302,66 +8303,86 @@ export const AdminPage: React.FC = () => {
                               )}
 
                               {/* Daily traffic chart */}
-                              {gaSeries.length > 0 && (
-                                <div className="rounded-xl border p-3">
-                                  <div className="text-sm font-medium mb-2">Daily Traffic - last {gaDays} days</div>
-                                  <div className="h-56 w-full">
-                                    <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
-                                      <ResponsiveContainer width="100%" height="100%">
-                                        <ComposedChart data={gaSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
-                                          <defs>
-                                            <linearGradient id="gaUsersGrad" x1="0" y1="0" x2="0" y2="1">
-                                              <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                              <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
-                                            </linearGradient>
-                                          </defs>
-                                          <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
-                                          <XAxis
-                                            dataKey="date"
-                                            tickFormatter={(d: string) => {
-                                              try {
-                                                const dt = new Date(d + "T00:00:00Z");
-                                                return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
-                                              } catch { return d; }
-                                            }}
-                                            tick={{ fontSize: 10 }}
-                                            axisLine={false}
-                                            tickLine={false}
-                                            interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
-                                          />
-                                          <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
-                                          <Tooltip
-                                            content={({ active, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
-                                              if (!active || !payload?.length) return null;
-                                              return (
-                                                <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
-                                                  <div className="font-medium opacity-70 mb-1">{label}</div>
-                                                  {payload.map((p) => (
-                                                    <div key={p.dataKey} className="flex items-center gap-2">
-                                                      <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-                                                      <span className="capitalize">{p.dataKey}</span>
-                                                      <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                              {gaSeries.length > 0 && (() => {
+                                  const metricOpts: Array<{ key: "users" | "pageViews" | "sessions" | "newUsers"; label: string; color: string }> = [
+                                    { key: "users", label: "Users", color: "#3b82f6" },
+                                    { key: "pageViews", label: "Page Views", color: "#f59e0b" },
+                                    { key: "sessions", label: "Sessions", color: "#10b981" },
+                                    { key: "newUsers", label: "New Users", color: "#8b5cf6" },
+                                  ];
+                                  const active = metricOpts.find(m => m.key === gaChartMetric) || metricOpts[0];
+                                  return (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-sm font-medium">Daily Traffic - last {gaDays} days</div>
+                                        <div className="flex items-center gap-1">
+                                          {metricOpts.map((m) => (
+                                            <button
+                                              key={m.key}
+                                              type="button"
+                                              onClick={() => setGaChartMetric(m.key)}
+                                              className={`text-[10px] px-2 py-0.5 rounded-full transition-colors ${
+                                                gaChartMetric === m.key
+                                                  ? "text-white font-medium"
+                                                  : "bg-stone-100 dark:bg-stone-800 opacity-60 hover:opacity-100"
+                                              }`}
+                                              style={gaChartMetric === m.key ? { backgroundColor: m.color } : undefined}
+                                            >
+                                              {m.label}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+                                      <div className="h-56 w-full">
+                                        <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <ComposedChart data={gaSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                              <defs>
+                                                <linearGradient id="gaMetricGrad" x1="0" y1="0" x2="0" y2="1">
+                                                  <stop offset="0%" stopColor={active.color} stopOpacity={0.3} />
+                                                  <stop offset="100%" stopColor={active.color} stopOpacity={0.05} />
+                                                </linearGradient>
+                                              </defs>
+                                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                              <XAxis
+                                                dataKey="date"
+                                                tickFormatter={(d: string) => {
+                                                  try {
+                                                    const dt = new Date(d + "T00:00:00Z");
+                                                    return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
+                                                  } catch { return d; }
+                                                }}
+                                                tick={{ fontSize: 10 }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
+                                              />
+                                              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} />
+                                              <Tooltip
+                                                content={({ active: tActive, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
+                                                  if (!tActive || !payload?.length) return null;
+                                                  const p = payload[0];
+                                                  return (
+                                                    <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
+                                                      <div className="font-medium opacity-70 mb-1">{label}</div>
+                                                      <div className="flex items-center gap-2">
+                                                        <span className="w-2 h-2 rounded-full" style={{ background: active.color }} />
+                                                        <span>{active.label}</span>
+                                                        <span className="font-bold tabular-nums ml-auto">{p?.value?.toLocaleString()}</span>
+                                                      </div>
                                                     </div>
-                                                  ))}
-                                                </div>
-                                              );
-                                            }}
-                                          />
-                                          <Area type="monotone" dataKey="users" fill="url(#gaUsersGrad)" stroke="none" />
-                                          <Line type="monotone" dataKey="users" stroke="#3b82f6" strokeWidth={2} dot={false} />
-                                          <Line type="monotone" dataKey="pageViews" stroke="#f59e0b" strokeWidth={2} dot={false} strokeDasharray="4 2" />
-                                          <Line type="monotone" dataKey="sessions" stroke="#10b981" strokeWidth={1.5} dot={false} strokeDasharray="2 2" />
-                                        </ComposedChart>
-                                      </ResponsiveContainer>
-                                    </ChartSuspense>
-                                  </div>
-                                  <div className="flex items-center gap-4 mt-2 text-[10px]">
-                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-blue-500 rounded" /> Users</span>
-                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-amber-500 rounded" style={{ borderTop: "1px dashed" }} /> Page Views</span>
-                                    <span className="flex items-center gap-1"><span className="w-3 h-0.5 bg-emerald-500 rounded" style={{ borderTop: "1px dotted" }} /> Sessions</span>
-                                  </div>
-                                </div>
-                              )}
+                                                  );
+                                                }}
+                                              />
+                                              <Area type="monotone" dataKey={gaChartMetric} fill="url(#gaMetricGrad)" stroke="none" />
+                                              <Line type="monotone" dataKey={gaChartMetric} stroke={active.color} strokeWidth={2} dot={false} />
+                                            </ComposedChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      </div>
+                                    </div>
+                                  );
+                                })()}
 
                               {/* Bottom grid: Top pages, Devices, Acquisition, Geo */}
                               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
