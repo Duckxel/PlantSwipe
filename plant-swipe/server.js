@@ -27931,23 +27931,18 @@ async function getUserLanguages(userIds) {
   const languageMap = new Map()
 
   try {
-    // Try to get from profiles table (if preferred_language column exists)
-    // This will fail gracefully if the column doesn't exist
-    try {
-      const profileLangs = await sql`
-        select id::text as id, preferred_language
-        from public.profiles
-        where id = any(${sql.array(userIds)}::uuid[])
-          and preferred_language is not null
-      `
-      for (const row of profileLangs || []) {
-        const lang = String(row.preferred_language).toLowerCase()
-        if (lang === 'fr' || lang === 'en') {
-          languageMap.set(row.id, lang)
-        }
+    // Get language preference from profiles table
+    const profileLangs = await sql`
+      select id::text as id, language
+      from public.profiles
+      where id = any(${sql.array(userIds)}::uuid[])
+        and language is not null
+    `
+    for (const row of profileLangs || []) {
+      const lang = String(row.language).toLowerCase()
+      if (lang === 'fr' || lang === 'en') {
+        languageMap.set(row.id, lang)
       }
-    } catch (err) {
-      // Column doesn't exist or other error - continue to fallback
     }
 
     // Fallback: get most recent language from web visits for users we don't have yet
@@ -28884,11 +28879,12 @@ async function processDueAutomations() {
           // Get message variants for user's language (with fallback to default)
           // For task reminder fallback, also check built-in translations
           let messageVariants
+          let recipientTitle = notificationTitle
           if (isTaskReminderFallback) {
             const lang = normalizeLanguageCode(recipient.language)
             const baseLang = lang ? lang.split('-')[0] : 'en'
             messageVariants = DAILY_TASK_REMINDER_DEFAULTS.variants[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.variants.en
-            notificationTitle = DAILY_TASK_REMINDER_DEFAULTS.title[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.title.en
+            recipientTitle = DAILY_TASK_REMINDER_DEFAULTS.title[baseLang] || DAILY_TASK_REMINDER_DEFAULTS.title.en
           } else {
             messageVariants = resolveMessageVariants(defaultVariants, translations, recipient.language)
           }
@@ -28898,7 +28894,7 @@ async function processDueAutomations() {
             : 0
           const message = messageVariants[messageIndex]
             .replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
-          const personalizedTitle = notificationTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
+          const personalizedTitle = recipientTitle.replace(/\{\{user\}\}/gi, recipient.display_name || 'there')
 
           try {
             // Check if a SCHEDULED notification already exists for this automation + user today.
