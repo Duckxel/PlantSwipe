@@ -29962,6 +29962,27 @@ app.get('/llms-full.txt', async (req, res) => {
   res.send(lines.join('\n'))
 })
 
+// Helper: detect non-production subdomains (e.g. dev01.aphylia.app)
+// Production domains are bare: aphylia.app, aphylia.fr (no subdomain prefix)
+function isNonProductionHost(hostname) {
+  if (!hostname) return false
+  const h = hostname.toLowerCase().replace(/:\d+$/, '') // strip port
+  // Production: aphylia.app, aphylia.fr, www.aphylia.app, www.aphylia.fr
+  if (h === 'aphylia.app' || h === 'aphylia.fr') return false
+  if (h === 'www.aphylia.app' || h === 'www.aphylia.fr') return false
+  if (h === 'localhost' || h.startsWith('127.0.0.1')) return false
+  // Any other subdomain (dev01.aphylia.app, staging.aphylia.app, etc.) is non-production
+  return true
+}
+
+// Serve a blocking robots.txt for non-production subdomains (before express.static)
+app.get('/robots.txt', (req, res, next) => {
+  if (!isNonProductionHost(req.hostname)) return next() // let express.static serve production robots.txt
+  res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+  res.setHeader('Cache-Control', 'public, max-age=86400')
+  res.send('User-agent: *\nDisallow: /\n')
+})
+
 // Static assets
 const distDir = path.resolve(__dirname, 'dist')
 const ONE_YEAR_SECONDS = 60 * 60 * 24 * 365
@@ -33006,7 +33027,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="description" content="${escapeHtml(description)}">
   <meta name="keywords" content="${escapeHtml(keywords)}">
   <meta name="author" content="Aphylia">
-  <meta name="robots" content="${(isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
+  <meta name="robots" content="${isNonProductionHost(req.hostname) ? 'noindex, nofollow' : (isDynamicRoute && !resourceFound) ? 'noindex, follow' : 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1'}">
   <link rel="canonical" href="${escapeHtml(canonicalUrl)}">
   
   <!-- Open Graph / Facebook / Discord / Telegram / LinkedIn -->
@@ -33385,6 +33406,9 @@ app.get('*', async (req, res) => {
       if (statusCode === 404) {
         res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
         res.setHeader('X-Robots-Tag', 'noindex, follow')
+      } else if (isNonProductionHost(req.hostname)) {
+        res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow')
       } else {
         res.setHeader('Cache-Control', 'public, max-age=3600, stale-while-revalidate=86400')
         res.setHeader('X-Robots-Tag', 'index, follow')
