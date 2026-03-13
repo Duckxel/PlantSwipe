@@ -101,7 +101,6 @@ import {
   Activity,
   Eye,
   MousePointer,
-  ArrowUpRight,
   ArrowDownRight,
 } from "lucide-react";
 import {
