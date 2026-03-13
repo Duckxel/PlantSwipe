@@ -8011,32 +8011,47 @@ export const AdminPage: React.FC = () => {
                                     <div className="rounded-xl border p-3">
                                       <div className="text-sm font-medium mb-2">Top Countries</div>
 
-                                      {/* Dot Map */}
+                                      {/* Dot Map with world outline */}
                                       {gaGeo.countries.length > 0 && (
                                         <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "2 / 1" }}>
-                                          {/* Grid lines */}
-                                          <svg className="absolute inset-0 w-full h-full opacity-[0.07]" viewBox="0 0 100 100" preserveAspectRatio="none">
-                                            {[20, 40, 60, 80].map(v => (
-                                              <line key={`h${v}`} x1="0" y1={v} x2="100" y2={v} stroke="currentColor" strokeWidth="0.2" />
+                                          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 50" preserveAspectRatio="xMidYMid meet">
+                                            {/* Simplified world land masses — equirectangular projection, viewBox 0-100 x 0-50 */}
+                                            {/* North America */}
+                                            <path d="M5,8 L12,7 L17,9 L20,7 L24,8 L27,11 L28,15 L30,17 L28,20 L25,22 L22,22 L19,25 L16,25 L14,28 L12,27 L10,24 L7,22 L5,18 L4,14 L5,10Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* South America */}
+                                            <path d="M20,28 L24,27 L28,29 L30,32 L31,35 L30,38 L28,41 L25,44 L22,45 L20,43 L19,39 L18,35 L19,31Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Europe */}
+                                            <path d="M47,8 L50,7 L53,8 L55,9 L56,11 L55,13 L53,15 L50,16 L48,15 L46,13 L45,11 L46,9Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Africa */}
+                                            <path d="M46,17 L50,16 L54,17 L57,19 L58,23 L57,27 L55,31 L53,34 L50,36 L47,35 L45,32 L44,28 L43,24 L44,20Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Asia */}
+                                            <path d="M56,5 L62,4 L68,5 L74,6 L80,8 L84,10 L86,13 L85,16 L82,18 L78,20 L74,21 L70,22 L66,21 L62,19 L58,17 L56,14 L55,10 L56,7Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Southeast Asia / Indonesia */}
+                                            <path d="M78,22 L82,21 L86,23 L88,25 L86,27 L82,27 L79,26 L78,24Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Australia */}
+                                            <path d="M82,32 L88,31 L92,33 L93,36 L91,39 L87,40 L84,39 L82,36 L81,34Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Greenland */}
+                                            <path d="M30,4 L35,3 L38,5 L37,8 L34,9 L31,8 L29,6Z" fill="currentColor" opacity={isDark ? 0.15 : 0.1} />
+                                            {/* Grid lines */}
+                                            {[10, 20, 30, 40].map(v => (
+                                              <line key={`h${v}`} x1="0" y1={v} x2="100" y2={v} stroke="currentColor" opacity={0.05} strokeWidth="0.1" />
                                             ))}
                                             {[20, 40, 60, 80].map(v => (
-                                              <line key={`v${v}`} x1={v} y1="0" x2={v} y2="100" stroke="currentColor" strokeWidth="0.2" />
+                                              <line key={`v${v}`} x1={v} y1="0" x2={v} y2="50" stroke="currentColor" opacity={0.05} strokeWidth="0.1" />
                                             ))}
-                                          </svg>
-                                          {/* Country dots */}
-                                          <svg className="absolute inset-0 w-full h-full" viewBox="0 0 100 100" preserveAspectRatio="none">
+                                            {/* Country dots */}
                                             {gaGeo.countries.map((c, i) => {
                                               const coords = countryCoords[c.country];
                                               if (!coords) return null;
-                                              const x = projX(coords[1]);
-                                              const y = projY(coords[0]);
+                                              const x = ((coords[1] + 180) / 360) * 100;
+                                              const y = ((90 - coords[0]) / 180) * 50;
                                               const ratio = c.users / maxUsers;
-                                              const r = 0.6 + ratio * 1.8;
+                                              const r = 0.4 + ratio * 1.2;
                                               const color = countryColors[Math.min(i, countryColors.length - 1)];
                                               return (
                                                 <g key={c.country}>
-                                                  <circle cx={x} cy={y} r={r + 0.8} fill={color} opacity={0.15} />
-                                                  <circle cx={x} cy={y} r={r} fill={color} opacity={0.85} />
+                                                  <circle cx={x} cy={y} r={r + 0.5} fill={color} opacity={0.2} />
+                                                  <circle cx={x} cy={y} r={r} fill={color} opacity={0.9} />
                                                 </g>
                                               );
                                             })}
