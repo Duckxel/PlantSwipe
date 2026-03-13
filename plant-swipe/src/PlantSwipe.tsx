@@ -1205,6 +1205,9 @@ export default function PlantSwipe() {
     // Pre-compute living space filter
     const livingSpaceCount = livingSpaceSet.size
 
+    // Pre-compute split type tokens
+    const typeTokens = normalizedType?.includes(',') ? normalizedType.split(',').map(t => t.trim()) : null;
+
     return preparedPlants.filter((p) => {
       // Early exit pattern: check cheapest conditions first
       // Boolean checks are O(1) and fastest
@@ -1212,8 +1215,15 @@ export default function PlantSwipe() {
       if (humanSafe && !p._humanSafe) return false
       // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
       if (normalizedType) {
-        if (normalizedType.includes(',')) {
-          if (!normalizedType.split(',').some(t => p._typeLabel === t.trim())) return false
+        if (typeTokens) {
+          let hasMatchingType = false;
+          for (let i = 0; i < typeTokens.length; i++) {
+            if (p._typeLabel === typeTokens[i]) {
+              hasMatchingType = true;
+              break;
+            }
+          }
+          if (!hasMatchingType) return false;
         } else {
           if (p._typeLabel !== normalizedType) return false
         }
@@ -1349,7 +1359,7 @@ export default function PlantSwipe() {
       
       return true
     })
-  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe, likedSet])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
