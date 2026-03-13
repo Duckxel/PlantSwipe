@@ -30705,16 +30705,27 @@ async function generateCrawlerHtml(req, pagePath) {
           supabaseServer
             .from('plants')
             .select(`
-              id, name, plant_type, utility, comestible_part, fruit_type,
-              spiked, scent, multicolor, bicolor,
-              temperature_max, temperature_min, temperature_ideal, hygrometry,
-              watering_type, division, soil, mulching, nutrition_need, fertilizer,
+              id, name, plant_type, plant_part, habitat,
+              scientific_name_species, family, featured_month,
+              climate, season, utility, edible_part, thorny,
+              toxicity_human, toxicity_pets, poisoning_method,
+              life_cycle, average_lifespan, foliage_persistence,
+              living_space, landscaping, plant_habit, multicolor, bicolor,
+              care_level, sunlight, temperature_max, temperature_min, temperature_ideal,
+              watering_mode, watering_frequency_warm, watering_frequency_cold,
+              watering_type, hygrometry, misting_frequency,
+              special_needs, substrate, substrate_mix,
+              mulching_needed, mulch_type, nutrition_need, fertilizer,
               sowing_month, flowering_month, fruiting_month, harvesting_month,
-              height_cm, wingspan_cm, sow_type, separation_cm,
-              tutoring, transplanting,
-              infusion, aromatherapy,
-              melliferous, polenizer, be_fertilizer, conservation_status,
-              companions
+              height_cm, wingspan_cm, separation_cm,
+              staking, division, cultivation_mode, sowing_method,
+              transplanting, pruning, pruning_month,
+              conservation_status, ecological_status, biotopes,
+              biodiversity_role, pollinators_attracted,
+              ecological_tolerance, ecological_impact,
+              infusion, infusion_parts, medicinal, aromatherapy, fragrance, edible_oil,
+              companion_plants, biotope_plants, beneficial_plants, harmful_plants,
+              status
             `)
             .eq('id', plantId)
             .maybeSingle(),
@@ -30725,7 +30736,7 @@ async function generateCrawlerHtml(req, pagePath) {
         // Many fields (scientific_name, family, level_sun, maintenance_level, etc.) are translatable
         // and stored primarily in plant_translations. The plants table may have stale/empty copies.
         const ssrLang = detectedLang || 'en'
-        const translationFields = 'name, overview, tags, origin, scientific_name, family, level_sun, maintenance_level, season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets, allergens, living_space, composition, habitat, symbolism, advice_soil, advice_mulching, advice_fertilizer, advice_tutoring, advice_sowing, advice_medicinal, advice_infusion, cut, nutritional_intake, recipes_ideas, ground_effect, pests, diseases'
+        const translationFields = 'name, variety, common_names, presentation, origin, allergens, poisoning_symptoms, soil_advice, mulch_advice, fertilizer_advice, staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice, pests, diseases, beneficial_roles, harmful_roles, symbiosis, symbiosis_notes, nutritional_value, recipes_ideas, infusion_benefits, infusion_recipe_ideas, medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history, aromatherapy_benefits, essential_oil_blends, spice_mixes, plant_tags, biodiversity_tags, source_name, source_url'
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
@@ -30759,44 +30770,49 @@ async function generateCrawlerHtml(req, pagePath) {
         const pickArr = (field) => (translation?.[field]?.length ? translation[field] : null) || (enTranslation?.[field]?.length ? enTranslation[field] : null) || (basePlant?.[field]?.length ? basePlant[field] : null) || []
 
         // Merge base plant with translations, with field-level fallback to English then base plant
-        // Translatable fields (scientific_name, family, level_sun, etc.) come from plant_translations
-        // with fallback to plants table (which may have migrated copies)
+        // Non-translatable fields come from plants table; translatable fields from plant_translations
         const plant = basePlant ? {
           ...basePlant,
           name: pickStr('name') || basePlant.name,
-          // Translatable fields - prefer translation, fallback to English, then base plant
-          scientific_name: pickStr('scientific_name'),
-          family: pickStr('family'),
-          level_sun: pickStr('level_sun'),
-          maintenance_level: pickStr('maintenance_level'),
-          life_cycle: pickStr('life_cycle'),
-          foliage_persistance: pickStr('foliage_persistance'),
-          toxicity_human: pickStr('toxicity_human'),
-          toxicity_pets: pickStr('toxicity_pets'),
-          living_space: pickStr('living_space'),
+          // Non-translatable fields from plants table (use directly)
+          scientific_name_species: basePlant.scientific_name_species,
+          family: basePlant.family,
+          sunlight: basePlant.sunlight,
+          care_level: basePlant.care_level,
+          life_cycle: basePlant.life_cycle,
+          foliage_persistence: basePlant.foliage_persistence,
+          toxicity_human: basePlant.toxicity_human,
+          toxicity_pets: basePlant.toxicity_pets,
+          living_space: basePlant.living_space,
           conservation_status: basePlant.conservation_status,
-          overview: pickStr('overview'),
-          advice_soil: pickStr('advice_soil'),
-          advice_mulching: pickStr('advice_mulching'),
-          advice_fertilizer: pickStr('advice_fertilizer'),
-          advice_tutoring: pickStr('advice_tutoring'),
-          advice_sowing: pickStr('advice_sowing'),
-          advice_medicinal: pickStr('advice_medicinal'),
-          advice_infusion: pickStr('advice_infusion'),
-          cut: pickStr('cut'),
-          ground_effect: pickStr('ground_effect'),
-          // Array translatable fields
-          season: pickArr('season'),
-          tags: pickArr('tags'),
+          // Translatable string fields from plant_translations
+          presentation: pickStr('presentation'),
+          variety: pickStr('variety'),
+          soil_advice: pickStr('soil_advice'),
+          mulch_advice: pickStr('mulch_advice'),
+          fertilizer_advice: pickStr('fertilizer_advice'),
+          staking_advice: pickStr('staking_advice'),
+          sowing_advice: pickStr('sowing_advice'),
+          pruning_advice: pickStr('pruning_advice'),
+          medicinal_benefits: pickStr('medicinal_benefits'),
+          medicinal_usage: pickStr('medicinal_usage'),
+          infusion_benefits: pickStr('infusion_benefits'),
+          infusion_recipe_ideas: pickStr('infusion_recipe_ideas'),
+          aromatherapy_benefits: pickStr('aromatherapy_benefits'),
+          nutritional_value: pickStr('nutritional_value'),
+          poisoning_symptoms: pickStr('poisoning_symptoms'),
+          // Translatable array fields from plant_translations
+          common_names: pickArr('common_names'),
+          plant_tags: pickArr('plant_tags'),
           origin: pickArr('origin'),
-          habitat: pickArr('habitat'),
           allergens: pickArr('allergens'),
-          composition: pickArr('composition'),
-          symbolism: pickArr('symbolism'),
-          nutritional_intake: pickArr('nutritional_intake'),
           recipes_ideas: pickArr('recipes_ideas'),
           pests: pickArr('pests'),
           diseases: pickArr('diseases'),
+          beneficial_roles: pickArr('beneficial_roles'),
+          harmful_roles: pickArr('harmful_roles'),
+          symbiosis: pickArr('symbiosis'),
+          biodiversity_tags: pickArr('biodiversity_tags'),
         } : null
 
         ssrDebug('plant_query_result', {
@@ -30808,10 +30824,10 @@ async function generateCrawlerHtml(req, pagePath) {
         req._ssrDebug.queryResults.plant = {
           found: !!plant,
           name: plant?.name,
-          scientificName: plant?.scientific_name,
+          scientificName: plant?.scientific_name_species,
           family: plant?.family,
           plantType: plant?.plant_type,
-          tags: plant?.tags,
+          tags: plant?.plant_tags,
           error: plantError?.message
         }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
@@ -30830,30 +30846,30 @@ async function generateCrawlerHtml(req, pagePath) {
             name: plant.name,
             id: plant.id,
             type: plant.plant_type,
-            hasOverview: !!plant.overview,
-            overviewLength: plant.overview?.length || 0,
-            tagsCount: plant.tags?.length || 0,
+            hasPresentation: !!plant.presentation,
+            presentationLength: plant.presentation?.length || 0,
+            tagsCount: plant.plant_tags?.length || 0,
             lang: ssrLang
           })
-          console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id}), overview=${plant.overview?.length || 0}chars, tags=${plant.tags?.length || 0}, lang=${ssrLang}`)
+          console.log(`[ssr] ✓ Found plant: ${plant.name} (${plant.id}), presentation=${plant.presentation?.length || 0}chars, tags=${plant.plant_tags?.length || 0}, lang=${ssrLang}`)
 
           // Simple, clean title format: "🌱 Lotus - Complete Care Guide | Aphylia"
           title = `🌱 ${plant.name} - ${tr.plantCareGuide} | Aphylia`
 
-          // Use overview cropped to ~150 characters for description
+          // Use presentation cropped to ~150 characters for description
           // Fallback to plant-specific info using tags, family, type
-          if (plant.overview) {
-            const overview = plant.overview.trim()
-            description = overview.length > 150
-              ? overview.slice(0, 150).trim() + '...'
-              : overview
+          if (plant.presentation) {
+            const presentation = plant.presentation.trim()
+            description = presentation.length > 150
+              ? presentation.slice(0, 150).trim() + '...'
+              : presentation
           } else {
             // Build a plant-specific description from available data
             const descParts = []
-            if (plant.scientific_name) descParts.push(plant.scientific_name)
+            if (plant.scientific_name_species) descParts.push(plant.scientific_name_species)
             if (plant.family) descParts.push(`${tr.family}: ${plant.family}`)
-            if (plant.tags?.length) {
-              const tagList = plant.tags.slice(0, 4).join(', ')
+            if (plant.plant_tags?.length) {
+              const tagList = plant.plant_tags.slice(0, 4).join(', ')
               descParts.push(tagList)
             }
             if (descParts.length > 0) {
@@ -30886,11 +30902,13 @@ async function generateCrawlerHtml(req, pagePath) {
           const typeKey = (plant.plant_type || '').toLowerCase()
           const emoji = plantEmoji[typeKey] || '🌱'
 
-          // Care difficulty indicator - use translations (for pageContent)
-          const difficulty = tr.difficulty[(plant.maintenance_level || '').toLowerCase()] || ''
+          // Care difficulty indicator - use care_level from plants table
+          const careLevelVal = Array.isArray(plant.care_level) ? plant.care_level[0] : plant.care_level
+          const difficulty = tr.difficulty[(careLevelVal || '').toLowerCase()] || ''
 
-          // Light requirement indicator - use translations (for pageContent)
-          const light = tr.light[(plant.level_sun || '').toLowerCase()] || ''
+          // Light requirement indicator - use sunlight from plants table
+          const sunlightVal = Array.isArray(plant.sunlight) ? plant.sunlight[0] : plant.sunlight
+          const light = tr.light[(sunlightVal || '').replace(/_/g, ' ').toLowerCase()] || ''
 
           // Fetch plant colors for palette display
           const { data: plantColors } = await ssrQuery(
@@ -30904,12 +30922,12 @@ async function generateCrawlerHtml(req, pagePath) {
 
           // Fetch companion plants if any
           let companionPlants = []
-          if (plant.companions?.length) {
+          if (plant.companion_plants?.length) {
             const { data: companions } = await ssrQuery(
               supabaseServer
                 .from('plants')
                 .select('id, name')
-                .in('id', plant.companions)
+                .in('id', plant.companion_plants)
                 .limit(20),
               'companion_plants'
             )
@@ -30946,7 +30964,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
           // Build comprehensive structured content for the page
           const quickFacts = []
-          if (plant.scientific_name) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name)}</em>`)
+          if (plant.scientific_name_species) quickFacts.push(`🔬 <em>${escapeHtml(plant.scientific_name_species)}</em>`)
           if (plant.family) quickFacts.push(`👨‍👩‍👧 ${tr.family}: ${escapeHtml(plant.family)}`)
           if (plant.plant_type) quickFacts.push(`${emoji} ${escapeHtml(plant.plant_type)}`)
           if (plant.origin?.length) quickFacts.push(`🌍 ${tr.origin}: ${plant.origin.slice(0, 2).map(o => escapeHtml(o)).join(', ')}`)
@@ -30986,14 +31004,14 @@ async function generateCrawlerHtml(req, pagePath) {
             detailedCare.push(`🌡️ <strong>${detectedLang === 'fr' ? 'Température' : 'Temperature'}:</strong> ${temps.join(' • ')}`)
           }
           if (difficulty) detailedCare.push(`⚙️ <strong>${detectedLang === 'fr' ? 'Entretien' : 'Maintenance'}:</strong> ${difficulty}`)
-          if (plant.soil?.length) detailedCare.push(`🌱 <strong>${detectedLang === 'fr' ? 'Sol' : 'Soil'}:</strong> ${plant.soil.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.substrate?.length) detailedCare.push(`🌱 <strong>${detectedLang === 'fr' ? 'Substrat' : 'Substrate'}:</strong> ${plant.substrate.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
           
           // Growth & Structure information
           let growthInfo = []
           if (plant.height_cm) growthInfo.push(`📏 <strong>${detectedLang === 'fr' ? 'Hauteur' : 'Height'}:</strong> ${plant.height_cm} cm`)
           if (plant.wingspan_cm) growthInfo.push(`↔️ <strong>${detectedLang === 'fr' ? 'Envergure' : 'Wingspan'}:</strong> ${plant.wingspan_cm} cm`)
-          if (plant.life_cycle) growthInfo.push(`🔄 <strong>${detectedLang === 'fr' ? 'Cycle de vie' : 'Life Cycle'}:</strong> ${escapeHtml(plant.life_cycle)}`)
-          if (plant.foliage_persistance) growthInfo.push(`🍃 <strong>${detectedLang === 'fr' ? 'Feuillage' : 'Foliage'}:</strong> ${escapeHtml(plant.foliage_persistance)}`)
+          if (plant.life_cycle?.length) growthInfo.push(`🔄 <strong>${detectedLang === 'fr' ? 'Cycle de vie' : 'Life Cycle'}:</strong> ${plant.life_cycle.slice(0, 3).map(l => escapeHtml(l.replace(/_/g, ' '))).join(', ')}`)
+          if (plant.foliage_persistence?.length) growthInfo.push(`🍃 <strong>${detectedLang === 'fr' ? 'Feuillage' : 'Foliage'}:</strong> ${plant.foliage_persistence.slice(0, 3).map(f => escapeHtml(f.replace(/_/g, ' '))).join(', ')}`)
           if (plant.season?.length) growthInfo.push(`🌿 <strong>${detectedLang === 'fr' ? 'Saisons' : 'Seasons'}:</strong> ${plant.season.map(s => escapeHtml(s)).join(', ')}`)
 
           // Phenology (flowering, sowing, fruiting)
@@ -31005,37 +31023,38 @@ async function generateCrawlerHtml(req, pagePath) {
 
           // Ecology information
           let ecology = []
-          if (plant.melliferous) ecology.push(`🐝 ${detectedLang === 'fr' ? 'Mellifère' : 'Melliferous'}`)
-          if (plant.polenizer?.length) ecology.push(`🦋 <strong>${detectedLang === 'fr' ? 'Pollinisateurs' : 'Pollinators'}:</strong> ${plant.polenizer.slice(0, 3).map(p => escapeHtml(p)).join(', ')}`)
-          if (plant.be_fertilizer) ecology.push(`🌿 ${detectedLang === 'fr' ? 'Engrais naturel' : 'Natural fertilizer'}`)
-          if (plant.conservation_status) ecology.push(`🌍 <strong>${detectedLang === 'fr' ? 'Conservation' : 'Conservation'}:</strong> ${escapeHtml(plant.conservation_status)}`)
-          if (plant.habitat?.length) ecology.push(`🏞️ <strong>Habitat:</strong> ${plant.habitat.slice(0, 3).map(h => escapeHtml(h)).join(', ')}`)
+          if (plant.biodiversity_role?.length) ecology.push(`🌿 <strong>${detectedLang === 'fr' ? 'Rôle biodiversité' : 'Biodiversity Role'}:</strong> ${plant.biodiversity_role.slice(0, 3).map(r => escapeHtml(r.replace(/_/g, ' '))).join(', ')}`)
+          if (plant.pollinators_attracted?.length) ecology.push(`🦋 <strong>${detectedLang === 'fr' ? 'Pollinisateurs' : 'Pollinators'}:</strong> ${plant.pollinators_attracted.slice(0, 3).map(p => escapeHtml(p)).join(', ')}`)
+          if (plant.conservation_status?.length) ecology.push(`🌍 <strong>${detectedLang === 'fr' ? 'Conservation' : 'Conservation'}:</strong> ${plant.conservation_status.slice(0, 2).map(s => escapeHtml(s.replace(/_/g, ' '))).join(', ')}`)
+          if (plant.habitat?.length) ecology.push(`🏞️ <strong>Habitat:</strong> ${plant.habitat.slice(0, 3).map(h => escapeHtml(h.replace(/_/g, ' '))).join(', ')}`)
+          if (plant.ecological_tolerance?.length) ecology.push(`💪 <strong>${detectedLang === 'fr' ? 'Tolérance' : 'Tolerance'}:</strong> ${plant.ecological_tolerance.slice(0, 3).map(t => escapeHtml(t.replace(/_/g, ' '))).join(', ')}`)
 
           // Safety & Traits
           let safety = []
-          if (plant.toxicity_human) safety.push(`👤 <strong>${detectedLang === 'fr' ? 'Toxicité humaine' : 'Human Toxicity'}:</strong> ${escapeHtml(plant.toxicity_human)}`)
-          if (plant.toxicity_pets) safety.push(`🐾 <strong>${detectedLang === 'fr' ? 'Toxicité animaux' : 'Pet Toxicity'}:</strong> ${escapeHtml(plant.toxicity_pets)}`)
+          if (plant.toxicity_human) safety.push(`👤 <strong>${detectedLang === 'fr' ? 'Toxicité humaine' : 'Human Toxicity'}:</strong> ${escapeHtml(plant.toxicity_human.replace(/_/g, ' '))}`)
+          if (plant.toxicity_pets) safety.push(`🐾 <strong>${detectedLang === 'fr' ? 'Toxicité animaux' : 'Pet Toxicity'}:</strong> ${escapeHtml(plant.toxicity_pets.replace(/_/g, ' '))}`)
           if (plant.allergens?.length) safety.push(`⚠️ <strong>${detectedLang === 'fr' ? 'Allergènes' : 'Allergens'}:</strong> ${plant.allergens.slice(0, 3).map(a => escapeHtml(a)).join(', ')}`)
-          if (plant.scent) safety.push(`👃 ${detectedLang === 'fr' ? 'Parfumé' : 'Scented'}`)
-          if (plant.spiked) safety.push(`🌵 ${detectedLang === 'fr' ? 'Épineux' : 'Spiked'}`)
+          if (plant.fragrance) safety.push(`👃 ${detectedLang === 'fr' ? 'Parfumé' : 'Fragrant'}`)
+          if (plant.thorny) safety.push(`🌵 ${detectedLang === 'fr' ? 'Épineux' : 'Thorny'}`)
 
           // Usage & Benefits (store raw text, escape in template)
           let usage = []
           if (plant.utility?.length) usage = [...plant.utility]
           if (plant.infusion) usage.push(detectedLang === 'fr' ? 'Infusion' : 'Infusion')
           if (plant.aromatherapy) usage.push(detectedLang === 'fr' ? 'Aromathérapie' : 'Aromatherapy')
-          if (plant.comestible_part?.length) usage.push(`${detectedLang === 'fr' ? 'Parties comestibles' : 'Edible parts'}: ${plant.comestible_part.slice(0, 3).join(', ')}`)
+          if (plant.medicinal) usage.push(detectedLang === 'fr' ? 'Médicinal' : 'Medicinal')
+          if (plant.edible_part?.length) usage.push(`${detectedLang === 'fr' ? 'Parties comestibles' : 'Edible parts'}: ${plant.edible_part.slice(0, 3).join(', ')}`)
 
           // Expert advice sections (from translations)
           let adviceSections = []
-          if (plant.advice_soil) adviceSections.push({ icon: '🌱', label: detectedLang === 'fr' ? 'Conseil Sol' : 'Soil Advice', text: plant.advice_soil })
-          if (plant.advice_sowing) adviceSections.push({ icon: '🌾', label: detectedLang === 'fr' ? 'Conseil Semis' : 'Sowing Advice', text: plant.advice_sowing })
-          if (plant.advice_fertilizer) adviceSections.push({ icon: '🧪', label: detectedLang === 'fr' ? 'Conseil Engrais' : 'Fertilizer Advice', text: plant.advice_fertilizer })
-          if (plant.advice_mulching) adviceSections.push({ icon: '🍂', label: detectedLang === 'fr' ? 'Conseil Paillage' : 'Mulching Advice', text: plant.advice_mulching })
-          if (plant.advice_tutoring) adviceSections.push({ icon: '🏗️', label: detectedLang === 'fr' ? 'Conseil Tuteurage' : 'Tutoring Advice', text: plant.advice_tutoring })
-          if (plant.advice_medicinal) adviceSections.push({ icon: '💊', label: detectedLang === 'fr' ? 'Usage Médicinal' : 'Medicinal Use', text: plant.advice_medicinal })
-          if (plant.advice_infusion) adviceSections.push({ icon: '🍵', label: detectedLang === 'fr' ? 'Conseil Infusion' : 'Infusion Advice', text: plant.advice_infusion })
-          if (plant.cut) adviceSections.push({ icon: '✂️', label: detectedLang === 'fr' ? 'Taille' : 'Pruning', text: plant.cut })
+          if (plant.soil_advice) adviceSections.push({ icon: '🌱', label: detectedLang === 'fr' ? 'Conseil Sol' : 'Soil Advice', text: plant.soil_advice })
+          if (plant.sowing_advice) adviceSections.push({ icon: '🌾', label: detectedLang === 'fr' ? 'Conseil Semis' : 'Sowing Advice', text: plant.sowing_advice })
+          if (plant.fertilizer_advice) adviceSections.push({ icon: '🧪', label: detectedLang === 'fr' ? 'Conseil Engrais' : 'Fertilizer Advice', text: plant.fertilizer_advice })
+          if (plant.mulch_advice) adviceSections.push({ icon: '🍂', label: detectedLang === 'fr' ? 'Conseil Paillage' : 'Mulching Advice', text: plant.mulch_advice })
+          if (plant.staking_advice) adviceSections.push({ icon: '🏗️', label: detectedLang === 'fr' ? 'Conseil Tuteurage' : 'Staking Advice', text: plant.staking_advice })
+          if (plant.medicinal_benefits) adviceSections.push({ icon: '💊', label: detectedLang === 'fr' ? 'Usage Médicinal' : 'Medicinal Benefits', text: plant.medicinal_benefits })
+          if (plant.infusion_benefits) adviceSections.push({ icon: '🍵', label: detectedLang === 'fr' ? 'Bienfaits Infusion' : 'Infusion Benefits', text: plant.infusion_benefits })
+          if (plant.pruning_advice) adviceSections.push({ icon: '✂️', label: detectedLang === 'fr' ? 'Taille' : 'Pruning', text: plant.pruning_advice })
 
           // Pests & Diseases
           let problems = []
@@ -31044,21 +31063,21 @@ async function generateCrawlerHtml(req, pagePath) {
 
           // Additional details
           let additionalInfo = []
-          if (plant.symbolism?.length) additionalInfo.push(`🎭 <strong>${detectedLang === 'fr' ? 'Symbolisme' : 'Symbolism'}:</strong> ${plant.symbolism.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
-          if (plant.ground_effect) additionalInfo.push(`🌿 <strong>${detectedLang === 'fr' ? 'Effet au sol' : 'Ground Effect'}:</strong> ${escapeHtml(plant.ground_effect)}`)
-          if (plant.nutritional_intake?.length) additionalInfo.push(`🥗 <strong>${detectedLang === 'fr' ? 'Apport nutritionnel' : 'Nutritional Intake'}:</strong> ${plant.nutritional_intake.slice(0, 3).map(n => escapeHtml(n)).join(', ')}`)
+          if (plant.nutritional_value) additionalInfo.push(`🥗 <strong>${detectedLang === 'fr' ? 'Valeur nutritionnelle' : 'Nutritional Value'}:</strong> ${escapeHtml(plant.nutritional_value)}`)
           if (plant.recipes_ideas?.length) additionalInfo.push(`🍳 <strong>${detectedLang === 'fr' ? 'Idées recettes' : 'Recipe Ideas'}:</strong> ${plant.recipes_ideas.slice(0, 3).map(r => escapeHtml(r)).join(', ')}`)
+          if (plant.medicinal_usage) additionalInfo.push(`💊 <strong>${detectedLang === 'fr' ? 'Usage médicinal' : 'Medicinal Usage'}:</strong> ${escapeHtml(plant.medicinal_usage)}`)
+          if (plant.aromatherapy_benefits) additionalInfo.push(`🌸 <strong>${detectedLang === 'fr' ? 'Aromathérapie' : 'Aromatherapy'}:</strong> ${escapeHtml(plant.aromatherapy_benefits)}`)
 
           // Propagation info
           let propagation = []
-          if (plant.division?.length) propagation.push(`🌱 <strong>${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}:</strong> ${plant.division.slice(0, 4).map(d => escapeHtml(d)).join(', ')}`)
-          if (plant.sow_type?.length) propagation.push(`🌰 <strong>${detectedLang === 'fr' ? 'Type de semis' : 'Sowing Type'}:</strong> ${plant.sow_type.slice(0, 3).map(s => escapeHtml(s)).join(', ')}`)
+          if (plant.division?.length) propagation.push(`🌱 <strong>${detectedLang === 'fr' ? 'Multiplication' : 'Propagation'}:</strong> ${plant.division.slice(0, 4).map(d => escapeHtml(d.replace(/_/g, ' '))).join(', ')}`)
+          if (plant.sowing_method?.length) propagation.push(`🌰 <strong>${detectedLang === 'fr' ? 'Méthode de semis' : 'Sowing Method'}:</strong> ${plant.sowing_method.slice(0, 3).map(s => escapeHtml(s.replace(/_/g, ' '))).join(', ')}`)
           if (plant.transplanting !== null && plant.transplanting !== undefined) propagation.push(`🪴 <strong>${detectedLang === 'fr' ? 'Transplantation' : 'Transplanting'}:</strong> ${plant.transplanting ? '✅' : '❌'}`)
-          if (plant.tutoring) propagation.push(`🏗️ <strong>${detectedLang === 'fr' ? 'Tuteurage nécessaire' : 'Needs Tutoring'}:</strong> ✅`)
+          if (plant.staking) propagation.push(`🏗️ <strong>${detectedLang === 'fr' ? 'Tuteurage nécessaire' : 'Needs Staking'}:</strong> ✅`)
 
           // Soil & Nutrition
           let soilNutrition = []
-          if (plant.mulching?.length) soilNutrition.push(`🍂 <strong>${detectedLang === 'fr' ? 'Paillage' : 'Mulching'}:</strong> ${plant.mulching.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
+          if (plant.mulch_type?.length) soilNutrition.push(`🍂 <strong>${detectedLang === 'fr' ? 'Paillage' : 'Mulching'}:</strong> ${plant.mulch_type.slice(0, 3).map(m => escapeHtml(m)).join(', ')}`)
           if (plant.fertilizer?.length) soilNutrition.push(`🧪 <strong>${detectedLang === 'fr' ? 'Engrais' : 'Fertilizer'}:</strong> ${plant.fertilizer.slice(0, 3).map(f => escapeHtml(f)).join(', ')}`)
           if (plant.nutrition_need?.length) soilNutrition.push(`⚡ <strong>${detectedLang === 'fr' ? 'Besoins nutritifs' : 'Nutrient Needs'}:</strong> ${plant.nutrition_need.slice(0, 4).map(n => escapeHtml(n)).join(', ')}`)
 
@@ -31074,10 +31093,10 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${colorPalette}
               
-              ${plant.overview ? `
+              ${plant.presentation ? `
                 <div itemprop="description">
                   <h2>${tr.plantAbout} ${escapeHtml(plant.name)}</h2>
-                  <p>${escapeHtml(plant.overview)}</p>
+                  <p>${escapeHtml(plant.presentation)}</p>
                 </div>
               ` : ''}
               
@@ -31173,9 +31192,9 @@ async function generateCrawlerHtml(req, pagePath) {
                 </div>
               ` : ''}
               
-              ${plant.tags?.length ? `
+              ${plant.plant_tags?.length ? `
                 <div style="margin: 24px 0;">
-                  <strong>${tr.tags}:</strong> ${plant.tags.slice(0, 12).map(t => `<span style="display: inline-block; background: #e5e7eb; padding: 4px 12px; border-radius: 12px; margin: 4px; font-size: 13px;">#${escapeHtml(t)}</span>`).join('')}
+                  <strong>${tr.tags}:</strong> ${plant.plant_tags.slice(0, 12).map(t => `<span style="display: inline-block; background: #e5e7eb; padding: 4px 12px; border-radius: 12px; margin: 4px; font-size: 13px;">#${escapeHtml(t)}</span>`).join('')}
                 </div>
               ` : ''}
               
@@ -32915,7 +32934,7 @@ async function generateCrawlerHtml(req, pagePath) {
     if (plantData.family) keywordParts.push(plantData.family)
     if (plantData.plantType) keywordParts.push(plantData.plantType)
     if (plantData.tags && Array.isArray(plantData.tags)) {
-      plantData.tags.slice(0, 5).forEach(tag => keywordParts.push(tag))
+      plantData.tags.slice(0, 5).forEach(tag => keywordParts.push(tag.replace(/_/g, ' ')))
     }
     keywords = keywordParts.join(', ')
   } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
