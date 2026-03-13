@@ -8018,8 +8018,10 @@ export const AdminPage: React.FC = () => {
                                       <div className="text-sm font-medium mb-2">Top Countries</div>
 
                                       {/* World Map with country dots — single SVG, coordinates from actual SVG centroids */}
-                                      {gaGeo.countries.length > 0 && (
-                                        <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border" style={{ aspectRatio: "820.44 / 501.3" }}>
+                                      {gaGeo.countries.length > 0 && (() => {
+                                        const totalGeoUsers = gaGeo.countries.reduce((s, c) => s + c.users, 0);
+                                        return (
+                                        <div className="relative w-full mb-3 rounded-lg overflow-hidden bg-stone-50 dark:bg-stone-900/50 border group/map" style={{ aspectRatio: "820.44 / 501.3" }}>
                                           <svg className="absolute inset-0 w-full h-full" viewBox="103.51 165.78 820.44 501.3" preserveAspectRatio="xMidYMid meet" role="img" aria-label="World map showing user locations">
                                             {/* SVG world map background — themed fill via CSS filter */}
                                             <image
@@ -8036,16 +8038,35 @@ export const AdminPage: React.FC = () => {
                                               const ratio = c.users / maxUsers;
                                               const r = 3 + ratio * 10;
                                               const color = countryColors[Math.min(i, countryColors.length - 1)];
+                                              const pct = totalGeoUsers > 0 ? Math.round((c.users / totalGeoUsers) * 100) : 0;
                                               return (
-                                                <g key={c.country}>
+                                                <g key={c.country} className="group/dot" style={{ cursor: "pointer" }}>
                                                   <circle cx={coords[0]} cy={coords[1]} r={r + 4} fill={color} opacity={0.2} />
                                                   <circle cx={coords[0]} cy={coords[1]} r={r} fill={color} opacity={0.9} />
+                                                  {/* Larger invisible hit area for easier hover */}
+                                                  <circle cx={coords[0]} cy={coords[1]} r={Math.max(r + 8, 14)} fill="transparent" />
+                                                  <foreignObject
+                                                    x={coords[0] - 75} y={coords[1] - 70}
+                                                    width="150" height="60"
+                                                    className="pointer-events-none opacity-0 group-hover/dot:opacity-100 transition-opacity"
+                                                    style={{ overflow: "visible" }}
+                                                  >
+                                                    <div className="flex justify-center">
+                                                      <div className="rounded-lg border bg-white/95 dark:bg-[#252526]/95 backdrop-blur shadow-lg px-2.5 py-1.5 text-center whitespace-nowrap" style={{ fontSize: "9px", lineHeight: "1.4" }}>
+                                                        <div className="font-semibold" style={{ color }}>{c.country}</div>
+                                                        <div className="text-stone-600 dark:text-stone-300">
+                                                          {c.users.toLocaleString()} user{c.users !== 1 ? "s" : ""} · {c.sessions.toLocaleString()} session{c.sessions !== 1 ? "s" : ""} · {pct}%
+                                                        </div>
+                                                      </div>
+                                                    </div>
+                                                  </foreignObject>
                                                 </g>
                                               );
                                             })}
                                           </svg>
                                         </div>
-                                      )}
+                                        );
+                                      })()}
 
                                       {/* Donut + Legend */}
                                       {gaGeo.countries.length > 0 && (
