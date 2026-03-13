@@ -8049,18 +8049,10 @@ export const AdminPage: React.FC = () => {
                                                   key={c.country}
                                                   style={{ cursor: "pointer" }}
                                                   onMouseEnter={(e) => {
-                                                    const rect = (e.currentTarget.ownerSVGElement?.parentElement as HTMLElement)?.getBoundingClientRect();
-                                                    if (!rect) return;
-                                                    const x = e.clientX - rect.left;
-                                                    const y = e.clientY - rect.top;
-                                                    setMapTooltip({ country: c.country, users: c.users, sessions: c.sessions, pct, color, x, y });
+                                                    setMapTooltip({ country: c.country, users: c.users, sessions: c.sessions, pct, color, x: e.clientX, y: e.clientY });
                                                   }}
                                                   onMouseMove={(e) => {
-                                                    const rect = (e.currentTarget.ownerSVGElement?.parentElement as HTMLElement)?.getBoundingClientRect();
-                                                    if (!rect) return;
-                                                    const x = e.clientX - rect.left;
-                                                    const y = e.clientY - rect.top;
-                                                    setMapTooltip((prev) => prev ? { ...prev, x, y } : null);
+                                                    setMapTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : null);
                                                   }}
                                                   onMouseLeave={() => setMapTooltip(null)}
                                                 >
@@ -8072,17 +8064,18 @@ export const AdminPage: React.FC = () => {
                                               );
                                             })}
                                           </svg>
-                                          {/* HTML tooltip rendered outside SVG */}
-                                          {mapTooltip && (
+                                          {/* HTML tooltip rendered via portal so it floats above all cards */}
+                                          {mapTooltip && createPortal(
                                             <div
-                                              className="absolute z-50 pointer-events-none rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#252526] shadow-lg px-3 py-2 whitespace-nowrap"
-                                              style={{ left: mapTooltip.x, top: mapTooltip.y, transform: "translate(-50%, -110%)" }}
+                                              className="fixed z-[9999] pointer-events-none rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#252526] shadow-lg px-3 py-2 whitespace-nowrap"
+                                              style={{ left: mapTooltip.x, top: mapTooltip.y, transform: "translate(-50%, calc(-100% - 12px))" }}
                                             >
                                               <div className="text-xs font-semibold mb-0.5" style={{ color: mapTooltip.color }}>{mapTooltip.country}</div>
                                               <div className="text-xs text-stone-600 dark:text-stone-300">
                                                 {mapTooltip.users.toLocaleString()} user{mapTooltip.users !== 1 ? "s" : ""} · {mapTooltip.sessions.toLocaleString()} session{mapTooltip.sessions !== 1 ? "s" : ""} · {mapTooltip.pct}%
                                               </div>
-                                            </div>
+                                            </div>,
+                                            document.body
                                           )}
                                         </div>
                                         );
