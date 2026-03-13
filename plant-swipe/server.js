@@ -30701,32 +30701,12 @@ async function generateCrawlerHtml(req, pagePath) {
         // season, life_cycle, foliage_persistance, toxicity_human, toxicity_pets,
         // allergens, living_space, composition, habitat, etc.) are fetched from
         // plant_translations below — they may NOT exist as columns on the plants table.
+        // Use select('*') like the client does — avoids failures when columns are
+        // added/removed from the DB without updating this list.
         const { data: basePlant, error: plantError} = await ssrQuery(
           supabaseServer
             .from('plants')
-            .select(`
-              id, name, plant_type, plant_part, habitat,
-              scientific_name_species, family, featured_month,
-              climate, season, utility, edible_part, thorny,
-              toxicity_human, toxicity_pets, poisoning_method,
-              life_cycle, average_lifespan, foliage_persistence,
-              living_space, landscaping, plant_habit, multicolor, bicolor,
-              care_level, sunlight, temperature_max, temperature_min, temperature_ideal,
-              watering_mode, watering_frequency_warm, watering_frequency_cold,
-              watering_type, hygrometry, misting_frequency,
-              special_needs, substrate, substrate_mix,
-              mulching_needed, mulch_type, nutrition_need, fertilizer,
-              sowing_month, flowering_month, fruiting_month, harvesting_month,
-              height_cm, wingspan_cm, separation_cm,
-              staking, division, cultivation_mode, sowing_method,
-              transplanting, pruning, pruning_month,
-              conservation_status, ecological_status, biotopes,
-              biodiversity_role, pollinators_attracted,
-              ecological_tolerance, ecological_impact,
-              infusion, infusion_parts, medicinal, aromatherapy, fragrance, edible_oil,
-              companion_plants, biotope_plants, beneficial_plants, harmful_plants,
-              status
-            `)
+            .select('*')
             .eq('id', plantId)
             .maybeSingle(),
           'plant_lookup'
@@ -30736,11 +30716,11 @@ async function generateCrawlerHtml(req, pagePath) {
         // Many fields (scientific_name, family, level_sun, maintenance_level, etc.) are translatable
         // and stored primarily in plant_translations. The plants table may have stale/empty copies.
         const ssrLang = detectedLang || 'en'
-        const translationFields = 'name, variety, common_names, presentation, origin, allergens, poisoning_symptoms, soil_advice, mulch_advice, fertilizer_advice, staking_advice, sowing_advice, transplanting_time, outdoor_planting_time, pruning_advice, pests, diseases, beneficial_roles, harmful_roles, symbiosis, symbiosis_notes, nutritional_value, recipes_ideas, infusion_benefits, infusion_recipe_ideas, medicinal_benefits, medicinal_usage, medicinal_warning, medicinal_history, aromatherapy_benefits, essential_oil_blends, spice_mixes, plant_tags, biodiversity_tags, source_name, source_url'
+        // Use select('*') for translations too — schema-safe.
         const { data: translation } = await ssrQuery(
           supabaseServer
             .from('plant_translations')
-            .select(translationFields)
+            .select('*')
             .eq('plant_id', plantId)
             .eq('language', ssrLang)
             .maybeSingle(),
@@ -30753,7 +30733,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: enData } = await ssrQuery(
             supabaseServer
               .from('plant_translations')
-              .select(translationFields)
+              .select('*')
               .eq('plant_id', plantId)
               .eq('language', 'en')
               .maybeSingle(),
