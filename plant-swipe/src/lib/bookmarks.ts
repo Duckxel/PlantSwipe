@@ -328,9 +328,10 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
       )
     `)
     .eq('id', bookmarkId)
-    .single()
+    .maybeSingle()
 
   if (error) throw new Error(error.message)
+  if (!data) throw new Error('Bookmark not found')
 
   // Fetch full plant details for items
   const plantIds = (data.items || []).map((i: any) => i.plant_id)
