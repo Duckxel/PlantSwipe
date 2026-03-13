@@ -7240,281 +7240,128 @@ export const AdminPage: React.FC = () => {
             )}
 
             <section className="space-y-6">
-                <Card className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717] shadow-[0_35px_60px_-20px_rgba(16,185,129,0.35)]">
-                <div className="absolute inset-0 pointer-events-none">
-                    <div className="absolute -top-8 -right-4 h-48 w-48 rounded-full bg-emerald-200/50 dark:bg-emerald-500/10 blur-3xl" />
-                    <div className="absolute bottom-0 left-0 h-48 w-48 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" />
-                </div>
-                  <CardContent className="relative z-10 p-6 md:p-8 space-y-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-                    <div>
-                        <div className="text-2xl font-semibold tracking-tight">
-                        Admin Controls
-                      </div>
-                        <div className="text-sm text-stone-600 dark:text-stone-300 mt-1 max-w-2xl">
-                        Monitor services, manage members, and handle requests all in one place.
-                      </div>
-                    </div>
-                  </div>
+                <div className="space-y-4">
 
                   {/* Overview Tab */}
                   {activeTab === "overview" && (
                     <>
-                      {/* Health monitor */}
-                      <Card className={glassCardClass}>
-                        <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-medium">
-                              Health monitor
-                            </div>
-                            <div className="text-xs opacity-60">
-                              Auto?ping every 60s
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Refresh health"
-                            onClick={refreshHealth}
-                            disabled={healthRefreshing}
-                            className="h-8 w-8 rounded-xl border bg-white text-black hover:bg-stone-50"
-                          >
-                            <RefreshCw
-                              className={`h-4 w-4 ? ${healthRefreshing ? "animate-spin" : ""}`}
-                            />
-                          </Button>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Server className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">API</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {apiProbe.latencyMs !== null
-                                  ? `${apiProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={apiProbe.ok}
-                                title={
-                                  !apiProbe.ok
-                                    ? apiProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!apiProbe?.ok && (
-                                <ErrorBadge code={apiProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <ShieldCheck className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">Admin API</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {adminProbe.latencyMs !== null
-                                  ? `${adminProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={adminProbe.ok}
-                                title={
-                                  !adminProbe.ok
-                                    ? adminProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!adminProbe?.ok && (
-                                <ErrorBadge code={adminProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center justify-between rounded-xl border p-3">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <Database className="h-4 w-4 opacity-70" />
-                              <div className="text-sm truncate">Database</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="text-xs tabular-nums opacity-60">
-                                {dbProbe.latencyMs !== null
-                                  ? `${dbProbe.latencyMs} ms`
-                                  : "-"}
-                              </div>
-                              <StatusDot
-                                ok={dbProbe.ok}
-                                title={
-                                  !dbProbe.ok
-                                    ? dbProbe.errorCode || undefined
-                                    : undefined
-                                }
-                              />
-                              {!dbProbe?.ok && (
-                                <ErrorBadge code={dbProbe.errorCode} />
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
+                      {/* ═══ AT A GLANCE ═══ */}
 
-                    {/* App Version Card */}
-                    <Card className={`${glassCardClass} relative overflow-hidden`}>
-                      {/* Subtle decorative glow from the badge */}
-                      <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-32 h-32 rounded-full bg-violet-500/10 dark:bg-violet-500/5 blur-3xl pointer-events-none" />
-                      
-                      <CardContent className="p-4 relative">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            {/* Icon with enhanced styling */}
-                            <div className="relative">
-                              <div className="absolute inset-0 rounded-2xl bg-gradient-to-br from-violet-500 to-purple-600 blur-lg opacity-40" />
-                              <div className="relative w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 via-purple-500 to-purple-600 flex items-center justify-center shadow-xl shadow-violet-500/30 ring-1 ring-white/20">
-                                <Sparkles className="h-6 w-6 text-white drop-shadow-sm" />
-                              </div>
-                            </div>
-                            <div>
-                              <div className="text-sm font-semibold">
-                                App Version
-                              </div>
-                              <div className="text-xs text-violet-600/70 dark:text-violet-300/60">
-                                Aphylia Release
-                              </div>
-                            </div>
-                          </div>
-                          
-                          {/* Version badge section */}
-                          <div className="flex flex-col items-end gap-1.5">
-                            <div className="relative group">
-                              <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 blur-md opacity-50 group-hover:opacity-70 transition-opacity" />
-                              <span className="relative inline-flex items-center px-4 py-1.5 rounded-xl bg-gradient-to-r from-violet-500 to-purple-600 text-white font-bold text-sm shadow-lg shadow-violet-500/25 ring-1 ring-white/20">
-                                v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}
-                              </span>
-                            </div>
-                            <div className="flex items-center gap-1.5 text-xs opacity-60">
-                              <GitBranch className="h-3.5 w-3.5" />
-                              <span className="font-mono tracking-tight">
-                                {(import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev'}
-                              </span>
-                            </div>
-                          </div>
+                      {/* Compact health status strip */}
+                      <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-stone-200/60 dark:border-[#3e3e42]/60 bg-white/80 dark:bg-[#1a1a1d]/80 backdrop-blur px-4 py-2.5">
+                        <div className="flex items-center gap-2 mr-auto">
+                          <Activity className="h-4 w-4 opacity-50" />
+                          <span className="text-xs font-medium opacity-60">Services</span>
                         </div>
-                      </CardContent>
-                    </Card>
+                        {[
+                          { label: "API", probe: apiProbe, icon: Server },
+                          { label: "Admin", probe: adminProbe, icon: ShieldCheck },
+                          { label: "Database", probe: dbProbe, icon: Database },
+                        ].map(({ label, probe, icon: Icon }) => (
+                          <div key={label} className="flex items-center gap-1.5 text-xs">
+                            <StatusDot ok={probe.ok} title={!probe.ok ? probe.errorCode || undefined : undefined} />
+                            <Icon className="h-3 w-3 opacity-50" />
+                            <span className="font-medium">{label}</span>
+                            {probe.latencyMs !== null && (
+                              <span className="tabular-nums opacity-40">{probe.latencyMs}ms</span>
+                            )}
+                            {!probe.ok && <ErrorBadge code={probe.errorCode} />}
+                          </div>
+                        ))}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="Refresh health"
+                          onClick={refreshHealth}
+                          disabled={healthRefreshing}
+                          className="h-6 w-6 rounded-lg ml-1"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${healthRefreshing ? "animate-spin" : ""}`} />
+                        </Button>
+                        <div className="hidden sm:flex items-center gap-1.5 text-xs border-l border-stone-200 dark:border-[#3e3e42] pl-3 ml-1">
+                          <span className="font-mono text-[10px] opacity-40">v{(import.meta.env as Record<string, string>).VITE_APP_VERSION ?? '1.0.0'}</span>
+                          <span className="opacity-20">·</span>
+                          <GitBranch className="h-3 w-3 opacity-30" />
+                          <span className="font-mono text-[10px] opacity-40">{((import.meta.env as Record<string, string>).VITE_COMMIT_SHA ?? 'dev').slice(0, 7)}</span>
+                        </div>
+                      </div>
 
-                    {/* Quick Stats Cards */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {/* Quick Stats Cards */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                         {/* Currently Online Card */}
-                        <div className="group relative rounded-2xl border border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50 via-teal-50 to-cyan-50 dark:from-emerald-950/40 dark:via-teal-950/30 dark:to-cyan-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-emerald-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-emerald-200/40 to-teal-200/40 dark:from-emerald-800/20 dark:to-teal-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-lg shadow-emerald-500/30">
-                                  <Wifi className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-emerald-900 dark:text-emerald-100">
-                                    Currently Online
-                                  </div>
-                                  <div className="text-xs text-emerald-600/70 dark:text-emerald-400/70">
-                                    {onlineUpdatedAt
-                                      ? `${formatTimeAgo(onlineUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
+                        <div className="group relative rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-emerald-500/8 transition-all duration-200 overflow-hidden">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm shadow-emerald-500/20">
+                                <Wifi className="h-4.5 w-4.5 text-white" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-emerald-900 dark:text-emerald-100">Currently Online</div>
+                                <div className="text-[10px] text-emerald-600/60 dark:text-emerald-400/60">
+                                  {onlineUpdatedAt ? formatTimeAgo(onlineUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh currently online"
-                                onClick={() => {
-                                  loadOnlineUsers({ initial: false });
-                                  loadOnlineIpsList({ initial: false });
-                                }}
-                                disabled={
-                                  onlineLoading ||
-                                  onlineRefreshing ||
-                                  ipsLoading ||
-                                  ipsRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-emerald-900/30 hover:bg-white dark:hover:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
-                                {onlineLoading ? (
-                                  <span className="inline-block w-12 h-10 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
-                                ) : (
-                                  onlineUsers
-                                )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Refresh currently online"
+                              onClick={() => { loadOnlineUsers({ initial: false }); loadOnlineIpsList({ initial: false }); }}
+                              disabled={onlineLoading || onlineRefreshing || ipsLoading || ipsRefreshing}
+                              className="h-7 w-7 rounded-lg text-emerald-600 dark:text-emerald-400"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${onlineLoading || onlineRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-2">
+                            <div className="text-3xl font-bold tabular-nums text-emerald-700 dark:text-emerald-300">
+                              {onlineLoading ? (
+                                <span className="inline-block w-10 h-8 bg-emerald-200/50 dark:bg-emerald-800/30 rounded-lg animate-pulse" />
+                              ) : (
+                                onlineUsers
+                              )}
                               </div>
                               {!onlineLoading && onlineUsers > 0 && (
                                 <div className="flex items-center gap-1">
-                                  <span className="relative flex h-2.5 w-2.5">
+                                  <span className="relative flex h-2 w-2">
                                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
                                   </span>
-                                  <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">live</span>
+                                  <span className="text-[10px] font-medium text-emerald-600 dark:text-emerald-400">live</span>
                                 </div>
                               )}
                             </div>
-                            {/* Collapsible Connected IPs */}
-                            <div className="mt-4 pt-3 border-t border-emerald-200/50 dark:border-emerald-800/30">
+                            {/* Connected IPs toggle */}
+                            <div className="mt-3 pt-2 border-t border-emerald-200/40 dark:border-emerald-800/30">
                               <button
                                 type="button"
-                                className="flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
+                                className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
                                 onClick={() => setIpsOpen((o) => !o)}
                                 aria-expanded={ipsOpen}
                                 aria-controls="connected-ips"
                               >
-                                <ChevronDown
-                                  className={`h-4 w-4 transition-transform ${ipsOpen ? "rotate-180" : ""}`}
-                                />
-                                Connected IPs
-                                {ips.length > 0 && (
-                                  <span className="text-xs bg-emerald-200 dark:bg-emerald-800/50 px-2 py-0.5 rounded-full">
-                                    {ips.length}
-                                  </span>
-                                )}
+                                <ChevronDown className={`h-3 w-3 transition-transform ${ipsOpen ? "rotate-180" : ""}`} />
+                                IPs {ips.length > 0 && <span className="text-[10px] bg-emerald-200 dark:bg-emerald-800/50 px-1.5 py-0.5 rounded-full">{ips.length}</span>}
                               </button>
                               {ipsOpen && (
-                                <div className="mt-3" id="connected-ips">
-                                  <div className="rounded-xl bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/50 dark:border-emerald-800/30 p-3 max-h-48 overflow-auto">
+                                <div className="mt-2" id="connected-ips">
+                                  <div className="rounded-lg bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/40 dark:border-emerald-800/30 p-2 max-h-32 overflow-auto">
                                     {ipsLoading ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        Loading...
-                                      </div>
+                                      <div className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">Loading...</div>
                                     ) : ips.length === 0 ? (
-                                      <div className="text-sm text-emerald-600/70 dark:text-emerald-400/70">
-                                        No IPs connected.
-                                      </div>
+                                      <div className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">No IPs connected.</div>
                                     ) : (
-                                      <div className="flex flex-wrap gap-2">
+                                      <div className="flex flex-wrap gap-1">
                                         {ips.map((ip) => (
                                           <Badge
                                             key={ip}
                                             role="button"
                                             tabIndex={0}
                                             onClick={() => jumpToIpLookup(ip)}
-                                            onKeyDown={(e) => {
-                                              if (e.key === "Enter" || e.key === " ") {
-                                                e.preventDefault();
-                                                jumpToIpLookup(ip);
-                                              }
-                                            }}
+                                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToIpLookup(ip); } }}
                                             title={`Lookup members for ${ip}`}
                                             aria-label={`Lookup members for ${ip}`}
-                                            className="rounded-full px-2.5 py-1 text-xs font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
+                                            className="rounded-full px-2 py-0.5 text-[10px] font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
                                           >
                                             {ip}
                                           </Badge>
@@ -7526,257 +7373,144 @@ export const AdminPage: React.FC = () => {
                               )}
                             </div>
                           </div>
-                        </div>
 
                         {/* Registered Accounts Card */}
-                        <div className="group relative rounded-2xl border border-violet-200 dark:border-violet-800/50 bg-gradient-to-br from-violet-50 via-purple-50 to-fuchsia-50 dark:from-violet-950/40 dark:via-purple-950/30 dark:to-fuchsia-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-violet-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-violet-200/40 to-purple-200/40 dark:from-violet-800/20 dark:to-purple-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-lg shadow-violet-500/30">
-                                  <Users className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-violet-900 dark:text-violet-100">
-                                    Registered Accounts
-                                  </div>
-                                  <div className="text-xs text-violet-600/70 dark:text-violet-400/70">
-                                    {registeredUpdatedAt
-                                      ? `${formatTimeAgo(registeredUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
+                        <div className="group relative rounded-2xl border border-violet-200/70 dark:border-violet-800/40 bg-gradient-to-br from-violet-50/80 to-purple-50/50 dark:from-violet-950/30 dark:to-purple-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-violet-500/8 transition-all duration-200 overflow-hidden">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm shadow-violet-500/20">
+                                <Users className="h-4.5 w-4.5 text-white" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-violet-900 dark:text-violet-100">Registered</div>
+                                <div className="text-[10px] text-violet-600/60 dark:text-violet-400/60">
+                                  {registeredUpdatedAt ? formatTimeAgo(registeredUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh registered accounts"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={
-                                  registeredLoading || registeredRefreshing
-                                }
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-violet-900/30 hover:bg-white dark:hover:bg-violet-900/50 text-violet-700 dark:text-violet-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
                             </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
-                                {registeredLoading ? (
-                                  <span className="inline-block w-16 h-10 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
-                                ) : registeredUpdatedAt !== null ? (
-                                  registeredCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-violet-500 dark:text-violet-400">
-                                users
-                              </span>
+                            <Button variant="ghost" size="icon" aria-label="Refresh registered accounts" onClick={() => loadRegisteredCount({ initial: false })} disabled={registeredLoading || registeredRefreshing} className="h-7 w-7 rounded-lg text-violet-600 dark:text-violet-400">
+                              <RefreshCw className={`h-3.5 w-3.5 ${registeredLoading || registeredRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="text-3xl font-bold tabular-nums text-violet-700 dark:text-violet-300">
+                              {registeredLoading ? (
+                                <span className="inline-block w-12 h-8 bg-violet-200/50 dark:bg-violet-800/30 rounded-lg animate-pulse" />
+                              ) : registeredUpdatedAt !== null ? (registeredCount ?? "-") : "-"}
                             </div>
-                            {/* Progress indicator */}
-                            <div className="mt-4 pt-3 border-t border-violet-200/50 dark:border-violet-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-violet-600/70 dark:text-violet-400/70">Total registered members</span>
-                                <span className="font-medium text-violet-700 dark:text-violet-300">
-                                  {registeredCount !== null && registeredCount > 0 ? "Active" : "—"}
-                                </span>
-                              </div>
-                            </div>
+                            <span className="text-xs font-medium text-violet-500 dark:text-violet-400">users</span>
                           </div>
                         </div>
 
                         {/* Total Plants Card */}
-                        <div className="group relative rounded-2xl border border-amber-200 dark:border-amber-800/50 bg-gradient-to-br from-amber-50 via-orange-50 to-yellow-50 dark:from-amber-950/40 dark:via-orange-950/30 dark:to-yellow-950/20 p-5 shadow-sm hover:shadow-lg hover:shadow-amber-500/10 transition-all duration-300 overflow-hidden">
-                          {/* Decorative background element */}
-                          <div className="absolute -right-6 -top-6 w-24 h-24 rounded-full bg-gradient-to-br from-amber-200/40 to-orange-200/40 dark:from-amber-800/20 dark:to-orange-800/20 blur-2xl" />
-                          <div className="relative">
-                            <div className="flex items-start justify-between gap-3 mb-4">
-                              <div className="flex items-center gap-3">
-                                <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/30">
-                                  <Leaf className="h-6 w-6 text-white" />
-                                </div>
-                                <div>
-                                  <div className="text-sm font-semibold text-amber-900 dark:text-amber-100">
-                                    Total Plants
-                                  </div>
-                                  <div className="text-xs text-amber-600/70 dark:text-amber-400/70">
-                                    {plantsUpdatedAt
-                                      ? `${formatTimeAgo(plantsUpdatedAt)}`
-                                      : "Updating..."}
-                                  </div>
-                                </div>
+                        <div className="group relative rounded-2xl border border-amber-200/70 dark:border-amber-800/40 bg-gradient-to-br from-amber-50/80 to-orange-50/50 dark:from-amber-950/30 dark:to-orange-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-amber-500/8 transition-all duration-200 overflow-hidden">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-500 to-orange-500 flex items-center justify-center shadow-sm shadow-amber-500/20">
+                                <Leaf className="h-4.5 w-4.5 text-white" />
                               </div>
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Refresh total plants"
-                                onClick={() =>
-                                  loadRegisteredCount({ initial: false })
-                                }
-                                disabled={plantsLoading || plantsRefreshing}
-                                className="h-8 w-8 rounded-xl bg-white/60 dark:bg-amber-900/30 hover:bg-white dark:hover:bg-amber-900/50 text-amber-700 dark:text-amber-300"
-                              >
-                                <RefreshCw
-                                  className={`h-4 w-4 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`}
-                                />
-                              </Button>
-                            </div>
-                            <div className="flex items-baseline gap-2">
-                              <div className="text-4xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
-                                {plantsLoading ? (
-                                  <span className="inline-block w-14 h-10 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
-                                ) : plantsUpdatedAt !== null ? (
-                                  plantsCount ?? "-"
-                                ) : (
-                                  "-"
-                                )}
-                              </div>
-                              <span className="text-sm font-medium text-amber-500 dark:text-amber-400">
-                                plants
-                              </span>
-                            </div>
-                            {/* Database indicator */}
-                            <div className="mt-4 pt-3 border-t border-amber-200/50 dark:border-amber-800/30">
-                              <div className="flex items-center justify-between text-xs">
-                                <span className="text-amber-600/70 dark:text-amber-400/70">In database</span>
-                                <div className="flex items-center gap-1.5">
-                                  <Database className="h-3 w-3 text-amber-500 dark:text-amber-400" />
-                                  <span className="font-medium text-amber-700 dark:text-amber-300">Synced</span>
+                              <div>
+                                <div className="text-xs font-semibold text-amber-900 dark:text-amber-100">Plants</div>
+                                <div className="text-[10px] text-amber-600/60 dark:text-amber-400/60">
+                                  {plantsUpdatedAt ? formatTimeAgo(plantsUpdatedAt) : "Updating..."}
                                 </div>
                               </div>
                             </div>
+                            <Button variant="ghost" size="icon" aria-label="Refresh total plants" onClick={() => loadRegisteredCount({ initial: false })} disabled={plantsLoading || plantsRefreshing} className="h-7 w-7 rounded-lg text-amber-600 dark:text-amber-400">
+                              <RefreshCw className={`h-3.5 w-3.5 ${plantsLoading || plantsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="text-3xl font-bold tabular-nums text-amber-700 dark:text-amber-300">
+                              {plantsLoading ? (
+                                <span className="inline-block w-10 h-8 bg-amber-200/50 dark:bg-amber-800/30 rounded-lg animate-pulse" />
+                              ) : plantsUpdatedAt !== null ? (plantsCount ?? "-") : "-"}
+                            </div>
+                            <span className="text-xs font-medium text-amber-500 dark:text-amber-400">plants</span>
                           </div>
                         </div>
                       </div>
 
-                    {/* System Health Stats */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between mb-4">
-                          <div className="flex items-center gap-3">
-                            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-cyan-100 to-blue-100 dark:from-cyan-900/40 dark:to-blue-900/40 flex items-center justify-center">
-                              <Server className="h-5 w-5 text-cyan-600 dark:text-cyan-400" />
+                      {/* ═══ SYSTEM & SERVER ═══ */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <Server className="h-3.5 w-3.5 opacity-40" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">System & Server</span>
+                      </div>
+
+                      {/* System health + Server controls in a 2-column layout */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {/* System Health - Compact */}
+                        <Card className={glassCardClass}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center justify-between mb-3">
+                              <div className="flex items-center gap-2">
+                                <Server className="h-4 w-4 text-cyan-600 dark:text-cyan-400" />
+                                <span className="text-sm font-semibold">System Health</span>
+                                <span className="text-[10px] opacity-40">{systemHealth.platform || ""}</span>
+                              </div>
+                              <Button variant="ghost" size="icon" aria-label="Refresh system health" onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }} disabled={systemHealthLoading} className="h-7 w-7 rounded-lg">
+                                <RefreshCw className={`h-3.5 w-3.5 ${systemHealthLoading ? "animate-spin" : ""}`} />
+                              </Button>
                             </div>
+
+                            {systemHealthError && !systemHealth.uptime && (
+                              <div className="text-[10px] text-amber-600 dark:text-amber-400 mb-2 p-1.5 rounded-lg bg-amber-50 dark:bg-amber-900/20">
+                                {systemHealthError}
+                              </div>
+                            )}
+
+                            {/* Uptime & Connections - inline */}
+                            <div className="flex items-center gap-3 mb-3 text-xs">
+                              <div className="flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-emerald-500" />
+                                <span className="font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{formatUptime(systemHealth.uptime)}</span>
+                              </div>
+                              <span className="opacity-20">|</span>
+                              <div className="flex items-center gap-1.5">
+                                <Users className="h-3 w-3 text-violet-500" />
+                                <span className="font-bold tabular-nums text-violet-600 dark:text-violet-400">{systemHealth.connections !== null ? systemHealth.connections : "-"}</span>
+                                <span className="opacity-50">conn</span>
+                              </div>
+                            </div>
+
+                            {/* CPU */}
+                            <div className="mb-2.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-medium">CPU</span>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
+                                  {systemHealth.cpu?.cores && <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores}c)</span>}
+                                </span>
+                              </div>
+                              <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
+                              {systemHealth.loadAvg && (
+                                <div className="text-[9px] text-stone-400 mt-0.5">Load: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}</div>
+                              )}
+                            </div>
+
+                            {/* Memory */}
+                            <div className="mb-2.5">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className="text-[11px] font-medium">Memory</span>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.memory ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}` : "-"}
+                                </span>
+                              </div>
+                              <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
+                            </div>
+
+                            {/* Disk */}
                             <div>
-                              <div className="text-sm font-semibold">System Health</div>
-                              <div className="text-xs text-stone-500 dark:text-stone-400">
-                                {systemHealth.platform || "Server"} • {systemHealth.nodeVersion || "Node.js"}
+                              <div className="flex items-center justify-between mb-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[11px] font-medium">Disk</span>
+                                  {systemHealth.disk?.path && <span className="text-[9px] text-stone-400 font-mono">{systemHealth.disk.path}</span>}
+                                </div>
+                                <span className="text-[11px] font-semibold tabular-nums">
+                                  {systemHealth.disk ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}` : "-"}
+                                </span>
                               </div>
-                            </div>
-                          </div>
-                          <Button
-                            variant="outline"
-                            size="icon"
-                            aria-label="Refresh system health"
-                            onClick={() => { setSystemHealthLoading(true); loadSystemHealth(); }}
-                            disabled={systemHealthLoading}
-                            className="h-8 w-8 rounded-xl"
-                          >
-                            <RefreshCw className={`h-4 w-4 ${systemHealthLoading ? "animate-spin" : ""}`} />
-                          </Button>
-                        </div>
-
-                        {systemHealthError && !systemHealth.uptime && (
-                          <div className="text-xs text-amber-600 dark:text-amber-400 mb-3 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20">
-                            ⚠️ {systemHealthError}
-                          </div>
-                        )}
-
-                        {/* Uptime & Connections Row - Compact */}
-                        <div className="flex items-center gap-4 mb-4 py-2 px-3 rounded-xl bg-stone-50/80 dark:bg-stone-900/30 border border-stone-200/60 dark:border-stone-700/40">
-                          <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-sm">
-                              <Clock className="h-4 w-4 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Uptime</span>
-                              <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
-                                {formatUptime(systemHealth.uptime)}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="w-px h-8 bg-stone-200 dark:bg-stone-700" />
-                          <div className="flex items-center gap-2.5 flex-1">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-purple-500 flex items-center justify-center shadow-sm">
-                              <Users className="h-4 w-4 text-white" />
-                            </div>
-                            <div className="flex flex-col">
-                              <span className="text-[10px] uppercase tracking-wide font-medium text-stone-400 dark:text-stone-500">Connections</span>
-                              <span className="text-sm font-bold text-violet-600 dark:text-violet-400 tabular-nums">
-                                {systemHealth.connections !== null ? systemHealth.connections : "-"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* CPU Usage */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
-                                <Sparkles className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-                              </div>
-                              <span className="text-xs font-medium">CPU</span>
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.cpu ? `${systemHealth.cpu.percent.toFixed(1)}%` : "-"}
-                              {systemHealth.cpu?.cores && (
-                                <span className="text-stone-400 font-normal ml-1">({systemHealth.cpu.cores} cores)</span>
-                              )}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.cpu?.percent ?? 0} />
-                          {systemHealth.loadAvg && (
-                            <div className="text-[10px] text-stone-400 mt-1">
-                              Load avg: {systemHealth.loadAvg.map(l => l.toFixed(2)).join(" / ")}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Memory Usage */}
-                        <div className="mb-3">
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-violet-100 dark:bg-violet-900/40 flex items-center justify-center">
-                                <Database className="h-3 w-3 text-violet-600 dark:text-violet-400" />
-                              </div>
-                              <span className="text-xs font-medium">Memory</span>
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.memory
-                                ? `${formatBytes(systemHealth.memory.used)} / ${formatBytes(systemHealth.memory.total)}`
-                                : "-"}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.memory?.percent ?? 0} />
-                        </div>
-
-                        {/* Disk Usage */}
-                        <div>
-                          <div className="flex items-center justify-between mb-1.5">
-                            <div className="flex items-center gap-2">
-                              <div className="w-5 h-5 rounded-md bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center">
-                                <Server className="h-3 w-3 text-amber-600 dark:text-amber-400" />
-                              </div>
-                              <span className="text-xs font-medium">Disk</span>
-                              {systemHealth.disk?.path && (
-                                <span className="text-[10px] text-stone-400 font-mono">{systemHealth.disk.path}</span>
-                              )}
-                            </div>
-                            <span className="text-xs font-semibold tabular-nums">
-                              {systemHealth.disk
-                                ? `${formatBytes(systemHealth.disk.used)} / ${formatBytes(systemHealth.disk.total)}`
-                                : "-"}
-                            </span>
-                          </div>
-                          <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
+                              <HealthProgressBar percent={systemHealth.disk?.percent ?? 0} />
                         </div>
 
                         {/* Collapsible: Server Controls */}
@@ -7897,18 +7631,17 @@ export const AdminPage: React.FC = () => {
                               </div>
                             </form>
                           )}
-                        </div>
-                      </CardContent>
-                    </Card>
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                    {/* Actions */}
-                    <Card className={glassCardClass}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="text-sm font-medium truncate">
-                            Actions
-                          </div>
-                        </div>
+                        {/* Server Controls + Actions - Right column */}
+                        <Card className={glassCardClass}>
+                          <CardContent className="p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Zap className="h-4 w-4 text-amber-500" />
+                              <span className="text-sm font-semibold">Actions & Controls</span>
+                            </div>
 
                         {/* Collapsible: Broadcast message creation */}
                         <div className="mt-2">
@@ -8193,8 +7926,16 @@ export const AdminPage: React.FC = () => {
                             </div>
                           )}
                         </div>
-                      </CardContent>
-                    </Card>
+                          </CardContent>
+                        </Card>
+                      </div>
+
+                      {/* ═══ TRAFFIC & ANALYTICS ═══ */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <TrendingUp className="h-3.5 w-3.5 opacity-40" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Traffic & Analytics</span>
+                      </div>
+
                       <Card className={glassCardClass}>
                         <CardContent className="p-4">
                           <div className="flex items-center justify-between gap-2 mb-2">
@@ -9424,8 +9165,10 @@ export const AdminPage: React.FC = () => {
                       </Card>
                     )}
 
-                      <div className="text-xs font-medium uppercase tracking-wide opacity-60 mt-6 mb-2">
-                        Quick Links
+                      {/* ═══ QUICK LINKS ═══ */}
+                      <div className="flex items-center gap-2 mt-2">
+                        <ExternalLink className="h-3.5 w-3.5 opacity-40" />
+                        <span className="text-[10px] font-semibold uppercase tracking-widest opacity-40">Quick Links</span>
                       </div>
                       <div className="flex flex-wrap gap-2">
                         <Button
@@ -14410,8 +14153,7 @@ export const AdminPage: React.FC = () => {
                   </div>
                 )}
 
-                </CardContent>
-              </Card>
+                </div>
             </section>
           </div>
         </main>
