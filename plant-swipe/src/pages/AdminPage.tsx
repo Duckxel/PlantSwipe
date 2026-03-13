@@ -1917,11 +1917,12 @@ export const AdminPage: React.FC = () => {
     "#fb7185",
     "#f97316",
   ];
-  // Connected IPs (last 60 minutes)
-  const [ips, setIps] = React.useState<string[]>([]);
+  // Connected IPs (last 60 minutes) — enriched with visits, RPM, country, account linkage
+  type EnrichedIp = { ip: string; visits: number; country: string | null; hasAccount: boolean; rpm: number };
+  const [enrichedIps, setEnrichedIps] = React.useState<EnrichedIp[]>([]);
   const [ipsLoading, setIpsLoading] = React.useState<boolean>(true);
   const [ipsRefreshing, setIpsRefreshing] = React.useState<boolean>(false);
-  const [ipsOpen, setIpsOpen] = React.useState<boolean>(false);
+  const [ipsUpdatedAt, setIpsUpdatedAt] = React.useState<number | null>(null);
 
   // --- Google Analytics Data API state ---
   const [gaConfigured, setGaConfigured] = React.useState<boolean | null>(null);
@@ -4970,14 +4971,9 @@ export const AdminPage: React.FC = () => {
 
 
   // Loader for list of connected IPs (unique IPs past N minutes; default 60)
-  const loadOnlineIpsList = React.useCallback(
-    async (opts?: { initial?: boolean; minutes?: number }) => {
+  const loadEnrichedIps = React.useCallback(
+    async (opts?: { initial?: boolean }) => {
       const isInitial = !!opts?.initial;
-      const minutes =
-        Number.isFinite(opts?.minutes as number) &&
-        (opts?.minutes as number)! > 0
-          ? Math.floor(opts!.minutes as number)
-          : 60;
       if (isInitial) setIpsLoading(true);
       else setIpsRefreshing(true);
       try {
@@ -4991,21 +4987,25 @@ export const AdminPage: React.FC = () => {
           if (adminToken) headers["X-Admin-Token"] = String(adminToken);
         } catch {}
         const resp = await fetchWithRetry(
-          `/api/admin/online-ips?minutes=${encodeURIComponent(String(minutes))}`,
+          "/api/admin/online-ips-enriched",
           { headers, credentials: "same-origin" },
         ).catch(() => null);
         if (resp && resp.ok) {
           const data = await safeJson(resp);
-          const list: string[] = Array.isArray(data?.ips)
-            ? data.ips.map((s: unknown) => String(s)).filter(Boolean)
+          const list: EnrichedIp[] = Array.isArray(data?.ips)
+            ? data.ips.map((r: Record<string, unknown>) => ({
+                ip: String(r.ip || ""),
+                visits: Number(r.visits || 0),
+                country: r.country ? String(r.country) : null,
+                hasAccount: !!r.hasAccount,
+                rpm: Number(r.rpm || 0),
+              })).filter((r: EnrichedIp) => !!r.ip)
             : [];
-          setIps(list);
-          return;
+          setEnrichedIps(list);
+          setIpsUpdatedAt(Date.now());
         }
-        // Don't clear IPs on error - keep last known value
       } catch (e) {
-        console.error("[AdminPage] Failed to load IPs:", e);
-        // keep last known value
+        console.error("[AdminPage] Failed to load enriched IPs:", e);
       } finally {
         if (isInitial) setIpsLoading(false);
         else setIpsRefreshing(false);
@@ -5014,19 +5014,15 @@ export const AdminPage: React.FC = () => {
     [safeJson, fetchWithRetry],
   );
 
-  // Initial load and auto-refresh every 60s - staggered
+  // Initial load and auto-refresh every 60s
   React.useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      loadOnlineIpsList({ initial: true });
-    }, 300);
-    return () => clearTimeout(timeoutId);
-  }, [loadOnlineIpsList]);
+    const t = setTimeout(() => loadEnrichedIps({ initial: true }), 300);
+    return () => clearTimeout(t);
+  }, [loadEnrichedIps]);
   React.useEffect(() => {
-    const id = setInterval(() => {
-      loadOnlineIpsList({ initial: false });
-    }, 60_000);
+    const id = setInterval(() => loadEnrichedIps({ initial: false }), 60_000);
     return () => clearInterval(id);
-  }, [loadOnlineIpsList]);
+  }, [loadEnrichedIps]);
 
 
   // --- Google Analytics Data API loaders ---
@@ -6959,7 +6955,7 @@ export const AdminPage: React.FC = () => {
                               variant="ghost"
                               size="icon"
                               aria-label="Refresh currently online"
-                              onClick={() => { loadGaRealtime(); loadOnlineIpsList({ initial: false }); }}
+                              onClick={() => { loadGaRealtime(); loadEnrichedIps({ initial: false }); }}
                               disabled={ipsLoading || ipsRefreshing}
                               className="h-7 w-7 rounded-lg text-emerald-600 dark:text-emerald-400"
                             >
@@ -7003,47 +6999,6 @@ export const AdminPage: React.FC = () => {
                                 ))}
                               </div>
                             )}
-                            {/* Connected IPs toggle */}
-                            <div className="mt-3 pt-2 border-t border-emerald-200/40 dark:border-emerald-800/30">
-                              <button
-                                type="button"
-                                className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 dark:text-emerald-300 hover:text-emerald-900 dark:hover:text-emerald-100 transition-colors"
-                                onClick={() => setIpsOpen((o) => !o)}
-                                aria-expanded={ipsOpen}
-                                aria-controls="connected-ips"
-                              >
-                                <ChevronDown className={`h-3 w-3 transition-transform ${ipsOpen ? "rotate-180" : ""}`} />
-                                IPs {ips.length > 0 && <span className="text-[10px] bg-emerald-200 dark:bg-emerald-800/50 px-1.5 py-0.5 rounded-full">{ips.length}</span>}
-                              </button>
-                              {ipsOpen && (
-                                <div className="mt-2" id="connected-ips">
-                                  <div className="rounded-lg bg-white/70 dark:bg-emerald-950/50 border border-emerald-200/40 dark:border-emerald-800/30 p-2 max-h-32 overflow-auto">
-                                    {ipsLoading ? (
-                                      <div className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">Loading...</div>
-                                    ) : ips.length === 0 ? (
-                                      <div className="text-[10px] text-emerald-600/70 dark:text-emerald-400/70">No IPs connected.</div>
-                                    ) : (
-                                      <div className="flex flex-wrap gap-1">
-                                        {ips.map((ip) => (
-                                          <Badge
-                                            key={ip}
-                                            role="button"
-                                            tabIndex={0}
-                                            onClick={() => jumpToIpLookup(ip)}
-                                            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); jumpToIpLookup(ip); } }}
-                                            title={`Lookup members for ${ip}`}
-                                            aria-label={`Lookup members for ${ip}`}
-                                            className="rounded-full px-2 py-0.5 text-[10px] font-mono cursor-pointer bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-800/50 border-0 transition-colors"
-                                          >
-                                            {ip}
-                                          </Badge>
-                                        ))}
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-                              )}
-                            </div>
                           </div>
 
                         {/* Registered Accounts Card */}
@@ -8191,6 +8146,97 @@ export const AdminPage: React.FC = () => {
                         </CardContent>
                       </Card>
                     )}
+
+                    {/* ─── Connected IPs Table ─── */}
+                    <Card className={glassCardClass}>
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <Wifi className="h-4 w-4 opacity-50" />
+                            <span className="text-sm font-semibold">Connected IPs</span>
+                            {enrichedIps.length > 0 && (
+                              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 tabular-nums">{enrichedIps.length}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {ipsUpdatedAt && (
+                              <span className="text-[10px] opacity-40">{formatTimeAgo(ipsUpdatedAt)}</span>
+                            )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Refresh IPs"
+                              onClick={() => loadEnrichedIps({ initial: false })}
+                              disabled={ipsLoading || ipsRefreshing}
+                              className="h-7 w-7 rounded-lg"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${ipsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                        </div>
+                        {ipsLoading ? (
+                          <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Loading connected IPs...</span>
+                          </div>
+                        ) : enrichedIps.length === 0 ? (
+                          <div className="text-sm opacity-50 text-center py-4">No connected IPs in the last 60 minutes.</div>
+                        ) : (
+                          <div className="overflow-x-auto -mx-4">
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="border-b text-left">
+                                  <th className="px-4 py-2 font-medium opacity-50">IP Address</th>
+                                  <th className="px-4 py-2 font-medium opacity-50">Country</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-center">Account</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-right">Visits</th>
+                                  <th className="px-4 py-2 font-medium opacity-50 text-right">RPM (5m)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {enrichedIps.map((row) => (
+                                  <tr
+                                    key={row.ip}
+                                    className="border-b border-stone-100 dark:border-stone-800/50 hover:bg-stone-50 dark:hover:bg-stone-800/30 cursor-pointer transition-colors"
+                                    onClick={() => jumpToIpLookup(row.ip)}
+                                    title={`Lookup members for ${row.ip}`}
+                                  >
+                                    <td className="px-4 py-2 font-mono tabular-nums">{row.ip}</td>
+                                    <td className="px-4 py-2">
+                                      {row.country ? (
+                                        <span className="inline-flex items-center gap-1">
+                                          <Globe className="h-3 w-3 opacity-40" />
+                                          {countryCodeToName(row.country)}
+                                        </span>
+                                      ) : (
+                                        <span className="opacity-30">—</span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-center">
+                                      {row.hasAccount ? (
+                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-emerald-100 dark:bg-emerald-900/50 text-emerald-600 dark:text-emerald-400">
+                                          <Check className="h-3 w-3" />
+                                        </span>
+                                      ) : (
+                                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-stone-100 dark:bg-stone-800 opacity-40">
+                                          <X className="h-3 w-3" />
+                                        </span>
+                                      )}
+                                    </td>
+                                    <td className="px-4 py-2 text-right tabular-nums">{row.visits}</td>
+                                    <td className="px-4 py-2 text-right tabular-nums">
+                                      <span className={row.rpm >= 10 ? "text-amber-600 dark:text-amber-400 font-medium" : row.rpm >= 30 ? "text-rose-600 dark:text-rose-400 font-bold" : ""}>
+                                        {row.rpm}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
 
                       {/* ═══ QUICK LINKS ═══ */}
                       <div className="flex items-center gap-2 mt-2">

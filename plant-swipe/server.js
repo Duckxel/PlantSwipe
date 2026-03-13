@@ -19347,6 +19347,59 @@ app.get('/api/admin/online-ips', async (req, res) => {
   }
 })
 
+// Admin: enriched connected IPs table (visits, RPM, country, account linkage)
+app.get('/api/admin/online-ips-enriched', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  const windowMinutes = 60
+  const rpmWindowMinutes = 5
+  try {
+    if (!sql) {
+      return res.status(503).json({ ok: false, error: 'No DB connection' })
+    }
+    const rows = await sql.unsafe(`
+      with window_visits as (
+        select
+          v.ip_address as ip,
+          v.user_id,
+          v.geo_country,
+          v.occurred_at
+        from ${VISITS_TABLE_SQL_IDENT} v
+        where v.ip_address is not null
+          and v.occurred_at >= now() - interval '${windowMinutes} minutes'
+      ),
+      ip_stats as (
+        select
+          ip,
+          count(*) as total_visits,
+          max(geo_country) as country,
+          bool_or(user_id is not null) as has_account,
+          count(*) filter (where occurred_at >= now() - interval '${rpmWindowMinutes} minutes') as recent_hits
+        from window_visits
+        group by ip
+      )
+      select
+        ip,
+        total_visits::int as visits,
+        country,
+        has_account,
+        round(recent_hits::numeric / ${rpmWindowMinutes}, 1)::float as rpm
+      from ip_stats
+      order by total_visits desc
+    `)
+    const ips = Array.isArray(rows) ? rows.map(r => ({
+      ip: String(r.ip),
+      visits: Number(r.visits || 0),
+      country: r.country || null,
+      hasAccount: !!r.has_account,
+      rpm: Number(r.rpm || 0),
+    })) : []
+    res.json({ ok: true, ips, count: ips.length, updatedAt: Date.now() })
+  } catch (e) {
+    res.status(500).json({ ok: false, error: e?.message || 'DB query failed' })
+  }
+})
+
 // Admin: simple online users count (unique IPs past 60 minutes)
 app.get('/api/admin/online-users', async (req, res) => {
   const uid = await ensureAdmin(req, res)
