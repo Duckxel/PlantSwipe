@@ -41,6 +41,7 @@ const W_EXPERIENCE = 10
 const W_NEW_PLANT = 10
 const W_STATUS_APPROVED = 10
 const W_STATUS_WIP = -20
+const W_STATUS_REWORK = -5
 const W_PARENT_TOXIC = -30
 const W_ALREADY_LIKED = -25
 const W_ALREADY_SEEN = -15
@@ -160,7 +161,8 @@ export function scoreDiscoveryPlants(
 
     // Plant status
     if (plant.status === 'approved') score += W_STATUS_APPROVED
-    if (plant.status === 'in_progress' || plant.status === 'rework') score += W_STATUS_WIP
+    if (plant.status === 'in_progress') score += W_STATUS_WIP
+    if (plant.status === 'rework') score += W_STATUS_REWORK
 
     // --- Personalized factors (only if consented & logged in) ---
     if (canPersonalize) {
