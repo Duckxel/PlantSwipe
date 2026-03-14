@@ -264,6 +264,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
             variant="ghost"
             size="icon"
             aria-label={t('common.close', { defaultValue: 'Close' })}
+            title={t('common.close', { defaultValue: 'Close' })}
             className="rounded-full h-11 w-11 min-w-11"
             onClick={onClose}
           >
@@ -324,6 +325,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                   <button
                     onClick={() => setSelectedIndex(index)}
                     aria-label={t('common.viewImage', { defaultValue: 'View image' })}
+                    title={t('common.viewImage', { defaultValue: 'View image' })}
                     className="relative aspect-square w-full overflow-hidden rounded-md bg-stone-100 dark:bg-[#2a2a2d] focus:outline-none focus:ring-2 focus:ring-blue-500"
                   >
                     <img
@@ -350,6 +352,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                       downloadImage(image, index)
                     }}
                     aria-label={t('common.downloadImage', { defaultValue: 'Download image' })}
+                    title={t('common.downloadImage', { defaultValue: 'Download image' })}
                     className={cn(
                       "absolute bottom-1.5 right-1.5 p-2 rounded-full transition-all",
                       "bg-black/60 text-white",
@@ -395,6 +398,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                   variant="ghost"
                   size="icon"
                   aria-label={t('common.closeFullscreen', { defaultValue: 'Close fullscreen' })}
+                  title={t('common.closeFullscreen', { defaultValue: 'Close fullscreen' })}
                   className="rounded-full h-11 w-11 text-white hover:bg-white/20 active:bg-white/30"
                   onClick={(e) => {
                     e.stopPropagation()
@@ -455,6 +459,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                       shareImage(selectedImage)
                     }}
                     aria-label={t('common.shareImage', { defaultValue: 'Share image' })}
+                    title={t('common.shareImage', { defaultValue: 'Share image' })}
                     className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-white/10 active:bg-white/20 transition-colors"
                   >
                     <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
@@ -472,6 +477,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                   }}
                   disabled={downloadingId === selectedImage.id}
                   aria-label={t('common.downloadImage', { defaultValue: 'Download image' })}
+                  title={t('common.downloadImage', { defaultValue: 'Download image' })}
                   className={cn(
                     "flex flex-col items-center gap-1 p-3 rounded-xl transition-colors",
                     "hover:bg-white/10 active:bg-white/20",
@@ -512,6 +518,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
               aria-label={t('common.previousImage', { defaultValue: 'Previous image' })}
+              title={t('common.previousImage', { defaultValue: 'Previous image' })}
               onClick={(e) => {
                 e.stopPropagation()
                 goToPrevious()
@@ -530,6 +537,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
               aria-label={t('common.nextImage', { defaultValue: 'Next image' })}
+              title={t('common.nextImage', { defaultValue: 'Next image' })}
               onClick={(e) => {
                 e.stopPropagation()
                 goToNext()
