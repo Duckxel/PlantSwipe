@@ -31,6 +31,7 @@ import {
   Upload,
   Trash2,
 } from "lucide-react"
+import { sendAdminEventNotification } from "@/lib/adminEventNotifications"
 
 type LeaderboardEntry = {
   rank: number
@@ -300,6 +301,13 @@ export function BugCatcherPage() {
       if (error) throw error
 
       if (data && data[0]?.success) {
+        // Fire-and-forget admin event notification
+        sendAdminEventNotification('bug_report', {
+          reporter_name: profile?.display_name || 'A user',
+          bug_name: bugName.trim(),
+          description: bugDescription.trim(),
+          report_id: data[0]?.report_id || '',
+        }).catch(() => {})
         setReportSuccess(true)
         // Reset form
         setBugName('')
