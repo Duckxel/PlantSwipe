@@ -31561,7 +31561,7 @@ async function generateCrawlerHtml(req, pagePath) {
                 .eq('created_by', profile.id)
                 .eq('privacy', 'public')
                 .order('created_at', { ascending: false })
-                .limit(6),
+                .limit(50),
               'profile_user_gardens'
             )
             if (gardens?.length) {
@@ -31598,7 +31598,7 @@ async function generateCrawlerHtml(req, pagePath) {
                 .eq('visibility', 'public')
                 .eq('is_like', false)
                 .order('created_at', { ascending: false })
-                .limit(8),
+                .limit(50),
               'profile_user_bookmarks'
             )
             if (bookmarks?.length) {
