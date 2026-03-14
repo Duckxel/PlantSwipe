@@ -31,6 +31,7 @@ import {
   BellRing,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { Tooltip } from '@/components/ui/tooltip'
 
 type NotifyUser = {
   id: string
@@ -364,29 +365,27 @@ export function AdminEventNotificationsPanel() {
                           {edit.adminIds.map((adminId) => {
                             const cached = adminCache.get(adminId)
                             return (
-                              <div
-                                key={adminId}
-                                className="relative group"
-                                title={cached?.displayName || 'User'}
-                              >
-                                <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
-                                  {cached?.avatarUrl ? (
-                                    <img src={cached.avatarUrl} alt={cached.displayName || ''} className="w-full h-full object-cover" />
-                                  ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-stone-400">
-                                      <User className="h-5 w-5" />
-                                    </div>
-                                  )}
+                              <Tooltip key={adminId} content={cached?.displayName || 'User'} side="top">
+                                <div className="relative group">
+                                  <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
+                                    {cached?.avatarUrl ? (
+                                      <img src={cached.avatarUrl} alt={cached.displayName || ''} className="w-full h-full object-cover" />
+                                    ) : (
+                                      <div className="w-full h-full flex items-center justify-center text-stone-400">
+                                        <User className="h-5 w-5" />
+                                      </div>
+                                    )}
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => removeAdmin(config.eventType, adminId)}
+                                    className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                    aria-label={`Remove ${cached?.displayName || 'user'}`}
+                                  >
+                                    <X className="h-3 w-3" />
+                                  </button>
                                 </div>
-                                <button
-                                  type="button"
-                                  onClick={() => removeAdmin(config.eventType, adminId)}
-                                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                                  aria-label={`Remove ${cached?.displayName || 'user'}`}
-                                >
-                                  <X className="h-3 w-3" />
-                                </button>
-                              </div>
+                              </Tooltip>
                             )
                           })}
                           <span className="text-xs font-medium text-stone-500 dark:text-stone-400 ml-1">
