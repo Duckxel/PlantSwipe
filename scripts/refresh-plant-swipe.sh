@@ -765,28 +765,71 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
   fi
 fi
 
+# --- Ensure swap space for low-RAM servers ---
+# On servers with ≤2GB RAM the build can exceed physical memory.
+# Create a 2GB swapfile if none is active and we have root/sudo access.
+SWAP_FILE="/swapfile"
+ensure_swap() {
+  if swapon --show 2>/dev/null | grep -q .; then
+    log "Swap already active, skipping creation."
+    return 0
+  fi
+  if [[ "$EUID" -eq 0 ]]; then
+    log "No swap detected – creating 2G swapfile for build…"
+    fallocate -l 2G "$SWAP_FILE" 2>/dev/null || dd if=/dev/zero of="$SWAP_FILE" bs=1M count=2048 status=progress
+    chmod 600 "$SWAP_FILE"
+    mkswap "$SWAP_FILE"
+    swapon "$SWAP_FILE"
+    log "Swap enabled: $(swapon --show)"
+  elif [[ -n "$SUDO" ]] && $SUDO -n true >/dev/null 2>&1; then
+    log "No swap detected – creating 2G swapfile for build (via sudo)…"
+    $SUDO fallocate -l 2G "$SWAP_FILE" 2>/dev/null || $SUDO dd if=/dev/zero of="$SWAP_FILE" bs=1M count=2048 status=progress
+    $SUDO chmod 600 "$SWAP_FILE"
+    $SUDO mkswap "$SWAP_FILE"
+    $SUDO swapon "$SWAP_FILE"
+    log "Swap enabled: $(swapon --show)"
+  else
+    log "[WARN] No swap detected and no root access to create one. Build may OOM on low-RAM servers."
+  fi
+}
+ensure_swap
+
 log "Building application with Bun…"
-# Limit memory to prevent OOM on low-RAM servers (default 1536MB/1.5GB for TypeScript compilation, override with NODE_BUILD_MEMORY)
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+# Memory limit for Node/tsc/Vite heap (default 1024MB, leaving ~1GB for OS on a 2GB server).
+# Override with NODE_BUILD_MEMORY env var for servers with more RAM.
+NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1024}"
 export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
 log "Using NODE_OPTIONS: $NODE_OPTIONS"
-if [[ "$REPO_OWNER" != "" ]]; then
-  OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
-  OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
-  if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
-  elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]]; then
-    if $SUDO -n true >/dev/null 2>&1; then
-      $SUDO -u "$REPO_OWNER" -H bash -lc "export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && CI=${CI:-true} bun run build"
+
+# Helper: run a command as the repo owner (or current user)
+run_as_owner() {
+  local cmd="$1"
+  if [[ "$REPO_OWNER" != "" ]]; then
+    local OWNER_HOME
+    OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
+    local OWNER_BUN_PATH="$OWNER_HOME/.bun/bin"
+    local full_cmd="export PATH='$OWNER_BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && $cmd"
+    if [[ "$EUID" -eq 0 ]]; then
+      sudo -u "$REPO_OWNER" -H bash -lc "$full_cmd"
+    elif [[ "$REPO_OWNER" != "$CURRENT_USER" && -n "$SUDO" ]] && $SUDO -n true >/dev/null 2>&1; then
+      $SUDO -u "$REPO_OWNER" -H bash -lc "$full_cmd"
     else
-      CI=${CI:-true} bun run build
+      (cd "$NODE_DIR" && eval "$cmd")
     fi
   else
-    CI=${CI:-true} bun run build
+    (cd "$NODE_DIR" && eval "$cmd")
   fi
-else
-  CI=${CI:-true} bun run build
-fi
+}
+
+# Run each build step separately so only one heavy process is in memory at a time
+log "Step 1/3: Generating sitemap…"
+run_as_owner "CI=${CI:-true} bun run generate:sitemap"
+
+log "Step 2/3: Type-checking with TypeScript…"
+run_as_owner "CI=${CI:-true} bun run --bun tsc -b"
+
+log "Step 3/3: Bundling with Vite…"
+run_as_owner "CI=${CI:-true} bun run --bun vite build"
 
 # Deploy Supabase Edge Functions (delegates to dedicated script)
 deploy_supabase_functions() {
