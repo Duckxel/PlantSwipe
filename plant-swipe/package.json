@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_OPTIONS='--max-old-space-size=4096' bun run generate:sitemap && NODE_OPTIONS='--max-old-space-size=4096' tsc -b && NODE_OPTIONS='--max-old-space-size=4096' vite build",
-    "build:low-mem": "NODE_OPTIONS='--max-old-space-size=1536' bun run generate:sitemap && NODE_OPTIONS='--max-old-space-size=1536' tsc -b && NODE_OPTIONS='--max-old-space-size=1536' vite build",
+    "build": "tsc -b && vite build",
+    "build:low-mem": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
     "serve": "bun server.js",
