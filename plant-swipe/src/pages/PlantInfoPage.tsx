@@ -1,7 +1,7 @@
 import React from 'react'
 import { useParams } from 'react-router-dom'
 import { PlantDetails } from '@/components/plant/PlantDetails'
-import { DimensionCube } from '@/components/plant/DimensionCube'
+const DimensionCube = React.lazy(() => import('@/components/plant/DimensionCube'))
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { PlantInfoPageSkeleton } from '@/components/garden/GardenSkeletons'
 import { ProAdviceSection } from '@/components/plant/ProAdviceSection'
@@ -1605,7 +1605,9 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                 <div className={`relative rounded-xl md:rounded-2xl border border-emerald-100/70 bg-white/80 dark:border-emerald-500/30 dark:bg-[#0f1f1f]/60 overflow-hidden md:row-span-3 ${
                   cubeExpanded ? 'h-[300px] md:h-auto p-2 sm:p-3' : 'p-1.5 sm:p-2 md:p-3'
                 }`}>
-                  <DimensionCube key={cubeExpanded ? 'exp' : 'col'} heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                  <React.Suspense fallback={<div className="h-full w-full animate-pulse rounded-xl bg-emerald-50/50 dark:bg-emerald-900/20" />}>
+                    <DimensionCube key={cubeExpanded ? 'exp' : 'col'} heightCm={height} wingspanCm={wingspan} className="h-full w-full" />
+                  </React.Suspense>
                   <button
                     type="button"
                     onClick={toggleCubeExpanded}
