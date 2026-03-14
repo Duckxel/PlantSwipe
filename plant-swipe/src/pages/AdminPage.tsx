@@ -9131,6 +9131,7 @@ export const AdminPage: React.FC = () => {
                                   </p>
                                 </div>
                               ) : (
+                              <>
                                 <div className="divide-y divide-stone-100 dark:divide-[#2a2a2d]">
                                   {/* Select All Row */}
                                   <div className="flex items-center gap-3 px-4 sm:px-5 py-2 bg-stone-50/50 dark:bg-[#1a1a1d]">
@@ -9540,6 +9541,7 @@ export const AdminPage: React.FC = () => {
                                     </button>
                                   </div>
                                 )}
+                              </>
                               )}
                             </div>
                           </div>
