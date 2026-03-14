@@ -583,7 +583,11 @@ type AdminPlantsListState = {
   featuredMonth: FeaturedMonthSlug | "none" | "all";
   statuses: NormalizedPlantStatus[];
   scrollPosition: number;
+  pageSize: number;
 };
+
+const DEFAULT_PLANT_PAGE_SIZE = 50;
+const PLANT_PAGE_SIZE_OPTIONS = [25, 50, 100, 200] as const;
 
 // Load persisted state from sessionStorage
 const loadAdminPlantsState = (): Partial<AdminPlantsListState> => {
@@ -620,7 +624,11 @@ const loadAdminPlantsState = (): Partial<AdminPlantsListState> => {
     if (typeof parsed.scrollPosition === "number" && parsed.scrollPosition >= 0) {
       result.scrollPosition = parsed.scrollPosition;
     }
-    
+
+    if (typeof parsed.pageSize === "number" && (PLANT_PAGE_SIZE_OPTIONS as readonly number[]).includes(parsed.pageSize)) {
+      result.pageSize = parsed.pageSize;
+    }
+
     return result;
   } catch {
     return {};
@@ -2160,6 +2168,12 @@ export const AdminPage: React.FC = () => {
   const [plantSortOption, setPlantSortOption] = React.useState<PlantSortOption>(
     savedPlantsState.sortOption ?? "status"
   );
+  const [plantPageSize, setPlantPageSize] = React.useState<number>(
+    savedPlantsState.pageSize ?? DEFAULT_PLANT_PAGE_SIZE
+  );
+  const [plantVisibleCount, setPlantVisibleCount] = React.useState<number>(
+    savedPlantsState.pageSize ?? DEFAULT_PLANT_PAGE_SIZE
+  );
   const [plantToDelete, setPlantToDelete] = React.useState<{ id: string; name: string } | null>(null);
   const [deletePlantDialogOpen, setDeletePlantDialogOpen] = React.useState(false);
   const [deletingPlant, setDeletingPlant] = React.useState(false);
@@ -2208,6 +2222,7 @@ export const AdminPage: React.FC = () => {
           featuredMonth: selectedFeaturedMonth,
           statuses: visiblePlantStatuses,
           scrollPosition: 0,
+          pageSize: plantPageSize,
         });
       }, 100);
     } else {
@@ -2986,6 +3001,7 @@ export const AdminPage: React.FC = () => {
         featuredMonth: selectedFeaturedMonth,
         statuses: visiblePlantStatuses,
         scrollPosition: window.scrollY,
+        pageSize: plantPageSize,
       });
       navigate(`/create/${plantId}`);
     },
@@ -3952,6 +3968,18 @@ export const AdminPage: React.FC = () => {
         }
       });
   }, [plantDashboardRows, visiblePlantStatuses, selectedFeaturedMonth, plantSearchQuery, plantSortOption]);
+
+  // Reset visible count when filters change
+  React.useEffect(() => {
+    setPlantVisibleCount(plantPageSize);
+  }, [visiblePlantStatuses, selectedFeaturedMonth, plantSearchQuery, plantSortOption, plantPageSize]);
+
+  // Slice filtered rows to the visible count for pagination
+  const visiblePlantRows = React.useMemo(
+    () => filteredPlantRows.slice(0, plantVisibleCount),
+    [filteredPlantRows, plantVisibleCount],
+  );
+  const hasMorePlants = plantVisibleCount < filteredPlantRows.length;
 
   const plantViewIsPlants = requestViewMode === "plants";
   const plantViewIsReports = requestViewMode === "reports";
@@ -8824,6 +8852,19 @@ export const AdminPage: React.FC = () => {
                                             <option value="images">Image Count</option>
                                           </select>
                                         </div>
+                                        <div className="w-full md:w-32">
+                                          <select
+                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                            value={plantPageSize}
+                                            onChange={(e) => setPlantPageSize(Number(e.target.value))}
+                                          >
+                                            {PLANT_PAGE_SIZE_OPTIONS.map((size) => (
+                                              <option key={size} value={size}>
+                                                {size} per page
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
                                       </div>
                                     </div>
                                   </div>
@@ -9095,17 +9136,17 @@ export const AdminPage: React.FC = () => {
                                   <div className="flex items-center gap-3 px-4 sm:px-5 py-2 bg-stone-50/50 dark:bg-[#1a1a1d]">
                                     <button
                                       type="button"
-                                      onClick={() => toggleSelectAllPlants(filteredPlantRows.map((p) => p.id))}
+                                      onClick={() => toggleSelectAllPlants(visiblePlantRows.map((p) => p.id))}
                                       className={`flex items-center justify-center w-5 h-5 rounded border-2 transition-colors flex-shrink-0 ${
-                                        filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id))
+                                        visiblePlantRows.length > 0 && visiblePlantRows.every((p) => selectedPlantIds.has(p.id))
                                           ? 'border-emerald-500 bg-emerald-500'
                                           : selectedPlantIds.size > 0
                                             ? 'border-emerald-500 bg-emerald-500/30'
                                             : 'border-stone-300 dark:border-stone-600 hover:border-emerald-400'
                                       }`}
-                                      title={filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? "Deselect all" : "Select all"}
+                                      title={visiblePlantRows.every((p) => selectedPlantIds.has(p.id)) ? "Deselect all" : "Select all"}
                                     >
-                                      {filteredPlantRows.length > 0 && filteredPlantRows.every((p) => selectedPlantIds.has(p.id)) ? (
+                                      {visiblePlantRows.length > 0 && visiblePlantRows.every((p) => selectedPlantIds.has(p.id)) ? (
                                         <Check className="h-3.5 w-3.5 text-white" />
                                       ) : selectedPlantIds.size > 0 ? (
                                         <span className="block w-2 h-0.5 bg-emerald-500 rounded" />
@@ -9114,10 +9155,12 @@ export const AdminPage: React.FC = () => {
                                     <span className="text-xs text-stone-500 dark:text-stone-400">
                                       {selectedPlantIds.size > 0
                                         ? `${selectedPlantIds.size} of ${filteredPlantRows.length} selected`
-                                        : `${filteredPlantRows.length} ${filteredPlantRows.length === 1 ? "plant" : "plants"}`}
+                                        : hasMorePlants
+                                          ? `Showing ${visiblePlantRows.length} of ${filteredPlantRows.length} ${filteredPlantRows.length === 1 ? "plant" : "plants"}`
+                                          : `${filteredPlantRows.length} ${filteredPlantRows.length === 1 ? "plant" : "plants"}`}
                                     </span>
                                   </div>
-                                  {filteredPlantRows.map((plant) => (
+                                  {visiblePlantRows.map((plant) => (
                                     <div
                                       key={plant.id}
                                       role="button"
@@ -9483,6 +9526,20 @@ export const AdminPage: React.FC = () => {
                                     </div>
                                   ))}
                                 </div>
+                                {hasMorePlants && (
+                                  <div className="flex flex-col items-center gap-2 py-4 px-4 border-t border-stone-100 dark:border-[#2a2a2d]">
+                                    <button
+                                      type="button"
+                                      onClick={() => setPlantVisibleCount((prev) => prev + plantPageSize)}
+                                      className="w-full max-w-xs rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1d] px-4 py-2.5 text-sm font-medium text-stone-700 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#252528] hover:border-emerald-300 dark:hover:border-emerald-700 transition-all"
+                                    >
+                                      Load {Math.min(plantPageSize, filteredPlantRows.length - plantVisibleCount)} more
+                                      <span className="ml-1.5 text-xs text-stone-400">
+                                        ({filteredPlantRows.length - plantVisibleCount} remaining)
+                                      </span>
+                                    </button>
+                                  </div>
+                                )}
                               )}
                             </div>
                           </div>
