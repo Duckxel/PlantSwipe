@@ -29,7 +29,7 @@ export const ReportPlantDialog: React.FC<ReportPlantDialogProps> = ({
   plantName,
 }) => {
   const { t } = useTranslation('common')
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [note, setNote] = React.useState('')
   const [imageUrl, setImageUrl] = React.useState<string | null>(null)
   const [imagePreview, setImagePreview] = React.useState<string | null>(null)
@@ -136,7 +136,7 @@ export const ReportPlantDialog: React.FC<ReportPlantDialogProps> = ({
 
       // Fire-and-forget admin event notification
       sendAdminEventNotification('plant_report', {
-        reporter_name: user?.user_metadata?.display_name || 'A user',
+        reporter_name: profile?.display_name || 'A user',
         plant_name: plantName,
         note: note.trim(),
         report_id: data?.id || '',
