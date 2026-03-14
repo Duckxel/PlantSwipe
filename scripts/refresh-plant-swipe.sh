@@ -795,11 +795,21 @@ ensure_swap() {
 ensure_swap
 
 log "Building application with Bun…"
-# Memory limit for Node/tsc/Vite heap (default 1024MB, leaving ~1GB for OS on a 2GB server).
-# Override with NODE_BUILD_MEMORY env var for servers with more RAM.
-NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1024}"
+# Memory limit for Node/tsc/Vite heap.
+# Default: 1536MB (matches setup.sh), auto-scales on servers with >2GB RAM.
+# Override with NODE_BUILD_MEMORY env var.
+if [[ -z "${NODE_BUILD_MEMORY:-}" ]]; then
+  TOTAL_MEM_MB="$(awk '/MemTotal/{printf "%d", $2/1024}' /proc/meminfo 2>/dev/null || echo 0)"
+  if [[ "$TOTAL_MEM_MB" -gt 4096 ]]; then
+    NODE_BUILD_MEMORY=3072
+  elif [[ "$TOTAL_MEM_MB" -gt 2048 ]]; then
+    NODE_BUILD_MEMORY=2048
+  else
+    NODE_BUILD_MEMORY=1536
+  fi
+fi
 export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
-log "Using NODE_OPTIONS: $NODE_OPTIONS"
+log "Using NODE_OPTIONS: $NODE_OPTIONS (server RAM: ${TOTAL_MEM_MB:-unknown}MB)"
 
 # Helper: run a command as the repo owner (or current user)
 run_as_owner() {
