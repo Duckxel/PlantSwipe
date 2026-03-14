@@ -23441,6 +23441,12 @@ app.get('/api/garden/:id/weather', async (req, res) => {
     if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
 
+    const isMember = await isGardenMember(req, gardenId, user.id)
+    if (!isMember) {
+      res.status(403).json({ ok: false, error: 'Access denied: not a member of this garden' })
+      return
+    }
+
     // Get garden location
     const gardenRows = await sql`
       select location_city, location_country, location_lat, location_lon, location_timezone
@@ -23603,7 +23609,15 @@ app.get('/api/garden/:id/weather', async (req, res) => {
   try {
     const gardenId = String(req.params.id || '').trim()
     if (!gardenId) { res.status(400).json({ ok: false, error: 'garden id required' }); return }
+    const user = await getUserFromRequestOrToken(req)
+    if (!user?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
+
+    const isMember = await isGardenMember(req, gardenId, user.id)
+    if (!isMember) {
+      res.status(403).json({ ok: false, error: 'Access denied: not a member of this garden' })
+      return
+    }
 
     // Get garden location
     const gardenResult = await sql`
