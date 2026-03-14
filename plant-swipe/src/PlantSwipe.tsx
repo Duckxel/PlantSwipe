@@ -35,6 +35,7 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
+import { scoreDiscoveryPlants, loadSeenPlantIds, markPlantSeen } from "@/lib/discoveryScoring";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
@@ -253,6 +254,10 @@ export default function PlantSwipe() {
   const [likedIds, setLikedIds] = useState<string[]>([])
   const initialCardBoostRef = React.useRef(true)
 
+  // Discovery scoring state
+  const sessionSeedRef = React.useRef(Math.random())
+  const [seenPlantIds, setSeenPlantIds] = useState<Set<string>>(new Set())
+
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useLanguageNavigate()
@@ -467,6 +472,15 @@ export default function PlantSwipe() {
     getLikesBookmarkPlantIds(user.id).then(({ plantIds }) => {
       setLikedIds(plantIds)
     }).catch(() => {})
+  }, [user?.id])
+
+  // Load seen-plant history from DB for discovery scoring
+  React.useEffect(() => {
+    if (!user?.id) {
+      setSeenPlantIds(new Set())
+      return
+    }
+    loadSeenPlantIds(user.id).then(ids => setSeenPlantIds(ids)).catch(() => {})
   }, [user?.id])
 
   // Read search query and filter params from URL when on search page
@@ -1375,51 +1389,27 @@ export default function PlantSwipe() {
   // Track if we've done initial shuffle
   const hasInitialShuffleRef = React.useRef(false)
   
-  // Create/update shuffled order only when plants change or explicit reshuffle
+  // Create/update scored order only when plants change or explicit reshuffle
+  // Uses the personalized discovery scoring algorithm based on user preferences,
+  // seasonal relevance, plant status, and exploration history.
   React.useEffect(() => {
     if (swipeablePlants.length === 0) {
       setShuffledPlantIds([])
       hasInitialShuffleRef.current = false
       return
     }
-    
-    // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
+
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
-      // Fisher-Yates shuffle for unbiased randomization
-      const shuffleArray = <T,>(arr: T[]): T[] => {
-        const result = arr.slice()
-        for (let i = result.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[result[i], result[j]] = [result[j], result[i]]
-        }
-        return result
-      }
-      
-      // Discovery Algorithm:
-      // 1. Plants with featured_month matching current month appear FIRST (shuffled among themselves)
-      // 2. All other plants follow (shuffled among themselves)
-      // This ensures "Plant of the Month" plants get priority visibility in Discovery
-      const now = new Date()
-      const promoted: string[] = []
-      const regular: string[] = []
-      
-      swipeablePlants.forEach((plant) => {
-        if (isPlantOfTheMonth(plant, now)) {
-          promoted.push(plant.id)
-        } else {
-          regular.push(plant.id)
-        }
+      const sorted = scoreDiscoveryPlants(swipeablePlants, {
+        profile: profile ?? null,
+        likedIds: likedSet,
+        seenIds: seenPlantIds,
+        sessionSeed: sessionSeedRef.current,
       })
-      
-      // Promoted plants first, then regular plants (both groups shuffled internally)
-      const newOrder = promoted.length === 0
-        ? shuffleArray(swipeablePlants.map(p => p.id))
-        : [...shuffleArray(promoted), ...shuffleArray(regular)]
-      
-      setShuffledPlantIds(newOrder)
+      setShuffledPlantIds(sorted.map(p => p.id))
       hasInitialShuffleRef.current = true
     }
-  }, [swipeablePlants, shuffleEpoch])
+  }, [swipeablePlants, shuffleEpoch, seenPlantIds, profile, likedSet])
   
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
@@ -1580,15 +1570,28 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
+    // Track current plant as seen (local state + DB persistence)
+    const currentPlant = swipeList[index % swipeList.length]
+    if (currentPlant) {
+      setSeenPlantIds(prev => {
+        const next = new Set(prev)
+        next.add(currentPlant.id)
+        return next
+      })
+      if (user?.id) {
+        markPlantSeen(user.id, currentPlant.id) // fire-and-forget
+      }
+    }
     setIndex((i) => {
       const next = i + 1
-      // When we complete a full cycle, reshuffle for variety
+      // When we complete a full cycle, reshuffle with a new seed for variety
       if (swipeList.length > 0 && next % swipeList.length === 0) {
+        sessionSeedRef.current = Math.random()
         setShuffleEpoch((e) => e + 1)
       }
       return next
     })
-  }, [swipeList.length])
+  }, [swipeList, index, user?.id])
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
