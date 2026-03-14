@@ -24,7 +24,6 @@ import {
   Loader2,
   RefreshCw,
   Save,
-  Shield,
   Sprout,
   User,
   Users,
@@ -33,7 +32,7 @@ import {
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type AdminUser = {
+type NotifyUser = {
   id: string
   displayName: string | null
   avatarUrl: string | null
@@ -50,8 +49,8 @@ export function AdminEventNotificationsPanel() {
   const [configs, setConfigs] = React.useState<AdminEventNotification[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  // Cache of admin users keyed by event type (so each card tracks its own selected admins)
-  const [adminCache, setAdminCache] = React.useState<Map<string, AdminUser>>(new Map())
+  // Cache of user profiles for selected recipients
+  const [adminCache, setAdminCache] = React.useState<Map<string, NotifyUser>>(new Map())
   const [saving, setSaving] = React.useState<string | null>(null)
 
   // Local edits (keyed by event_type)
@@ -130,13 +129,12 @@ export function AdminEventNotificationsPanel() {
     setDirty((prev) => new Set(prev).add(eventType))
   }, [])
 
-  // Search admin users for the SearchItem component — filters to admin-only
-  const searchAdmins = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
+  // Search users for the SearchItem component — any user can be selected
+  const searchUsers = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
     try {
       let q = supabase
         .from('profiles')
         .select('id, display_name, avatar_url, is_admin, roles')
-        .eq('is_admin', true)
         .limit(20)
       if (query) {
         q = q.ilike('display_name', `%${query}%`)
@@ -145,12 +143,12 @@ export function AdminEventNotificationsPanel() {
       return (data || []).map((u) => {
         const icon = u.avatar_url
           ? <img src={u.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
-          : <Shield className="h-4 w-4 text-purple-500 dark:text-purple-400" />
+          : <User className="h-4 w-4 text-stone-400 dark:text-stone-500" />
 
         return {
           id: String(u.id),
-          label: u.display_name || 'Unknown Admin',
-          description: u.id,
+          label: u.display_name || 'Unknown User',
+          description: u.is_admin ? 'Admin' : u.id,
           icon,
         }
       })
@@ -166,11 +164,11 @@ export function AdminEventNotificationsPanel() {
         const cached = adminCache.get(id)
         return {
           id,
-          label: cached?.displayName || 'Admin',
+          label: cached?.displayName || 'User',
           description: id,
           icon: cached?.avatarUrl
             ? <img src={cached.avatarUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
-            : <Shield className="h-4 w-4 text-purple-500 dark:text-purple-400" />,
+            : <User className="h-4 w-4 text-stone-400 dark:text-stone-500" />,
         }
       })
   }, [adminCache])
@@ -279,7 +277,7 @@ export function AdminEventNotificationsPanel() {
           </h2>
           <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
             Configure push notifications sent to admins when special events occur.
-            Each event has its own toggle, message template, and list of admin recipients.
+            Each event has its own toggle, message template, and list of recipients.
           </p>
         </div>
         <Button
@@ -357,7 +355,7 @@ export function AdminEventNotificationsPanel() {
                     <div>
                       <label className="text-sm font-medium flex items-center gap-2 mb-3">
                         <Users className="h-4 w-4 text-stone-500" />
-                        Admins to Notify
+                        Users to Notify
                       </label>
 
                       {/* Selected admins — compact thumbnail row (companion plant pattern) */}
@@ -369,7 +367,7 @@ export function AdminEventNotificationsPanel() {
                               <div
                                 key={adminId}
                                 className="relative group"
-                                title={cached?.displayName || 'Admin'}
+                                title={cached?.displayName || 'User'}
                               >
                                 <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
                                   {cached?.avatarUrl ? (
@@ -384,7 +382,7 @@ export function AdminEventNotificationsPanel() {
                                   type="button"
                                   onClick={() => removeAdmin(config.eventType, adminId)}
                                   className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
-                                  aria-label={`Remove ${cached?.displayName || 'admin'}`}
+                                  aria-label={`Remove ${cached?.displayName || 'user'}`}
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -397,11 +395,11 @@ export function AdminEventNotificationsPanel() {
                         </div>
                       ) : (
                         <div className="text-sm text-stone-400 dark:text-stone-500 py-3 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl mb-3">
-                          No admins selected yet.
+                          No users selected yet.
                         </div>
                       )}
 
-                      {/* SearchItem — multi-select admin search */}
+                      {/* SearchItem — multi-select user search */}
                       <SearchItem
                         multiSelect
                         value={null}
@@ -409,18 +407,18 @@ export function AdminEventNotificationsPanel() {
                         selectedOptions={selectedAdminOptions}
                         onSelect={() => {}}
                         onMultiSelect={(opts) => handleMultiSelect(config.eventType, opts)}
-                        onSearch={searchAdmins}
-                        placeholder="Select Admins"
-                        title="Select Admins to Notify"
-                        description="Search admin users by display name. Only admin users are shown."
-                        searchPlaceholder="Search admins..."
-                        emptyMessage="No admin users found."
+                        onSearch={searchUsers}
+                        placeholder="Select Users"
+                        title="Select Users to Notify"
+                        description="Search users by display name."
+                        searchPlaceholder="Search users..."
+                        emptyMessage="No users found."
                         confirmLabel="Confirm Selection"
                       />
 
                       {edit.adminIds.length === 0 && edit.enabled && (
                         <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                          No admins selected — notifications won't be sent.
+                          No users selected — notifications won't be sent.
                         </p>
                       )}
                     </div>
