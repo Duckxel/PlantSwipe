@@ -114,6 +114,7 @@ export default defineConfig({
           'recharts': ['recharts'],
           'three': ['three'],
           'supabase': ['@supabase/supabase-js'],
+          'framer-motion': ['framer-motion'],
           'ui-components': ['@radix-ui/react-dialog', '@radix-ui/react-label', '@radix-ui/react-slot'],
         },
       },

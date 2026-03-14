@@ -805,7 +805,7 @@ if [[ -z "${NODE_BUILD_MEMORY:-}" ]]; then
   elif [[ "$TOTAL_MEM_MB" -gt 2048 ]]; then
     NODE_BUILD_MEMORY=2048
   else
-    NODE_BUILD_MEMORY=1536
+    NODE_BUILD_MEMORY=1024
   fi
 fi
 export NODE_OPTIONS="--max-old-space-size=$NODE_BUILD_MEMORY"
