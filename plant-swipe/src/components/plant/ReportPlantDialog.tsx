@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { Loader2, Upload, X, Check } from 'lucide-react'
+import { sendAdminEventNotification } from '@/lib/adminEventNotifications'
 
 interface ReportPlantDialogProps {
   open: boolean
@@ -132,6 +133,14 @@ export const ReportPlantDialog: React.FC<ReportPlantDialogProps> = ({
 
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'Failed to submit report')
+
+      // Fire-and-forget admin event notification
+      sendAdminEventNotification('plant_report', {
+        reporter_name: user?.user_metadata?.display_name || 'A user',
+        plant_name: plantName,
+        note: note.trim(),
+        report_id: data?.id || '',
+      }).catch(() => {})
 
       setSubmitted(true)
     } catch (err: unknown) {

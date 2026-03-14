@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
+import { sendAdminEventNotification } from "@/lib/adminEventNotifications"
 
 interface RequestPlantDialogProps {
   open: boolean
@@ -15,7 +16,7 @@ interface RequestPlantDialogProps {
 
 export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, onOpenChange, initialPlantName }) => {
   const { t } = useTranslation('common')
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [plantName, setPlantName] = React.useState(initialPlantName || "")
   
   // Update plant name when initialPlantName prop changes
@@ -289,6 +290,13 @@ export const RequestPlantDialog: React.FC<RequestPlantDialogProps> = ({ open, on
           }
         }
       }
+
+      // Fire-and-forget admin event notification
+      sendAdminEventNotification('plant_request', {
+        requester_name: profile?.display_name || 'A user',
+        plant_name: displayName,
+        request_count: '1',
+      }).catch(() => {})
 
       setSuccess(true)
       setPlantName("")

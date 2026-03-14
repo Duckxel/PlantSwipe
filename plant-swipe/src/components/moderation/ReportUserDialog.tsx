@@ -11,7 +11,9 @@ import {
 } from "@/components/ui/dialog"
 import { AlertTriangle, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { useAuth } from "@/context/AuthContext"
 import { createUserReport } from "@/lib/moderation"
+import { sendAdminEventNotification } from "@/lib/adminEventNotifications"
 
 interface ReportUserDialogProps {
   open: boolean
@@ -27,6 +29,7 @@ export function ReportUserDialog({
   displayName 
 }: ReportUserDialogProps) {
   const { t } = useTranslation('common')
+  const { profile } = useAuth()
   const [reason, setReason] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -43,6 +46,13 @@ export function ReportUserDialog({
         reportedUserId: userId,
         reason: reason.trim()
       })
+      // Fire-and-forget admin event notification
+      sendAdminEventNotification('user_report', {
+        reporter_name: profile?.display_name || 'A user',
+        reported_user_name: displayName || 'Unknown',
+        reason: reason.trim(),
+        report_id: '',
+      }).catch(() => {})
       setSuccess(true)
       setTimeout(() => {
         onOpenChange(false)
