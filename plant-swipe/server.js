@@ -31410,7 +31410,7 @@ async function generateCrawlerHtml(req, pagePath) {
         const { data: profileByDisplayName, error: err1 } = await ssrQuery(
           supabaseServer
             .from('profiles')
-            .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
+            .select('id, display_name, username, bio, avatar_url, is_private, country, city, job, experience_level, profile_link, show_country, roles, is_admin')
             .ilike('display_name', username)
             .maybeSingle(),
           'profile_lookup_by_display_name'
@@ -31423,7 +31423,7 @@ async function generateCrawlerHtml(req, pagePath) {
           const { data: profileByUsername, error: err2 } = await ssrQuery(
             supabaseServer
               .from('profiles')
-              .select('id, display_name, username, bio, avatar_url, is_private, country, roles, is_admin')
+              .select('id, display_name, username, bio, avatar_url, is_private, country, city, job, experience_level, profile_link, show_country, roles, is_admin')
               .ilike('username', username)
               .maybeSingle(),
             'profile_lookup_by_username'
@@ -31551,19 +31551,77 @@ async function generateCrawlerHtml(req, pagePath) {
             lastSeen = profile.last_seen_at
           }
 
-          // Fetch user's public gardens for internal links
+          // Fetch user's public gardens with plant counts for richer display
           let userGardens = []
           try {
             const { data: gardens } = await ssrQuery(
               supabaseServer
                 .from('gardens')
-                .select('id, name')
+                .select('id, name, cover_image_url, created_at, location_city, location_country')
                 .eq('created_by', profile.id)
                 .eq('privacy', 'public')
+                .order('created_at', { ascending: false })
                 .limit(6),
               'profile_user_gardens'
             )
-            if (gardens) userGardens = gardens
+            if (gardens?.length) {
+              // Get plant counts per garden
+              const gardenIds = gardens.map(g => g.id)
+              const { data: gardenPlantCounts } = await ssrQuery(
+                supabaseServer
+                  .from('garden_plants')
+                  .select('garden_id')
+                  .in('garden_id', gardenIds),
+                'profile_garden_plant_counts'
+              )
+              const plantCountMap = {}
+              if (gardenPlantCounts) {
+                gardenPlantCounts.forEach(gp => {
+                  plantCountMap[gp.garden_id] = (plantCountMap[gp.garden_id] || 0) + 1
+                })
+              }
+              userGardens = gardens.map(g => ({
+                ...g,
+                plant_count: plantCountMap[g.id] || 0
+              }))
+            }
+          } catch { }
+
+          // Fetch user's public bookmark collections
+          let userBookmarks = []
+          try {
+            const { data: bookmarks } = await ssrQuery(
+              supabaseServer
+                .from('bookmarks')
+                .select('id, name, created_at')
+                .eq('user_id', profile.id)
+                .eq('visibility', 'public')
+                .eq('is_like', false)
+                .order('created_at', { ascending: false })
+                .limit(8),
+              'profile_user_bookmarks'
+            )
+            if (bookmarks?.length) {
+              // Get item counts per bookmark
+              const bookmarkIds = bookmarks.map(b => b.id)
+              const { data: bookmarkItemCounts } = await ssrQuery(
+                supabaseServer
+                  .from('bookmark_items')
+                  .select('bookmark_id')
+                  .in('bookmark_id', bookmarkIds),
+                'profile_bookmark_item_counts'
+              )
+              const itemCountMap = {}
+              if (bookmarkItemCounts) {
+                bookmarkItemCounts.forEach(bi => {
+                  itemCountMap[bi.bookmark_id] = (itemCountMap[bi.bookmark_id] || 0) + 1
+                })
+              }
+              userBookmarks = bookmarks.map(b => ({
+                ...b,
+                item_count: itemCountMap[b.id] || 0
+              }))
+            }
           } catch { }
 
           // Create rich description with all stats
@@ -31625,7 +31683,7 @@ async function generateCrawlerHtml(req, pagePath) {
               </figure>` : ''}
               
               <div class="profile-meta" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; color: #6b7280;">
-                ${profile.country && profile.show_country !== false ? `<span>📍 ${escapeHtml(profile.country)}</span>` : ''}
+                ${profile.country && profile.show_country !== false ? `<span>📍 ${profile.city ? escapeHtml(profile.city) + ', ' : ''}${escapeHtml(profile.country)}</span>` : ''}
                 ${profile.job ? `<span>💼 ${escapeHtml(profile.job)}</span>` : ''}
                 ${profile.experience_level ? `<span>🌱 ${escapeHtml(profile.experience_level)}</span>` : ''}
                 ${isOnline ? `<span>🟢 ${detectedLang === 'fr' ? 'En ligne' : 'Online'}</span>` : ''}
@@ -31663,11 +31721,41 @@ async function generateCrawlerHtml(req, pagePath) {
               
               ${userGardens.length > 0 ? `
               <h2>🏡 ${detectedLang === 'fr' ? 'Jardins de' : 'Gardens by'} ${escapeHtml(displayName)}</h2>
-              <ul>
-                ${userGardens.map(g => `<li><a href="/garden/${encodeURIComponent(g.id)}">${escapeHtml(g.name || 'Garden')}</a></li>`).join('')}
+              <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px;">
+                ${userGardens.map(g => {
+                  const locationParts = [g.location_city, g.location_country].filter(Boolean)
+                  const gardenLoc = locationParts.length > 0 ? locationParts.join(', ') : null
+                  return `
+                    <li style="background: #f9fafb; border-radius: 12px; padding: 16px; border-left: 4px solid #10b981;">
+                      <a href="/garden/${encodeURIComponent(g.id)}" style="text-decoration: none; color: inherit;">
+                        <strong style="color: #065f46;">🏡 ${escapeHtml(g.name || 'Garden')}</strong>
+                        <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
+                          ${g.plant_count > 0 ? `🌿 ${g.plant_count} ${detectedLang === 'fr' ? 'plante(s)' : 'plant(s)'}` : `🌱 ${detectedLang === 'fr' ? 'Nouveau jardin' : 'New garden'}`}
+                          ${gardenLoc ? ` · 📍 ${escapeHtml(gardenLoc)}` : ''}
+                        </div>
+                      </a>
+                    </li>
+                  `
+                }).join('')}
               </ul>
               ` : ''}
-              
+
+              ${userBookmarks.length > 0 ? `
+              <h2>🔖 ${detectedLang === 'fr' ? 'Collections de' : 'Collections by'} ${escapeHtml(displayName)}</h2>
+              <ul style="list-style: none; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px;">
+                ${userBookmarks.map(b => `
+                  <li style="background: #f9fafb; border-radius: 12px; padding: 16px; border-left: 4px solid #8b5cf6;">
+                    <a href="/bookmarks/${encodeURIComponent(b.id)}" style="text-decoration: none; color: inherit;">
+                      <strong style="color: #5b21b6;">🔖 ${escapeHtml(b.name || 'Collection')}</strong>
+                      <div style="font-size: 13px; color: #6b7280; margin-top: 4px;">
+                        🌿 ${b.item_count} ${b.item_count === 1 ? (detectedLang === 'fr' ? 'plante' : 'plant') : (detectedLang === 'fr' ? 'plantes' : 'plants')}
+                      </div>
+                    </a>
+                  </li>
+                `).join('')}
+              </ul>
+              ` : ''}
+
               <h2>🔗 ${detectedLang === 'fr' ? 'Explorer Aphylia' : 'Explore Aphylia'}</h2>
               <nav style="display: flex; flex-wrap: wrap; gap: 12px; margin-top: 12px;">
                 <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
@@ -32495,6 +32583,7 @@ async function generateCrawlerHtml(req, pagePath) {
         let ownerName = null
         let plantCount = 0
         let listImage = null
+        let bookmarkPlantDetails = []
 
         try {
           if (bookmarkList.user_id) {
@@ -32519,8 +32608,6 @@ async function generateCrawlerHtml(req, pagePath) {
               .limit(50),
             'bookmark_plants'
           )
-          
-          let bookmarkPlantDetails = []
           if (bookmarkPlants?.length) {
             plantCount = bookmarkPlants.length
             const plantIds = bookmarkPlants.map(bp => bp.plant_id).filter(Boolean)
