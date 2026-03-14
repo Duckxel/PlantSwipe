@@ -19,7 +19,6 @@ import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
 import { AdminPlantReportsPanel } from "@/components/admin/AdminPlantReportsPanel";
-import { AdminEventNotificationsPanel } from "@/components/admin/AdminEventNotificationsPanel";
 import { AdminUserMessagesDialog } from "@/components/admin/AdminUserMessagesDialog";
 import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
@@ -103,7 +102,6 @@ import {
   Eye,
   MousePointer,
   ArrowDownRight,
-  Megaphone,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -260,7 +258,6 @@ type AdminTab =
   | "stocks"
   | "upload"
   | "notifications"
-  | "event_alerts"
   | "emails"
   | "admin_logs";
 
@@ -5171,7 +5168,6 @@ export const AdminPage: React.FC = () => {
     { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
-    { key: "event_alerts", label: "Event Alerts", Icon: Megaphone, path: "/admin/event-alerts", adminOnly: true },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
     { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
@@ -5190,7 +5186,6 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/stocks")) return "stocks";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
-    if (currentPath.includes("/admin/event-alerts")) return "event_alerts";
     if (currentPath.includes("/admin/emails")) return "emails";
     if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
@@ -5199,7 +5194,7 @@ export const AdminPage: React.FC = () => {
   // Redirect editors away from admin-only tabs
   React.useEffect(() => {
     if (isFullAdmin) return; // Admins can access everything
-    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "event_alerts", "admin_logs"];
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
       // Redirect to plants tab (default for editors)
       navigate("/admin/plants", { replace: true });
@@ -10767,9 +10762,6 @@ export const AdminPage: React.FC = () => {
 
                     {/* Notifications Tab */}
                     {activeTab === "notifications" && <AdminNotificationsPanel />}
-
-                    {/* Event Alerts Tab */}
-                    {activeTab === "event_alerts" && <AdminEventNotificationsPanel />}
 
                     {/* Emails Tab */}
                     {activeTab === "emails" && <AdminEmailsPanel />}

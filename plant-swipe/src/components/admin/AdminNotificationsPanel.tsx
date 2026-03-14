@@ -51,6 +51,7 @@ import { cn } from '@/lib/utils'
 import { SearchInput } from '@/components/ui/search-input'
 import { SearchItem } from '@/components/ui/search-item'
 import { Link, useLocation } from 'react-router-dom'
+import { AdminEventNotificationsPanel } from '@/components/admin/AdminEventNotificationsPanel'
 import { translateNotificationToAllLanguages } from '@/lib/deepl'
 import { SUPPORTED_LANGUAGES, DEFAULT_LANGUAGE } from '@/lib/i18n'
 
@@ -270,11 +271,13 @@ const DEFAULT_TIMEZONE = typeof Intl !== 'undefined' ? Intl.DateTimeFormat().res
 // =========================================================================
 export function AdminNotificationsPanel() {
   const location = useLocation()
-  const activeView = location.pathname.includes('/templates')
-    ? 'templates'
-    : location.pathname.includes('/automations')
-      ? 'automations'
-      : 'campaigns'
+  const activeView = location.pathname.includes('/event-alerts')
+    ? 'event_alerts'
+    : location.pathname.includes('/templates')
+      ? 'templates'
+      : location.pathname.includes('/automations')
+        ? 'automations'
+        : 'campaigns'
 
   // State: Campaigns
   const [campaigns, setCampaigns] = React.useState<NotificationCampaign[]>([])
@@ -1019,6 +1022,18 @@ export function AdminNotificationsPanel() {
                   {templates.length}
                 </span>
               )}
+            </Link>
+            <Link
+              to="/admin/notifications/event-alerts"
+              className={cn(
+                "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+                activeView === 'event_alerts'
+                  ? "bg-amber-600 text-white shadow-lg shadow-amber-500/25"
+                  : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+              )}
+            >
+              <BellRing className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              Event Alerts
             </Link>
           </div>
 
@@ -2552,6 +2567,11 @@ export function AdminNotificationsPanel() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Event Alerts View */}
+      {activeView === 'event_alerts' && (
+        <AdminEventNotificationsPanel />
+      )}
     </div>
   )
 }
