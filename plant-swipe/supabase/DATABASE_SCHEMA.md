@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 11, 2026
+> **Last Updated:** March 14, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 14, 2026:** **Admin Event Notifications.** Added `admin_event_notifications` table for configurable push notifications sent to selected admins when special events occur (user reports, bug reports, plant reports, plant requests). Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and selectable list of admin recipients. Schema file: `17_admin_event_notifications.sql`. New admin panel: "Event Alerts" tab.
 - **Mar 11, 2026:** **Email timezone bug fix.** Added `original_scheduled_for` column to `admin_email_campaigns` — stores the admin's intended send time immutably. The campaign runner edge function now uses this column for per-user timezone calculations instead of `scheduled_for`, which gets overwritten with cron wake-up times after partial sends, preventing timezone offset compounding. Added detailed column documentation for `admin_email_campaigns` and `admin_campaign_sends` tables.
 - **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
 - **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
@@ -50,7 +51,7 @@ pg_net        -- HTTP requests from database (edge functions)
 
 ## Schema Files Structure
 
-The schema is split into 15 files in `supabase/sync_parts/` for easier management:
+The schema is split into 17 files in `supabase/sync_parts/` for easier management:
 
 | File | Description |
 |------|-------------|
@@ -70,6 +71,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `14_scanning_and_bugs.sql` | Plant scanning, bug catcher system |
 | `15_gdpr_and_preferences.sql` | GDPR compliance, email verification, preferences |
 | `16_user_action_status.sql` | Profile action completion & skip sync across devices |
+| `17_admin_event_notifications.sql` | Admin event notification settings (per-event toggle, template, recipients) |
 
 ---
 
@@ -167,6 +169,7 @@ The schema is split into 15 files in `supabase/sync_parts/` for easier managemen
 | `notification_templates` | Notification message templates |
 | `notification_template_translations` | Template translations |
 | `notification_automations` | Automated notification rules (cron-based and event-driven) |
+| `admin_event_notifications` | Per-event admin notification settings (toggle, template, recipients) |
 | `user_notifications` | User notification inbox |
 | `user_push_subscriptions` | Push notification subscriptions |
 
@@ -1184,6 +1187,33 @@ UNIQUE(trigger_type, user_id)
 **Note:** The `UNIQUE(trigger_type, user_id)` constraint provides per-user deduplication. Triggers like `FRIEND_REQUEST_REMINDER` and `GARDEN_INVITE_REMINDER` use `skipDedup` mode and instead track sends via the `reminder_email_sent` column on their respective tables.
 
 **RLS:** Admin-only full access. Service role full access for edge functions.
+
+### `admin_event_notifications`
+
+Configurable push notification settings for special admin events. Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and list of admin user IDs to notify.
+
+```sql
+id                UUID PRIMARY KEY
+event_type        TEXT NOT NULL UNIQUE     -- 'user_report', 'bug_report', 'plant_report', 'plant_request'
+enabled           BOOLEAN DEFAULT false    -- Whether notifications are active for this event
+message_template  TEXT NOT NULL DEFAULT '' -- Message with {{variable}} placeholders
+admin_ids         UUID[] DEFAULT '{}'      -- Array of admin profile IDs to notify
+created_at        TIMESTAMPTZ DEFAULT now()
+updated_at        TIMESTAMPTZ DEFAULT now()  -- Auto-updated via trigger
+```
+
+**Event types and available template variables:**
+
+| Event Type | Variables |
+|-----------|-----------|
+| `user_report` | `{{reporter_name}}`, `{{reported_user_name}}`, `{{reason}}`, `{{report_id}}` |
+| `bug_report` | `{{reporter_name}}`, `{{bug_name}}`, `{{description}}`, `{{report_id}}` |
+| `plant_report` | `{{reporter_name}}`, `{{plant_name}}`, `{{note}}`, `{{report_id}}` |
+| `plant_request` | `{{requester_name}}`, `{{plant_name}}`, `{{request_count}}` |
+
+**RLS:** Admin-only full access (SELECT, INSERT, UPDATE, DELETE).
+
+**Seeded defaults:** One row per event type is inserted on migration with `enabled = false`.
 
 ---
 

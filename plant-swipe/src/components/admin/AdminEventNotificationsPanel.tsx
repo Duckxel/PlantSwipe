@@ -4,6 +4,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import { SearchItem, type SearchItemOption } from '@/components/ui/search-item'
 import {
   getAdminEventNotifications,
   updateAdminEventNotification,
@@ -18,12 +19,12 @@ import {
 import {
   AlertTriangle,
   Bug,
-  Check,
   Code,
   Leaf,
   Loader2,
   RefreshCw,
   Save,
+  Shield,
   Sprout,
   User,
   Users,
@@ -49,7 +50,8 @@ export function AdminEventNotificationsPanel() {
   const [configs, setConfigs] = React.useState<AdminEventNotification[]>([])
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
-  const [admins, setAdmins] = React.useState<AdminUser[]>([])
+  // Cache of admin users keyed by event type (so each card tracks its own selected admins)
+  const [adminCache, setAdminCache] = React.useState<Map<string, AdminUser>>(new Map())
   const [saving, setSaving] = React.useState<string | null>(null)
 
   // Local edits (keyed by event_type)
@@ -62,28 +64,37 @@ export function AdminEventNotificationsPanel() {
   // Track which configs have unsaved changes
   const [dirty, setDirty] = React.useState<Set<string>>(new Set())
 
-  // Load configs and admin list
+  // Load configs and fetch admin profiles for already-selected admins
   const loadData = React.useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [configsData, adminsRes] = await Promise.all([
-        getAdminEventNotifications(),
-        supabase
+      const configsData = await getAdminEventNotifications()
+      setConfigs(configsData)
+
+      // Collect all unique admin IDs across all configs
+      const allAdminIds = [...new Set(configsData.flatMap((c) => c.adminIds))]
+
+      // Fetch profiles for already-selected admins
+      if (allAdminIds.length > 0) {
+        const { data: profiles } = await supabase
           .from('profiles')
           .select('id, display_name, avatar_url')
-          .eq('is_admin', true)
-          .order('display_name'),
-      ])
-
-      setConfigs(configsData)
-      setAdmins(
-        (adminsRes.data || []).map((a) => ({
-          id: String(a.id),
-          displayName: a.display_name || null,
-          avatarUrl: a.avatar_url || null,
-        }))
-      )
+          .in('id', allAdminIds)
+        if (profiles) {
+          setAdminCache((prev) => {
+            const next = new Map(prev)
+            for (const p of profiles) {
+              next.set(String(p.id), {
+                id: String(p.id),
+                displayName: p.display_name || null,
+                avatarUrl: p.avatar_url || null,
+              })
+            }
+            return next
+          })
+        }
+      }
 
       // Initialize edits from loaded data
       const initialEdits: typeof edits = {}
@@ -119,18 +130,80 @@ export function AdminEventNotificationsPanel() {
     setDirty((prev) => new Set(prev).add(eventType))
   }, [])
 
-  // Toggle an admin in the admin list for a given event type
-  const toggleAdmin = React.useCallback((eventType: string, adminId: string) => {
+  // Search admin users for the SearchItem component — filters to admin-only
+  const searchAdmins = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
+    try {
+      let q = supabase
+        .from('profiles')
+        .select('id, display_name, avatar_url, is_admin, roles')
+        .eq('is_admin', true)
+        .limit(20)
+      if (query) {
+        q = q.ilike('display_name', `%${query}%`)
+      }
+      const { data } = await q
+      return (data || []).map((u) => {
+        const icon = u.avatar_url
+          ? <img src={u.avatar_url} alt="" className="h-4 w-4 rounded-full object-cover" />
+          : <Shield className="h-4 w-4 text-purple-500 dark:text-purple-400" />
+
+        return {
+          id: String(u.id),
+          label: u.display_name || 'Unknown Admin',
+          description: u.id,
+          icon,
+        }
+      })
+    } catch {
+      return []
+    }
+  }, [])
+
+  // Build selectedOptions for a given event type (for SearchItem pre-populated display)
+  const getSelectedOptions = React.useCallback((adminIds: string[]): SearchItemOption[] => {
+    return adminIds
+      .map((id) => {
+        const cached = adminCache.get(id)
+        return {
+          id,
+          label: cached?.displayName || 'Admin',
+          description: id,
+          icon: cached?.avatarUrl
+            ? <img src={cached.avatarUrl} alt="" className="h-4 w-4 rounded-full object-cover" />
+            : <Shield className="h-4 w-4 text-purple-500 dark:text-purple-400" />,
+        }
+      })
+  }, [adminCache])
+
+  // Handle multi-select confirm from SearchItem
+  const handleMultiSelect = React.useCallback((eventType: string, finalSet: SearchItemOption[]) => {
+    const finalIds = finalSet.map((o) => o.id)
+    updateEdit(eventType, 'adminIds', finalIds)
+    // Update admin cache with any new entries
+    setAdminCache((prev) => {
+      const next = new Map(prev)
+      for (const o of finalSet) {
+        if (!next.has(o.id)) {
+          next.set(o.id, {
+            id: o.id,
+            displayName: o.label,
+            avatarUrl: null,
+          })
+        }
+      }
+      return next
+    })
+  }, [updateEdit])
+
+  // Remove a single admin from an event type
+  const removeAdmin = React.useCallback((eventType: string, adminId: string) => {
     setEdits((prev) => {
       const current = prev[eventType]?.adminIds || []
-      const next = current.includes(adminId)
-        ? current.filter((id) => id !== adminId)
-        : [...current, adminId]
       return {
         ...prev,
         [eventType]: {
           ...prev[eventType],
-          adminIds: next,
+          adminIds: current.filter((id) => id !== adminId),
         },
       }
     })
@@ -149,7 +222,6 @@ export function AdminEventNotificationsPanel() {
         messageTemplate: edit.messageTemplate,
         adminIds: edit.adminIds,
       })
-      // Update local configs
       setConfigs((prev) =>
         prev.map((c) => (c.eventType === eventType ? updated : c))
       )
@@ -178,13 +250,11 @@ export function AdminEventNotificationsPanel() {
       const current = edits[eventType]?.messageTemplate || ''
       const newValue = current.substring(0, start) + tag + current.substring(end)
       updateEdit(eventType, 'messageTemplate', newValue)
-      // Restore cursor after React re-render
       requestAnimationFrame(() => {
         textarea.focus()
         textarea.setSelectionRange(start + tag.length, start + tag.length)
       })
     } else {
-      // Fallback: append
       const current = edits[eventType]?.messageTemplate || ''
       updateEdit(eventType, 'messageTemplate', current + tag)
     }
@@ -250,6 +320,7 @@ export function AdminEventNotificationsPanel() {
             const isDirty = dirty.has(config.eventType)
             const isSaving = saving === config.eventType
             const variables = ADMIN_EVENT_VARIABLES[config.eventType] || []
+            const selectedAdminOptions = getSelectedOptions(edit.adminIds)
 
             return (
               <Card key={config.eventType} className="rounded-xl overflow-hidden">
@@ -288,42 +359,65 @@ export function AdminEventNotificationsPanel() {
                         <Users className="h-4 w-4 text-stone-500" />
                         Admins to Notify
                       </label>
-                      {admins.length === 0 ? (
-                        <p className="text-sm text-stone-400 italic">No admin users found</p>
-                      ) : (
-                        <div className="flex flex-wrap gap-2">
-                          {admins.map((admin) => {
-                            const isSelected = edit.adminIds.includes(admin.id)
+
+                      {/* Selected admins — compact thumbnail row (companion plant pattern) */}
+                      {edit.adminIds.length > 0 ? (
+                        <div className="flex flex-wrap gap-2 items-center mb-3">
+                          {edit.adminIds.map((adminId) => {
+                            const cached = adminCache.get(adminId)
                             return (
-                              <button
-                                key={admin.id}
-                                type="button"
-                                className={cn(
-                                  'flex items-center gap-2 px-3 py-2 rounded-xl border-2 transition-all text-sm',
-                                  isSelected
-                                    ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400'
-                                    : 'border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 text-stone-600 dark:text-stone-400'
-                                )}
-                                onClick={() => toggleAdmin(config.eventType, admin.id)}
+                              <div
+                                key={adminId}
+                                className="relative group"
+                                title={cached?.displayName || 'Admin'}
                               >
-                                {admin.avatarUrl ? (
-                                  <img
-                                    src={admin.avatarUrl}
-                                    alt=""
-                                    className="w-6 h-6 rounded-full object-cover"
-                                  />
-                                ) : (
-                                  <div className="w-6 h-6 rounded-full bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
-                                    <User className="h-3 w-3 text-stone-500" />
-                                  </div>
-                                )}
-                                <span>{admin.displayName || 'Admin'}</span>
-                                {isSelected && <Check className="h-4 w-4 text-emerald-500" />}
-                              </button>
+                                <div className="h-10 w-10 rounded-lg overflow-hidden border border-stone-200 dark:border-stone-700 bg-stone-100 dark:bg-stone-800">
+                                  {cached?.avatarUrl ? (
+                                    <img src={cached.avatarUrl} alt={cached.displayName || ''} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <div className="w-full h-full flex items-center justify-center text-stone-400">
+                                      <User className="h-5 w-5" />
+                                    </div>
+                                  )}
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => removeAdmin(config.eventType, adminId)}
+                                  className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-red-500 text-white opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity flex items-center justify-center shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                                  aria-label={`Remove ${cached?.displayName || 'admin'}`}
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
                             )
                           })}
+                          <span className="text-xs font-medium text-stone-500 dark:text-stone-400 ml-1">
+                            {edit.adminIds.length}
+                          </span>
+                        </div>
+                      ) : (
+                        <div className="text-sm text-stone-400 dark:text-stone-500 py-3 text-center border border-dashed border-stone-300 dark:border-stone-700 rounded-xl mb-3">
+                          No admins selected yet.
                         </div>
                       )}
+
+                      {/* SearchItem — multi-select admin search */}
+                      <SearchItem
+                        multiSelect
+                        value={null}
+                        values={edit.adminIds}
+                        selectedOptions={selectedAdminOptions}
+                        onSelect={() => {}}
+                        onMultiSelect={(opts) => handleMultiSelect(config.eventType, opts)}
+                        onSearch={searchAdmins}
+                        placeholder="Select Admins"
+                        title="Select Admins to Notify"
+                        description="Search admin users by display name. Only admin users are shown."
+                        searchPlaceholder="Search admins..."
+                        emptyMessage="No admin users found."
+                        confirmLabel="Confirm Selection"
+                      />
+
                       {edit.adminIds.length === 0 && edit.enabled && (
                         <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
                           No admins selected — notifications won't be sent.
