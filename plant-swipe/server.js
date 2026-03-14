@@ -30439,6 +30439,26 @@ async function generateCrawlerHtml(req, pagePath) {
         businessBrands: 'Garden Product Brands',
         businessCreators: 'Gardening Content Creators',
         businessExplore: 'Get in touch to explore collaboration opportunities!',
+        // Privacy
+        privacyTitle: 'Aphylia Privacy Policy & GDPR Rights',
+        privacyDesc: 'Learn how Aphylia protects your personal data and your GDPR rights including data access, export, and deletion.',
+        privacyHeading: 'Privacy Policy',
+        privacyCommitment: 'Your privacy matters. We are committed to protecting your personal data and being transparent about how we use it.',
+        privacyGdpr: 'GDPR Compliant',
+        privacyGdprDesc: 'We comply with EU General Data Protection Regulation standards.',
+        privacyDataRights: 'Your Data Rights',
+        privacyAccess: 'Access your personal data',
+        privacyExport: 'Export your data',
+        privacyDelete: 'Request data deletion',
+        privacyCorrect: 'Correct inaccurate data',
+        privacyWhat: 'What We Collect',
+        privacyWhatAccount: 'Account information (email, username)',
+        privacyWhatGarden: 'Garden and plant data you create',
+        privacyWhatUsage: 'Anonymous usage analytics (consent-based)',
+        privacyNever: 'What We Never Do',
+        privacyNeverSell: 'We never sell your personal data',
+        privacyNeverShare: 'We never share data with third parties for marketing',
+        privacyNeverTrack: 'We never track you without consent',
         // Bookmarks
         bookmarksCollection: 'Plant Collection',
         bookmarksCurated: 'Curated by',
@@ -30636,6 +30656,25 @@ async function generateCrawlerHtml(req, pagePath) {
         businessBrands: 'Marques de Jardinage',
         businessCreators: 'Créateurs de Contenu Jardinage',
         businessExplore: 'Contactez-nous pour explorer les opportunités !',
+        privacyTitle: 'Politique de Confidentialité & Droits RGPD - Aphylia',
+        privacyDesc: 'Découvrez comment Aphylia protège vos données personnelles et vos droits RGPD incluant l\'accès, l\'export et la suppression.',
+        privacyHeading: 'Politique de Confidentialité',
+        privacyCommitment: 'Votre vie privée compte. Nous nous engageons à protéger vos données personnelles et à être transparents sur leur utilisation.',
+        privacyGdpr: 'Conforme au RGPD',
+        privacyGdprDesc: 'Nous respectons les normes du Règlement Général sur la Protection des Données.',
+        privacyDataRights: 'Vos Droits sur vos Données',
+        privacyAccess: 'Accéder à vos données personnelles',
+        privacyExport: 'Exporter vos données',
+        privacyDelete: 'Demander la suppression de vos données',
+        privacyCorrect: 'Corriger des données inexactes',
+        privacyWhat: 'Ce Que Nous Collectons',
+        privacyWhatAccount: 'Informations de compte (email, nom d\'utilisateur)',
+        privacyWhatGarden: 'Données de jardin et plantes que vous créez',
+        privacyWhatUsage: 'Analyses d\'utilisation anonymes (basées sur le consentement)',
+        privacyNever: 'Ce Que Nous Ne Faisons Jamais',
+        privacyNeverSell: 'Nous ne vendons jamais vos données personnelles',
+        privacyNeverShare: 'Nous ne partageons jamais vos données avec des tiers pour du marketing',
+        privacyNeverTrack: 'Nous ne vous suivons jamais sans votre consentement',
         bookmarksCollection: 'Collection de Plantes',
         bookmarksCurated: 'Sélectionné par',
         bookmarksCarefully: 'Une collection de plantes soigneusement sélectionnée',
@@ -31253,7 +31292,7 @@ async function generateCrawlerHtml(req, pagePath) {
         console.log(`[ssr] Blog query error: ${postError.message}`)
         queryErrorOccurred = true
       } else if (!post) {
-        console.log(`[ssr] ✗ Blog post not found: ${slugOrId}`)
+        console.log(`[ssr] ✗ Blog post not found: ${blogParam}`)
         resourceFound = false
       }
       
@@ -32373,6 +32412,48 @@ async function generateCrawlerHtml(req, pagePath) {
             <a href="/discovery">🎴 ${detectedLang === 'fr' ? 'Découvrir' : 'Discover'}</a>
             <a href="/blog">📚 Blog</a>
             <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+          </nav>
+        </article>
+      `
+    }
+
+    // Privacy page
+    else if (effectivePath[0] === 'privacy') {
+      title = `🔒 ${tr.privacyTitle}`
+      description = tr.privacyDesc
+      pageContent = `
+        <article>
+          <h1>🔒 ${tr.privacyHeading}</h1>
+          <p>${tr.privacyCommitment}</p>
+          <div style="margin: 20px 0; padding: 16px; background: #eff6ff; border-radius: 8px; border-left: 4px solid #3b82f6;">
+            <strong>🛡️ ${tr.privacyGdpr}</strong><br>
+            ${tr.privacyGdprDesc}
+          </div>
+          <h2>📋 ${tr.privacyDataRights}</h2>
+          <ul>
+            <li>✅ ${tr.privacyAccess}</li>
+            <li>✅ ${tr.privacyExport}</li>
+            <li>✅ ${tr.privacyDelete}</li>
+            <li>✅ ${tr.privacyCorrect}</li>
+          </ul>
+          <h2>📊 ${tr.privacyWhat}</h2>
+          <ul>
+            <li>👤 ${tr.privacyWhatAccount}</li>
+            <li>🌿 ${tr.privacyWhatGarden}</li>
+            <li>📈 ${tr.privacyWhatUsage}</li>
+          </ul>
+          <h2>🚫 ${tr.privacyNever}</h2>
+          <ul>
+            <li>❌ ${tr.privacyNeverSell}</li>
+            <li>❌ ${tr.privacyNeverShare}</li>
+            <li>❌ ${tr.privacyNeverTrack}</li>
+          </ul>
+          <h2>🔗 ${detectedLang === 'fr' ? 'Liens Utiles' : 'Useful Links'}</h2>
+          <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
+            <a href="/">🏠 ${detectedLang === 'fr' ? 'Accueil' : 'Home'}</a>
+            <a href="/terms">📜 ${detectedLang === 'fr' ? 'Conditions' : 'Terms'}</a>
+            <a href="/about">ℹ️ ${detectedLang === 'fr' ? 'À Propos' : 'About'}</a>
+            <a href="/contact">💬 Contact</a>
           </nav>
         </article>
       `
