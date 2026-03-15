@@ -424,6 +424,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                       : 'bg-white dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] border-stone-200 dark:border-[#3a3a3d]'
                   )}
                   aria-label={data.hasOwn ? t('messages.removeReaction', { defaultValue: 'Remove reaction' }) : t('messages.addReaction', { defaultValue: 'Add reaction' })}
+                  title={data.hasOwn ? t('messages.removeReaction', { defaultValue: 'Remove reaction' }) : t('messages.addReaction', { defaultValue: 'Add reaction' })}
                 >
                   <span className="text-sm">{emoji}</span>
                   {data.count > 1 && <span className="font-medium">{data.count}</span>}
