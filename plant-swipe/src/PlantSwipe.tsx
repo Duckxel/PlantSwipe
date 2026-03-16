@@ -890,9 +890,13 @@ export default function PlantSwipe() {
         }
       }
 
+      // ⚡ Bolt: Use single-pass iteration over split strings to prevent intermediate array allocation via .filter()
       // Split compound colors and add individual tokens
-      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-      splitTokens.forEach(token => {
+      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE)
+      for (let i = 0; i < splitTokens.length; i++) {
+        const token = splitTokens[i]
+        if (!token) continue
+
         tokens.add(token)
 
         // O(1) expansion of tokens to all their aliases (canonical + translations)
@@ -904,7 +908,7 @@ export default function PlantSwipe() {
             tokens.add(alias)
           }
         }
-      })
+      }
 
       colorTokenCache.set(color, tokens)
       return tokens
@@ -952,11 +956,19 @@ export default function PlantSwipe() {
       const humanSafe = toxHuman === 'nontoxic' || toxHuman === 'non_toxic'
 
       // Living space — new flat: livingSpace (array), legacy: identity nested
+      const livingSpaceSet = new Set<string>()
       const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
-      const livingSpaceLower = livingSpaceArr.length > 0
-        ? livingSpaceArr.map(s => String(s).toLowerCase())
-        : [(p.identity?.livingSpace as string || '').toLowerCase()].filter(Boolean)
-      const livingSpaceSet = new Set(livingSpaceLower.filter(Boolean))
+
+      // ⚡ Bolt: Replace chained .map().filter() with a single-pass loop to avoid intermediate array allocations
+      if (livingSpaceArr.length > 0) {
+        for (let i = 0; i < livingSpaceArr.length; i++) {
+          const s = livingSpaceArr[i]
+          if (s) livingSpaceSet.add(String(s).toLowerCase())
+        }
+      } else {
+        const identitySpace = p.identity?.livingSpace as string | undefined
+        if (identitySpace) livingSpaceSet.add(identitySpace.toLowerCase())
+      }
 
       // Pre-parse createdAt for faster sorting
       const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
@@ -982,11 +994,28 @@ export default function PlantSwipe() {
 
       const getColors = () => {
         if (_cachedColors) return _cachedColors
+
+        // ⚡ Bolt: Avoid chained .map().filter() and object destructuring for better memory footprint
+        _cachedColors = []
         const colorNames = Array.isArray(p.colorNames) ? p.colorNames : []
-        const colorObjects = Array.isArray(p.colors)
-          ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name)
-          : []
-        _cachedColors = (colorNames.length > 0 ? colorNames : colorObjects).filter((c): c is string => typeof c === 'string' && c.length > 0)
+        if (colorNames.length > 0) {
+          for (let i = 0; i < colorNames.length; i++) {
+            const c = colorNames[i]
+            if (typeof c === 'string' && c.length > 0) {
+              _cachedColors.push(c)
+            }
+          }
+        } else {
+          const colorObjects = Array.isArray(p.colors) ? p.colors : []
+          for (let i = 0; i < colorObjects.length; i++) {
+            const c = colorObjects[i] as PlantColor | string
+            const name = typeof c === 'string' ? c : c?.name
+            if (typeof name === 'string' && name.length > 0) {
+              _cachedColors.push(name)
+            }
+          }
+        }
+
         return _cachedColors
       }
 
