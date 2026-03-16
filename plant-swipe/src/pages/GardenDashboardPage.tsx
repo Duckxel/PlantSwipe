@@ -4891,6 +4891,7 @@ function OverviewSection({
             done: hasLivingSpace || roadmapCompletions.has('set_living_space'),
             label: t("gardenDashboard.beginnerRoadmap.setLivingSpace", { defaultValue: "Set your garden space" }),
             desc: t("gardenDashboard.beginnerRoadmap.setLivingSpaceDesc", { defaultValue: "Choose where your plants will live — indoor, outdoor, terrarium, or greenhouse." }),
+            tip: t("gardenDashboard.beginnerRoadmap.setLivingSpaceTip", { defaultValue: "Picking the right space helps us recommend plants that thrive in your environment. You can always change this later in Settings." }),
             icon: <Home className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/settings?section=general`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.setLivingSpaceAction", { defaultValue: "Set space" }),
@@ -4900,6 +4901,7 @@ function OverviewSection({
             done: plants.length > 0 || roadmapCompletions.has('add_plant'),
             label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add your first plant" }),
             desc: t("gardenDashboard.beginnerRoadmap.addPlantDesc", { defaultValue: "Browse the catalog and add a plant to start growing your garden." }),
+            tip: t("gardenDashboard.beginnerRoadmap.addPlantTip", { defaultValue: "Not sure where to start? Try a low-maintenance plant like a pothos or snake plant — they're perfect for beginners!" }),
             icon: <Sprout className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/plants`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
@@ -4909,6 +4911,7 @@ function OverviewSection({
             done: (firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false) || roadmapCompletions.has('read_plant_info'),
             label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read your plant's info" }),
             desc: t("gardenDashboard.beginnerRoadmap.readPlantInfoDesc", { defaultValue: "Learn about care requirements, growing conditions, and tips for your plant." }),
+            tip: t("gardenDashboard.beginnerRoadmap.readPlantInfoTip", { defaultValue: "Each plant page shows light, water, and soil needs. Understanding these basics will help your plant stay happy and healthy." }),
             icon: <BookOpen className="w-5 h-5" />,
             action: firstPlantId ? () => {
               localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
@@ -4921,6 +4924,7 @@ function OverviewSection({
             done: hasWaterTask || roadmapCompletions.has('schedule_water'),
             label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering" }),
             desc: t("gardenDashboard.beginnerRoadmap.scheduleWaterDesc", { defaultValue: "Set up a watering schedule so you never forget to water your plant." }),
+            tip: t("gardenDashboard.beginnerRoadmap.scheduleWaterTip", { defaultValue: "Overwatering is the #1 mistake new gardeners make. When in doubt, let the soil dry out a bit between waterings." }),
             icon: <Droplets className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
@@ -4930,6 +4934,7 @@ function OverviewSection({
             done: hasFertilizeTask || roadmapCompletions.has('schedule_fertilize'),
             label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization" }),
             desc: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeDesc", { defaultValue: "Keep your plant healthy by scheduling regular fertilization." }),
+            tip: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeTip", { defaultValue: "Most indoor plants only need fertilizing during spring and summer. Less is more — always dilute to half strength if unsure." }),
             icon: <FlaskConical className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeAction", { defaultValue: "Set up fertilizing" }),
@@ -4939,6 +4944,7 @@ function OverviewSection({
             done: hasJournalEntry || roadmapCompletions.has('create_journal'),
             label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Write a journal entry" }),
             desc: t("gardenDashboard.beginnerRoadmap.createJournalDesc", { defaultValue: "Document your garden journey with photos and notes." }),
+            tip: t("gardenDashboard.beginnerRoadmap.createJournalTip", { defaultValue: "Take a photo of your plant today! Looking back at your journal in a few weeks will show you how much it's grown." }),
             icon: <BookOpen className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/journal`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
@@ -5020,7 +5026,9 @@ function OverviewSection({
         };
 
         const vinePath = buildLianaPath();
-        const progressFraction = nodeCount > 1 ? completedCount / nodeCount : completedCount;
+        // Progress: 0 completed = 0%, all completed = 100%
+        // Map to segments: completedCount steps done means vine reaches up to that node
+        const progressFraction = nodeCount > 1 ? Math.min(1, completedCount / (nodeCount - 1)) : (completedCount > 0 ? 1 : 0);
 
         // Decorations: leaves sprouting from the liana + flowers at select points
         type DecType = 'leaf' | 'flower';
@@ -5031,14 +5039,16 @@ function OverviewSection({
           // Direction of the segment
           const segDx = x1 - x0;
           const segAngle = Math.atan2(y1 - y0, segDx) * (180 / Math.PI);
-          // Leaves at 30% and 70% along segment, alternating sides
+          // Leaves at 30% and 70% along segment, alternating sides, pointing upward
           for (const [t, side] of [[0.3, 1], [0.7, -1]] as [number, number][]) {
             const mx = x0 + (x1 - x0) * t;
             const my = y0 + (y1 - y0) * t;
+            // Leaves tilt outward from the vine and point upward (negative Y = up)
+            const leafAngle = -45 * side + (segDx > 0 ? -10 : 10);
             decorations.push({
               x: mx + side * 10,
               y: my,
-              rotation: segAngle + side * 40,
+              rotation: leafAngle,
               type: 'leaf',
               segIdx: i,
             });
@@ -5084,10 +5094,10 @@ function OverviewSection({
               {t("gardenDashboard.beginnerRoadmap.chapter1", { defaultValue: "Chapter 1 — Creating a Garden" })}
             </div>
 
-            {/* Two-column layout: current task left, map right */}
-            <div className="flex gap-4">
+            {/* Two-column 50/50 layout: current task left, map right */}
+            <div className="grid grid-cols-2 gap-4" style={{ minHeight: 380 }}>
               {/* Left column: Current task focus */}
-              <div className="flex-1 min-w-0 flex flex-col">
+              <div className="min-w-0 flex flex-col">
                 {!allDone && currentIdx >= 0 ? (() => {
                   const step = roadmapSteps[currentIdx];
                   return (
@@ -5120,6 +5130,18 @@ function OverviewSection({
                           </button>
                         )}
                       </div>
+
+                      {/* Tip / help section */}
+                      {step.tip && (
+                        <div className="mt-3 rounded-xl bg-amber-50/70 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30 p-3">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                            {t("gardenDashboard.beginnerRoadmap.tip", { defaultValue: "Tip" })}
+                          </div>
+                          <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                            {step.tip}
+                          </p>
+                        </div>
+                      )}
 
                       {/* Progress summary */}
                       <div className="mt-3 flex items-center gap-2">
@@ -5163,11 +5185,12 @@ function OverviewSection({
                 )}
               </div>
 
-              {/* Right column: Scrollable roadmap (wider) */}
+              {/* Right column: Scrollable roadmap (50/50, hidden scrollbar) */}
+              <style dangerouslySetInnerHTML={{ __html: `.roadmap-scroll::-webkit-scrollbar { display: none; }` }} />
               <div
                 ref={mapScrollRef}
-                className="w-[260px] flex-shrink-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600"
-                style={{ maxHeight: 420 }}
+                className="roadmap-scroll min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50"
+                style={{ maxHeight: 420, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
               >
                 <div className="relative" style={{ height: svgHeight, minHeight: '100%' }}>
                   {/* SVG vine */}
@@ -5187,7 +5210,7 @@ function OverviewSection({
                       className="text-stone-200 dark:text-stone-700"
                     />
 
-                    {/* Growing vine (green) */}
+                    {/* Growing vine (green) — only up to completed nodes */}
                     <path
                       d={vinePath}
                       fill="none"
@@ -5195,8 +5218,8 @@ function OverviewSection({
                       strokeWidth="3.5"
                       strokeLinecap="round"
                       style={{
-                        strokeDasharray: '2000',
-                        strokeDashoffset: `${2000 - progressFraction * 2000}`,
+                        strokeDasharray: '5000',
+                        strokeDashoffset: `${5000 - progressFraction * 5000}`,
                         transition: 'stroke-dashoffset 0.8s ease-out',
                       }}
                     />
