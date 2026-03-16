@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant, GardenPrivacy, GardenType } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy, GardenType, GardenLivingSpace } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant, PlantImage } from '@/types/plant'
@@ -382,7 +382,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   let gerr: any = null
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, garden_type')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, garden_type, living_space')
     .in('id', gardenIds)
   gardens = result.data || []
   gerr = result.error
@@ -408,11 +408,12 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
     streak: Number(g.streak ?? 0),
     privacy: (g.privacy || 'public') as GardenPrivacy,
     gardenType: (g.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(g.living_space) ? g.living_space : []) as GardenLivingSpace[],
   }))
 }
 
-export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy; gardenType?: GardenType }): Promise<Garden> {
-  const { name, coverImageUrl = null, ownerUserId, privacy = 'public', gardenType = 'default' } = params
+export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy; gardenType?: GardenType; livingSpace?: GardenLivingSpace[] }): Promise<Garden> {
+  const { name, coverImageUrl = null, ownerUserId, privacy = 'public', gardenType = 'default', livingSpace = [] } = params
 
   // Try with privacy column first, fallback if column doesn't exist
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
@@ -421,8 +422,8 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
   let error: any = null
   const result = await supabase
     .from('gardens')
-    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy, garden_type: gardenType })
-    .select('id, name, cover_image_url, created_by, created_at, privacy, garden_type')
+    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy, garden_type: gardenType, living_space: livingSpace })
+    .select('id, name, cover_image_url, created_by, created_at, privacy, garden_type, living_space')
     .single()
   data = result.data
   error = result.error
@@ -448,6 +449,7 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     privacy: ((data as any).privacy || privacy) as GardenPrivacy,
     gardenType: (data.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(data.living_space) ? data.living_space : livingSpace) as GardenLivingSpace[],
   }
   // Add owner as member
   const { error: merr } = await supabase
@@ -466,7 +468,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space')
     .eq('id', gardenId)
     .maybeSingle()
 
@@ -524,6 +526,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     preferredLanguage: data.preferred_language || null,
     hideAiChat: Boolean(data.hide_ai_chat ?? false),
     gardenType: (data.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(data.living_space) ? data.living_space : []) as GardenLivingSpace[],
   }
 }
 

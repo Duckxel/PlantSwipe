@@ -83,23 +83,37 @@ The roadmap has a progress bar and is organized into **sections**, each containi
 - An action button linking to the relevant page/tab
 - A checked/unchecked visual state
 
-#### Section 1: Your first plant
+#### Roadmap Steps (Duolingo/CandyCrush map style)
 
-| # | Step | Completion trigger | Action link |
-|---|------|-------------------|-------------|
-| 1 | Add 1 plant to your garden | `plants.length > 0` | Plants tab |
-| 2 | Read the info page of your plant | localStorage flag `beginner_read_plant_{gardenId}` | `/plants/{plantId}` |
-| 3 | Schedule watering tasks for your plant | Any task with `type === 'water'` exists | Tasks tab |
-| 4 | Schedule fertilization tasks for your plant | Any task with `type === 'fertilize'` exists | Tasks tab |
-| 5 | Create an entry in your journal | Any row in `garden_journal_entries` for the garden | Journal tab |
+| # | Step | Key | Completion trigger | Action link |
+|---|------|-----|-------------------|-------------|
+| 1 | Set your garden space | `set_living_space` | `garden.livingSpace.length > 0` | Settings (general) |
+| 2 | Add your first plant | `add_plant` | `plants.length > 0` | Plants tab |
+| 3 | Read your plant's info | `read_plant_info` | localStorage flag `beginner_read_plant_{gardenId}` | `/plants/{plantId}` |
+| 4 | Schedule watering | `schedule_water` | Any task with `type === 'water'` exists | Tasks tab |
+| 5 | Schedule fertilization | `schedule_fertilize` | Any task with `type === 'fertilize'` exists | Tasks tab |
+| 6 | Write a journal entry | `create_journal` | Any row in `garden_journal_entries` for the garden | Journal tab |
+
+**Sequential unlocking:** Steps are locked until the previous step is completed. Only the current (first incomplete) step shows a "START" badge and can be interacted with.
+
+**Persistent tracking:** Completions are stored in `garden_roadmap_completions` table (per garden, not per user). The `complete_roadmap_step` RPC is called when a step is detected as complete. Once persisted, a step stays complete forever even if the underlying resource is removed.
+
+**Visual design:**
+- Inspired by Duolingo course map / CandyCrush level map
+- Nodes arranged in a vertical squiggly path (alternating left/center/right)
+- Green vine line grows between completed nodes (SVG path with dash animation)
+- Leaves appear along the vine as progress advances
+- Completed nodes: green circle with checkmark
+- Current node: green with amber ring + pulse animation + "START" badge
+- Locked nodes: grey circle with lock icon
 
 **Data sources:**
-- Steps 1: `plants` array length from `getGardenPlants()`
-- Step 2: `localStorage` (client-side only, per garden)
-- Steps 3–4: `listGardenTasks()` filtered by `task.type`
-- Step 5: Count query on `garden_journal_entries` table
-
-**Adding new sections:** The roadmap is built as an array of `roadmapSections`, each with a `key`, `title`, and `steps` array. To add a new section, append to the array. Steps from all sections are flattened for the overall progress bar.
+- Step 1: `garden.livingSpace` array from garden fetch
+- Step 2: `plants` array length from `getGardenPlants()`
+- Step 3: `localStorage` (client-side only, per garden)
+- Steps 4–5: `listGardenTasks()` filtered by `task.type`
+- Step 6: Count query on `garden_journal_entries` table
+- All steps: also checked against `garden_roadmap_completions` table
 
 ### Plant Suggestions
 
@@ -110,12 +124,23 @@ A "Suggested for you" section appears **only in the Plants tab** of beginner gar
 - **Not shown in the Overview tab**
 
 Shows 5 cards in a horizontal scrollable row:
-- **Cards 1–4:** Random easy-care succulents from the plant catalog
-  - Queried as: `plant_type = 'succulent'`, `care_level @> ['easy']`, `status != 'in_progress'`
+- **Cards 1–4:** Random plants matching the garden's living space
+  - If `garden.livingSpace` is set: `living_space && {garden.livingSpace}`, `status != 'in_progress'`
+  - If `garden.livingSpace` is empty: falls back to `care_level @> ['easy']`, `status != 'in_progress'`
   - Shuffled randomly, limited to 4
   - Shows plant image (3:4 aspect), name, variety, "Learn more" link
   - Respects current language for translated names
-- **Card 5:** "Explore more" — links to `/search?type=Succulent&maintenance=easy`
+- **Card 5:** "Explore more" — links to search filtered by living space (or easy maintenance fallback)
+
+### Garden Living Space
+
+All gardens (default and beginners) have a `living_space` field — a text array of: `indoor`, `outdoor`, `terrarium`, `greenhouse`.
+
+- **Set in:** Garden Settings > General > Living Space (multi-select toggle buttons)
+- **Also available at creation:** Garden creation dialog includes living space picker
+- **Used by:** Plant suggestions query (filters plants whose `living_space` overlaps with the garden's)
+- **Beginner action:** "Set your garden space" is the first step in the beginner roadmap
+- **DB column:** `gardens.living_space text[] not null default '{}'`
 
 ### Recommended Watering Frequency
 

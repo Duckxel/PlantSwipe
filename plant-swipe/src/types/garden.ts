@@ -6,6 +6,8 @@ export type GardenPrivacy = 'public' | 'friends_only' | 'private'
 
 export type GardenType = 'default' | 'beginners'
 
+export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse'
+
 export interface Garden {
   id: string
   name: string
@@ -23,6 +25,7 @@ export interface Garden {
   /** If true, hide the AI chat bubble for this garden */
   hideAiChat?: boolean
   gardenType?: GardenType
+  livingSpace?: GardenLivingSpace[]
 }
 
 export interface GardenMember {

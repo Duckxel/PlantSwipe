@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase data */
 // @ts-nocheck
 import React from "react";
-import { Leaf, Sprout } from "lucide-react";
+import { Leaf, Sprout, Home, Trees, FlaskConical, Warehouse } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -71,6 +71,7 @@ export const GardenListPage: React.FC = () => {
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
   const [gardenType, setGardenType] = React.useState<"default" | "beginners">("default");
+  const [livingSpace, setLivingSpace] = React.useState<Array<"indoor" | "outdoor" | "terrarium" | "greenhouse">>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [progressByGarden, setProgressByGarden] = React.useState<
     Record<string, { due: number; completed: number }>
@@ -1792,10 +1793,12 @@ export const GardenListPage: React.FC = () => {
         ownerUserId: user.id,
         privacy: defaultPrivacy as any,
         gardenType,
+        livingSpace,
       });
       setOpen(false);
       setName("");
       setGardenType("default");
+      setLivingSpace([]);
       // Navigate to the new garden dashboard
       navigate(`/garden/${garden.id}`);
     } catch (e: any) {
@@ -2331,6 +2334,37 @@ export const GardenListPage: React.FC = () => {
                       </div>
                       <span>{t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}</span>
                     </button>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>{t("garden.livingSpace", { defaultValue: "Living Space" })}</Label>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    {t("garden.livingSpaceHint", { defaultValue: "Where will your plants grow? Select all that apply." })}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: "indoor" as const, icon: <Home className="h-4 w-4" />, label: t("garden.livingSpace.indoor", { defaultValue: "Indoor" }) },
+                      { value: "outdoor" as const, icon: <Trees className="h-4 w-4" />, label: t("garden.livingSpace.outdoor", { defaultValue: "Outdoor" }) },
+                      { value: "terrarium" as const, icon: <FlaskConical className="h-4 w-4" />, label: t("garden.livingSpace.terrarium", { defaultValue: "Terrarium" }) },
+                      { value: "greenhouse" as const, icon: <Warehouse className="h-4 w-4" />, label: t("garden.livingSpace.greenhouse", { defaultValue: "Greenhouse" }) },
+                    ]).map((opt) => {
+                      const active = livingSpace.includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setLivingSpace((prev) => active ? prev.filter((v) => v !== opt.value) : [...prev, opt.value])}
+                          className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-all cursor-pointer ${
+                            active
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                              : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                          }`}
+                        >
+                          <span className={active ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"}>{opt.icon}</span>
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="flex gap-2 justify-end pt-2">

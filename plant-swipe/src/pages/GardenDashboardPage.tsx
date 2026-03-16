@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
@@ -82,6 +82,7 @@ import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
 import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
+import { GardenLivingSpaceEditor } from "@/components/garden/GardenLivingSpaceEditor";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
@@ -157,6 +158,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [hasWaterTask, setHasWaterTask] = React.useState(false);
   const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
   const [hasJournalEntry, setHasJournalEntry] = React.useState(false);
+  const [roadmapCompletions, setRoadmapCompletions] = React.useState<Set<string>>(new Set());
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<
     Array<{
       id: string;
@@ -1653,13 +1655,20 @@ export const GardenDashboardPage: React.FC = () => {
       let ignore = false;
       (async () => {
         try {
-          const { data: plantRows } = await supabase
+          let query = supabase
             .from('plants')
             .select('id, name, plant_images (link, use)')
-            .eq('plant_type', 'succulent')
-            .contains('care_level', ['easy'])
-            .neq('status', 'in_progress')
-            .limit(50);
+            .neq('status', 'in_progress');
+
+          // Filter by garden living space if set, otherwise fall back to easy care
+          const gardenSpaces = garden?.livingSpace ?? [];
+          if (gardenSpaces.length > 0) {
+            query = query.overlaps('living_space', gardenSpaces);
+          } else {
+            query = query.contains('care_level', ['easy']);
+          }
+
+          const { data: plantRows } = await query.limit(50);
           if (ignore || !plantRows || plantRows.length === 0) return;
 
           const plantIds = plantRows.map((p: any) => p.id);
@@ -1692,7 +1701,8 @@ export const GardenDashboardPage: React.FC = () => {
         } catch {}
       })();
       return () => { ignore = true; };
-    }, [garden?.gardenType, currentLang, isMember]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [garden?.gardenType, garden?.livingSpace?.join(','), currentLang, isMember]);
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
@@ -1710,6 +1720,63 @@ export const GardenDashboardPage: React.FC = () => {
       })();
       return () => { ignore = true; };
     }, [garden?.gardenType, id, isMember]);
+
+    // Beginner roadmap: load persistent completions from DB
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      let ignore = false;
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('garden_roadmap_completions')
+            .select('step_key')
+            .eq('garden_id', id);
+          if (!ignore && data) {
+            setRoadmapCompletions(new Set(data.map((r: any) => r.step_key)));
+          }
+        } catch {}
+      })();
+      return () => { ignore = true; };
+    }, [garden?.gardenType, id, isMember]);
+
+    // Beginner roadmap: sync live completions to DB
+    // Detect when steps are completed live and persist them
+    const syncRoadmapRef = React.useRef<Set<string>>(new Set());
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
+      const firstPlantId = plants[0]?.plant?.id;
+      const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
+      const liveSteps: Array<{ key: string; done: boolean }> = [
+        { key: 'set_living_space', done: hasLivingSpace },
+        { key: 'add_plant', done: plants.length > 0 },
+        { key: 'read_plant_info', done: firstPlantId ? localStorage.getItem(`beginner_read_plant_${id}`) === 'true' : false },
+        { key: 'schedule_water', done: hasWaterTask },
+        { key: 'schedule_fertilize', done: hasFertilizeTask },
+        { key: 'create_journal', done: hasJournalEntry },
+      ];
+      const newCompletions: string[] = [];
+      for (const step of liveSteps) {
+        if (step.done && !roadmapCompletions.has(step.key) && !syncRoadmapRef.current.has(step.key)) {
+          newCompletions.push(step.key);
+          syncRoadmapRef.current.add(step.key);
+        }
+      }
+      if (newCompletions.length > 0) {
+        (async () => {
+          for (const key of newCompletions) {
+            try {
+              await supabase.rpc('complete_roadmap_step', { _garden_id: id, _step_key: key });
+            } catch {}
+          }
+          setRoadmapCompletions((prev) => {
+            const next = new Set(prev);
+            for (const k of newCompletions) next.add(k);
+            return next;
+          });
+        })();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [garden?.gardenType, garden?.livingSpace, id, isMember, user?.id, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry]);
 
     React.useEffect(() => {
       load();
@@ -3208,7 +3275,11 @@ export const GardenDashboardPage: React.FC = () => {
                             {/* Explore more card */}
                             <div
                               className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
-                              onClick={() => navigate('/search?type=Succulent&maintenance=easy')}
+                              onClick={() => {
+                                const spaces = garden?.livingSpace ?? [];
+                                const params = spaces.length > 0 ? `?living_space=${spaces.join(',')}` : '?maintenance=easy';
+                                navigate(`/search${params}`);
+                              }}
                             >
                               <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
                                 <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
@@ -3341,6 +3412,7 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
                       GardenPrivacyToggle={GardenPrivacyToggle}
                       GardenAiChatToggle={GardenAiChatToggle}
+                      GardenLivingSpaceEditor={GardenLivingSpaceEditor}
                       MemberCard={MemberCard}
                     />
                   ) : (
@@ -4806,21 +4878,32 @@ function OverviewSection({
         )}
       </div>
 
-      {/* Beginner Roadmap - shown only to members in beginners gardens */}
+      {/* Beginner Roadmap - Duolingo/CandyCrush map style */}
       {garden?.gardenType === 'beginners' && isMember && (() => {
         const firstPlantId = plants[0]?.plant?.id;
-        const sectionSteps = [
+        const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
+        const roadmapSteps = [
+          {
+            key: 'set_living_space',
+            done: hasLivingSpace || roadmapCompletions.has('set_living_space'),
+            label: t("gardenDashboard.beginnerRoadmap.setLivingSpace", { defaultValue: "Set your garden space" }),
+            icon: <Home className="w-5 h-5" />,
+            action: () => navigate(`/garden/${gardenId}/settings?section=general`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.setLivingSpaceAction", { defaultValue: "Set space" }),
+          },
           {
             key: 'add_plant',
-            done: plants.length > 0,
-            label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add 1 plant to your garden" }),
+            done: plants.length > 0 || roadmapCompletions.has('add_plant'),
+            label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add your first plant" }),
+            icon: <Sprout className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/plants`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
           },
           {
             key: 'read_plant_info',
-            done: firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false,
-            label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read the info page of your plant" }),
+            done: (firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false) || roadmapCompletions.has('read_plant_info'),
+            label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read your plant's info" }),
+            icon: <BookOpen className="w-5 h-5" />,
             action: firstPlantId ? () => {
               localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
               navigate(`/plants/${firstPlantId}`);
@@ -4829,39 +4912,88 @@ function OverviewSection({
           },
           {
             key: 'schedule_water',
-            done: hasWaterTask,
-            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering tasks for your plant" }),
+            done: hasWaterTask || roadmapCompletions.has('schedule_water'),
+            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering" }),
+            icon: <Droplets className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
           },
           {
             key: 'schedule_fertilize',
-            done: hasFertilizeTask,
-            label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization tasks for your plant" }),
+            done: hasFertilizeTask || roadmapCompletions.has('schedule_fertilize'),
+            label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization" }),
+            icon: <FlaskConical className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeAction", { defaultValue: "Set up fertilizing" }),
           },
           {
             key: 'create_journal',
-            done: hasJournalEntry,
-            label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Create an entry in your journal" }),
+            done: hasJournalEntry || roadmapCompletions.has('create_journal'),
+            label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Write a journal entry" }),
+            icon: <BookOpen className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/journal`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
           },
         ];
-        const roadmapSections = [
-          {
-            key: 'section_1',
-            title: t("gardenDashboard.beginnerRoadmap.section1Title", { defaultValue: "Your first plant" }),
-            steps: sectionSteps,
-          },
-        ];
-        const roadmapSteps = roadmapSections.flatMap((s) => s.steps);
+
         const completedCount = roadmapSteps.filter((s) => s.done).length;
         const allDone = completedCount === roadmapSteps.length;
+
+        // Find the first incomplete step (the "current" one to focus on)
+        const currentIdx = roadmapSteps.findIndex((s) => !s.done);
+
+        // Squiggly path positions - alternating left/center/right like CandyCrush
+        // Each node has a horizontal offset that creates the winding path
+        const nodeOffsets = [0, -1, 0, 1, 0, -1]; // -1=left, 0=center, 1=right
+
+        // Generate SVG vine path points
+        const nodeSpacing = 110; // vertical spacing between nodes
+        const centerX = 140;
+        const offsetPx = 55;
+        const nodeY = (i: number) => 40 + i * nodeSpacing;
+        const nodeX = (i: number) => centerX + nodeOffsets[i % nodeOffsets.length] * offsetPx;
+
+        // Build vine path as cubic bezier curves through nodes
+        const buildVinePath = () => {
+          if (roadmapSteps.length < 2) return '';
+          let d = `M ${nodeX(0)} ${nodeY(0)}`;
+          for (let i = 1; i < roadmapSteps.length; i++) {
+            const x0 = nodeX(i - 1), y0 = nodeY(i - 1);
+            const x1 = nodeX(i), y1 = nodeY(i);
+            const midY = (y0 + y1) / 2;
+            d += ` C ${x0} ${midY}, ${x1} ${midY}, ${x1} ${y1}`;
+          }
+          return d;
+        };
+
+        const vinePath = buildVinePath();
+        const svgHeight = nodeY(roadmapSteps.length - 1) + 40;
+        const svgWidth = centerX * 2;
+
+        // Progress along the vine (0 to 1)
+        const progressFraction = roadmapSteps.length > 1
+          ? (completedCount) / (roadmapSteps.length)
+          : completedCount;
+
+        // Leaf positions along the vine between nodes
+        const leafPositions: Array<{ x: number; y: number; rotation: number; side: 'left' | 'right' }> = [];
+        for (let i = 0; i < roadmapSteps.length - 1; i++) {
+          const x0 = nodeX(i), y0 = nodeY(i);
+          const x1 = nodeX(i + 1), y1 = nodeY(i + 1);
+          const midX = (x0 + x1) / 2 + (x1 > x0 ? -15 : 15);
+          const midY = (y0 + y1) / 2;
+          leafPositions.push({
+            x: midX,
+            y: midY,
+            rotation: x1 > x0 ? 35 : -35,
+            side: x1 > x0 ? 'right' : 'left',
+          });
+        }
+
         return (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
-            <div className="flex items-center justify-between mb-4">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-2">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-emerald-500" />
                 {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Getting Started" })}
@@ -4870,66 +5002,148 @@ function OverviewSection({
                 {completedCount}/{roadmapSteps.length}
               </span>
             </div>
-            {/* Progress bar */}
-            <div className="w-full h-2 rounded-full bg-stone-200 dark:bg-stone-700 mb-4 overflow-hidden">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
-                style={{ width: `${roadmapSteps.length > 0 ? (completedCount / roadmapSteps.length) * 100 : 0}%` }}
-              />
-            </div>
-            <div className="space-y-5">
-              {roadmapSections.map((section) => {
-                const sectionDone = section.steps.filter((s) => s.done).length;
-                const sectionTotal = section.steps.length;
+
+            {/* Map container */}
+            <div className="relative" style={{ height: svgHeight }}>
+              {/* SVG vine/path */}
+              <svg
+                className="absolute inset-0 w-full h-full pointer-events-none"
+                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                preserveAspectRatio="xMidYMid meet"
+              >
+                <defs>
+                  <clipPath id={`roadmap-vine-clip-${gardenId}`}>
+                    <rect x="0" y="0" width={svgWidth} height={svgHeight} />
+                  </clipPath>
+                </defs>
+
+                {/* Background path (grey, full length) */}
+                <path
+                  d={vinePath}
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                  strokeLinecap="round"
+                  strokeDasharray="8 6"
+                  className="text-stone-200 dark:text-stone-700"
+                />
+
+                {/* Vine path (green, grows with progress) */}
+                <path
+                  d={vinePath}
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="4.5"
+                  strokeLinecap="round"
+                  style={{
+                    strokeDasharray: '2000',
+                    strokeDashoffset: `${2000 - progressFraction * 2000}`,
+                    transition: 'stroke-dashoffset 0.8s ease-out',
+                  }}
+                />
+
+                {/* Leaves along the vine */}
+                {leafPositions.map((leaf, i) => {
+                  const stepProgress = (i + 1) / roadmapSteps.length;
+                  const visible = progressFraction >= stepProgress - 0.05;
+                  return (
+                    <g
+                      key={`leaf-${i}`}
+                      transform={`translate(${leaf.x}, ${leaf.y}) rotate(${leaf.rotation})`}
+                      style={{
+                        opacity: visible ? 1 : 0,
+                        transition: 'opacity 0.4s ease',
+                      }}
+                    >
+                      <path
+                        d="M 0 -8 Q 6 -2, 0 8 Q -6 -2, 0 -8"
+                        fill="#10b981"
+                        opacity="0.7"
+                      />
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Step nodes */}
+              {roadmapSteps.map((step, i) => {
+                const x = nodeX(i);
+                const y = nodeY(i);
+                const isCompleted = step.done;
+                const isCurrent = i === currentIdx;
+                // A step is locked if any previous step is not done
+                const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
+                const nodeSize = isCurrent ? 64 : 56;
+
                 return (
-                  <div key={section.key}>
-                    <div className="flex items-center gap-2 mb-2">
-                      <h4 className="text-sm font-semibold text-stone-600 dark:text-stone-300">
-                        {section.title}
-                      </h4>
-                      <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500">
-                        {sectionDone}/{sectionTotal}
-                      </span>
-                    </div>
-                    <div className="space-y-2">
-                      {section.steps.map((step) => (
-                        <div
-                          key={step.key}
-                          className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
-                            step.done
-                              ? "bg-emerald-50 dark:bg-emerald-900/20"
-                              : "bg-stone-50 dark:bg-stone-800/50"
-                          }`}
-                        >
-                          {step.done ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                          ) : (
-                            <Circle className="w-5 h-5 text-stone-400 dark:text-stone-500 flex-shrink-0" />
-                          )}
-                          <span className={`flex-1 text-sm ${step.done ? "line-through text-stone-400 dark:text-stone-500" : "text-stone-700 dark:text-stone-200"}`}>
-                            {step.label}
-                          </span>
-                          {!step.done && step.action && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-xs h-7 px-2.5"
-                              onClick={step.action}
-                            >
-                              {step.actionLabel}
-                              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-                            </Button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                  <div
+                    key={step.key}
+                    className="absolute flex flex-col items-center"
+                    style={{
+                      left: `calc(${(x / svgWidth) * 100}% - ${nodeSize / 2}px)`,
+                      top: y - nodeSize / 2,
+                      width: nodeSize,
+                    }}
+                  >
+                    {/* Node circle */}
+                    <button
+                      disabled={isLocked || isCompleted}
+                      onClick={() => {
+                        if (!isLocked && !isCompleted && step.action) step.action();
+                      }}
+                      className={`
+                        relative flex items-center justify-center rounded-full transition-all duration-300
+                        ${isCompleted
+                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40'
+                          : isCurrent
+                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-300 dark:shadow-emerald-800/60 ring-4 ring-amber-400/60 animate-pulse'
+                            : isLocked
+                              ? 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
+                              : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
+                        }
+                      `}
+                      style={{ width: nodeSize, height: nodeSize }}
+                    >
+                      {isCompleted ? (
+                        <CheckCircle2 className="w-6 h-6" />
+                      ) : isLocked ? (
+                        <Lock className="w-5 h-5" />
+                      ) : (
+                        step.icon
+                      )}
+
+                      {/* Current step badge */}
+                      {isCurrent && !isCompleted && (
+                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm">
+                          {t("gardenDashboard.beginnerRoadmap.start", { defaultValue: "START" })}
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Label below node */}
+                    <span
+                      className={`mt-1.5 text-xs font-medium text-center leading-tight max-w-[120px] ${
+                        isCompleted
+                          ? 'text-emerald-600 dark:text-emerald-400'
+                          : isCurrent
+                            ? 'text-stone-800 dark:text-stone-100'
+                            : 'text-stone-400 dark:text-stone-500'
+                      }`}
+                    >
+                      {step.label}
+                    </span>
                   </div>
                 );
               })}
             </div>
+
             {allDone && (
-              <div className="mt-4 text-center text-sm text-emerald-600 dark:text-emerald-400 font-medium">
-                {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
+              <div className="mt-4 text-center">
+                <div className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-4 py-2 font-semibold text-sm">
+                  <Star className="w-5 h-5 text-amber-500" />
+                  {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
+                  <Star className="w-5 h-5 text-amber-500" />
+                </div>
               </div>
             )}
           </Card>
