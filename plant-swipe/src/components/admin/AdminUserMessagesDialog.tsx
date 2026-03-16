@@ -588,7 +588,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Back"
+                aria-label="Back" title="Back"
                 className="rounded-full h-9 w-9"
                 onClick={() => {
                   if (selectedImageIndex !== null) {
@@ -751,7 +751,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   {messageSearchQuery && (
                     <button
                       type="button"
-                      aria-label="Clear search"
+                      aria-label="Clear search" title="Clear search"
                       onClick={() => setMessageSearchQuery('')}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
                     >
@@ -949,7 +949,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                           {/* Quick download button */}
                           <button
                             type="button"
-                            aria-label="Download image"
+                            aria-label="Download image" title="Download image"
                             onClick={(e) => {
                               e.stopPropagation()
                               downloadImage(img, index)
@@ -1011,7 +1011,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label="Close fullscreen"
+                          aria-label="Close fullscreen" title="Close fullscreen"
                           className="rounded-full h-10 w-10 text-white hover:bg-white/20"
                           onClick={(e) => {
                             e.stopPropagation()
@@ -1106,7 +1106,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   {selectedImageIndex !== null && selectedImageIndex > 0 && (
                     <button
                       type="button"
-                      aria-label="Previous image"
+                      aria-label="Previous image" title="Previous image"
                       className={cn(
                         "absolute left-2 top-1/2 -translate-y-1/2 p-2 transition-opacity duration-200",
                         "text-white",
@@ -1125,7 +1125,7 @@ export const AdminUserMessagesDialog: React.FC<AdminUserMessagesDialogProps> = (
                   {selectedImageIndex !== null && selectedImageIndex < userImages.length - 1 && (
                     <button
                       type="button"
-                      aria-label="Next image"
+                      aria-label="Next image" title="Next image"
                       className={cn(
                         "absolute right-2 top-1/2 -translate-y-1/2 p-2 transition-opacity duration-200",
                         "text-white",
