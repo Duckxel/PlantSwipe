@@ -202,6 +202,23 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
 
             <div>
               <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                <Home className="w-5 h-5 text-emerald-600" />
+                {t("gardenDashboard.settingsSection.livingSpace", { defaultValue: "Living Space" })}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("gardenDashboard.settingsSection.livingSpaceDescription", { defaultValue: "Where are your plants growing? This helps us suggest the right plants for your garden." })}
+              </p>
+              <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
+                <GardenLivingSpaceEditor
+                  garden={garden}
+                  onSaved={onRefreshGarden}
+                  canEdit={viewerIsOwner}
+                />
+              </Card>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
                 <Globe className="w-5 h-5 text-blue-600" />
                 {t("gardenDashboard.settingsSection.adviceLanguage", "Advice Language")}
               </h3>
@@ -228,23 +245,6 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
               </p>
               <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
                 <GardenAiChatToggle
-                  garden={garden}
-                  onSaved={onRefreshGarden}
-                  canEdit={viewerIsOwner}
-                />
-              </Card>
-            </div>
-
-            <div>
-              <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
-                <Home className="w-5 h-5 text-emerald-600" />
-                {t("gardenDashboard.settingsSection.livingSpace", { defaultValue: "Living Space" })}
-              </h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                {t("gardenDashboard.settingsSection.livingSpaceDescription", { defaultValue: "Where are your plants growing? This helps us suggest the right plants for your garden." })}
-              </p>
-              <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
-                <GardenLivingSpaceEditor
                   garden={garden}
                   onSaved={onRefreshGarden}
                   canEdit={viewerIsOwner}

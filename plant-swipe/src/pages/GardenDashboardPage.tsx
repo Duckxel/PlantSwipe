@@ -4890,6 +4890,7 @@ function OverviewSection({
             key: 'set_living_space',
             done: hasLivingSpace || roadmapCompletions.has('set_living_space'),
             label: t("gardenDashboard.beginnerRoadmap.setLivingSpace", { defaultValue: "Set your garden space" }),
+            desc: t("gardenDashboard.beginnerRoadmap.setLivingSpaceDesc", { defaultValue: "Choose where your plants will live — indoor, outdoor, terrarium, or greenhouse." }),
             icon: <Home className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/settings?section=general`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.setLivingSpaceAction", { defaultValue: "Set space" }),
@@ -4898,6 +4899,7 @@ function OverviewSection({
             key: 'add_plant',
             done: plants.length > 0 || roadmapCompletions.has('add_plant'),
             label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add your first plant" }),
+            desc: t("gardenDashboard.beginnerRoadmap.addPlantDesc", { defaultValue: "Browse the catalog and add a plant to start growing your garden." }),
             icon: <Sprout className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/plants`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
@@ -4906,6 +4908,7 @@ function OverviewSection({
             key: 'read_plant_info',
             done: (firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false) || roadmapCompletions.has('read_plant_info'),
             label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read your plant's info" }),
+            desc: t("gardenDashboard.beginnerRoadmap.readPlantInfoDesc", { defaultValue: "Learn about care requirements, growing conditions, and tips for your plant." }),
             icon: <BookOpen className="w-5 h-5" />,
             action: firstPlantId ? () => {
               localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
@@ -4917,6 +4920,7 @@ function OverviewSection({
             key: 'schedule_water',
             done: hasWaterTask || roadmapCompletions.has('schedule_water'),
             label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering" }),
+            desc: t("gardenDashboard.beginnerRoadmap.scheduleWaterDesc", { defaultValue: "Set up a watering schedule so you never forget to water your plant." }),
             icon: <Droplets className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
@@ -4925,6 +4929,7 @@ function OverviewSection({
             key: 'schedule_fertilize',
             done: hasFertilizeTask || roadmapCompletions.has('schedule_fertilize'),
             label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization" }),
+            desc: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeDesc", { defaultValue: "Keep your plant healthy by scheduling regular fertilization." }),
             icon: <FlaskConical className="w-5 h-5" />,
             action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeAction", { defaultValue: "Set up fertilizing" }),
@@ -4933,6 +4938,7 @@ function OverviewSection({
             key: 'create_journal',
             done: hasJournalEntry || roadmapCompletions.has('create_journal'),
             label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Write a journal entry" }),
+            desc: t("gardenDashboard.beginnerRoadmap.createJournalDesc", { defaultValue: "Document your garden journey with photos and notes." }),
             icon: <BookOpen className="w-5 h-5" />,
             action: () => navigate(`/garden/${gardenId}/journal`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
@@ -4941,62 +4947,86 @@ function OverviewSection({
 
         const completedCount = roadmapSteps.filter((s) => s.done).length;
         const allDone = completedCount === roadmapSteps.length;
-
-        // Find the first incomplete step (the "current" one to focus on)
         const currentIdx = roadmapSteps.findIndex((s) => !s.done);
 
-        // Squiggly path positions - alternating left/center/right like CandyCrush
-        // Each node has a horizontal offset that creates the winding path
-        const nodeOffsets = [0, -1, 0, 1, 0, -1]; // -1=left, 0=center, 1=right
+        // === Map geometry (bottom-to-top, S-curve path) ===
+        const nodeCount = roadmapSteps.length;
+        const nodeSpacing = 100;
+        const svgPadTop = 50;
+        const svgPadBot = 50;
+        const svgHeight = svgPadTop + (nodeCount - 1) * nodeSpacing + svgPadBot;
+        const svgWidth = 200;
+        const centerX = svgWidth / 2;
+        const amplitude = 45; // horizontal swing
 
-        // Generate SVG vine path points
-        const nodeSpacing = 110; // vertical spacing between nodes
-        const centerX = 140;
-        const offsetPx = 55;
-        const nodeY = (i: number) => 40 + i * nodeSpacing;
-        const nodeX = (i: number) => centerX + nodeOffsets[i % nodeOffsets.length] * offsetPx;
+        // S-curve offsets: smooth sine wave, bottom-to-top
+        // Index 0 = bottom of the map (START), last = top (FINISH)
+        const nodeX = (i: number) => {
+          // Sine wave: alternates left/right as we go up
+          return centerX + Math.sin((i / (nodeCount - 1)) * Math.PI * 2 + Math.PI / 2) * amplitude;
+        };
+        // Y goes from bottom (high value) to top (low value)
+        const nodeY = (i: number) => svgHeight - svgPadBot - i * nodeSpacing;
 
-        // Build vine path as cubic bezier curves through nodes
-        const buildVinePath = () => {
-          if (roadmapSteps.length < 2) return '';
-          let d = `M ${nodeX(0)} ${nodeY(0)}`;
-          for (let i = 1; i < roadmapSteps.length; i++) {
-            const x0 = nodeX(i - 1), y0 = nodeY(i - 1);
-            const x1 = nodeX(i), y1 = nodeY(i);
-            const midY = (y0 + y1) / 2;
-            d += ` C ${x0} ${midY}, ${x1} ${midY}, ${x1} ${y1}`;
+        // Build smooth S-curve through all nodes using Catmull-Rom → cubic bezier
+        const buildSmoothPath = () => {
+          if (nodeCount < 2) return '';
+          const pts = Array.from({ length: nodeCount }, (_, i) => ({ x: nodeX(i), y: nodeY(i) }));
+
+          let d = `M ${pts[0].x} ${pts[0].y}`;
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[Math.max(0, i - 1)];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[Math.min(pts.length - 1, i + 2)];
+            // Catmull-Rom to Bezier conversion (tension 0.5)
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
           }
           return d;
         };
 
-        const vinePath = buildVinePath();
-        const svgHeight = nodeY(roadmapSteps.length - 1) + 40;
-        const svgWidth = centerX * 2;
+        const vinePath = buildSmoothPath();
+        const progressFraction = nodeCount > 1 ? completedCount / nodeCount : completedCount;
 
-        // Progress along the vine (0 to 1)
-        const progressFraction = roadmapSteps.length > 1
-          ? (completedCount) / (roadmapSteps.length)
-          : completedCount;
-
-        // Leaf positions along the vine between nodes
-        const leafPositions: Array<{ x: number; y: number; rotation: number; side: 'left' | 'right' }> = [];
-        for (let i = 0; i < roadmapSteps.length - 1; i++) {
+        // Leaf & flower decorations between nodes
+        const decorations: Array<{ x: number; y: number; rotation: number; type: 'leaf' | 'flower'; segIdx: number }> = [];
+        for (let i = 0; i < nodeCount - 1; i++) {
           const x0 = nodeX(i), y0 = nodeY(i);
           const x1 = nodeX(i + 1), y1 = nodeY(i + 1);
-          const midX = (x0 + x1) / 2 + (x1 > x0 ? -15 : 15);
-          const midY = (y0 + y1) / 2;
-          leafPositions.push({
-            x: midX,
-            y: midY,
-            rotation: x1 > x0 ? 35 : -35,
-            side: x1 > x0 ? 'right' : 'left',
-          });
+          // Two leaves per segment at 33% and 66%
+          for (const t of [0.33, 0.66]) {
+            const mx = x0 + (x1 - x0) * t;
+            const my = y0 + (y1 - y0) * t;
+            const dx = x1 - x0;
+            const side = t < 0.5 ? 1 : -1;
+            decorations.push({
+              x: mx + side * 12,
+              y: my,
+              rotation: dx > 0 ? 35 * side : -35 * side,
+              type: 'leaf',
+              segIdx: i,
+            });
+          }
+          // One flower at midpoint of every other segment
+          if (i % 2 === 0) {
+            decorations.push({
+              x: (x0 + x1) / 2 + (x1 > x0 ? 18 : -18),
+              y: (y0 + y1) / 2,
+              rotation: 0,
+              type: 'flower',
+              segIdx: i,
+            });
+          }
         }
 
         return (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center justify-between mb-4">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-emerald-500" />
                 {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Getting Started" })}
@@ -5006,149 +5036,228 @@ function OverviewSection({
               </span>
             </div>
 
-            {/* Map container */}
-            <div className="relative" style={{ height: svgHeight }}>
-              {/* SVG vine/path */}
-              <svg
-                className="absolute inset-0 w-full h-full pointer-events-none"
-                viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                preserveAspectRatio="xMidYMid meet"
-              >
-                <defs>
-                  <clipPath id={`roadmap-vine-clip-${gardenId}`}>
-                    <rect x="0" y="0" width={svgWidth} height={svgHeight} />
-                  </clipPath>
-                </defs>
+            {/* Two-column layout: task list left, map right */}
+            <div className="flex gap-4">
+              {/* Left column: Task list */}
+              <div className="flex-1 min-w-0 space-y-2">
+                {roadmapSteps.map((step, i) => {
+                  const isCompleted = step.done;
+                  const isCurrent = i === currentIdx;
+                  const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
 
-                {/* Background path (grey, full length) */}
-                <path
-                  d={vinePath}
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="4"
-                  strokeLinecap="round"
-                  strokeDasharray="8 6"
-                  className="text-stone-200 dark:text-stone-700"
-                />
-
-                {/* Vine path (green, grows with progress) */}
-                <path
-                  d={vinePath}
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="4.5"
-                  strokeLinecap="round"
-                  style={{
-                    strokeDasharray: '2000',
-                    strokeDashoffset: `${2000 - progressFraction * 2000}`,
-                    transition: 'stroke-dashoffset 0.8s ease-out',
-                  }}
-                />
-
-                {/* Leaves along the vine */}
-                {leafPositions.map((leaf, i) => {
-                  const stepProgress = (i + 1) / roadmapSteps.length;
-                  const visible = progressFraction >= stepProgress - 0.05;
                   return (
-                    <g
-                      key={`leaf-${i}`}
-                      transform={`translate(${leaf.x}, ${leaf.y}) rotate(${leaf.rotation})`}
-                      style={{
-                        opacity: visible ? 1 : 0,
-                        transition: 'opacity 0.4s ease',
-                      }}
-                    >
-                      <path
-                        d="M 0 -8 Q 6 -2, 0 8 Q -6 -2, 0 -8"
-                        fill="#10b981"
-                        opacity="0.7"
-                      />
-                    </g>
-                  );
-                })}
-              </svg>
-
-              {/* Step nodes */}
-              {roadmapSteps.map((step, i) => {
-                const x = nodeX(i);
-                const y = nodeY(i);
-                const isCompleted = step.done;
-                const isCurrent = i === currentIdx;
-                // A step is locked if any previous step is not done
-                const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
-                const nodeSize = isCurrent ? 64 : 56;
-
-                return (
-                  <div
-                    key={step.key}
-                    className="absolute flex flex-col items-center"
-                    style={{
-                      left: `calc(${(x / svgWidth) * 100}% - ${nodeSize / 2}px)`,
-                      top: y - nodeSize / 2,
-                      width: nodeSize,
-                    }}
-                  >
-                    {/* Node circle */}
-                    <button
-                      disabled={isLocked || isCompleted}
-                      onClick={() => {
-                        if (!isLocked && !isCompleted && step.action) step.action();
-                      }}
-                      className={`
-                        relative flex items-center justify-center rounded-full transition-all duration-300
-                        ${isCompleted
-                          ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-200 dark:shadow-emerald-900/40'
-                          : isCurrent
-                            ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-300 dark:shadow-emerald-800/60 ring-4 ring-amber-400/60 animate-pulse'
-                            : isLocked
-                              ? 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
-                              : 'bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700'
-                        }
-                      `}
-                      style={{ width: nodeSize, height: nodeSize }}
-                    >
-                      {isCompleted ? (
-                        <CheckCircle2 className="w-6 h-6" />
-                      ) : isLocked ? (
-                        <Lock className="w-5 h-5" />
-                      ) : (
-                        step.icon
-                      )}
-
-                      {/* Current step badge */}
-                      {isCurrent && !isCompleted && (
-                        <span className="absolute -top-2 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-900 text-[10px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap shadow-sm">
-                          {t("gardenDashboard.beginnerRoadmap.start", { defaultValue: "START" })}
-                        </span>
-                      )}
-                    </button>
-
-                    {/* Label below node */}
-                    <span
-                      className={`mt-1.5 text-xs font-medium text-center leading-tight max-w-[120px] ${
-                        isCompleted
-                          ? 'text-emerald-600 dark:text-emerald-400'
-                          : isCurrent
-                            ? 'text-stone-800 dark:text-stone-100'
-                            : 'text-stone-400 dark:text-stone-500'
+                    <div
+                      key={step.key}
+                      className={`rounded-2xl p-3 transition-all ${
+                        isCurrent
+                          ? 'bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-300 dark:ring-emerald-700'
+                          : isCompleted
+                            ? 'bg-stone-50 dark:bg-stone-800/30'
+                            : 'bg-stone-50/50 dark:bg-stone-800/20'
                       }`}
                     >
-                      {step.label}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
+                      <div className="flex items-start gap-2.5">
+                        <div className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
+                          isCompleted
+                            ? 'bg-emerald-500 text-white'
+                            : isCurrent
+                              ? 'bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400'
+                              : 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
+                        }`}>
+                          {isCompleted ? (
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                          ) : (
+                            <span className="text-[10px] font-bold">{i + 1}</span>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className={`text-sm font-medium ${
+                            isCompleted
+                              ? 'line-through text-stone-400 dark:text-stone-500'
+                              : isCurrent
+                                ? 'text-stone-800 dark:text-stone-100'
+                                : isLocked
+                                  ? 'text-stone-400 dark:text-stone-500'
+                                  : 'text-stone-600 dark:text-stone-300'
+                          }`}>
+                            {step.label}
+                          </div>
+                          {isCurrent && (
+                            <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5 leading-relaxed">
+                              {step.desc}
+                            </p>
+                          )}
+                          {isCurrent && !isCompleted && step.action && (
+                            <Button
+                              variant="default"
+                              size="sm"
+                              className="rounded-xl text-xs h-7 px-3 mt-2"
+                              onClick={step.action}
+                            >
+                              {step.actionLabel}
+                              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
 
-            {allDone && (
-              <div className="mt-4 text-center">
-                <div className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-4 py-2 font-semibold text-sm">
-                  <Star className="w-5 h-5 text-amber-500" />
-                  {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
-                  <Star className="w-5 h-5 text-amber-500" />
+                {allDone && (
+                  <div className="text-center py-2">
+                    <div className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-4 py-2 font-semibold text-xs">
+                      <Star className="w-4 h-4 text-amber-500" />
+                      {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "All done!" })}
+                      <Star className="w-4 h-4 text-amber-500" />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Right column: Scrollable map */}
+              <div
+                className="w-[180px] flex-shrink-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50"
+                style={{ maxHeight: 420 }}
+              >
+                <div className="relative" style={{ height: svgHeight, minHeight: '100%' }}>
+                  {/* SVG vine */}
+                  <svg
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    {/* Background path (dashed grey) */}
+                    <path
+                      d={vinePath}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray="6 5"
+                      className="text-stone-200 dark:text-stone-700"
+                    />
+
+                    {/* Growing vine (green) */}
+                    <path
+                      d={vinePath}
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      style={{
+                        strokeDasharray: '2000',
+                        strokeDashoffset: `${2000 - progressFraction * 2000}`,
+                        transition: 'stroke-dashoffset 0.8s ease-out',
+                      }}
+                    />
+
+                    {/* Decorations: leaves and flowers */}
+                    {decorations.map((dec, di) => {
+                      const segProgress = (dec.segIdx + 1) / nodeCount;
+                      const visible = progressFraction >= segProgress - 0.08;
+                      if (dec.type === 'leaf') {
+                        return (
+                          <g
+                            key={`dec-${di}`}
+                            transform={`translate(${dec.x}, ${dec.y}) rotate(${dec.rotation})`}
+                            style={{ opacity: visible ? 0.7 : 0, transition: 'opacity 0.4s ease' }}
+                          >
+                            <path d="M 0 -6 Q 4 -1.5, 0 6 Q -4 -1.5, 0 -6" fill="#10b981" />
+                          </g>
+                        );
+                      }
+                      return (
+                        <g
+                          key={`dec-${di}`}
+                          transform={`translate(${dec.x}, ${dec.y})`}
+                          style={{ opacity: visible ? 0.9 : 0, transition: 'opacity 0.5s ease' }}
+                        >
+                          {/* Small 5-petal flower */}
+                          {[0, 72, 144, 216, 288].map((angle) => (
+                            <ellipse
+                              key={angle}
+                              cx="0"
+                              cy="-3.5"
+                              rx="2"
+                              ry="3"
+                              transform={`rotate(${angle})`}
+                              className="fill-stone-600 dark:fill-white"
+                              opacity="0.6"
+                            />
+                          ))}
+                          <circle cx="0" cy="0" r="2" fill="#fbbf24" />
+                        </g>
+                      );
+                    })}
+                  </svg>
+
+                  {/* Step nodes */}
+                  {roadmapSteps.map((step, i) => {
+                    const x = nodeX(i);
+                    const y = nodeY(i);
+                    const isCompleted = step.done;
+                    const isCurrent = i === currentIdx;
+                    const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
+                    const nodeSize = isCurrent ? 52 : 44;
+
+                    return (
+                      <div
+                        key={step.key}
+                        className="absolute flex flex-col items-center pointer-events-auto"
+                        style={{
+                          left: (x / svgWidth) * 100 + '%',
+                          top: y,
+                          transform: `translate(-50%, -50%)`,
+                          width: nodeSize + 40,
+                        }}
+                      >
+                        <button
+                          disabled={isLocked || isCompleted}
+                          onClick={() => {
+                            if (!isLocked && !isCompleted && step.action) step.action();
+                          }}
+                          className={`
+                            relative flex items-center justify-center rounded-full transition-all duration-300
+                            ${isCompleted
+                              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40 dark:shadow-emerald-800/40'
+                              : isCurrent
+                                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-300/60 dark:shadow-emerald-800/60 ring-[3px] ring-amber-400/70'
+                                : isLocked
+                                  ? 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
+                                  : 'bg-stone-100 dark:bg-stone-800 text-stone-500 hover:bg-stone-200'
+                            }
+                          `}
+                          style={{ width: nodeSize, height: nodeSize }}
+                        >
+                          {isCompleted ? (
+                            <CheckCircle2 className={isCurrent ? 'w-6 h-6' : 'w-5 h-5'} />
+                          ) : isLocked ? (
+                            <Lock className="w-4 h-4" />
+                          ) : (
+                            step.icon
+                          )}
+
+                          {/* START badge */}
+                          {isCurrent && !isCompleted && (
+                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
+                              START
+                            </span>
+                          )}
+
+                          {/* Finish star on last node */}
+                          {i === nodeCount - 1 && allDone && (
+                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            )}
+            </div>
           </Card>
         );
       })()}
