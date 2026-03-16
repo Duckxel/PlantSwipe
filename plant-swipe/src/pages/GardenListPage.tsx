@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase data */
 // @ts-nocheck
 import React from "react";
+import { Leaf, Sprout } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -2293,28 +2294,42 @@ export const GardenListPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   <Label>{t("garden.gardenType", { defaultValue: "Garden Type" })}</Label>
-                  <div className="flex gap-2">
+                  <div className="grid grid-cols-2 gap-3">
                     <button
                       type="button"
                       onClick={() => setGardenType("default")}
-                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
                         gardenType === "default"
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
                           : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
                       }`}
                     >
-                      {t("garden.gardenTypeDefault", { defaultValue: "Default" })}
+                      <div className={`rounded-xl p-2.5 ${
+                        gardenType === "default"
+                          ? "bg-emerald-100 dark:bg-emerald-800/40"
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Leaf className="h-6 w-6" />
+                      </div>
+                      <span>{t("garden.gardenTypeDefault", { defaultValue: "Default" })}</span>
                     </button>
                     <button
                       type="button"
                       onClick={() => setGardenType("beginners")}
-                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
                         gardenType === "beginners"
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
                           : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
                       }`}
                     >
-                      {t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}
+                      <div className={`rounded-xl p-2.5 ${
+                        gardenType === "beginners"
+                          ? "bg-emerald-100 dark:bg-emerald-800/40"
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Sprout className="h-6 w-6" />
+                      </div>
+                      <span>{t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}</span>
                     </button>
                   </div>
                 </div>

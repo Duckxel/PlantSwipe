@@ -21341,7 +21341,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
                  location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                 coalesce(hide_ai_chat, false) as hide_ai_chat
+                 coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -21355,7 +21355,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
                    location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                   coalesce(hide_ai_chat, false) as hide_ai_chat
+                   coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -21369,7 +21369,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             gRows = await sql`
               select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
                      location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language,
-                     false as hide_ai_chat
+                     false as hide_ai_chat, 'default' as garden_type
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -21624,6 +21624,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       locationLon: garden.location_lon || null,
       preferredLanguage: garden.preferred_language || 'en',
       hideAiChat: Boolean(garden.hide_ai_chat ?? false),
+      gardenType: garden.garden_type || 'default',
     } : null
 
     // Check access: members always allowed, otherwise check privacy

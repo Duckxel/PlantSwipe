@@ -31,7 +31,7 @@ import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import type { Bookmark as BookmarkType } from "@/types/bookmark";
 import { motion } from "framer-motion";
-import type { Garden, GardenPrivacy } from "@/types/garden";
+import type { Garden, GardenPrivacy, GardenType } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import {
   getGarden,
@@ -453,6 +453,7 @@ export const GardenDashboardPage: React.FC = () => {
                   locationLon: data.garden.locationLon || null,
                   preferredLanguage: data.garden.preferredLanguage || null,
                   hideAiChat: Boolean(data.garden.hideAiChat ?? data.garden.hide_ai_chat ?? false),
+                  gardenType: (data.garden.gardenType || data.garden.garden_type || 'default') as GardenType,
                 });
                 hydratedGarden = true;
               }
