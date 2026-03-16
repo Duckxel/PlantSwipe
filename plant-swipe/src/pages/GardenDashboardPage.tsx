@@ -5036,81 +5036,81 @@ function OverviewSection({
               </span>
             </div>
 
-            {/* Two-column layout: task list left, map right */}
+            {/* Two-column layout: current task left, map right */}
             <div className="flex gap-4">
-              {/* Left column: Task list */}
-              <div className="flex-1 min-w-0 space-y-2">
-                {roadmapSteps.map((step, i) => {
-                  const isCompleted = step.done;
-                  const isCurrent = i === currentIdx;
-                  const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
-
+              {/* Left column: Current task focus */}
+              <div className="flex-1 min-w-0 flex flex-col">
+                {!allDone && currentIdx >= 0 ? (() => {
+                  const step = roadmapSteps[currentIdx];
                   return (
-                    <div
-                      key={step.key}
-                      className={`rounded-2xl p-3 transition-all ${
-                        isCurrent
-                          ? 'bg-emerald-50 dark:bg-emerald-900/20 ring-1 ring-emerald-300 dark:ring-emerald-700'
-                          : isCompleted
-                            ? 'bg-stone-50 dark:bg-stone-800/30'
-                            : 'bg-stone-50/50 dark:bg-stone-800/20'
-                      }`}
-                    >
-                      <div className="flex items-start gap-2.5">
-                        <div className={`mt-0.5 flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center ${
-                          isCompleted
-                            ? 'bg-emerald-500 text-white'
-                            : isCurrent
-                              ? 'bg-emerald-100 dark:bg-emerald-800/50 text-emerald-600 dark:text-emerald-400'
-                              : 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
-                        }`}>
-                          {isCompleted ? (
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                          ) : (
-                            <span className="text-[10px] font-bold">{i + 1}</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className={`text-sm font-medium ${
-                            isCompleted
-                              ? 'line-through text-stone-400 dark:text-stone-500'
-                              : isCurrent
-                                ? 'text-stone-800 dark:text-stone-100'
-                                : isLocked
-                                  ? 'text-stone-400 dark:text-stone-500'
-                                  : 'text-stone-600 dark:text-stone-300'
-                          }`}>
-                            {step.label}
+                    <>
+                      {/* Current task card */}
+                      <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-800/40 p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center flex-shrink-0">
+                            {step.icon}
                           </div>
-                          {isCurrent && (
-                            <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5 leading-relaxed">
-                              {step.desc}
-                            </p>
-                          )}
-                          {isCurrent && !isCompleted && step.action && (
-                            <Button
-                              variant="default"
-                              size="sm"
-                              className="rounded-xl text-xs h-7 px-3 mt-2"
-                              onClick={step.action}
-                            >
-                              {step.actionLabel}
-                              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-                            </Button>
-                          )}
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
+                              {t("gardenDashboard.beginnerRoadmap.currentTask", { defaultValue: "Current task" })}
+                            </div>
+                            <div className="text-sm font-semibold text-stone-800 dark:text-stone-100">
+                              {step.label}
+                            </div>
+                          </div>
                         </div>
+                        <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed mb-3">
+                          {step.desc}
+                        </p>
+                        {step.action && (
+                          <button
+                            onClick={step.action}
+                            className="w-full flex items-center justify-between rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 transition-colors"
+                          >
+                            <span>{step.actionLabel}</span>
+                            <ArrowUpRight className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
-                    </div>
-                  );
-                })}
 
-                {allDone && (
-                  <div className="text-center py-2">
-                    <div className="inline-flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-4 py-2 font-semibold text-xs">
-                      <Star className="w-4 h-4 text-amber-500" />
-                      {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "All done!" })}
-                      <Star className="w-4 h-4 text-amber-500" />
+                      {/* Progress summary */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${(completedCount / roadmapSteps.length) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 whitespace-nowrap">
+                          {t("gardenDashboard.beginnerRoadmap.stepOf", { defaultValue: "Step {{current}} of {{total}}", current: currentIdx + 1, total: roadmapSteps.length })}
+                        </span>
+                      </div>
+
+                      {/* Up next preview */}
+                      {currentIdx < roadmapSteps.length - 1 && (
+                        <div className="mt-3 rounded-xl bg-stone-50 dark:bg-stone-800/30 border border-stone-200/50 dark:border-stone-700/30 p-3">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-stone-400 dark:text-stone-500 mb-1.5">
+                            {t("gardenDashboard.beginnerRoadmap.upNext", { defaultValue: "Up next" })}
+                          </div>
+                          <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
+                            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="text-xs">{roadmapSteps[currentIdx + 1].label}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })() : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                    <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                      <Star className="w-7 h-7 text-amber-500" />
                     </div>
+                    <div className="font-semibold text-emerald-700 dark:text-emerald-300 mb-1">
+                      {t("gardenDashboard.beginnerRoadmap.allDoneTitle", { defaultValue: "All done!" })}
+                    </div>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 max-w-[200px]">
+                      {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
+                    </p>
                   </div>
                 )}
               </div>
