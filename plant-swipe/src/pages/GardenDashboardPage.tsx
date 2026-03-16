@@ -3602,6 +3602,8 @@ export const GardenDashboardPage: React.FC = () => {
             }}
             gardenId={id!}
             gardenPlantId={pendingGardenPlantId || ""}
+            wateringFrequencyWarm={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyWarm}
+            wateringFrequencyCold={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyCold}
             onChanged={async () => {
               // Ensure page reflects latest tasks after create/update/delete
               await load({ silent: true, preserveHeavy: true });
@@ -4801,20 +4803,13 @@ function OverviewSection({
       {/* Beginner Roadmap - shown only to members in beginners gardens */}
       {garden?.gardenType === 'beginners' && isMember && (() => {
         const firstPlantId = plants[0]?.plant?.id;
-        const roadmapSteps = [
+        const sectionSteps = [
           {
             key: 'add_plant',
             done: plants.length > 0,
             label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add 1 plant to your garden" }),
             action: () => navigate(`/garden/${gardenId}/plants`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
-          },
-          {
-            key: 'schedule_water',
-            done: hasWaterTask,
-            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering tasks for your plant" }),
-            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
-            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
           },
           {
             key: 'read_plant_info',
@@ -4825,6 +4820,13 @@ function OverviewSection({
               navigate(`/plants/${firstPlantId}`);
             } : undefined,
             actionLabel: t("gardenDashboard.beginnerRoadmap.readPlantInfoAction", { defaultValue: "View plant" }),
+          },
+          {
+            key: 'schedule_water',
+            done: hasWaterTask,
+            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering tasks for your plant" }),
+            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
           },
           {
             key: 'schedule_fertilize',
@@ -4841,6 +4843,14 @@ function OverviewSection({
             actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
           },
         ];
+        const roadmapSections = [
+          {
+            key: 'section_1',
+            title: t("gardenDashboard.beginnerRoadmap.section1Title", { defaultValue: "Your first plant" }),
+            steps: sectionSteps,
+          },
+        ];
+        const roadmapSteps = roadmapSections.flatMap((s) => s.steps);
         const completedCount = roadmapSteps.filter((s) => s.done).length;
         const allDone = completedCount === roadmapSteps.length;
         return (
@@ -4861,37 +4871,55 @@ function OverviewSection({
                 style={{ width: `${roadmapSteps.length > 0 ? (completedCount / roadmapSteps.length) * 100 : 0}%` }}
               />
             </div>
-            <div className="space-y-3">
-              {roadmapSteps.map((step) => (
-                <div
-                  key={step.key}
-                  className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
-                    step.done
-                      ? "bg-emerald-50 dark:bg-emerald-900/20"
-                      : "bg-stone-50 dark:bg-stone-800/50"
-                  }`}
-                >
-                  {step.done ? (
-                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-stone-400 dark:text-stone-500 flex-shrink-0" />
-                  )}
-                  <span className={`flex-1 text-sm ${step.done ? "line-through text-stone-400 dark:text-stone-500" : "text-stone-700 dark:text-stone-200"}`}>
-                    {step.label}
-                  </span>
-                  {!step.done && step.action && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-xs h-7 px-2.5"
-                      onClick={step.action}
-                    >
-                      {step.actionLabel}
-                      <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
-                    </Button>
-                  )}
-                </div>
-              ))}
+            <div className="space-y-5">
+              {roadmapSections.map((section) => {
+                const sectionDone = section.steps.filter((s) => s.done).length;
+                const sectionTotal = section.steps.length;
+                return (
+                  <div key={section.key}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <h4 className="text-sm font-semibold text-stone-600 dark:text-stone-300">
+                        {section.title}
+                      </h4>
+                      <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500">
+                        {sectionDone}/{sectionTotal}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {section.steps.map((step) => (
+                        <div
+                          key={step.key}
+                          className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
+                            step.done
+                              ? "bg-emerald-50 dark:bg-emerald-900/20"
+                              : "bg-stone-50 dark:bg-stone-800/50"
+                          }`}
+                        >
+                          {step.done ? (
+                            <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                          ) : (
+                            <Circle className="w-5 h-5 text-stone-400 dark:text-stone-500 flex-shrink-0" />
+                          )}
+                          <span className={`flex-1 text-sm ${step.done ? "line-through text-stone-400 dark:text-stone-500" : "text-stone-700 dark:text-stone-200"}`}>
+                            {step.label}
+                          </span>
+                          {!step.done && step.action && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-xs h-7 px-2.5"
+                              onClick={step.action}
+                            >
+                              {step.actionLabel}
+                              <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                            </Button>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
             {allDone && (
               <div className="mt-4 text-center text-sm text-emerald-600 dark:text-emerald-400 font-medium">
