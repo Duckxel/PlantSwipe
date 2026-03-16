@@ -1646,7 +1646,7 @@ export const GardenDashboardPage: React.FC = () => {
     >([]);
 
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || plants.length > 0 || !isMember) {
+      if (garden?.gardenType !== 'beginners' || !isMember) {
         setSuggestedPlants([]);
         return;
       }
@@ -1692,7 +1692,7 @@ export const GardenDashboardPage: React.FC = () => {
         } catch {}
       })();
       return () => { ignore = true; };
-    }, [garden?.gardenType, plants.length, currentLang, isMember]);
+    }, [garden?.gardenType, currentLang, isMember]);
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
@@ -2854,7 +2854,6 @@ export const GardenDashboardPage: React.FC = () => {
                     onNavigateToPlants={() => navigate(`/garden/${id}/tasks`)}
                     shareStatus={shareStatus}
                     isMember={isMember}
-                    suggestedPlants={suggestedPlants}
                     hasWaterTask={hasWaterTask}
                     hasFertilizeTask={hasFertilizeTask}
                     hasJournalEntry={hasJournalEntry}
@@ -3152,74 +3151,82 @@ export const GardenDashboardPage: React.FC = () => {
                       ))}
                     </div>
                     {plants.length === 0 && (
-                      <div className="space-y-4">
-                        <div className="p-10 text-center opacity-60 text-sm">
-                          {t("gardenDashboard.plantsSection.noPlantsYet")}
-                        </div>
-                        {garden?.gardenType === 'beginners' && isMember && suggestedPlants.length > 0 && (
-                          <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
-                            <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+                      <div className="p-10 text-center opacity-60 text-sm">
+                        {t("gardenDashboard.plantsSection.noPlantsYet")}
+                      </div>
+                    )}
+                    {/* Beginner Suggestions - collapsible at bottom of Plants tab */}
+                    {garden?.gardenType === 'beginners' && isMember && suggestedPlants.length > 0 && (
+                      <details className="mt-4" open={plants.length === 0}>
+                        <summary className="cursor-pointer list-none">
+                          <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur px-5 py-4 shadow-sm">
+                            <div className="flex items-center gap-2">
                               <Sprout className="w-5 h-5 text-emerald-500" />
-                              {t("gardenDashboard.beginnerSuggestions.title", { defaultValue: "Suggested for you" })}
-                            </h3>
-                            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
-                              {suggestedPlants.map((sp) => (
-                                <div
-                                  key={sp.id}
-                                  className="flex-shrink-0 w-[160px] snap-start group"
-                                >
-                                  <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
-                                    {sp.imageUrl ? (
-                                      <img
-                                        src={sp.imageUrl}
-                                        alt={sp.name}
-                                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                                        loading="lazy"
-                                      />
-                                    ) : (
-                                      <div className="absolute inset-0 flex items-center justify-center">
-                                        <span className="text-3xl opacity-40">🌵</span>
-                                      </div>
-                                    )}
-                                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                                  </div>
-                                  <div className="px-1">
-                                    <div className="font-medium text-sm truncate">{sp.name}</div>
-                                    {sp.variety && (
-                                      <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
-                                    )}
-                                    <button
-                                      onClick={() => navigate(`/plants/${sp.id}`)}
-                                      className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
-                                    >
-                                      {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                              {/* Explore more card */}
+                              <span className="font-semibold text-base flex-1">
+                                {t("gardenDashboard.beginnerSuggestions.title", { defaultValue: "Suggested for you" })}
+                              </span>
+                              <ChevronDown className="w-5 h-5 opacity-50 transition-transform [details[open]>summary_&]:rotate-180" />
+                            </div>
+                          </Card>
+                        </summary>
+                        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden mt-1 border-t-0 rounded-t-none">
+                          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+                            {suggestedPlants.map((sp) => (
                               <div
-                                className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
-                                onClick={() => navigate('/search?type=Succulent&maintenance=easy')}
+                                key={sp.id}
+                                className="flex-shrink-0 w-[160px] snap-start group"
                               >
-                                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
-                                  <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                                    <ArrowUpRight className="w-8 h-8" />
-                                    <span className="text-sm font-semibold text-center px-2">
-                                      {t("gardenDashboard.beginnerSuggestions.exploreMore", { defaultValue: "Explore more" })}
-                                    </span>
-                                  </div>
+                                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
+                                  {sp.imageUrl ? (
+                                    <img
+                                      src={sp.imageUrl}
+                                      alt={sp.name}
+                                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-3xl opacity-40">🌵</span>
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
                                 </div>
                                 <div className="px-1">
-                                  <div className="font-medium text-sm text-emerald-600 dark:text-emerald-400 truncate">
-                                    {t("gardenDashboard.beginnerSuggestions.browseSucculents", { defaultValue: "Browse succulents" })}
-                                  </div>
+                                  <div className="font-medium text-sm truncate">{sp.name}</div>
+                                  {sp.variety && (
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
+                                  )}
+                                  <button
+                                    onClick={() => navigate(`/plants/${sp.id}`)}
+                                    className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
+                                  >
+                                    {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {/* Explore more card */}
+                            <div
+                              className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
+                              onClick={() => navigate('/search?type=Succulent&maintenance=easy')}
+                            >
+                              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
+                                <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                  <ArrowUpRight className="w-8 h-8" />
+                                  <span className="text-sm font-semibold text-center px-2">
+                                    {t("gardenDashboard.beginnerSuggestions.exploreMore", { defaultValue: "Explore more" })}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="px-1">
+                                <div className="font-medium text-sm text-emerald-600 dark:text-emerald-400 truncate">
+                                  {t("gardenDashboard.beginnerSuggestions.browseSucculents", { defaultValue: "Browse succulents" })}
                                 </div>
                               </div>
                             </div>
-                          </Card>
-                        )}
-                      </div>
+                          </div>
+                        </Card>
+                      </details>
                     )}
                   </div>
                   ) : (
@@ -4299,7 +4306,6 @@ function OverviewSection({
   completeAllTodayForPlant,
   onNavigateToPlants,
   isMember = true,
-  suggestedPlants = [],
   hasWaterTask = false,
   hasFertilizeTask = false,
   hasJournalEntry = false,
@@ -4348,7 +4354,6 @@ function OverviewSection({
   completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
   onNavigateToPlants: () => void;
   isMember?: boolean;
-  suggestedPlants?: Array<{ id: string; name: string; variety: string | null; imageUrl: string | null }>;
   hasWaterTask?: boolean;
   hasFertilizeTask?: boolean;
   hasJournalEntry?: boolean;
@@ -4930,71 +4935,6 @@ function OverviewSection({
           </Card>
         );
       })()}
-
-      {/* Beginner Suggestions - shown only to members when garden is beginners type with no plants */}
-      {garden?.gardenType === 'beginners' && plants.length === 0 && isMember && suggestedPlants.length > 0 && (
-        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
-          <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
-            <Sprout className="w-5 h-5 text-emerald-500" />
-            {t("gardenDashboard.beginnerSuggestions.title", { defaultValue: "Suggested for you" })}
-          </h3>
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
-            {suggestedPlants.map((sp) => (
-              <div
-                key={sp.id}
-                className="flex-shrink-0 w-[160px] snap-start group"
-              >
-                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
-                  {sp.imageUrl ? (
-                    <img
-                      src={sp.imageUrl}
-                      alt={sp.name}
-                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-                      loading="lazy"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-3xl opacity-40">🌵</span>
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
-                </div>
-                <div className="px-1">
-                  <div className="font-medium text-sm truncate">{sp.name}</div>
-                  {sp.variety && (
-                    <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
-                  )}
-                  <button
-                    onClick={() => navigate(`/plants/${sp.id}`)}
-                    className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
-                  >
-                    {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
-                  </button>
-                </div>
-              </div>
-            ))}
-            {/* Explore more card */}
-            <div
-              className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
-              onClick={() => navigate('/search?type=Succulent&maintenance=easy')}
-            >
-              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
-                <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
-                  <ArrowUpRight className="w-8 h-8" />
-                  <span className="text-sm font-semibold text-center px-2">
-                    {t("gardenDashboard.beginnerSuggestions.exploreMore", { defaultValue: "Explore more" })}
-                  </span>
-                </div>
-              </div>
-              <div className="px-1">
-                <div className="font-medium text-sm text-emerald-600 dark:text-emerald-400 truncate">
-                  {t("gardenDashboard.beginnerSuggestions.browseSucculents", { defaultValue: "Browse succulents" })}
-                </div>
-              </div>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* Members Section */}
       {members.length > 0 && (

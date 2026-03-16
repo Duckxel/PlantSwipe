@@ -103,11 +103,11 @@ The roadmap has a progress bar and is organized into **sections**, each containi
 
 ### Plant Suggestions
 
-When a beginner garden has **no plants**, a "Suggested for you" card appears in both:
-- **Overview tab**
-- **Plants tab** (in the empty state)
+A "Suggested for you" section appears **only in the Plants tab** of beginner gardens. **Only visible to owners and members.**
 
-**Only visible to owners and members.**
+- When the garden has **no plants**: expanded by default (open)
+- When plants have been added: **collapsed** at the bottom of the Plants tab (click to expand)
+- **Not shown in the Overview tab**
 
 Shows 5 cards in a horizontal scrollable row:
 - **Cards 1–4:** Random easy-care succulents from the plant catalog
@@ -116,8 +116,6 @@ Shows 5 cards in a horizontal scrollable row:
   - Shows plant image (3:4 aspect), name, variety, "Learn more" link
   - Respects current language for translated names
 - **Card 5:** "Explore more" — links to `/search?type=Succulent&maintenance=easy`
-
-Suggestions disappear once the user adds any plant to the garden.
 
 ### Recommended Watering Frequency
 
