@@ -4949,7 +4949,7 @@ function OverviewSection({
         const allDone = completedCount === roadmapSteps.length;
         const currentIdx = roadmapSteps.findIndex((s) => !s.done);
 
-        // === Map geometry (bottom-to-top, winding adventure path) ===
+        // === Map geometry (bottom-to-top, liana S-curve like /setup) ===
         const nodeCount = roadmapSteps.length;
         const nodeSpacing = 130;
         const svgPadTop = 60;
@@ -4957,22 +4957,53 @@ function OverviewSection({
         const svgHeight = svgPadTop + (nodeCount - 1) * nodeSpacing + svgPadBot;
         const svgWidth = 260;
         const centerX = svgWidth / 2;
+        const amplitude = 50; // horizontal swing for the S-curve
 
-        // Winding path: each node alternates sides with varying amplitudes
-        // Creates an organic, trail-like feel rather than a simple sine
-        const amplitudes = [0, 55, -40, 65, -55, 45, -60]; // per-node horizontal offsets
+        // Smooth S-curve: sine wave alternating left/right
         const nodeX = (i: number) => {
-          const amp = amplitudes[i % amplitudes.length] || 0;
-          return centerX + amp;
+          return centerX + Math.sin(((i) / Math.max(nodeCount - 1, 1)) * Math.PI * 2) * amplitude;
         };
         // Y goes from bottom (high value) to top (low value)
         const nodeY = (i: number) => svgHeight - svgPadBot - i * nodeSpacing;
 
-        // Build smooth winding path using Catmull-Rom → cubic bezier
-        const buildSmoothPath = () => {
-          if (nodeCount < 2) return '';
-          const pts = Array.from({ length: nodeCount }, (_, i) => ({ x: nodeX(i), y: nodeY(i) }));
+        // Helper: get x,y at any fractional position along the vine (0 = node 0, 1 = last node)
+        const getVinePos = (frac: number) => {
+          const angle = frac * Math.PI * 2;
+          const x = centerX + Math.sin(angle) * amplitude;
+          const y = svgHeight - svgPadBot - frac * (nodeCount - 1) * nodeSpacing;
+          return { x, y };
+        };
 
+        // Build liana path: smooth S-curve through nodes with small oscillation (wave) between them
+        // like the setup page's vine with mini sine bumps
+        const buildLianaPath = () => {
+          if (nodeCount < 2) return '';
+          // Generate many intermediate points for the wavy liana effect
+          const totalSteps = (nodeCount - 1) * 12; // 12 sub-steps per segment
+          const pts: Array<{ x: number; y: number }> = [];
+          for (let s = 0; s <= totalSteps; s++) {
+            const frac = s / totalSteps;
+            const base = getVinePos(frac);
+            // Add small liana oscillation perpendicular to the path
+            const waveFreq = 8; // number of mini-waves along entire path
+            const waveAmp = 5; // small oscillation amplitude
+            // Direction of the wave is perpendicular: approximate tangent direction
+            const eps = 0.001;
+            const ahead = getVinePos(Math.min(1, frac + eps));
+            const dx = ahead.x - base.x;
+            const dy = ahead.y - base.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            // Perpendicular direction
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const wave = Math.sin(frac * Math.PI * 2 * waveFreq) * waveAmp;
+            pts.push({
+              x: base.x + perpX * wave,
+              y: base.y + perpY * wave,
+            });
+          }
+
+          // Convert points to smooth cubic bezier using Catmull-Rom
           let d = `M ${pts[0].x} ${pts[0].y}`;
           for (let i = 0; i < pts.length - 1; i++) {
             const p0 = pts[Math.max(0, i - 1)];
@@ -4988,48 +5019,37 @@ function OverviewSection({
           return d;
         };
 
-        const vinePath = buildSmoothPath();
+        const vinePath = buildLianaPath();
         const progressFraction = nodeCount > 1 ? completedCount / nodeCount : completedCount;
 
-        // Decorations: leaves, flowers, mushrooms, rocks, butterflies
-        type DecType = 'leaf' | 'flower' | 'mushroom' | 'rock' | 'butterfly' | 'sprout';
+        // Decorations: leaves sprouting from the liana + flowers at select points
+        type DecType = 'leaf' | 'flower';
         const decorations: Array<{ x: number; y: number; rotation: number; type: DecType; segIdx: number }> = [];
-        const decTypes: DecType[] = ['leaf', 'flower', 'mushroom', 'rock', 'butterfly', 'sprout'];
         for (let i = 0; i < nodeCount - 1; i++) {
           const x0 = nodeX(i), y0 = nodeY(i);
           const x1 = nodeX(i + 1), y1 = nodeY(i + 1);
-          // Leaves along the path
-          for (const t of [0.25, 0.75]) {
+          // Direction of the segment
+          const segDx = x1 - x0;
+          const segAngle = Math.atan2(y1 - y0, segDx) * (180 / Math.PI);
+          // Leaves at 30% and 70% along segment, alternating sides
+          for (const [t, side] of [[0.3, 1], [0.7, -1]] as [number, number][]) {
             const mx = x0 + (x1 - x0) * t;
             const my = y0 + (y1 - y0) * t;
-            const side = t < 0.5 ? 1 : -1;
             decorations.push({
-              x: mx + side * 16,
+              x: mx + side * 10,
               y: my,
-              rotation: side * 30 + (i * 15),
+              rotation: segAngle + side * 40,
               type: 'leaf',
               segIdx: i,
             });
           }
-          // Alternating decorations at midpoint
-          const midX = (x0 + x1) / 2;
-          const midY = (y0 + y1) / 2;
-          const offsetSide = x1 > x0 ? 1 : -1;
-          const decType = decTypes[(i + 2) % decTypes.length];
-          decorations.push({
-            x: midX + offsetSide * 28,
-            y: midY,
-            rotation: 0,
-            type: decType,
-            segIdx: i,
-          });
-          // Extra scatter decoration on opposite side
+          // One flower at midpoint of every other segment
           if (i % 2 === 0) {
             decorations.push({
-              x: midX - offsetSide * 22,
-              y: midY + 15,
+              x: (x0 + x1) / 2 + (segDx > 0 ? 18 : -18),
+              y: (y0 + y1) / 2,
               rotation: 0,
-              type: decTypes[(i + 4) % decTypes.length],
+              type: 'flower',
               segIdx: i,
             });
           }
@@ -5051,14 +5071,17 @@ function OverviewSection({
         return (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
             {/* Header */}
-            <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center justify-between mb-1">
               <h3 className="font-semibold text-lg flex items-center gap-2">
                 <ListChecks className="w-5 h-5 text-emerald-500" />
-                {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Getting Started" })}
+                {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Garden Guide" })}
               </h3>
               <span className="text-xs font-medium text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded-full px-2.5 py-1">
                 {completedCount}/{roadmapSteps.length}
               </span>
+            </div>
+            <div className="text-xs font-medium text-stone-400 dark:text-stone-500 mb-4">
+              {t("gardenDashboard.beginnerRoadmap.chapter1", { defaultValue: "Chapter 1 — Creating a Garden" })}
             </div>
 
             {/* Two-column layout: current task left, map right */}
@@ -5178,73 +5201,28 @@ function OverviewSection({
                       }}
                     />
 
-                    {/* Decorations: leaves, flowers, mushrooms, rocks, butterflies, sprouts */}
+                    {/* Decorations: leaves and flowers on the liana */}
                     {decorations.map((dec, di) => {
                       const segProgress = (dec.segIdx + 1) / nodeCount;
                       const visible = progressFraction >= segProgress - 0.08;
-                      const baseOpacity = visible ? 0.8 : 0.15;
                       if (dec.type === 'leaf') {
                         return (
                           <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y}) rotate(${dec.rotation})`}
-                            style={{ opacity: baseOpacity, transition: 'opacity 0.4s ease' }}>
-                            <path d="M 0 -7 Q 5 -2, 0 7 Q -5 -2, 0 -7" fill="#10b981" />
-                            <line x1="0" y1="-5" x2="0" y2="5" stroke="#059669" strokeWidth="0.5" />
+                            style={{ opacity: visible ? 0.7 : 0.12, transition: 'opacity 0.4s ease' }}>
+                            <path d="M 0 -6 Q 4 -1.5, 0 6 Q -4 -1.5, 0 -6" fill="#10b981" />
+                            <line x1="0" y1="-4" x2="0" y2="4" stroke="#059669" strokeWidth="0.5" />
                           </g>
                         );
                       }
-                      if (dec.type === 'flower') {
-                        return (
-                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
-                            style={{ opacity: visible ? 0.9 : 0.12, transition: 'opacity 0.5s ease' }}>
-                            {[0, 72, 144, 216, 288].map((angle) => (
-                              <ellipse key={angle} cx="0" cy="-4" rx="2.5" ry="3.5" transform={`rotate(${angle})`}
-                                fill="#f9a8d4" opacity="0.7" />
-                            ))}
-                            <circle cx="0" cy="0" r="2.5" fill="#fbbf24" />
-                          </g>
-                        );
-                      }
-                      if (dec.type === 'mushroom') {
-                        return (
-                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
-                            style={{ opacity: visible ? 0.85 : 0.12, transition: 'opacity 0.5s ease' }}>
-                            {/* Stem */}
-                            <rect x="-2" y="-2" width="4" height="7" rx="1.5" fill="#d6d3d1" />
-                            {/* Cap */}
-                            <ellipse cx="0" cy="-4" rx="6" ry="4" fill="#ef4444" opacity="0.8" />
-                            {/* Spots */}
-                            <circle cx="-2" cy="-5" r="1" fill="white" opacity="0.8" />
-                            <circle cx="2" cy="-3.5" r="0.8" fill="white" opacity="0.8" />
-                          </g>
-                        );
-                      }
-                      if (dec.type === 'rock') {
-                        return (
-                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
-                            style={{ opacity: visible ? 0.5 : 0.1, transition: 'opacity 0.5s ease' }}>
-                            <ellipse cx="0" cy="0" rx="7" ry="4" className="fill-stone-300 dark:fill-stone-600" />
-                            <ellipse cx="-2" cy="-1.5" rx="4" ry="2.5" className="fill-stone-200 dark:fill-stone-500" />
-                          </g>
-                        );
-                      }
-                      if (dec.type === 'butterfly') {
-                        return (
-                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y}) scale(0.8)`}
-                            style={{ opacity: visible ? 0.75 : 0.1, transition: 'opacity 0.5s ease' }}>
-                            {/* Wings */}
-                            <ellipse cx="-4" cy="-2" rx="4" ry="5" fill="#c084fc" opacity="0.7" transform="rotate(-15)" />
-                            <ellipse cx="4" cy="-2" rx="4" ry="5" fill="#c084fc" opacity="0.7" transform="rotate(15)" />
-                            {/* Body */}
-                            <ellipse cx="0" cy="0" rx="1" ry="4" fill="#7c3aed" />
-                          </g>
-                        );
-                      }
-                      // sprout
+                      // flower
                       return (
                         <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
-                          style={{ opacity: visible ? 0.7 : 0.1, transition: 'opacity 0.5s ease' }}>
-                          <line x1="0" y1="4" x2="0" y2="-2" stroke="#10b981" strokeWidth="1.5" />
-                          <path d="M 0 -2 Q 4 -6 0 -8 Q -4 -6 0 -2" fill="#34d399" />
+                          style={{ opacity: visible ? 0.9 : 0.1, transition: 'opacity 0.5s ease' }}>
+                          {[0, 72, 144, 216, 288].map((angle) => (
+                            <ellipse key={angle} cx="0" cy="-3.5" rx="2" ry="3" transform={`rotate(${angle})`}
+                              className="fill-pink-300 dark:fill-pink-400" opacity="0.7" />
+                          ))}
+                          <circle cx="0" cy="0" r="2" fill="#fbbf24" />
                         </g>
                       );
                     })}
