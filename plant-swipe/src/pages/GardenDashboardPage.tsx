@@ -2924,6 +2924,7 @@ export const GardenDashboardPage: React.FC = () => {
                     hasWaterTask={hasWaterTask}
                     hasFertilizeTask={hasFertilizeTask}
                     hasJournalEntry={hasJournalEntry}
+                    roadmapCompletions={roadmapCompletions}
                   />
                 }
               />
@@ -4381,6 +4382,7 @@ function OverviewSection({
   hasWaterTask = false,
   hasFertilizeTask = false,
   hasJournalEntry = false,
+  roadmapCompletions = new Set<string>(),
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4429,6 +4431,7 @@ function OverviewSection({
   hasWaterTask?: boolean;
   hasFertilizeTask?: boolean;
   hasJournalEntry?: boolean;
+  roadmapCompletions?: Set<string>;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
