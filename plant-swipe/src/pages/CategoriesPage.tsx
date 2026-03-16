@@ -26,13 +26,13 @@ interface Category {
 
 /** Main categories — always visible */
 const mainCategories: Category[] = [
-  { key: "cacti", params: "?q=cactus", defaultName: "Cacti", defaultDesc: "Spiny desert plants with unique shapes" },
+  { key: "cactusSucculent", params: "?type=Succulent", defaultName: "Cacti & Succulents", defaultDesc: "Drought-tolerant water-storing plants with unique shapes" },
   { key: "treesAndShrubs", params: "?type=Tree,Shrub", defaultName: "Trees & Shrubs", defaultDesc: "Woody plants from towering trees to compact shrubs" },
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
-  { key: "grassesAndSucculents", params: "?type=Grass,Succulent", defaultName: "Grasses & Succulents", defaultDesc: "Ornamental grasses and drought-tolerant succulents" },
+  { key: "grasses", params: "?type=Grass", defaultName: "Grasses", defaultDesc: "Ornamental and lawn grasses for every landscape" },
   { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
-  { key: "vegetableGarden", params: "?vegetable=true", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
+  { key: "vegetableGarden", params: "?usage=Edible&type=Herb", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
 ]
 
 /** Advanced categories — shown when expanded */
@@ -51,7 +51,7 @@ const advancedCategories: Category[] = [
   { key: "bonsai", params: "?q=bonsai", defaultName: "Bonsai", defaultDesc: "Miniature trees shaped through careful cultivation" },
   { key: "carnivorous", params: "?q=carnivorous", defaultName: "Carnivorous Plants", defaultDesc: "Insect-eating plants with fascinating traps" },
   { key: "moss", params: "?type=Moss", defaultName: "Mosses", defaultDesc: "Low-growing plants that carpet shady areas" },
-  { key: "tropical", params: "?climate=tropical", defaultName: "Tropical Plants", defaultDesc: "Lush plants from warm, humid climates" },
+  { key: "tropical", params: "?q=tropical", defaultName: "Tropical Plants", defaultDesc: "Lush plants from warm, humid climates" },
   { key: "ornamental", params: "?usage=Ornamental", defaultName: "Ornamental", defaultDesc: "Plants grown primarily for their beauty" },
   { key: "fragrant", params: "?usage=Fragrant", defaultName: "Fragrant Plants", defaultDesc: "Plants known for their delightful scent" },
   { key: "droughtTolerant", params: "?habitat=xerophytic", defaultName: "Drought Tolerant", defaultDesc: "Resilient plants that thrive with minimal water" },
@@ -78,8 +78,6 @@ type PlantRow = {
   life_cycle: string[] | null
   edible_part: string[] | null
   living_space: string[] | null
-  climate: string[] | null
-  vegetable: boolean | null
   scientific_name_species: string | null
   plant_images: { link: string }[]
 }
@@ -180,18 +178,6 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     const spaces = livingSpace.split(",").map((s) => s.trim().toLowerCase())
     const plantSpaces = (plant.living_space || []).map((s) => s.toLowerCase())
     if (!spaces.some((s) => plantSpaces.includes(s))) return false
-  }
-
-  const climate = sp.get("climate")
-  if (climate) {
-    const climates = climate.split(",").map((c) => c.trim().toLowerCase())
-    const plantClimates = (plant.climate || []).map((c) => c.toLowerCase())
-    if (!climates.some((c) => plantClimates.includes(c))) return false
-  }
-
-  const vegetable = sp.get("vegetable")
-  if (vegetable === "true") {
-    if (!plant.vegetable) return false
   }
 
   return true
@@ -316,7 +302,7 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, climate, vegetable, scientific_name_species, plant_images!inner(link)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),
