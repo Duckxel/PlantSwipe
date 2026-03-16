@@ -2,7 +2,7 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
-import { Home, Trees, FlaskConical, Warehouse, Loader2 } from "lucide-react";
+import { Home, Trees, FlaskConical, Warehouse, Loader2, Check } from "lucide-react";
 import type { Garden, GardenLivingSpace } from "@/types/garden";
 
 const LIVING_SPACE_OPTIONS: Array<{
@@ -25,6 +25,8 @@ export const GardenLivingSpaceEditor: React.FC<{
   const { t } = useTranslation("common");
   const [selected, setSelected] = React.useState<GardenLivingSpace[]>(garden?.livingSpace ?? []);
   const [saving, setSaving] = React.useState(false);
+  const [saveError, setSaveError] = React.useState<string | null>(null);
+  const [saved, setSaved] = React.useState(false);
 
   React.useEffect(() => {
     setSelected(garden?.livingSpace ?? []);
@@ -32,6 +34,8 @@ export const GardenLivingSpaceEditor: React.FC<{
 
   const toggle = (value: GardenLivingSpace) => {
     if (!canEdit) return;
+    setSaveError(null);
+    setSaved(false);
     setSelected((prev) =>
       prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
     );
@@ -46,6 +50,8 @@ export const GardenLivingSpaceEditor: React.FC<{
   const save = async () => {
     if (!garden || !dirty || saving) return;
     setSaving(true);
+    setSaveError(null);
+    setSaved(false);
     try {
       const { error } = await supabase
         .from("gardens")
@@ -53,8 +59,11 @@ export const GardenLivingSpaceEditor: React.FC<{
         .eq("id", garden.id);
       if (error) throw error;
       await onSaved();
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
     } catch (e: any) {
       console.error("Failed to save living space", e);
+      setSaveError(e?.message || t("common.errorUnknown", { defaultValue: "Something went wrong. Please try again." }));
     } finally {
       setSaving(false);
     }
@@ -85,11 +94,22 @@ export const GardenLivingSpaceEditor: React.FC<{
           );
         })}
       </div>
-      {canEdit && dirty && (
-        <div className="flex justify-end">
+
+      {/* Save button — always visible when canEdit, enabled when dirty */}
+      {canEdit && (
+        <div className="flex items-center justify-end gap-2">
+          {saveError && (
+            <span className="text-xs text-red-500 dark:text-red-400 mr-auto">{saveError}</span>
+          )}
+          {saved && (
+            <span className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1 mr-auto">
+              <Check className="w-3.5 h-3.5" />
+              {t("common.saved", { defaultValue: "Saved" })}
+            </span>
+          )}
           <Button
             onClick={save}
-            disabled={saving}
+            disabled={saving || !dirty}
             className="rounded-2xl"
           >
             {saving && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
