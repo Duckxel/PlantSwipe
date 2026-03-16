@@ -4949,26 +4949,26 @@ function OverviewSection({
         const allDone = completedCount === roadmapSteps.length;
         const currentIdx = roadmapSteps.findIndex((s) => !s.done);
 
-        // === Map geometry (bottom-to-top, S-curve path) ===
+        // === Map geometry (bottom-to-top, winding adventure path) ===
         const nodeCount = roadmapSteps.length;
-        const nodeSpacing = 100;
-        const svgPadTop = 50;
-        const svgPadBot = 50;
+        const nodeSpacing = 130;
+        const svgPadTop = 60;
+        const svgPadBot = 60;
         const svgHeight = svgPadTop + (nodeCount - 1) * nodeSpacing + svgPadBot;
-        const svgWidth = 200;
+        const svgWidth = 260;
         const centerX = svgWidth / 2;
-        const amplitude = 45; // horizontal swing
 
-        // S-curve offsets: smooth sine wave, bottom-to-top
-        // Index 0 = bottom of the map (START), last = top (FINISH)
+        // Winding path: each node alternates sides with varying amplitudes
+        // Creates an organic, trail-like feel rather than a simple sine
+        const amplitudes = [0, 55, -40, 65, -55, 45, -60]; // per-node horizontal offsets
         const nodeX = (i: number) => {
-          // Sine wave: alternates left/right as we go up
-          return centerX + Math.sin((i / (nodeCount - 1)) * Math.PI * 2 + Math.PI / 2) * amplitude;
+          const amp = amplitudes[i % amplitudes.length] || 0;
+          return centerX + amp;
         };
         // Y goes from bottom (high value) to top (low value)
         const nodeY = (i: number) => svgHeight - svgPadBot - i * nodeSpacing;
 
-        // Build smooth S-curve through all nodes using Catmull-Rom → cubic bezier
+        // Build smooth winding path using Catmull-Rom → cubic bezier
         const buildSmoothPath = () => {
           if (nodeCount < 2) return '';
           const pts = Array.from({ length: nodeCount }, (_, i) => ({ x: nodeX(i), y: nodeY(i) }));
@@ -4979,7 +4979,6 @@ function OverviewSection({
             const p1 = pts[i];
             const p2 = pts[i + 1];
             const p3 = pts[Math.min(pts.length - 1, i + 2)];
-            // Catmull-Rom to Bezier conversion (tension 0.5)
             const cp1x = p1.x + (p2.x - p0.x) / 6;
             const cp1y = p1.y + (p2.y - p0.y) / 6;
             const cp2x = p2.x - (p3.x - p1.x) / 6;
@@ -4992,36 +4991,62 @@ function OverviewSection({
         const vinePath = buildSmoothPath();
         const progressFraction = nodeCount > 1 ? completedCount / nodeCount : completedCount;
 
-        // Leaf & flower decorations between nodes
-        const decorations: Array<{ x: number; y: number; rotation: number; type: 'leaf' | 'flower'; segIdx: number }> = [];
+        // Decorations: leaves, flowers, mushrooms, rocks, butterflies
+        type DecType = 'leaf' | 'flower' | 'mushroom' | 'rock' | 'butterfly' | 'sprout';
+        const decorations: Array<{ x: number; y: number; rotation: number; type: DecType; segIdx: number }> = [];
+        const decTypes: DecType[] = ['leaf', 'flower', 'mushroom', 'rock', 'butterfly', 'sprout'];
         for (let i = 0; i < nodeCount - 1; i++) {
           const x0 = nodeX(i), y0 = nodeY(i);
           const x1 = nodeX(i + 1), y1 = nodeY(i + 1);
-          // Two leaves per segment at 33% and 66%
-          for (const t of [0.33, 0.66]) {
+          // Leaves along the path
+          for (const t of [0.25, 0.75]) {
             const mx = x0 + (x1 - x0) * t;
             const my = y0 + (y1 - y0) * t;
-            const dx = x1 - x0;
             const side = t < 0.5 ? 1 : -1;
             decorations.push({
-              x: mx + side * 12,
+              x: mx + side * 16,
               y: my,
-              rotation: dx > 0 ? 35 * side : -35 * side,
+              rotation: side * 30 + (i * 15),
               type: 'leaf',
               segIdx: i,
             });
           }
-          // One flower at midpoint of every other segment
+          // Alternating decorations at midpoint
+          const midX = (x0 + x1) / 2;
+          const midY = (y0 + y1) / 2;
+          const offsetSide = x1 > x0 ? 1 : -1;
+          const decType = decTypes[(i + 2) % decTypes.length];
+          decorations.push({
+            x: midX + offsetSide * 28,
+            y: midY,
+            rotation: 0,
+            type: decType,
+            segIdx: i,
+          });
+          // Extra scatter decoration on opposite side
           if (i % 2 === 0) {
             decorations.push({
-              x: (x0 + x1) / 2 + (x1 > x0 ? 18 : -18),
-              y: (y0 + y1) / 2,
+              x: midX - offsetSide * 22,
+              y: midY + 15,
               rotation: 0,
-              type: 'flower',
+              type: decTypes[(i + 4) % decTypes.length],
               segIdx: i,
             });
           }
         }
+
+        // Ref for auto-scrolling to current step
+        const mapScrollRef = React.useRef<HTMLDivElement>(null);
+        React.useEffect(() => {
+          const container = mapScrollRef.current;
+          if (!container) return;
+          const targetIdx = currentIdx >= 0 ? currentIdx : 0;
+          const targetY = nodeY(targetIdx);
+          const containerH = container.clientHeight;
+          // Center the current node in the visible area
+          const scrollTo = targetY - containerH / 2;
+          container.scrollTop = Math.max(0, Math.min(scrollTo, container.scrollHeight - containerH));
+        }, [currentIdx]);
 
         return (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
@@ -5115,9 +5140,10 @@ function OverviewSection({
                 )}
               </div>
 
-              {/* Right column: Scrollable map */}
+              {/* Right column: Scrollable roadmap (wider) */}
               <div
-                className="w-[180px] flex-shrink-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50"
+                ref={mapScrollRef}
+                className="w-[260px] flex-shrink-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50 scrollbar-thin scrollbar-thumb-stone-300 dark:scrollbar-thumb-stone-600"
                 style={{ maxHeight: 420 }}
               >
                 <div className="relative" style={{ height: svgHeight, minHeight: '100%' }}>
@@ -5152,41 +5178,73 @@ function OverviewSection({
                       }}
                     />
 
-                    {/* Decorations: leaves and flowers */}
+                    {/* Decorations: leaves, flowers, mushrooms, rocks, butterflies, sprouts */}
                     {decorations.map((dec, di) => {
                       const segProgress = (dec.segIdx + 1) / nodeCount;
                       const visible = progressFraction >= segProgress - 0.08;
+                      const baseOpacity = visible ? 0.8 : 0.15;
                       if (dec.type === 'leaf') {
                         return (
-                          <g
-                            key={`dec-${di}`}
-                            transform={`translate(${dec.x}, ${dec.y}) rotate(${dec.rotation})`}
-                            style={{ opacity: visible ? 0.7 : 0, transition: 'opacity 0.4s ease' }}
-                          >
-                            <path d="M 0 -6 Q 4 -1.5, 0 6 Q -4 -1.5, 0 -6" fill="#10b981" />
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y}) rotate(${dec.rotation})`}
+                            style={{ opacity: baseOpacity, transition: 'opacity 0.4s ease' }}>
+                            <path d="M 0 -7 Q 5 -2, 0 7 Q -5 -2, 0 -7" fill="#10b981" />
+                            <line x1="0" y1="-5" x2="0" y2="5" stroke="#059669" strokeWidth="0.5" />
                           </g>
                         );
                       }
+                      if (dec.type === 'flower') {
+                        return (
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
+                            style={{ opacity: visible ? 0.9 : 0.12, transition: 'opacity 0.5s ease' }}>
+                            {[0, 72, 144, 216, 288].map((angle) => (
+                              <ellipse key={angle} cx="0" cy="-4" rx="2.5" ry="3.5" transform={`rotate(${angle})`}
+                                fill="#f9a8d4" opacity="0.7" />
+                            ))}
+                            <circle cx="0" cy="0" r="2.5" fill="#fbbf24" />
+                          </g>
+                        );
+                      }
+                      if (dec.type === 'mushroom') {
+                        return (
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
+                            style={{ opacity: visible ? 0.85 : 0.12, transition: 'opacity 0.5s ease' }}>
+                            {/* Stem */}
+                            <rect x="-2" y="-2" width="4" height="7" rx="1.5" fill="#d6d3d1" />
+                            {/* Cap */}
+                            <ellipse cx="0" cy="-4" rx="6" ry="4" fill="#ef4444" opacity="0.8" />
+                            {/* Spots */}
+                            <circle cx="-2" cy="-5" r="1" fill="white" opacity="0.8" />
+                            <circle cx="2" cy="-3.5" r="0.8" fill="white" opacity="0.8" />
+                          </g>
+                        );
+                      }
+                      if (dec.type === 'rock') {
+                        return (
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
+                            style={{ opacity: visible ? 0.5 : 0.1, transition: 'opacity 0.5s ease' }}>
+                            <ellipse cx="0" cy="0" rx="7" ry="4" className="fill-stone-300 dark:fill-stone-600" />
+                            <ellipse cx="-2" cy="-1.5" rx="4" ry="2.5" className="fill-stone-200 dark:fill-stone-500" />
+                          </g>
+                        );
+                      }
+                      if (dec.type === 'butterfly') {
+                        return (
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y}) scale(0.8)`}
+                            style={{ opacity: visible ? 0.75 : 0.1, transition: 'opacity 0.5s ease' }}>
+                            {/* Wings */}
+                            <ellipse cx="-4" cy="-2" rx="4" ry="5" fill="#c084fc" opacity="0.7" transform="rotate(-15)" />
+                            <ellipse cx="4" cy="-2" rx="4" ry="5" fill="#c084fc" opacity="0.7" transform="rotate(15)" />
+                            {/* Body */}
+                            <ellipse cx="0" cy="0" rx="1" ry="4" fill="#7c3aed" />
+                          </g>
+                        );
+                      }
+                      // sprout
                       return (
-                        <g
-                          key={`dec-${di}`}
-                          transform={`translate(${dec.x}, ${dec.y})`}
-                          style={{ opacity: visible ? 0.9 : 0, transition: 'opacity 0.5s ease' }}
-                        >
-                          {/* Small 5-petal flower */}
-                          {[0, 72, 144, 216, 288].map((angle) => (
-                            <ellipse
-                              key={angle}
-                              cx="0"
-                              cy="-3.5"
-                              rx="2"
-                              ry="3"
-                              transform={`rotate(${angle})`}
-                              className="fill-stone-600 dark:fill-white"
-                              opacity="0.6"
-                            />
-                          ))}
-                          <circle cx="0" cy="0" r="2" fill="#fbbf24" />
+                        <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
+                          style={{ opacity: visible ? 0.7 : 0.1, transition: 'opacity 0.5s ease' }}>
+                          <line x1="0" y1="4" x2="0" y2="-2" stroke="#10b981" strokeWidth="1.5" />
+                          <path d="M 0 -2 Q 4 -6 0 -8 Q -4 -6 0 -2" fill="#34d399" />
                         </g>
                       );
                     })}
