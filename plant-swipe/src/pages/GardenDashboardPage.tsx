@@ -4243,6 +4243,64 @@ function OverviewSection({
     };
   }, [members]);
 
+  // Beginner garden suggestions: fetch random succulents when garden is beginners + no plants
+  const [suggestedPlants, setSuggestedPlants] = React.useState<
+    Array<{ id: string; name: string; variety: string | null; imageUrl: string | null }>
+  >([]);
+  const currentLang = useLanguage();
+
+  React.useEffect(() => {
+    if (garden?.gardenType !== 'beginners' || plants.length > 0) {
+      setSuggestedPlants([]);
+      return;
+    }
+    let ignore = false;
+    (async () => {
+      try {
+        // Fetch succulents with easy care level
+        const { data: plantRows } = await supabase
+          .from('plants')
+          .select('id, name, plant_images (link, use)')
+          .eq('plant_type', 'succulent')
+          .contains('care_level', ['easy'])
+          .eq('status', 'approved')
+          .limit(50);
+        if (ignore || !plantRows || plantRows.length === 0) return;
+
+        // Fetch translations for the current language
+        const plantIds = plantRows.map((p: any) => p.id);
+        const { data: translations } = await supabase
+          .from('plant_translations')
+          .select('plant_id, name, variety')
+          .eq('language', currentLang)
+          .in('plant_id', plantIds);
+        const trMap = new Map<string, { name?: string; variety?: string }>();
+        if (translations) {
+          for (const t of translations as any[]) {
+            trMap.set(t.plant_id, { name: t.name || undefined, variety: t.variety || undefined });
+          }
+        }
+
+        // Shuffle and pick 4
+        const shuffled = plantRows.sort(() => Math.random() - 0.5).slice(0, 4);
+        const result = shuffled.map((p: any) => {
+          const tr = trMap.get(p.id);
+          const images = p.plant_images || [];
+          const primary = images.find((img: any) => img.use === 'primary' && img.link);
+          const firstImg = images.find((img: any) => img.link);
+          return {
+            id: p.id,
+            name: tr?.name || p.name,
+            variety: tr?.variety || null,
+            imageUrl: primary?.link || firstImg?.link || null,
+          };
+        });
+        if (!ignore) setSuggestedPlants(result);
+      } catch {}
+    })();
+    return () => { ignore = true; };
+  }, [garden?.gardenType, plants.length, currentLang]);
+
   React.useEffect(() => {
     let ignore = false;
     (async () => {
@@ -4641,6 +4699,71 @@ function OverviewSection({
           </div>
         )}
       </div>
+
+      {/* Beginner Suggestions - shown when garden is beginners type with no plants */}
+      {garden?.gardenType === 'beginners' && plants.length === 0 && suggestedPlants.length > 0 && (
+        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+          <h3 className="font-semibold text-lg mb-4 flex items-center gap-2">
+            <Sprout className="w-5 h-5 text-emerald-500" />
+            {t("gardenDashboard.beginnerSuggestions.title", { defaultValue: "Suggested for you" })}
+          </h3>
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+            {suggestedPlants.map((sp) => (
+              <div
+                key={sp.id}
+                className="flex-shrink-0 w-[160px] snap-start group"
+              >
+                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
+                  {sp.imageUrl ? (
+                    <img
+                      src={sp.imageUrl}
+                      alt={sp.name}
+                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <span className="text-3xl opacity-40">🌵</span>
+                    </div>
+                  )}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                </div>
+                <div className="px-1">
+                  <div className="font-medium text-sm truncate">{sp.name}</div>
+                  {sp.variety && (
+                    <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
+                  )}
+                  <button
+                    onClick={() => navigate(`/plants/${sp.id}`)}
+                    className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
+                  >
+                    {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
+                  </button>
+                </div>
+              </div>
+            ))}
+            {/* Explore more card */}
+            <div
+              className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
+              onClick={() => navigate('/search?type=Succulent&maintenance=easy')}
+            >
+              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
+                <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                  <ArrowUpRight className="w-8 h-8" />
+                  <span className="text-sm font-semibold text-center px-2">
+                    {t("gardenDashboard.beginnerSuggestions.exploreMore", { defaultValue: "Explore more" })}
+                  </span>
+                </div>
+              </div>
+              <div className="px-1">
+                <div className="font-medium text-sm text-emerald-600 dark:text-emerald-400 truncate">
+                  {t("gardenDashboard.beginnerSuggestions.browseSucculents", { defaultValue: "Browse succulents" })}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {/* Members Section */}
       {members.length > 0 && (

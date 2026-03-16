@@ -1289,6 +1289,12 @@
       "completed": "Complété",
       "missed": "Manqué"
     },
+    "beginnerSuggestions": {
+      "title": "Suggestions pour vous",
+      "learnMore": "En savoir plus",
+      "exploreMore": "Explorer plus",
+      "browseSucculents": "Parcourir les succulentes"
+    },
     "analyticsSection": {
       "title": "Statistiques et analyses",
       "subtitle": "Suivez les progrès de votre jardin et recevez des conseils personnalisés",
