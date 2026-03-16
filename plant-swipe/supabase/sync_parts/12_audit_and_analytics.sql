@@ -771,6 +771,9 @@ alter table if exists public.gardens add column if not exists preferred_language
 -- Migration: Add hide_ai_chat column to gardens (default false = chat visible by default)
 alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
 
+-- Migration: Add garden_type column to gardens (default 'default')
+alter table if exists public.gardens add column if not exists garden_type text not null default 'default' check (garden_type in ('default', 'beginners'));
+
 -- ========== Plant Stocks Management ==========
 -- Table to manage plant seed/plant availability, quantity, and pricing for the shop
 create table if not exists public.plant_stocks (

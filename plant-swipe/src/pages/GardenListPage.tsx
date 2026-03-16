@@ -69,7 +69,7 @@ export const GardenListPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [imageUrl, setImageUrl] = React.useState("");
+  const [gardenType, setGardenType] = React.useState<"default" | "beginners">("default");
   const [submitting, setSubmitting] = React.useState(false);
   const [progressByGarden, setProgressByGarden] = React.useState<
     Record<string, { due: number; completed: number }>
@@ -1788,13 +1788,13 @@ export const GardenListPage: React.FC = () => {
       const defaultPrivacy = profile?.is_private ? 'friends_only' : 'public';
       const garden = await createGarden({
         name: name.trim(),
-        coverImageUrl: imageUrl.trim() || null,
         ownerUserId: user.id,
         privacy: defaultPrivacy as any,
+        gardenType,
       });
       setOpen(false);
       setName("");
-      setImageUrl("");
+      setGardenType("default");
       // Navigate to the new garden dashboard
       navigate(`/garden/${garden.id}`);
     } catch (e: any) {
@@ -2178,9 +2178,16 @@ export const GardenListPage: React.FC = () => {
                     <div className="p-3 md:p-4 bg-transparent relative z-10">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm md:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-1">
-                            {g.name}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-sm md:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {g.name}
+                            </h3>
+                            {g.gardenType === 'beginners' && (
+                              <span className="flex-shrink-0 text-[10px] md:text-xs font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-2 py-0.5">
+                                {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center flex-wrap gap-2 md:gap-3 text-xs md:text-sm text-stone-600 dark:text-stone-300">
                             <div className="flex items-center gap-1.5">
                               <svg
@@ -2285,17 +2292,31 @@ export const GardenListPage: React.FC = () => {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="garden-image">
-                    {t("garden.coverImageUrl")}
-                  </Label>
-                  <Input
-                    id="garden-image"
-                    value={imageUrl}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setImageUrl(e.target.value)
-                    }
-                    placeholder={t("garden.coverImageUrlPlaceholder")}
-                  />
+                  <Label>{t("garden.gardenType", { defaultValue: "Garden Type" })}</Label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setGardenType("default")}
+                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                        gardenType === "default"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                      }`}
+                    >
+                      {t("garden.gardenTypeDefault", { defaultValue: "Default" })}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGardenType("beginners")}
+                      className={`flex-1 rounded-2xl border-2 px-4 py-3 text-sm font-medium transition-all ${
+                        gardenType === "beginners"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                      }`}
+                    >
+                      {t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}
+                    </button>
+                  </div>
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <Button

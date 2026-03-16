@@ -4,6 +4,8 @@ export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
 
 export type GardenPrivacy = 'public' | 'friends_only' | 'private'
 
+export type GardenType = 'default' | 'beginners'
+
 export interface Garden {
   id: string
   name: string
@@ -20,6 +22,7 @@ export interface Garden {
   preferredLanguage?: string | null
   /** If true, hide the AI chat bubble for this garden */
   hideAiChat?: boolean
+  gardenType?: GardenType
 }
 
 export interface GardenMember {

@@ -4464,6 +4464,11 @@ function OverviewSection({
                     </h1>
                   )}
                   <div className="flex flex-wrap items-center gap-4 text-white/90">
+                    {garden?.gardenType === 'beginners' && (
+                      <div className="flex items-center gap-1.5 bg-sky-500/30 backdrop-blur-sm text-white rounded-full px-3 py-1.5 text-sm font-medium">
+                        {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🌱</span>
                       <span className="font-medium">{totalOnHand}</span>
@@ -4556,6 +4561,11 @@ function OverviewSection({
                   </h1>
                 )}
                 <div className="flex flex-wrap items-center gap-3">
+                  {garden?.gardenType === 'beginners' && (
+                    <div className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-3 py-1.5 border border-sky-200/50 dark:border-sky-500/20 text-sm font-medium">
+                      {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
                     <span className="text-lg">🌱</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-300">
