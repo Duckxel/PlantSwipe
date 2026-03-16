@@ -1658,7 +1658,7 @@ export const GardenDashboardPage: React.FC = () => {
             .select('id, name, plant_images (link, use)')
             .eq('plant_type', 'succulent')
             .contains('care_level', ['easy'])
-            .or('status.eq.approved,status.is.null')
+            .neq('status', 'in_progress')
             .limit(50);
           if (ignore || !plantRows || plantRows.length === 0) return;
 

@@ -111,7 +111,7 @@ When a beginner garden has **no plants**, a "Suggested for you" card appears in 
 
 Shows 5 cards in a horizontal scrollable row:
 - **Cards 1–4:** Random easy-care succulents from the plant catalog
-  - Queried as: `plant_type = 'succulent'`, `care_level @> ['easy']`, `status IN ('approved', NULL)`
+  - Queried as: `plant_type = 'succulent'`, `care_level @> ['easy']`, `status != 'in_progress'`
   - Shuffled randomly, limited to 4
   - Shows plant image (3:4 aspect), name, variety, "Learn more" link
   - Respects current language for translated names
