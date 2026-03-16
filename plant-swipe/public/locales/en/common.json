@@ -1293,6 +1293,14 @@
       "title": "Getting Started",
       "addPlant": "Add 1 plant to your garden",
       "addPlantAction": "Add a plant",
+      "scheduleWater": "Schedule watering tasks for your plant",
+      "scheduleWaterAction": "Set up watering",
+      "readPlantInfo": "Read the info page of your plant",
+      "readPlantInfoAction": "View plant",
+      "scheduleFertilize": "Schedule fertilization tasks for your plant",
+      "scheduleFertilizeAction": "Set up fertilizing",
+      "createJournal": "Create an entry in your journal",
+      "createJournalAction": "Open journal",
       "allDone": "Great job! You've completed all the steps."
     },
     "beginnerSuggestions": {

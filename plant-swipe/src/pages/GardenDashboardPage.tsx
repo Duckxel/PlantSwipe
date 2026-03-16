@@ -153,6 +153,10 @@ export const GardenDashboardPage: React.FC = () => {
   const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<
     Record<string, number>
   >({});
+  // Beginner roadmap flags
+  const [hasWaterTask, setHasWaterTask] = React.useState(false);
+  const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
+  const [hasJournalEntry, setHasJournalEntry] = React.useState(false);
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<
     Array<{
       id: string;
@@ -969,6 +973,10 @@ export const GardenDashboardPage: React.FC = () => {
               (taskCountMap[t.gardenPlantId] || 0) + 1;
           setTaskCountsByPlant(taskCountMap);
 
+          // Beginner roadmap: track task types
+          setHasWaterTask(allTasks.some((t) => t.type === 'water'));
+          setHasFertilizeTask(allTasks.some((t) => t.type === 'fertilize'));
+
           const dueMap: Record<string, number> = {};
           for (const o of occsDetailed) {
             const remaining = Math.max(
@@ -1684,6 +1692,23 @@ export const GardenDashboardPage: React.FC = () => {
       })();
       return () => { ignore = true; };
     }, [garden?.gardenType, plants.length, currentLang, isMember]);
+
+    // Beginner roadmap: check if garden has any journal entries
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      let ignore = false;
+      (async () => {
+        try {
+          const { count } = await supabase
+            .from('garden_journal_entries')
+            .select('id', { count: 'exact', head: true })
+            .eq('garden_id', id)
+            .limit(1);
+          if (!ignore) setHasJournalEntry((count ?? 0) > 0);
+        } catch {}
+      })();
+      return () => { ignore = true; };
+    }, [garden?.gardenType, id, isMember]);
 
     React.useEffect(() => {
       load();
@@ -2829,6 +2854,9 @@ export const GardenDashboardPage: React.FC = () => {
                     shareStatus={shareStatus}
                     isMember={isMember}
                     suggestedPlants={suggestedPlants}
+                    hasWaterTask={hasWaterTask}
+                    hasFertilizeTask={hasFertilizeTask}
+                    hasJournalEntry={hasJournalEntry}
                   />
                 }
               />
@@ -4269,6 +4297,9 @@ function OverviewSection({
   onNavigateToPlants,
   isMember = true,
   suggestedPlants = [],
+  hasWaterTask = false,
+  hasFertilizeTask = false,
+  hasJournalEntry = false,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4315,6 +4346,9 @@ function OverviewSection({
   onNavigateToPlants: () => void;
   isMember?: boolean;
   suggestedPlants?: Array<{ id: string; name: string; variety: string | null; imageUrl: string | null }>;
+  hasWaterTask?: boolean;
+  hasFertilizeTask?: boolean;
+  hasJournalEntry?: boolean;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -4766,6 +4800,7 @@ function OverviewSection({
 
       {/* Beginner Roadmap - shown only to members in beginners gardens */}
       {garden?.gardenType === 'beginners' && isMember && (() => {
+        const firstPlantId = plants[0]?.plant?.id;
         const roadmapSteps = [
           {
             key: 'add_plant',
@@ -4773,6 +4808,37 @@ function OverviewSection({
             label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add 1 plant to your garden" }),
             action: () => navigate(`/garden/${gardenId}/plants`),
             actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
+          },
+          {
+            key: 'schedule_water',
+            done: hasWaterTask,
+            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering tasks for your plant" }),
+            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
+          },
+          {
+            key: 'read_plant_info',
+            done: firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false,
+            label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read the info page of your plant" }),
+            action: firstPlantId ? () => {
+              localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
+              navigate(`/plants/${firstPlantId}`);
+            } : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.readPlantInfoAction", { defaultValue: "View plant" }),
+          },
+          {
+            key: 'schedule_fertilize',
+            done: hasFertilizeTask,
+            label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization tasks for your plant" }),
+            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeAction", { defaultValue: "Set up fertilizing" }),
+          },
+          {
+            key: 'create_journal',
+            done: hasJournalEntry,
+            label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Create an entry in your journal" }),
+            action: () => navigate(`/garden/${gardenId}/journal`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
           },
         ];
         const completedCount = roadmapSteps.filter((s) => s.done).length;
