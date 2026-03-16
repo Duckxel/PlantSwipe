@@ -1289,6 +1289,12 @@
       "completed": "Completed",
       "missed": "Missed"
     },
+    "beginnerRoadmap": {
+      "title": "Getting Started",
+      "addPlant": "Add 1 plant to your garden",
+      "addPlantAction": "Add a plant",
+      "allDone": "Great job! You've completed all the steps."
+    },
     "beginnerSuggestions": {
       "title": "Suggested for you",
       "learnMore": "Learn more",

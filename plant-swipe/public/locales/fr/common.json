@@ -1289,6 +1289,12 @@
       "completed": "Complété",
       "missed": "Manqué"
     },
+    "beginnerRoadmap": {
+      "title": "Pour bien commencer",
+      "addPlant": "Ajouter 1 plante à votre jardin",
+      "addPlantAction": "Ajouter une plante",
+      "allDone": "Bravo ! Vous avez complété toutes les étapes."
+    },
     "beginnerSuggestions": {
       "title": "Suggestions pour vous",
       "learnMore": "En savoir plus",

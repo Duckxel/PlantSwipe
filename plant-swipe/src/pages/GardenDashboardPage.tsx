@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
@@ -4763,6 +4763,78 @@ function OverviewSection({
           </div>
         )}
       </div>
+
+      {/* Beginner Roadmap - shown only to members in beginners gardens */}
+      {garden?.gardenType === 'beginners' && isMember && (() => {
+        const roadmapSteps = [
+          {
+            key: 'add_plant',
+            done: plants.length > 0,
+            label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add 1 plant to your garden" }),
+            action: () => navigate(`/garden/${gardenId}/plants`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
+          },
+        ];
+        const completedCount = roadmapSteps.filter((s) => s.done).length;
+        const allDone = completedCount === roadmapSteps.length;
+        return (
+          <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <ListChecks className="w-5 h-5 text-emerald-500" />
+                {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Getting Started" })}
+              </h3>
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded-full px-2.5 py-1">
+                {completedCount}/{roadmapSteps.length}
+              </span>
+            </div>
+            {/* Progress bar */}
+            <div className="w-full h-2 rounded-full bg-stone-200 dark:bg-stone-700 mb-4 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                style={{ width: `${roadmapSteps.length > 0 ? (completedCount / roadmapSteps.length) * 100 : 0}%` }}
+              />
+            </div>
+            <div className="space-y-3">
+              {roadmapSteps.map((step) => (
+                <div
+                  key={step.key}
+                  className={`flex items-center gap-3 rounded-2xl p-3 transition-colors ${
+                    step.done
+                      ? "bg-emerald-50 dark:bg-emerald-900/20"
+                      : "bg-stone-50 dark:bg-stone-800/50"
+                  }`}
+                >
+                  {step.done ? (
+                    <CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0" />
+                  ) : (
+                    <Circle className="w-5 h-5 text-stone-400 dark:text-stone-500 flex-shrink-0" />
+                  )}
+                  <span className={`flex-1 text-sm ${step.done ? "line-through text-stone-400 dark:text-stone-500" : "text-stone-700 dark:text-stone-200"}`}>
+                    {step.label}
+                  </span>
+                  {!step.done && step.action && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="rounded-xl text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 text-xs h-7 px-2.5"
+                      onClick={step.action}
+                    >
+                      {step.actionLabel}
+                      <ArrowUpRight className="w-3.5 h-3.5 ml-1" />
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {allDone && (
+              <div className="mt-4 text-center text-sm text-emerald-600 dark:text-emerald-400 font-medium">
+                {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
+              </div>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* Beginner Suggestions - shown only to members when garden is beginners type with no plants */}
       {garden?.gardenType === 'beginners' && plants.length === 0 && isMember && suggestedPlants.length > 0 && (
