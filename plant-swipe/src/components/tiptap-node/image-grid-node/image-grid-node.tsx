@@ -569,7 +569,11 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     </div>
 
                     {/* Zoom slider */}
-                    <div className="mt-3 flex items-center gap-3 px-1">
+                    <div
+                      className="mt-3 flex items-center gap-3 px-1"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
                       <ZoomIn className="h-3.5 w-3.5 text-white/50 flex-shrink-0" />
                       <input
                         type="range"
