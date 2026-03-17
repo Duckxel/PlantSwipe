@@ -1,7 +1,7 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
 import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link } from "lucide-react"
-import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
+import type { GridColumns, GridGap, GridAspectRatio, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // Default upload folder if not configured
@@ -22,6 +22,14 @@ const SIZE_PRESETS = [
   { label: "Full", shortLabel: "Full", value: "100%", percent: 100 },
 ]
 
+// Aspect ratio options for image cropping
+const ASPECT_RATIO_OPTIONS: { value: GridAspectRatio; label: string }[] = [
+  { value: "4/3", label: "4:3" },
+  { value: "1/1", label: "1:1" },
+  { value: "3/4", label: "3:4" },
+  { value: "none", label: "None" },
+]
+
 // Alignment options
 const ALIGN_OPTIONS: { value: ImageGridAlign; label: string; Icon: typeof AlignLeft }[] = [
   { value: "left", label: "Left", Icon: AlignLeft },
@@ -38,11 +46,12 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     rounded: boolean
     width?: string
     align?: ImageGridAlign
+    aspectRatio?: GridAspectRatio
   }
-  
+
   // Ensure images is always an array (memoized to avoid dependency churn in hooks)
   const images = useMemo(() => (Array.isArray(attrs.images) ? attrs.images : []), [attrs.images])
-  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center" } = attrs
+  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center", aspectRatio = "4/3" } = attrs
 
   // Get upload folder from extension storage, fallback to default
   const uploadFolder = useMemo(() => {
@@ -399,15 +408,16 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 return (
                   <div
                     key={`${img.src}-${index}`}
-                    className={`group relative overflow-hidden aspect-[4/3] ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
+                    className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
+                    style={aspectRatio !== "none" ? { aspectRatio } : undefined}
                   >
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className={`h-full w-full ${rounded ? "rounded-2xl" : ""}`}
+                      className={`w-full ${aspectRatio !== "none" ? "h-full" : "h-auto"} ${rounded ? "rounded-2xl" : ""}`}
                       style={{
-                        objectFit: 'cover',
-                        objectPosition: `${focalX}% ${focalY}%`
+                        objectFit: aspectRatio !== "none" ? 'cover' : undefined,
+                        objectPosition: aspectRatio !== "none" ? `${focalX}% ${focalY}%` : undefined,
                       }}
                       draggable={false}
                     />
@@ -424,14 +434,16 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     )}
                     {/* Overlay controls */}
                     <div className={`absolute inset-0 flex items-center justify-center gap-2 bg-black/50 transition-opacity ${isBeingEdited ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
-                      <button
-                        type="button"
-                        onClick={(e) => startCropEdit(index, e)}
-                        className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
-                        title="Adjust crop area"
-                      >
-                        <Crop className="h-4 w-4" />
-                      </button>
+                      {aspectRatio !== "none" && (
+                        <button
+                          type="button"
+                          onClick={(e) => startCropEdit(index, e)}
+                          className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
+                          title="Adjust crop area"
+                        >
+                          <Crop className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeImage(index)}
@@ -488,8 +500,10 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   <div className="p-4">
                     <div 
                       ref={cropContainerRef}
-                      className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden aspect-video`}
-                      style={{ 
+                      className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
+                      data-aspect-ratio={aspectRatio}
+                      style={{
+                        aspectRatio: aspectRatio !== "none" ? aspectRatio : "16/9",
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
                         backgroundSize: 'cover',
@@ -693,6 +707,30 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                         }`}
                       >
                         <Icon className="h-3 w-3" />
+                      </button>
+                    )
+                  })}
+                </div>
+
+                <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+
+                {/* Aspect Ratio */}
+                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                  {ASPECT_RATIO_OPTIONS.map((ar) => {
+                    const isActive = aspectRatio === ar.value
+                    return (
+                      <button
+                        key={ar.value}
+                        type="button"
+                        onClick={() => updateAttributes({ aspectRatio: ar.value })}
+                        title={ar.value === "none" ? "No crop" : `Crop ${ar.label}`}
+                        className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all ${
+                          isActive
+                            ? "bg-emerald-500 text-white shadow-sm"
+                            : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                        }`}
+                      >
+                        {ar.label}
                       </button>
                     )
                   })}

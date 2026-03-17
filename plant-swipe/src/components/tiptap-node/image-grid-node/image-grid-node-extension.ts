@@ -5,6 +5,7 @@ import { shouldStopNodeViewEvent } from "@/lib/tiptap-utils"
 
 export type GridColumns = 2 | 3 | 4
 export type GridGap = "none" | "sm" | "md" | "lg"
+export type GridAspectRatio = "4/3" | "1/1" | "3/4" | "none"
 
 export interface ImageGridNodeOptions {
   HTMLAttributes: Record<string, unknown>
@@ -34,6 +35,7 @@ export interface ImageGridAttributes {
   rounded: boolean
   width: string
   align: ImageGridAlign
+  aspectRatio: GridAspectRatio
 }
 
 declare module "@tiptap/react" {
@@ -209,6 +211,15 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-align": attributes.align || "center",
         }),
       },
+      aspectRatio: {
+        default: "4/3" as GridAspectRatio,
+        parseHTML: (element: HTMLElement) => {
+          return (element.getAttribute("data-aspect-ratio") as GridAspectRatio) || "4/3"
+        },
+        renderHTML: (attributes) => ({
+          "data-aspect-ratio": attributes.aspectRatio || "4/3",
+        }),
+      },
     }
   },
 
@@ -228,6 +239,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     const rounded = HTMLAttributes["data-rounded"] !== "false"
     const width = (HTMLAttributes["data-width"] as string) || "100%"
     const align = (HTMLAttributes["data-align"] as ImageGridAlign) || "center"
+    const aspectRatio = (HTMLAttributes["data-aspect-ratio"] as GridAspectRatio) || "4/3"
     
     const gapMap: Record<GridGap, string> = {
       none: "0",
@@ -254,15 +266,35 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       max-width: 100%;
     `.replace(/\s+/g, " ").trim()
 
+    const hasCrop = aspectRatio !== "none"
     const imageElements = (images || []).map((img: ImageGridImage) => {
       const focalX = img.focalX ?? 50
       const focalY = img.focalY ?? 50
+      if (hasCrop) {
+        return [
+          "div",
+          {
+            style: `position: relative; overflow: hidden; aspect-ratio: ${aspectRatio}; ${rounded ? "border-radius: 16px;" : ""}`,
+          },
+          [
+            "img",
+            {
+              src: img.src,
+              alt: img.alt || "",
+              style: `width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%;`,
+              "data-grid-image": "true",
+              "data-focal-x": String(focalX),
+              "data-focal-y": String(focalY),
+            },
+          ],
+        ]
+      }
       return [
         "img",
         {
           src: img.src,
           alt: img.alt || "",
-          style: `width: 100%; height: auto; object-fit: cover; object-position: ${focalX}% ${focalY}%; ${rounded ? "border-radius: 16px;" : ""}`,
+          style: `width: 100%; height: auto; ${rounded ? "border-radius: 16px;" : ""}`,
           "data-grid-image": "true",
           "data-focal-x": String(focalX),
           "data-focal-y": String(focalY),
@@ -280,6 +312,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-rounded": String(rounded),
           "data-width": widthValue,
           "data-align": alignValue,
+          "data-aspect-ratio": aspectRatio,
           "data-images": encodeImagesAttr(images),
           style: containerStyle,
         },
@@ -313,6 +346,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
               rounded: options?.rounded ?? true,
               width: options?.width ?? "100%",
               align: options?.align ?? "center",
+              aspectRatio: options?.aspectRatio ?? "4/3",
             },
           })
         },
