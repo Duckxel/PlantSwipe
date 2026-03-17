@@ -426,13 +426,13 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className={`${effectiveAspectRatio !== "none" ? "" : "w-full h-auto"} ${rounded ? "rounded-2xl" : ""}`}
+                      className={`${effectiveAspectRatio !== "none" ? "w-full h-full" : "w-full h-auto"} ${rounded ? "rounded-2xl" : ""}`}
                       style={{
                         ...(effectiveAspectRatio !== "none" ? {
-                          width: `${zoomPercent}%`,
-                          height: `${zoomPercent}%`,
                           objectFit: 'cover' as const,
                           objectPosition: `${focalX}% ${focalY}%`,
+                          transform: imgZoom !== 1 ? `scale(${imgZoom})` : undefined,
+                          transformOrigin: `${focalX}% ${focalY}%`,
                         } : {}),
                       }}
                       draggable={false}

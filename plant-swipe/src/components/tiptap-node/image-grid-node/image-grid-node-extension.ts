@@ -295,7 +295,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
             {
               src: img.src,
               alt: img.alt || "",
-              style: `width: ${zoomPercent}%; height: ${zoomPercent}%; object-fit: cover; object-position: ${focalX}% ${focalY}%;`,
+              style: `width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%;${zoom !== 1 ? ` transform: scale(${zoom}); transform-origin: ${focalX}% ${focalY}%;` : ''}`,
               "data-grid-image": "true",
               "data-focal-x": String(focalX),
               "data-focal-y": String(focalY),
