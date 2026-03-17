@@ -283,7 +283,6 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
       const focalX = img.focalX ?? 50
       const focalY = img.focalY ?? 50
       const zoom = img.zoom ?? 1
-      const zoomPercent = zoom * 100
       if (hasCrop) {
         return [
           "div",

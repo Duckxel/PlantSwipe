@@ -413,7 +413,6 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 const focalX = isBeingEdited ? cropPosition.x : (img.focalX ?? 50)
                 const focalY = isBeingEdited ? cropPosition.y : (img.focalY ?? 50)
                 const imgZoom = isBeingEdited ? cropZoom : (img.zoom ?? 1)
-                const zoomPercent = imgZoom * 100
                 const isNotCentered = focalX !== 50 || focalY !== 50
                 const isZoomed = imgZoom !== 1
                 
