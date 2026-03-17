@@ -28,6 +28,8 @@ export interface ImageGridImage {
   focalX?: number
   /** Focal point Y position (0-100, default 50 = center) */
   focalY?: number
+  /** Zoom level (1 = no zoom, 2 = 2x zoom, etc). Default 1 */
+  zoom?: number
 }
 
 export type ImageGridAlign = "left" | "center" | "right"
@@ -112,12 +114,16 @@ function extractImagesFromChildren(element: HTMLElement): ImageGridImage[] {
       const focalX = dataFocalX ? parseFloat(dataFocalX) : (objectPosMatch ? parseFloat(objectPosMatch[1]) : 50)
       const focalY = dataFocalY ? parseFloat(dataFocalY) : (objectPosMatch ? parseFloat(objectPosMatch[2]) : 50)
       
+      const dataZoom = img.getAttribute('data-zoom')
+      const zoom = dataZoom ? parseFloat(dataZoom) : 1
+
       images.push({
         src,
         alt: img.getAttribute('alt') || '',
         width: img.getAttribute('width') || undefined,
         focalX,
         focalY,
+        zoom: zoom !== 1 ? zoom : undefined,
       })
     }
   })
@@ -276,6 +282,8 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     const imageElements = (images || []).map((img: ImageGridImage) => {
       const focalX = img.focalX ?? 50
       const focalY = img.focalY ?? 50
+      const zoom = img.zoom ?? 1
+      const zoomPercent = zoom * 100
       if (hasCrop) {
         return [
           "div",
@@ -287,10 +295,11 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
             {
               src: img.src,
               alt: img.alt || "",
-              style: `width: 100%; height: 100%; object-fit: cover; object-position: ${focalX}% ${focalY}%;`,
+              style: `width: ${zoomPercent}%; height: ${zoomPercent}%; object-fit: cover; object-position: ${focalX}% ${focalY}%;`,
               "data-grid-image": "true",
               "data-focal-x": String(focalX),
               "data-focal-y": String(focalY),
+              ...(zoom !== 1 ? { "data-zoom": String(zoom) } : {}),
             },
           ],
         ]
@@ -304,6 +313,7 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
           "data-grid-image": "true",
           "data-focal-x": String(focalX),
           "data-focal-y": String(focalY),
+          ...(zoom !== 1 ? { "data-zoom": String(zoom) } : {}),
         },
       ]
     })

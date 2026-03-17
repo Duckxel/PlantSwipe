@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link } from "lucide-react"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link, ZoomIn } from "lucide-react"
 import type { GridColumns, GridGap, GridAspectRatio, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
@@ -79,6 +79,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   // Crop editor state
   const [editingCropIndex, setEditingCropIndex] = useState<number | null>(null)
   const [cropPosition, setCropPosition] = useState({ x: 50, y: 50 }) // Center position as percentage
+  const [cropZoom, setCropZoom] = useState(1) // Zoom level: 1 = no zoom, up to 3
   const [isDraggingCrop, setIsDraggingCrop] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -164,6 +165,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     const img = images[index]
     setEditingCropIndex(index)
     setCropPosition({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
+    setCropZoom(img.zoom ?? 1)
   }, [images])
 
   // Handle crop rectangle drag - pan the image within the crop window
@@ -228,25 +230,27 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   // Save crop changes
   const saveCrop = useCallback(() => {
     if (editingCropIndex === null) return
-    
+
     const newImages = [...images]
     newImages[editingCropIndex] = {
       ...newImages[editingCropIndex],
       focalX: cropPosition.x,
       focalY: cropPosition.y,
+      zoom: cropZoom !== 1 ? cropZoom : undefined,
     }
     updateAttributes({ images: newImages })
     setEditingCropIndex(null)
-  }, [editingCropIndex, cropPosition, images, updateAttributes])
+  }, [editingCropIndex, cropPosition, cropZoom, images, updateAttributes])
 
   // Cancel crop editing
   const cancelCropEdit = useCallback(() => {
     setEditingCropIndex(null)
   }, [])
 
-  // Reset crop to center
+  // Reset crop to center and zoom
   const resetCrop = useCallback(() => {
     setCropPosition({ x: 50, y: 50 })
+    setCropZoom(1)
   }, [])
 
   const handleFileSelect = useCallback(
@@ -404,11 +408,14 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
             >
               {images.map((img, index) => {
-                // Use live cropPosition when this image is being edited, otherwise use saved values
+                // Use live cropPosition/zoom when this image is being edited, otherwise use saved values
                 const isBeingEdited = editingCropIndex === index
                 const focalX = isBeingEdited ? cropPosition.x : (img.focalX ?? 50)
                 const focalY = isBeingEdited ? cropPosition.y : (img.focalY ?? 50)
+                const imgZoom = isBeingEdited ? cropZoom : (img.zoom ?? 1)
+                const zoomPercent = imgZoom * 100
                 const isNotCentered = focalX !== 50 || focalY !== 50
+                const isZoomed = imgZoom !== 1
                 
                 return (
                   <div
@@ -419,15 +426,19 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className={`w-full ${effectiveAspectRatio !== "none" ? "h-full" : "h-auto"} ${rounded ? "rounded-2xl" : ""}`}
+                      className={`${effectiveAspectRatio !== "none" ? "" : "w-full h-auto"} ${rounded ? "rounded-2xl" : ""}`}
                       style={{
-                        objectFit: effectiveAspectRatio !== "none" ? 'cover' : undefined,
-                        objectPosition: effectiveAspectRatio !== "none" ? `${focalX}% ${focalY}%` : undefined,
+                        ...(effectiveAspectRatio !== "none" ? {
+                          width: `${zoomPercent}%`,
+                          height: `${zoomPercent}%`,
+                          objectFit: 'cover' as const,
+                          objectPosition: `${focalX}% ${focalY}%`,
+                        } : {}),
                       }}
                       draggable={false}
                     />
-                    {/* Focal point indicator (shows when not centered or when being edited) */}
-                    {(isNotCentered || isBeingEdited) && (
+                    {/* Focal point indicator (shows when not centered, zoomed, or when being edited) */}
+                    {(isNotCentered || isZoomed || isBeingEdited) && (
                       <div 
                         className={`absolute w-3 h-3 border-2 border-white rounded-full shadow-md pointer-events-none z-10 transition-all duration-75 ${isBeingEdited ? "bg-emerald-400 opacity-100 w-4 h-4" : "bg-emerald-500 opacity-70"}`}
                         style={{
@@ -511,7 +522,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                         aspectRatio: effectiveAspectRatio !== "none" ? effectiveAspectRatio : "16/9",
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
-                        backgroundSize: 'cover',
+                        backgroundSize: `${cropZoom * 100}%`,
                         backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`,
                         backgroundRepeat: 'no-repeat',
                       }}
@@ -557,9 +568,33 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       )}
                     </div>
 
+                    {/* Zoom slider */}
+                    <div className="mt-3 flex items-center gap-3 px-1">
+                      <ZoomIn className="h-3.5 w-3.5 text-white/50 flex-shrink-0" />
+                      <input
+                        type="range"
+                        min="100"
+                        max="300"
+                        value={Math.round(cropZoom * 100)}
+                        onChange={(e) => setCropZoom(parseInt(e.target.value, 10) / 100)}
+                        className="flex-1 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none
+                          [&::-webkit-slider-thumb]:w-3.5
+                          [&::-webkit-slider-thumb]:h-3.5
+                          [&::-webkit-slider-thumb]:rounded-full
+                          [&::-webkit-slider-thumb]:bg-emerald-400
+                          [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-webkit-slider-thumb]:shadow-md"
+                        title="Zoom level"
+                      />
+                      <span className="text-white/50 text-xs font-medium tabular-nums w-10 text-right flex-shrink-0">
+                        {Math.round(cropZoom * 100)}%
+                      </span>
+                    </div>
+
                     {/* Position info */}
-                    <div className="mt-3 text-center text-white/40 text-xs">
-                      Crop position: {cropPosition.x}%, {cropPosition.y}%
+                    <div className="mt-2 text-center text-white/30 text-[10px]">
+                      Position: {cropPosition.x}%, {cropPosition.y}%
                     </div>
                   </div>
                 </div>
