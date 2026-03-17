@@ -332,6 +332,10 @@ export default function CategoriesPage() {
       if (cancelled) return
 
       const previews: Record<string, CategoryPlantPreview[]> = {}
+      // Track which plant IDs are already used as hero images across categories
+      // so each category shows a unique hero when possible
+      const usedHeroIds = new Set<string>()
+
       for (const cat of categories) {
         const matching = typedPlants.filter((p) => matchesCategoryFilter(p, cat.params))
         // Sort by most viewed (descending), then alphabetically as tiebreaker
@@ -341,7 +345,21 @@ export default function CategoriesPage() {
           if (viewsB !== viewsA) return viewsB - viewsA
           return a.name.localeCompare(b.name)
         })
-        previews[cat.key] = matching.slice(0, 5).map((p) => ({
+
+        // If the top plant is already a hero in another category, swap it
+        // with the first non-hero plant so each card shows a unique hero
+        if (matching.length > 1 && usedHeroIds.has(matching[0].id)) {
+          const altIdx = matching.findIndex((p) => !usedHeroIds.has(p.id))
+          if (altIdx > 0) {
+            const [alt] = matching.splice(altIdx, 1)
+            matching.unshift(alt)
+          }
+        }
+
+        const top5 = matching.slice(0, 5)
+        if (top5.length > 0) usedHeroIds.add(top5[0].id)
+
+        previews[cat.key] = top5.map((p) => ({
           id: p.id,
           name: translationMap.get(p.id) || p.name,
           imageUrl: p.plant_images?.[0]?.link || "",
