@@ -53,17 +53,22 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const images = useMemo(() => (Array.isArray(attrs.images) ? attrs.images : []), [attrs.images])
   const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center", aspectRatio = "4/3" } = attrs
 
-  // Get upload folder from extension storage, fallback to default
-  const uploadFolder = useMemo(() => {
+  // Get upload folder and variant from extension storage
+  const { uploadFolder, isEmailMode } = useMemo(() => {
     try {
-      // Access storage with type assertion since TipTap's storage is dynamically typed
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const storage = editor?.storage as any
-      return storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
+      return {
+        uploadFolder: storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER,
+        isEmailMode: storage?.imageGrid?.variant === "embedded",
+      }
     } catch {
-      return DEFAULT_UPLOAD_FOLDER
+      return { uploadFolder: DEFAULT_UPLOAD_FOLDER, isEmailMode: false }
     }
   }, [editor])
+
+  // In email mode, force aspect ratio to "none" since Gmail doesn't support crop
+  const effectiveAspectRatio = isEmailMode ? "none" as GridAspectRatio : aspectRatio
 
   const [isUploading, setIsUploading] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
@@ -409,15 +414,15 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   <div
                     key={`${img.src}-${index}`}
                     className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
-                    style={aspectRatio !== "none" ? { aspectRatio } : undefined}
+                    style={effectiveAspectRatio !== "none" ? { aspectRatio: effectiveAspectRatio } : undefined}
                   >
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className={`w-full ${aspectRatio !== "none" ? "h-full" : "h-auto"} ${rounded ? "rounded-2xl" : ""}`}
+                      className={`w-full ${effectiveAspectRatio !== "none" ? "h-full" : "h-auto"} ${rounded ? "rounded-2xl" : ""}`}
                       style={{
-                        objectFit: aspectRatio !== "none" ? 'cover' : undefined,
-                        objectPosition: aspectRatio !== "none" ? `${focalX}% ${focalY}%` : undefined,
+                        objectFit: effectiveAspectRatio !== "none" ? 'cover' : undefined,
+                        objectPosition: effectiveAspectRatio !== "none" ? `${focalX}% ${focalY}%` : undefined,
                       }}
                       draggable={false}
                     />
@@ -434,7 +439,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     )}
                     {/* Overlay controls */}
                     <div className={`absolute inset-0 flex items-center justify-center gap-2 bg-black/50 transition-opacity ${isBeingEdited ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
-                      {aspectRatio !== "none" && (
+                      {effectiveAspectRatio !== "none" && (
                         <button
                           type="button"
                           onClick={(e) => startCropEdit(index, e)}
@@ -501,9 +506,9 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <div 
                       ref={cropContainerRef}
                       className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
-                      data-aspect-ratio={aspectRatio}
+                      data-aspect-ratio={effectiveAspectRatio}
                       style={{
-                        aspectRatio: aspectRatio !== "none" ? aspectRatio : "16/9",
+                        aspectRatio: effectiveAspectRatio !== "none" ? effectiveAspectRatio : "16/9",
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
                         backgroundSize: 'cover',
@@ -714,29 +719,33 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
 
                 <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
 
-                {/* Aspect Ratio */}
-                <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
-                  {ASPECT_RATIO_OPTIONS.map((ar) => {
-                    const isActive = aspectRatio === ar.value
-                    return (
-                      <button
-                        key={ar.value}
-                        type="button"
-                        onClick={() => updateAttributes({ aspectRatio: ar.value })}
-                        title={ar.value === "none" ? "No crop" : `Crop ${ar.label}`}
-                        className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all ${
-                          isActive
-                            ? "bg-emerald-500 text-white shadow-sm"
-                            : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
-                        }`}
-                      >
-                        {ar.label}
-                      </button>
-                    )
-                  })}
-                </div>
+                {/* Aspect Ratio - hidden in email mode (forced to none) */}
+                {!isEmailMode && (
+                  <>
+                    <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                      {ASPECT_RATIO_OPTIONS.map((ar) => {
+                        const isActive = aspectRatio === ar.value
+                        return (
+                          <button
+                            key={ar.value}
+                            type="button"
+                            onClick={() => updateAttributes({ aspectRatio: ar.value })}
+                            title={ar.value === "none" ? "No crop" : `Crop ${ar.label}`}
+                            className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all ${
+                              isActive
+                                ? "bg-emerald-500 text-white shadow-sm"
+                                : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                            }`}
+                          >
+                            {ar.label}
+                          </button>
+                        )
+                      })}
+                    </div>
 
-                <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+                    <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+                  </>
+                )}
 
                 {/* Gap */}
                 <select

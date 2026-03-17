@@ -14,6 +14,10 @@ export interface ImageGridNodeOptions {
    * @default 'image-grids'
    */
   uploadFolder?: string
+  /**
+   * Editor variant. When 'embedded' (email template), aspect ratio is locked to 'none'.
+   */
+  variant?: "default" | "embedded"
 }
 
 export interface ImageGridImage {
@@ -135,12 +139,14 @@ export const ImageGridNode = Node.create<ImageGridNodeOptions>({
     return {
       HTMLAttributes: {},
       uploadFolder: 'image-grids',
+      variant: 'default' as const,
     }
   },
 
   addStorage() {
     return {
       uploadFolder: this.options.uploadFolder || 'image-grids',
+      variant: this.options.variant || 'default',
     }
   },
 

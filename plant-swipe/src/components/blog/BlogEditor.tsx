@@ -281,6 +281,7 @@ export const BlogEditor = forwardRef<BlogEditorHandle, BlogEditorProps>(
         StyledDividerNode,
         ImageGridNode.configure({
           uploadFolder: uploadFolderRef.current,
+          variant,
         }),
         ResizableImageNode,
         EmailCardNode,
