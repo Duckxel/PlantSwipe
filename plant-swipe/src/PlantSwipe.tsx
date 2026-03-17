@@ -3034,15 +3034,13 @@ function getPlantUsageLabels(plant: Plant): string[] {
     })
   }
 
-  // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
-  const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
-    ? plant.ediblePart
-    : (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0)
-      ? plant.comestiblePart
-      : null
-  if (edibleParts) {
-    const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
-    if (hasEdible) {
+  // Only infer "Edible" from ediblePart/comestiblePart when the plant's utility
+  // already includes "edible". Some plants (e.g. Arum) have edible_part data but
+  // are actually toxic — relying on edible_part alone produces false positives.
+  const alreadyEdible = labels.some(l => l.toLowerCase() === 'edible')
+  if (!alreadyEdible) {
+    const hasEdibleUtility = (plant.utility || []).some(u => u?.toLowerCase() === 'edible')
+    if (hasEdibleUtility) {
       const edibleLabel = formatClassificationLabel('edible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
         labels.push(edibleLabel)
