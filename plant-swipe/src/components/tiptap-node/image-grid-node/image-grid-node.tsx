@@ -1,6 +1,6 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw } from "lucide-react"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link } from "lucide-react"
 import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
@@ -59,6 +59,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   const [isUploading, setIsUploading] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlInputValue, setUrlInputValue] = useState("")
   
   // Crop editor state
   const [editingCropIndex, setEditingCropIndex] = useState<number | null>(null)
@@ -279,6 +281,23 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     fileInputRef.current?.click()
   }, [])
 
+  const handleUrlSubmit = useCallback(() => {
+    const url = urlInputValue.trim()
+    if (!url) return
+
+    // Split by newlines or commas to support multiple URLs at once
+    const urls = url.split(/[\n,]+/).map(u => u.trim()).filter(Boolean)
+    const newImages: ImageGridImage[] = [...images]
+
+    for (const u of urls) {
+      newImages.push({ src: u, alt: "" })
+    }
+
+    updateAttributes({ images: newImages })
+    setUrlInputValue("")
+    setShowUrlInput(false)
+  }, [urlInputValue, images, updateAttributes])
+
   return (
     <NodeViewWrapper
       data-type="image-grid"
@@ -298,10 +317,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
 
       {images.length === 0 ? (
         // Empty state - prompt to add images
-        <div
-          className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 py-12 transition-colors hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-[#3e3e42] dark:bg-[#1a1a1d] dark:hover:border-emerald-600 dark:hover:bg-emerald-900/10"
-          onClick={openFileDialog}
-        >
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 py-12 transition-colors dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
             <ImageIcon className="h-7 w-7" />
           </div>
@@ -310,9 +326,49 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               {isUploading ? "Uploading..." : "Add Images to Grid"}
             </p>
             <p className="text-sm text-stone-500 dark:text-stone-400">
-              Click to upload multiple images
+              Upload files or paste image URLs
             </p>
           </div>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              onClick={openFileDialog}
+              disabled={isUploading}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-200 dark:hover:bg-[#2a2a2d]"
+            >
+              <Link className="h-3.5 w-3.5" />
+              Paste URL
+            </button>
+          </div>
+          {showUrlInput && (
+            <div className="flex items-center gap-2 mt-2 w-full max-w-md px-6">
+              <input
+                type="text"
+                value={urlInputValue}
+                onChange={(e) => setUrlInputValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); if (e.key === "Escape") { setShowUrlInput(false); setUrlInputValue(""); } }}
+                placeholder="https://example.com/image.jpg"
+                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-700 placeholder-stone-400 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-200 dark:placeholder-stone-500"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={handleUrlSubmit}
+                disabled={!urlInputValue.trim()}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Add
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div 
@@ -348,8 +404,8 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className="h-auto w-full"
-                      style={{ 
+                      className={`h-auto w-full ${rounded ? "rounded-2xl" : ""}`}
+                      style={{
                         objectFit: 'cover',
                         objectPosition: `${focalX}% ${focalY}%`
                       }}
@@ -534,9 +590,22 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   onClick={openFileDialog}
                   disabled={isUploading}
                   className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  title="Upload image files"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {isUploading ? "..." : "Add"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    showUrlInput
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-600"
+                      : "border-stone-300 bg-white text-stone-600 hover:bg-stone-50 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-300 dark:hover:bg-[#2a2a2d]"
+                  }`}
+                  title="Add image by URL"
+                >
+                  <Link className="h-3.5 w-3.5" />
                 </button>
 
                 <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
@@ -656,6 +725,40 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 </label>
               </div>
             </div>
+
+            {/* URL input bar */}
+            {showUrlInput && (
+              <div
+                className="mt-2 flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
+                contentEditable={false}
+              >
+                <Link className="h-3.5 w-3.5 flex-shrink-0 text-stone-400" />
+                <input
+                  type="text"
+                  value={urlInputValue}
+                  onChange={(e) => setUrlInputValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); if (e.key === "Escape") { setShowUrlInput(false); setUrlInputValue(""); } }}
+                  placeholder="Paste image URL and press Enter"
+                  className="flex-1 bg-transparent text-xs text-stone-700 placeholder-stone-400 outline-none dark:text-stone-200 dark:placeholder-stone-500"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleUrlSubmit}
+                  disabled={!urlInputValue.trim()}
+                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowUrlInput(false); setUrlInputValue(""); }}
+                  className="rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-stone-600 dark:hover:bg-[#2a2a2d] dark:hover:text-stone-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
