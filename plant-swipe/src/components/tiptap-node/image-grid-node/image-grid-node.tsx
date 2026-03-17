@@ -1,7 +1,7 @@
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react"
 import { useState, useCallback, useRef, useMemo } from "react"
-import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw } from "lucide-react"
-import type { GridColumns, GridGap, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
+import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link, ZoomIn } from "lucide-react"
+import type { GridColumns, GridGap, GridAspectRatio, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 
 // Default upload folder if not configured
@@ -22,6 +22,14 @@ const SIZE_PRESETS = [
   { label: "Full", shortLabel: "Full", value: "100%", percent: 100 },
 ]
 
+// Aspect ratio options for image cropping
+const ASPECT_RATIO_OPTIONS: { value: GridAspectRatio; label: string }[] = [
+  { value: "4/3", label: "4:3" },
+  { value: "1/1", label: "1:1" },
+  { value: "3/4", label: "3:4" },
+  { value: "none", label: "None" },
+]
+
 // Alignment options
 const ALIGN_OPTIONS: { value: ImageGridAlign; label: string; Icon: typeof AlignLeft }[] = [
   { value: "left", label: "Left", Icon: AlignLeft },
@@ -38,31 +46,40 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     rounded: boolean
     width?: string
     align?: ImageGridAlign
+    aspectRatio?: GridAspectRatio
   }
-  
+
   // Ensure images is always an array (memoized to avoid dependency churn in hooks)
   const images = useMemo(() => (Array.isArray(attrs.images) ? attrs.images : []), [attrs.images])
-  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center" } = attrs
+  const { columns = 2, gap = "md", rounded = true, width = "100%", align = "center", aspectRatio = "4/3" } = attrs
 
-  // Get upload folder from extension storage, fallback to default
-  const uploadFolder = useMemo(() => {
+  // Get upload folder and variant from extension storage
+  const { uploadFolder, isEmailMode } = useMemo(() => {
     try {
-      // Access storage with type assertion since TipTap's storage is dynamically typed
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const storage = editor?.storage as any
-      return storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER
+      return {
+        uploadFolder: storage?.imageGrid?.uploadFolder || DEFAULT_UPLOAD_FOLDER,
+        isEmailMode: storage?.imageGrid?.variant === "embedded",
+      }
     } catch {
-      return DEFAULT_UPLOAD_FOLDER
+      return { uploadFolder: DEFAULT_UPLOAD_FOLDER, isEmailMode: false }
     }
   }, [editor])
+
+  // In email mode, force aspect ratio to "none" since Gmail doesn't support crop
+  const effectiveAspectRatio = isEmailMode ? "none" as GridAspectRatio : aspectRatio
 
   const [isUploading, setIsUploading] = useState(false)
   const [isHovering, setIsHovering] = useState(false)
   const [isResizing, setIsResizing] = useState(false)
+  const [showUrlInput, setShowUrlInput] = useState(false)
+  const [urlInputValue, setUrlInputValue] = useState("")
   
   // Crop editor state
   const [editingCropIndex, setEditingCropIndex] = useState<number | null>(null)
   const [cropPosition, setCropPosition] = useState({ x: 50, y: 50 }) // Center position as percentage
+  const [cropZoom, setCropZoom] = useState(1) // Zoom level: 1 = no zoom, up to 3
   const [isDraggingCrop, setIsDraggingCrop] = useState(false)
   
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -148,6 +165,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     const img = images[index]
     setEditingCropIndex(index)
     setCropPosition({ x: img.focalX ?? 50, y: img.focalY ?? 50 })
+    setCropZoom(img.zoom ?? 1)
   }, [images])
 
   // Handle crop rectangle drag - pan the image within the crop window
@@ -212,25 +230,27 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
   // Save crop changes
   const saveCrop = useCallback(() => {
     if (editingCropIndex === null) return
-    
+
     const newImages = [...images]
     newImages[editingCropIndex] = {
       ...newImages[editingCropIndex],
       focalX: cropPosition.x,
       focalY: cropPosition.y,
+      zoom: cropZoom !== 1 ? cropZoom : undefined,
     }
     updateAttributes({ images: newImages })
     setEditingCropIndex(null)
-  }, [editingCropIndex, cropPosition, images, updateAttributes])
+  }, [editingCropIndex, cropPosition, cropZoom, images, updateAttributes])
 
   // Cancel crop editing
   const cancelCropEdit = useCallback(() => {
     setEditingCropIndex(null)
   }, [])
 
-  // Reset crop to center
+  // Reset crop to center and zoom
   const resetCrop = useCallback(() => {
     setCropPosition({ x: 50, y: 50 })
+    setCropZoom(1)
   }, [])
 
   const handleFileSelect = useCallback(
@@ -279,6 +299,23 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
     fileInputRef.current?.click()
   }, [])
 
+  const handleUrlSubmit = useCallback(() => {
+    const url = urlInputValue.trim()
+    if (!url) return
+
+    // Split by newlines or commas to support multiple URLs at once
+    const urls = url.split(/[\n,]+/).map(u => u.trim()).filter(Boolean)
+    const newImages: ImageGridImage[] = [...images]
+
+    for (const u of urls) {
+      newImages.push({ src: u, alt: "" })
+    }
+
+    updateAttributes({ images: newImages })
+    setUrlInputValue("")
+    setShowUrlInput(false)
+  }, [urlInputValue, images, updateAttributes])
+
   return (
     <NodeViewWrapper
       data-type="image-grid"
@@ -298,10 +335,7 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
 
       {images.length === 0 ? (
         // Empty state - prompt to add images
-        <div
-          className="flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 py-12 transition-colors hover:border-emerald-400 hover:bg-emerald-50/50 dark:border-[#3e3e42] dark:bg-[#1a1a1d] dark:hover:border-emerald-600 dark:hover:bg-emerald-900/10"
-          onClick={openFileDialog}
-        >
+        <div className="flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-stone-300 bg-stone-50 py-12 transition-colors dark:border-[#3e3e42] dark:bg-[#1a1a1d]">
           <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400">
             <ImageIcon className="h-7 w-7" />
           </div>
@@ -310,9 +344,49 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               {isUploading ? "Uploading..." : "Add Images to Grid"}
             </p>
             <p className="text-sm text-stone-500 dark:text-stone-400">
-              Click to upload multiple images
+              Upload files or paste image URLs
             </p>
           </div>
+          <div className="flex items-center gap-2 mt-1">
+            <button
+              type="button"
+              onClick={openFileDialog}
+              disabled={isUploading}
+              className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Upload
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowUrlInput(true)}
+              className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs font-medium text-stone-700 transition-colors hover:bg-stone-50 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-200 dark:hover:bg-[#2a2a2d]"
+            >
+              <Link className="h-3.5 w-3.5" />
+              Paste URL
+            </button>
+          </div>
+          {showUrlInput && (
+            <div className="flex items-center gap-2 mt-2 w-full max-w-md px-6">
+              <input
+                type="text"
+                value={urlInputValue}
+                onChange={(e) => setUrlInputValue(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); if (e.key === "Escape") { setShowUrlInput(false); setUrlInputValue(""); } }}
+                placeholder="https://example.com/image.jpg"
+                className="flex-1 rounded-lg border border-stone-300 bg-white px-3 py-1.5 text-xs text-stone-700 placeholder-stone-400 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-200 dark:placeholder-stone-500"
+                autoFocus
+              />
+              <button
+                type="button"
+                onClick={handleUrlSubmit}
+                disabled={!urlInputValue.trim()}
+                className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+              >
+                Add
+              </button>
+            </div>
+          )}
         </div>
       ) : (
         <div 
@@ -334,29 +408,36 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
               style={{ gridTemplateColumns: `repeat(${columns}, 1fr)` }}
             >
               {images.map((img, index) => {
-                // Use live cropPosition when this image is being edited, otherwise use saved values
+                // Use live cropPosition/zoom when this image is being edited, otherwise use saved values
                 const isBeingEdited = editingCropIndex === index
                 const focalX = isBeingEdited ? cropPosition.x : (img.focalX ?? 50)
                 const focalY = isBeingEdited ? cropPosition.y : (img.focalY ?? 50)
+                const imgZoom = isBeingEdited ? cropZoom : (img.zoom ?? 1)
                 const isNotCentered = focalX !== 50 || focalY !== 50
+                const isZoomed = imgZoom !== 1
                 
                 return (
                   <div
                     key={`${img.src}-${index}`}
                     className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
+                    style={effectiveAspectRatio !== "none" ? { aspectRatio: effectiveAspectRatio } : undefined}
                   >
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className="h-auto w-full"
-                      style={{ 
-                        objectFit: 'cover',
-                        objectPosition: `${focalX}% ${focalY}%`
+                      className={`${effectiveAspectRatio !== "none" ? "w-full h-full" : "w-full h-auto"} ${rounded ? "rounded-2xl" : ""}`}
+                      style={{
+                        ...(effectiveAspectRatio !== "none" ? {
+                          objectFit: 'cover' as const,
+                          objectPosition: `${focalX}% ${focalY}%`,
+                          transform: imgZoom !== 1 ? `scale(${imgZoom})` : undefined,
+                          transformOrigin: `${focalX}% ${focalY}%`,
+                        } : {}),
                       }}
                       draggable={false}
                     />
-                    {/* Focal point indicator (shows when not centered or when being edited) */}
-                    {(isNotCentered || isBeingEdited) && (
+                    {/* Focal point indicator (shows when not centered, zoomed, or when being edited) */}
+                    {(isNotCentered || isZoomed || isBeingEdited) && (
                       <div 
                         className={`absolute w-3 h-3 border-2 border-white rounded-full shadow-md pointer-events-none z-10 transition-all duration-75 ${isBeingEdited ? "bg-emerald-400 opacity-100 w-4 h-4" : "bg-emerald-500 opacity-70"}`}
                         style={{
@@ -368,14 +449,16 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                     )}
                     {/* Overlay controls */}
                     <div className={`absolute inset-0 flex items-center justify-center gap-2 bg-black/50 transition-opacity ${isBeingEdited ? "opacity-0 pointer-events-none" : "opacity-0 group-hover:opacity-100"}`}>
-                      <button
-                        type="button"
-                        onClick={(e) => startCropEdit(index, e)}
-                        className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
-                        title="Adjust crop area"
-                      >
-                        <Crop className="h-4 w-4" />
-                      </button>
+                      {effectiveAspectRatio !== "none" && (
+                        <button
+                          type="button"
+                          onClick={(e) => startCropEdit(index, e)}
+                          className="rounded-full bg-emerald-500 p-2 text-white transition-colors hover:bg-emerald-600"
+                          title="Adjust crop area"
+                        >
+                          <Crop className="h-4 w-4" />
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => removeImage(index)}
@@ -432,11 +515,13 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   <div className="p-4">
                     <div 
                       ref={cropContainerRef}
-                      className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden aspect-video`}
-                      style={{ 
+                      className={`relative w-full cursor-grab ${isDraggingCrop ? 'ring-2 ring-emerald-400 cursor-grabbing' : 'ring-2 ring-white/50 hover:ring-emerald-300'} overflow-hidden`}
+                      data-aspect-ratio={effectiveAspectRatio}
+                      style={{
+                        aspectRatio: effectiveAspectRatio !== "none" ? effectiveAspectRatio : "16/9",
                         borderRadius: rounded ? '12px' : '0',
                         backgroundImage: `url('${images[editingCropIndex]?.src}')`,
-                        backgroundSize: 'cover',
+                        backgroundSize: `${cropZoom * 100}%`,
                         backgroundPosition: `${cropPosition.x}% ${cropPosition.y}%`,
                         backgroundRepeat: 'no-repeat',
                       }}
@@ -482,9 +567,37 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                       )}
                     </div>
 
+                    {/* Zoom slider */}
+                    <div
+                      className="mt-3 flex items-center gap-3 px-1"
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    >
+                      <ZoomIn className="h-3.5 w-3.5 text-white/50 flex-shrink-0" />
+                      <input
+                        type="range"
+                        min="100"
+                        max="300"
+                        value={Math.round(cropZoom * 100)}
+                        onChange={(e) => setCropZoom(parseInt(e.target.value, 10) / 100)}
+                        className="flex-1 h-1.5 bg-white/20 rounded-full appearance-none cursor-pointer
+                          [&::-webkit-slider-thumb]:appearance-none
+                          [&::-webkit-slider-thumb]:w-3.5
+                          [&::-webkit-slider-thumb]:h-3.5
+                          [&::-webkit-slider-thumb]:rounded-full
+                          [&::-webkit-slider-thumb]:bg-emerald-400
+                          [&::-webkit-slider-thumb]:cursor-pointer
+                          [&::-webkit-slider-thumb]:shadow-md"
+                        title="Zoom level"
+                      />
+                      <span className="text-white/50 text-xs font-medium tabular-nums w-10 text-right flex-shrink-0">
+                        {Math.round(cropZoom * 100)}%
+                      </span>
+                    </div>
+
                     {/* Position info */}
-                    <div className="mt-3 text-center text-white/40 text-xs">
-                      Crop position: {cropPosition.x}%, {cropPosition.y}%
+                    <div className="mt-2 text-center text-white/30 text-[10px]">
+                      Position: {cropPosition.x}%, {cropPosition.y}%
                     </div>
                   </div>
                 </div>
@@ -534,9 +647,22 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                   onClick={openFileDialog}
                   disabled={isUploading}
                   className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                  title="Upload image files"
                 >
                   <Plus className="h-3.5 w-3.5" />
                   {isUploading ? "..." : "Add"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUrlInput(!showUrlInput)}
+                  className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
+                    showUrlInput
+                      ? "border-emerald-500 bg-emerald-50 text-emerald-700 dark:bg-emerald-900/20 dark:text-emerald-400 dark:border-emerald-600"
+                      : "border-stone-300 bg-white text-stone-600 hover:bg-stone-50 dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-stone-300 dark:hover:bg-[#2a2a2d]"
+                  }`}
+                  title="Add image by URL"
+                >
+                  <Link className="h-3.5 w-3.5" />
                 </button>
 
                 <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
@@ -631,6 +757,34 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
 
                 <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
 
+                {/* Aspect Ratio - hidden in email mode (forced to none) */}
+                {!isEmailMode && (
+                  <>
+                    <div className="flex items-center gap-0.5 rounded-lg bg-stone-100/80 p-0.5 dark:bg-[#2a2a2d]">
+                      {ASPECT_RATIO_OPTIONS.map((ar) => {
+                        const isActive = aspectRatio === ar.value
+                        return (
+                          <button
+                            key={ar.value}
+                            type="button"
+                            onClick={() => updateAttributes({ aspectRatio: ar.value })}
+                            title={ar.value === "none" ? "No crop" : `Crop ${ar.label}`}
+                            className={`rounded-md px-1.5 py-1 text-[10px] font-semibold transition-all ${
+                              isActive
+                                ? "bg-emerald-500 text-white shadow-sm"
+                                : "text-stone-500 hover:text-stone-700 hover:bg-white/60 dark:text-stone-400 dark:hover:text-stone-200 dark:hover:bg-white/10"
+                            }`}
+                          >
+                            {ar.label}
+                          </button>
+                        )
+                      })}
+                    </div>
+
+                    <div className="h-4 w-px bg-stone-200 dark:bg-stone-700" />
+                  </>
+                )}
+
                 {/* Gap */}
                 <select
                   value={gap}
@@ -656,6 +810,40 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 </label>
               </div>
             </div>
+
+            {/* URL input bar */}
+            {showUrlInput && (
+              <div
+                className="mt-2 flex items-center gap-2 rounded-xl border border-stone-200 bg-stone-50 p-2 dark:border-[#3e3e42] dark:bg-[#1a1a1d]"
+                contentEditable={false}
+              >
+                <Link className="h-3.5 w-3.5 flex-shrink-0 text-stone-400" />
+                <input
+                  type="text"
+                  value={urlInputValue}
+                  onChange={(e) => setUrlInputValue(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") handleUrlSubmit(); if (e.key === "Escape") { setShowUrlInput(false); setUrlInputValue(""); } }}
+                  placeholder="Paste image URL and press Enter"
+                  className="flex-1 bg-transparent text-xs text-stone-700 placeholder-stone-400 outline-none dark:text-stone-200 dark:placeholder-stone-500"
+                  autoFocus
+                />
+                <button
+                  type="button"
+                  onClick={handleUrlSubmit}
+                  disabled={!urlInputValue.trim()}
+                  className="rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white transition-colors hover:bg-emerald-700 disabled:opacity-50"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setShowUrlInput(false); setUrlInputValue(""); }}
+                  className="rounded-md p-1 text-stone-400 hover:bg-stone-200 hover:text-stone-600 dark:hover:bg-[#2a2a2d] dark:hover:text-stone-200"
+                >
+                  <X className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
