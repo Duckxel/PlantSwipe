@@ -414,15 +414,11 @@ export function convertImageGridToEmailHtml(html: string): string {
     for (let i = 0; i < images.length; i += numCols) {
       const rowImages = images.slice(i, i + numCols)
       const cells = rowImages.map(img => {
-        const focalX = img.focalX ?? 50
-        const focalY = img.focalY ?? 50
-        // Use a background-image div for email clients that don't support object-position
-        // This provides a cropped view with focal point support
-        // height: 0 is essential for the padding-bottom aspect ratio trick
-        // position: relative and display: block ensure proper rendering
+        // Gmail doesn't support background-image, object-fit, or object-position
+        // so we render plain <img> tags without any cropping for email
         return `
         <td style="width: ${cellWidth}%; padding: ${gapPx / 2}px; vertical-align: top;">
-          <div style="display: block; position: relative; width: 100%; height: 0; padding-bottom: 62.5%; background-image: url('${img.src}'); background-size: cover; background-position: ${focalX}% ${focalY}%; background-repeat: no-repeat; ${isRounded ? 'border-radius: 16px;' : ''}" role="img" aria-label="${img.alt || ''}"></div>
+          <img src="${img.src}" alt="${img.alt || ''}" style="display: block; width: 100%; height: auto; ${isRounded ? 'border-radius: 16px;' : ''}" />
         </td>
       `}).join('')
       

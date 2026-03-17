@@ -399,12 +399,12 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 return (
                   <div
                     key={`${img.src}-${index}`}
-                    className={`group relative overflow-hidden ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
+                    className={`group relative overflow-hidden aspect-[4/3] ${rounded ? "rounded-2xl" : ""} ${isBeingEdited ? "ring-2 ring-emerald-500 ring-offset-2" : ""}`}
                   >
                     <img
                       src={img.src}
                       alt={img.alt || ""}
-                      className={`h-auto w-full ${rounded ? "rounded-2xl" : ""}`}
+                      className={`h-full w-full ${rounded ? "rounded-2xl" : ""}`}
                       style={{
                         objectFit: 'cover',
                         objectPosition: `${focalX}% ${focalY}%`
