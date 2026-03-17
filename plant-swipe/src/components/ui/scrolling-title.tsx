@@ -123,11 +123,14 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className={cn("block whitespace-nowrap max-w-full", innerClasses)}
+        className={cn(
+          "block whitespace-nowrap",
+          isActive ? "w-max" : "max-w-full",
+          innerClasses,
+        )}
         style={
           isActive && scrollDistance > 0
             ? {
-                overflow: "visible",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
                 ["--scroll-dist" as string]: `-${scrollDistance}px`,
               }
