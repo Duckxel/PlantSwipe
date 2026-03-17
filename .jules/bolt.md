@@ -6,3 +6,7 @@
 ## 2026-02-23 - Avoid intermediate allocations with map/filter chains in data loading loops
 **Learning:** Chaining `.map().filter()` or `.filter().map()` creates intermediate arrays and forces multiple iterations. In hot paths like `loadPlantsWithTranslations`, `loadPlantPreviews`, and `preparedPlants` mapping (which run on hundreds or thousands of elements), these allocations compound and create unnecessary garbage collection pressure and slower processing.
 **Action:** Replace map/filter chains with single-pass `for` loops that push to a pre-allocated array in data processing loops.
+
+## 2026-03-01 - Optimizing chained array allocations in components
+**Learning:** Chaining `.map().filter()` or `.split().filter()` within hot loops or frequently re-rendered components (e.g., inside `preparedPlants` memo or `SwipePage` rendering) creates multiple intermediate arrays, compounding garbage collection overhead.
+**Action:** Replace map/filter chains and split/filter chains with single-pass `for` loops in hot data preparation and render paths to avoid intermediate array allocation and improve performance.
