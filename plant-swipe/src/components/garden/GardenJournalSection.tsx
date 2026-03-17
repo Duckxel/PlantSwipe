@@ -1115,10 +1115,11 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
                 {/* Title (optional) */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
+                  <label htmlFor="entry-title" className="text-sm font-medium mb-2 block">
                     {t("gardenDashboard.journalSection.titleOptional", "Title (optional)")}
                   </label>
                   <Input
+                    id="entry-title"
                     value={entryTitle}
                     onChange={(e) => setEntryTitle(e.target.value)}
                     placeholder={t("gardenDashboard.journalSection.titlePlaceholder", "Give this entry a title...")}
@@ -1128,10 +1129,11 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
                 {/* Content */}
                 <div>
-                  <label className="text-sm font-medium mb-2 block">
+                  <label htmlFor="entry-content" className="text-sm font-medium mb-2 block">
                     {t("gardenDashboard.journalSection.observations", "Your observations")}
                   </label>
                   <textarea
+                    id="entry-content"
                     value={entryContent}
                     onChange={(e) => setEntryContent(e.target.value)}
                     placeholder={t("gardenDashboard.journalSection.contentPlaceholder", "What did you notice today? How are your plants doing? Any changes, blooms, or concerns?")}
