@@ -30,13 +30,13 @@ const mainCategories: Category[] = [
   { key: "treesAndShrubs", params: "?type=Tree,Shrub", defaultName: "Trees & Shrubs", defaultDesc: "Woody plants from towering trees to compact shrubs" },
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
-  { key: "grasses", params: "?type=Grass", defaultName: "Grasses", defaultDesc: "Ornamental and lawn grasses for every landscape" },
   { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
   { key: "vegetableGarden", params: "?usage=Edible&type=Herb", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
 ]
 
 /** Advanced categories — shown when expanded */
 const advancedCategories: Category[] = [
+  { key: "grasses", params: "?type=Grass", defaultName: "Grasses", defaultDesc: "Ornamental and lawn grasses for every landscape" },
   { key: "herbaceous", params: "?type=Herb,Grass", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
   { key: "fruitPlant", params: "?plantPart=fruits&usage=Edible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible fruits" },
   { key: "aromatic", params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
