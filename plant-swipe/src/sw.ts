@@ -121,6 +121,13 @@ const criticalRoutes = [
   '/friends',
   '/settings',
   '/about',
+  // French language routes (PWA users may install from French locale)
+  '/fr/swipe',
+  '/fr/gardens',
+  '/fr/download',
+  '/fr/friends',
+  '/fr/settings',
+  '/fr/about',
   offlinePagePath,
 ]
 

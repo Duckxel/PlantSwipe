@@ -4068,19 +4068,34 @@ app.get('/api/manifest/screenshots', async (_req, res) => {
 // Full dynamic manifest endpoint - merges static config with dynamic screenshots
 app.get('/api/manifest.webmanifest', async (_req, res) => {
   try {
+    // Detect preferred language from Accept-Language header
+    // This allows the manifest to serve language-appropriate start_url and shortcuts
+    const acceptLang = (_req.headers['accept-language'] || '').toLowerCase()
+    const isFrench = acceptLang.startsWith('fr') || /,\s*fr/.test(acceptLang.split(';')[0])
+
+    // Check if the request comes from a French domain
+    const host = (_req.headers.host || '').toLowerCase()
+    const isFrenchDomain = host.endsWith('.fr') || host === 'aphylia.fr'
+
+    const useFrench = isFrenchDomain || isFrench
+    const langPrefix = useFrench ? '/fr' : ''
+
     // Base manifest (matches vite.config.ts)
     const baseManifest = {
       id: 'aphylia',
       name: 'Aphylia',
       short_name: 'Aphylia',
-      description: 'Discover, swipe and manage the perfect plants for every garden.',
-      lang: 'en',
+      description: useFrench
+        ? 'Découvrez, swipez et gérez les plantes parfaites pour chaque jardin.'
+        : 'Discover, swipe and manage the perfect plants for every garden.',
+      lang: useFrench ? 'fr' : 'en',
+      dir: 'ltr',
       theme_color: '#052e16',
       background_color: '#03120c',
       display: 'standalone',
       display_override: ['window-controls-overlay', 'standalone'],
       scope: '/',
-      start_url: '/discovery',
+      start_url: `${langPrefix}/discovery`,
       orientation: 'portrait-primary',
       categories: ['productivity', 'lifestyle', 'utilities'],
       iarc_rating_id: 'IARC21-00000000-0000000000000000',
@@ -4091,10 +4106,15 @@ app.get('/api/manifest.webmanifest', async (_req, res) => {
         { src: '/icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         { src: '/icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
       ],
-      shortcuts: [
-        { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
-        { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
-      ],
+      shortcuts: useFrench
+        ? [
+            { name: 'Swiper les plantes', url: '/fr/swipe', description: 'Accédez directement au mode swipe' },
+            { name: 'Mes jardins', url: '/fr/gardens', description: 'Ouvrez votre tableau de bord de jardins' },
+          ]
+        : [
+            { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
+            { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
+          ],
     }
     
     // Fetch screenshots from database
@@ -4148,6 +4168,7 @@ app.get('/api/manifest.webmanifest', async (_req, res) => {
     
     res.setHeader('Content-Type', 'application/manifest+json')
     res.setHeader('Cache-Control', 'public, max-age=3600') // Cache for 1 hour
+    res.setHeader('Vary', 'Accept-Language') // Different manifest per language
     res.json(baseManifest)
   } catch (err) {
     console.error('[manifest] failed to generate manifest', err)
