@@ -78,17 +78,13 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     const check = () => {
       if (containerRef.current && textRef.current) {
         const containerWidth = containerRef.current.clientWidth
-        const el = textRef.current
-        // Temporarily remove constraints to measure natural text width.
-        // Block elements fill their container, so we need width:max-content
-        // to get the actual text width.
-        el.style.width = "max-content"
-        el.style.maxWidth = "none"
-        el.style.overflow = "visible"
-        const textWidth = el.offsetWidth
-        el.style.width = ""
-        el.style.maxWidth = ""
-        el.style.overflow = ""
+        // Measure using an offscreen clone to avoid visual flicker
+        const clone = textRef.current.cloneNode(true) as HTMLElement
+        clone.style.cssText =
+          "position:absolute;visibility:hidden;width:max-content;max-width:none;overflow:visible;white-space:nowrap;pointer-events:none"
+        containerRef.current.appendChild(clone)
+        const textWidth = clone.offsetWidth
+        containerRef.current.removeChild(clone)
         const overflows = textWidth > containerWidth
         setIsOverflowing(overflows)
         setScrollDistance(overflows ? textWidth - containerWidth + 16 : 0)
