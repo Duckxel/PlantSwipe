@@ -192,7 +192,9 @@ do $$ declare
     -- User Action Status (profile onboarding sync)
     'user_action_status',
     -- Plant Stocks (shop availability & pricing)
-    'plant_stocks'
+    'plant_stocks',
+    -- Admin Event Notifications (alert settings for admin)
+    'admin_event_notifications'
   ];
   rec record;
 begin
