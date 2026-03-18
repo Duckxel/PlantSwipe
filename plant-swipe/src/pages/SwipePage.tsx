@@ -1128,9 +1128,15 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">, isParent: boo
   }
 
   const originArr = Array.isArray(plant.origin) ? plant.origin : []
-  const nativeRange = (originArr.length > 0 ? originArr : (plant.ecology?.nativeRange as string[]) ?? [])
-    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
-    .filter((entry): entry is string => Boolean(entry))
+  const originSource = originArr.length > 0 ? originArr : (plant.ecology?.nativeRange as string[]) ?? []
+  const nativeRange: string[] = []
+  for (let i = 0; i < originSource.length; i++) {
+    const entry = originSource[i]
+    if (typeof entry === "string") {
+      const trimmed = entry.trim()
+      if (trimmed) nativeRange.push(trimmed)
+    }
+  }
   if (nativeRange.length) {
     items.push({
       key: "origin",
@@ -1159,10 +1165,14 @@ const buildIndicatorItems = (plant: Plant, t: TFunction<"common">, isParent: boo
     })
   }
 
-  const utilityArray = (plant.utility ?? [])
-    .map((util) => String(util))
-    .filter((util) => util.trim().length > 0)
-  const utilitySet = new Set(utilityArray.map((util) => util.toLowerCase().trim()))
+  const plantUtility = plant.utility ?? []
+  const utilitySet = new Set<string>()
+  for (let i = 0; i < plantUtility.length; i++) {
+    const util = String(plantUtility[i]).trim()
+    if (util.length > 0) {
+      utilitySet.add(util.toLowerCase())
+    }
+  }
   
   if (utilitySet.has("comestible") || utilitySet.has("edible")) {
     items.push({
@@ -1482,15 +1492,18 @@ const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
   // Use identity colors first, then legacy colors, then fallback
   const palette = identityColors.length > 0 ? identityColors : (legacyColors.length > 0 ? legacyColors : fallbackColors)
 
-  return palette
-    .map((color, index) => {
-      const resolvedTone = resolveColorValue(color)
+  const result: ColorSwatchDescriptor[] = []
+  for (let i = 0; i < palette.length; i++) {
+    const color = palette[i]
+    const resolvedTone = resolveColorValue(color)
+    if (resolvedTone && resolvedTone.length > 0) {
       const label = formatIndicatorValue(color)
-      return {
-        id: `${color}-${index}`,
+      result.push({
+        id: `${color}-${i}`,
         label: label || resolvedTone,
         tone: resolvedTone,
-      }
-    })
-    .filter((entry) => entry.tone && entry.tone.length > 0)
+      })
+    }
+  }
+  return result
 }
