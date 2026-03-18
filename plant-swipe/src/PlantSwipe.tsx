@@ -1100,27 +1100,52 @@ export default function PlantSwipe() {
              : Array.isArray(p.seasons) ? p.seasons
              : Array.isArray(p.identity?.season) ? p.identity.season
              : []
-           _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
+           // ⚡ Bolt: Use single-pass loops instead of array mapping to avoid intermediate allocations
+           const set = new Set<string>()
+           for (let i = 0; i < seasonArr.length; i++) {
+             set.add(String(seasonArr[i]).toLowerCase())
+           }
+           _cachedSeasonsSet = set
            return _cachedSeasonsSet
         },
         get _lifeCycleSet() {
            if (_cachedLifeCycleSet) return _cachedLifeCycleSet
-           _cachedLifeCycleSet = new Set((p.lifeCycle || []).map((l: string) => l.toLowerCase()))
+           const set = new Set<string>()
+           const arr = p.lifeCycle || []
+           for (let i = 0; i < arr.length; i++) {
+             set.add(arr[i].toLowerCase())
+           }
+           _cachedLifeCycleSet = set
            return _cachedLifeCycleSet
         },
         get _plantHabitSet() {
            if (_cachedPlantHabitSet) return _cachedPlantHabitSet
-           _cachedPlantHabitSet = new Set((p.plantHabit || []).map((h: string) => h.toLowerCase()))
+           const set = new Set<string>()
+           const arr = p.plantHabit || []
+           for (let i = 0; i < arr.length; i++) {
+             set.add(arr[i].toLowerCase())
+           }
+           _cachedPlantHabitSet = set
            return _cachedPlantHabitSet
         },
         get _ediblePartSet() {
            if (_cachedEdiblePartSet) return _cachedEdiblePartSet
-           _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
+           const set = new Set<string>()
+           const arr = p.ediblePart || []
+           for (let i = 0; i < arr.length; i++) {
+             set.add(arr[i].toLowerCase())
+           }
+           _cachedEdiblePartSet = set
            return _cachedEdiblePartSet
         },
         get _plantPartSet() {
            if (_cachedPlantPartSet) return _cachedPlantPartSet
-           _cachedPlantPartSet = new Set((p.plantPart || []).map((e: string) => e.toLowerCase()))
+           const set = new Set<string>()
+           const arr = p.plantPart || []
+           for (let i = 0; i < arr.length; i++) {
+             set.add(arr[i].toLowerCase())
+           }
+           _cachedPlantPartSet = set
            return _cachedPlantPartSet
         },
         _createdAtTs: createdAtTsFinal,
