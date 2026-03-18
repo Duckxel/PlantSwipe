@@ -77,9 +77,15 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
   useEffect(() => {
     const check = () => {
       if (containerRef.current && textRef.current) {
-        const containerWidth = containerRef.current.offsetWidth
-        const textWidth = textRef.current.scrollWidth
-        const overflows = textWidth > containerWidth + 2
+        const containerWidth = containerRef.current.clientWidth
+        // Measure using an offscreen clone to avoid visual flicker
+        const clone = textRef.current.cloneNode(true) as HTMLElement
+        clone.style.cssText =
+          "position:absolute;visibility:hidden;width:max-content;max-width:none;overflow:visible;white-space:nowrap;pointer-events:none"
+        containerRef.current.appendChild(clone)
+        const textWidth = clone.offsetWidth
+        containerRef.current.removeChild(clone)
+        const overflows = textWidth > containerWidth
         setIsOverflowing(overflows)
         setScrollDistance(overflows ? textWidth - containerWidth + 16 : 0)
       }
@@ -123,11 +129,14 @@ export const ScrollingTitle: React.FC<ScrollingTitleProps> = ({
     >
       <Tag
         ref={textRef as React.Ref<never>}
-        className={cn("block whitespace-nowrap max-w-full", innerClasses)}
+        className={cn(
+          "block whitespace-nowrap",
+          isActive ? "w-max" : "max-w-full",
+          innerClasses,
+        )}
         style={
           isActive && scrollDistance > 0
             ? {
-                overflow: "visible",
                 animation: `scroll-text-left ${duration}s ease-in-out infinite`,
                 ["--scroll-dist" as string]: `-${scrollDistance}px`,
               }
