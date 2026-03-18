@@ -468,10 +468,10 @@ export function EmailVerificationPage() {
                           </div>
                           <div className="flex-1 text-left">
                             <p className="text-sm font-semibold text-stone-800 dark:text-stone-100 mb-1">
-                              {t('emailVerification.domainSuggestion.title', { domain: suggestion.targetDomain })}
+                              {t('emailVerification.domainSuggestion.title', { defaultValue: 'Did you know? Aphylia is also on {{domain}}!', domain: suggestion.targetDomain })}
                             </p>
                             <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed mb-3">
-                              {t('emailVerification.domainSuggestion.description', { domain: suggestion.targetDomain })}
+                              {t('emailVerification.domainSuggestion.description', { defaultValue: 'For the best experience in your language, you can also use {{domain}}. Your account works on both!', domain: suggestion.targetDomain })}
                             </p>
                             <div className="flex items-center gap-2">
                               <a
@@ -480,7 +480,7 @@ export function EmailVerificationPage() {
                                 rel="noopener noreferrer"
                                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors shadow-sm"
                               >
-                                {t('emailVerification.domainSuggestion.visit', { domain: suggestion.targetDomain })}
+                                {t('emailVerification.domainSuggestion.visit', { defaultValue: 'Visit {{domain}}', domain: suggestion.targetDomain })}
                                 <ExternalLink className="w-3 h-3" />
                               </a>
                               <button
