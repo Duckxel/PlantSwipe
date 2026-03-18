@@ -4068,19 +4068,34 @@ app.get('/api/manifest/screenshots', async (_req, res) => {
 // Full dynamic manifest endpoint - merges static config with dynamic screenshots
 app.get('/api/manifest.webmanifest', async (_req, res) => {
   try {
+    // Detect preferred language from Accept-Language header
+    // This allows the manifest to serve language-appropriate start_url and shortcuts
+    const acceptLang = (_req.headers['accept-language'] || '').toLowerCase()
+    const isFrench = acceptLang.startsWith('fr') || /,\s*fr/.test(acceptLang.split(';')[0])
+
+    // Check if the request comes from a French domain
+    const host = (_req.headers.host || '').toLowerCase()
+    const isFrenchDomain = host.endsWith('.fr') || host === 'aphylia.fr'
+
+    const useFrench = isFrenchDomain || isFrench
+    const langPrefix = useFrench ? '/fr' : ''
+
     // Base manifest (matches vite.config.ts)
     const baseManifest = {
       id: 'aphylia',
       name: 'Aphylia',
       short_name: 'Aphylia',
-      description: 'Discover, swipe and manage the perfect plants for every garden.',
-      lang: 'en',
+      description: useFrench
+        ? 'Découvrez, swipez et gérez les plantes parfaites pour chaque jardin.'
+        : 'Discover, swipe and manage the perfect plants for every garden.',
+      lang: useFrench ? 'fr' : 'en',
+      dir: 'ltr',
       theme_color: '#052e16',
       background_color: '#03120c',
       display: 'standalone',
       display_override: ['window-controls-overlay', 'standalone'],
       scope: '/',
-      start_url: '/discovery',
+      start_url: `${langPrefix}/discovery`,
       orientation: 'portrait-primary',
       categories: ['productivity', 'lifestyle', 'utilities'],
       iarc_rating_id: 'IARC21-00000000-0000000000000000',
@@ -4091,10 +4106,15 @@ app.get('/api/manifest.webmanifest', async (_req, res) => {
         { src: '/icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
         { src: '/icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
       ],
-      shortcuts: [
-        { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
-        { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
-      ],
+      shortcuts: useFrench
+        ? [
+            { name: 'Swiper les plantes', url: '/fr/swipe', description: 'Accédez directement au mode swipe' },
+            { name: 'Mes jardins', url: '/fr/gardens', description: 'Ouvrez votre tableau de bord de jardins' },
+          ]
+        : [
+            { name: 'Swipe plants', url: '/swipe', description: 'Jump directly into swipe mode' },
+            { name: 'My gardens', url: '/gardens', description: 'Open your garden dashboard' },
+          ],
     }
     
     // Fetch screenshots from database
@@ -4148,6 +4168,7 @@ app.get('/api/manifest.webmanifest', async (_req, res) => {
     
     res.setHeader('Content-Type', 'application/manifest+json')
     res.setHeader('Cache-Control', 'public, max-age=3600') // Cache for 1 hour
+    res.setHeader('Vary', 'Accept-Language') // Different manifest per language
     res.json(baseManifest)
   } catch (err) {
     console.error('[manifest] failed to generate manifest', err)
@@ -28565,6 +28586,32 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
   // Detect source language from campaign title/message (assume English if not specified)
   const sourceLang = 'EN'
 
+  // Load template translations if the campaign uses a template
+  // This allows campaigns to use pre-translated variants instead of relying solely on DeepL
+  let templateTranslations = {}
+  if (campaign.templateId) {
+    try {
+      const translationRows = await sql`
+        select ntt.language, ntt.message_variants
+        from public.notification_template_translations ntt
+        where ntt.template_id = ${campaign.templateId}::uuid
+      `
+      for (const row of translationRows || []) {
+        const lang = normalizeLanguageCode(row.language)
+        if (!lang) continue
+        const variants = toStringArray(row.message_variants)
+        if (variants.length > 0) {
+          templateTranslations[lang] = variants
+        }
+      }
+      if (Object.keys(templateTranslations).length > 0) {
+        console.log(`[notifications] Loaded template translations for campaign ${campaign.id}: ${Object.keys(templateTranslations).join(', ')}`)
+      }
+    } catch (err) {
+      console.warn(`[notifications] Failed to load template translations for campaign ${campaign.id}:`, err?.message)
+    }
+  }
+
   for (const chunk of chunks) {
     // Fetch user display names, language preferences, and timezones for this chunk
     const userProfiles = await sql`
@@ -28594,24 +28641,42 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
 
     // Prepare payloads with personalized, translated messages, and timezone-adjusted scheduled times
     const payloadPromises = chunk.map(async (userId, index) => {
-      const baseMessage = pickNotificationMessage(campaign, processedCount + index)
       const userDisplayName = userDisplayNames.get(String(userId)) || 'User'
-      // Replace {{user}} with the actual user display name
-      let personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
-      let personalizedTitle = (campaign.title || 'Aphylia').replace(/\{\{user\}\}/g, userDisplayName)
-
-      // Translate message based on user's language preference
       const userLang = userLanguages.get(String(userId)) || 'en'
-      const targetLang = userLang === 'fr' ? 'FR' : 'EN'
 
-      if (targetLang !== sourceLang) {
-        personalizedMessage = await translateNotificationText(personalizedMessage, targetLang, sourceLang)
-      }
+      // Use template translations if available (same approach as automations)
+      // This ensures campaigns respect the admin's pre-translated variants
+      const hasTemplateTranslation = Object.keys(templateTranslations).length > 0
+      let personalizedMessage
+      let personalizedTitle
 
-      // Translate title if needed
-      let translatedTitle = personalizedTitle
-      if (targetLang !== sourceLang) {
-        translatedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
+      if (hasTemplateTranslation) {
+        // Pick the right language variant using the same logic as automations
+        const messageVariants = resolveMessageVariants(
+          campaign.messageVariants && campaign.messageVariants.length > 0
+            ? campaign.messageVariants
+            : [campaign.description || 'You have a new update waiting in Aphylia.'],
+          templateTranslations,
+          userLang
+        )
+        const shouldRandomize = campaign.randomize !== false
+        const messageIndex = shouldRandomize
+          ? Math.floor(Math.random() * messageVariants.length)
+          : (processedCount + index) % messageVariants.length
+        personalizedMessage = messageVariants[messageIndex].replace(/\{\{user\}\}/g, userDisplayName)
+        personalizedTitle = (campaign.title || 'Aphylia').replace(/\{\{user\}\}/g, userDisplayName)
+      } else {
+        // No template translations: fall back to DeepL auto-translation
+        const baseMessage = pickNotificationMessage(campaign, processedCount + index)
+        personalizedMessage = baseMessage.replace(/\{\{user\}\}/g, userDisplayName)
+        personalizedTitle = (campaign.title || 'Aphylia').replace(/\{\{user\}\}/g, userDisplayName)
+
+        const targetLang = userLang === 'fr' ? 'FR' : 'EN'
+        if (targetLang !== sourceLang) {
+          personalizedMessage = await translateNotificationText(personalizedMessage, targetLang, sourceLang)
+          personalizedTitle = await translateNotificationText(campaign.title, targetLang, sourceLang)
+          personalizedTitle = personalizedTitle.replace(/\{\{user\}\}/g, userDisplayName)
+        }
       }
 
       // Calculate scheduled time based on user's timezone
@@ -28626,7 +28691,7 @@ async function insertNotificationDeliveries(campaign, recipients, iteration, sch
         campaign_id: campaign.id,
         iteration,
         user_id: userId,
-        title: translatedTitle,
+        title: personalizedTitle,
         message: personalizedMessage,
         payload: { ctaUrl: campaign.ctaUrl || null },
         cta_url: campaign.ctaUrl || null,

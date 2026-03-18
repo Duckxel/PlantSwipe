@@ -43,23 +43,51 @@ function AppShell() {
   }, [location.pathname, location.search, location.hash])
   
   // Handle initial redirect to preferred language
+  // This runs on first load and when PWA users land on a URL in the wrong language.
+  // Covers: PWA home screen launch, bookmarks, shared links, etc.
   React.useEffect(() => {
-    // Only redirect if we're at root path and language is not default
-    if (location.pathname === '/' || location.pathname === '') {
-      // If the domain already sets a default language (e.g., aphylia.fr -> French),
-      // don't redirect to /fr — the app already serves French content on /
-      const domainLang = getDomainDefaultLanguage()
-      if (domainLang) {
-        // Domain dictates the language, no redirect needed
-        return
-      }
-      const savedLang = getSavedLanguagePreference()
-      const preferredLang = savedLang || detectBrowserLanguage()
+    const domainLang = getDomainDefaultLanguage()
+    const segments = location.pathname.split('/').filter(Boolean)
+    const hasExplicitLangPrefix = segments.length > 0 && SUPPORTED_LANGUAGES.includes(segments[0] as typeof SUPPORTED_LANGUAGES[number])
 
-      if (preferredLang !== DEFAULT_LANGUAGE) {
-        const newPath = addLanguagePrefix('/', preferredLang)
+    // Determine what language the URL currently implies
+    const urlLang = getLanguageFromPath(location.pathname)
+
+    // Get user's saved language preference (only redirect based on explicit preference,
+    // not browser detection, to avoid unwanted redirects on subsequent navigations)
+    const savedLang = getSavedLanguagePreference()
+
+    // On first visit (no saved preference), use browser language for initial redirect only
+    const preferredLang = savedLang || detectBrowserLanguage()
+
+    // If URL already matches user preference, nothing to do
+    if (urlLang === preferredLang) {
+      return
+    }
+
+    // On a language-specific domain (e.g., aphylia.fr serves French by default):
+    // Only redirect if user has an EXPLICIT saved preference that differs from the domain default.
+    // Don't redirect based on browser detection alone — the domain already chose a language.
+    if (domainLang) {
+      if (savedLang && savedLang !== domainLang && !hasExplicitLangPrefix) {
+        const currentPath = location.pathname === '' ? '/' : location.pathname
+        const newPath = addLanguagePrefix(currentPath, savedLang)
         navigate(newPath, { replace: true })
       }
+      return
+    }
+
+    // If URL has an explicit language prefix (e.g., /fr/discovery), respect it
+    if (hasExplicitLangPrefix) {
+      return
+    }
+
+    // URL has no language prefix (e.g., /discovery, /gardens, /)
+    // Redirect if user's preferred language differs from default (English)
+    if (preferredLang !== DEFAULT_LANGUAGE) {
+      const currentPath = location.pathname === '' ? '/' : location.pathname
+      const newPath = addLanguagePrefix(currentPath, preferredLang)
+      navigate(newPath, { replace: true })
     }
   }, [location.pathname, navigate])
   

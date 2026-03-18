@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useAuth } from "@/context/AuthContext"
 import { supabase } from "@/lib/supabaseClient"
 import { Button } from "@/components/ui/button"
-import { Mail, Loader2, Check, RefreshCw, ArrowLeft } from "lucide-react"
+import { Mail, Loader2, Check, RefreshCw, ArrowLeft, Globe, ExternalLink } from "lucide-react"
 
 /**
  * Get CSRF token from backend (SECURITY: Required for state-changing operations)
@@ -102,18 +102,41 @@ const OTPInput: React.FC<{
   )
 }
 
+/**
+ * Determine if we should suggest the alternate domain to the user.
+ * French-speaking users on .app → suggest aphylia.fr
+ * English-speaking users on .fr → suggest aphylia.app
+ * Returns { show, targetDomain, targetUrl } or { show: false }
+ */
+function getAlternateDomainSuggestion(lang: string): { show: boolean; targetDomain?: string; targetUrl?: string } {
+  try {
+    const hostname = window.location.hostname.toLowerCase()
+    const isFrenchDomain = hostname.endsWith('.fr') || hostname === 'aphylia.fr'
+    const isAppDomain = hostname.endsWith('.app') || hostname === 'aphylia.app'
+
+    if (lang === 'fr' && isAppDomain) {
+      return { show: true, targetDomain: 'aphylia.fr', targetUrl: 'https://aphylia.fr' }
+    }
+    if (lang === 'en' && isFrenchDomain) {
+      return { show: true, targetDomain: 'aphylia.app', targetUrl: 'https://aphylia.app' }
+    }
+  } catch {}
+  return { show: false }
+}
+
 export function EmailVerificationPage() {
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const currentLang = useLanguage()
   const location = useLocation()
   const { user, profile, refreshProfile } = useAuth()
-  
+
   const [code, setCode] = React.useState('')
   const [loading, setLoading] = React.useState(false)
   const [sendingCode, setSendingCode] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [success, setSuccess] = React.useState(false)
+  const [domainSuggestionDismissed, setDomainSuggestionDismissed] = React.useState(false)
   const [codeSent, setCodeSent] = React.useState(false)
   const [expiresAt, setExpiresAt] = React.useState<Date | null>(null)
   const [timeLeft, setTimeLeft] = React.useState<number>(0)
@@ -312,11 +335,14 @@ export function EmailVerificationPage() {
       if (data.verified) {
         setSuccess(true)
         await refreshProfile()
-        
-        // Brief delay to show success state before navigating
+
+        // Check if we should show the alternate domain suggestion
+        const domainSuggestion = getAlternateDomainSuggestion(currentLang)
+
+        // Longer delay if showing domain suggestion, otherwise brief delay
         setTimeout(() => {
           navigate('/discovery')
-        }, 1500)
+        }, domainSuggestion.show ? 8000 : 1500)
       } else {
         throw new Error(data.error || 'Failed to verify code')
       }
@@ -394,7 +420,7 @@ export function EmailVerificationPage() {
                 className="flex flex-col items-center text-center max-w-md mx-auto"
               >
                 {/* Success animation */}
-                <motion.div 
+                <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
                   transition={{ type: "spring", stiffness: 200, damping: 15 }}
@@ -405,8 +431,8 @@ export function EmailVerificationPage() {
                     <Check className="w-14 h-14 text-white" strokeWidth={3} />
                   </div>
                 </motion.div>
-                
-                <motion.h2 
+
+                <motion.h2
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.2 }}
@@ -414,8 +440,8 @@ export function EmailVerificationPage() {
                 >
                   {t('emailVerification.successTitle', 'Email Verified!')}
                 </motion.h2>
-                
-                <motion.p 
+
+                <motion.p
                   initial={{ opacity: 0, y: 20 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 0.3 }}
@@ -423,6 +449,54 @@ export function EmailVerificationPage() {
                 >
                   {t('emailVerification.successDescription', 'Redirecting you to your garden...')}
                 </motion.p>
+
+                {/* Cross-domain suggestion — shown after email verification + setup */}
+                {(() => {
+                  const suggestion = getAlternateDomainSuggestion(currentLang)
+                  if (!suggestion.show || domainSuggestionDismissed) return null
+                  return (
+                    <motion.div
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.6 }}
+                      className="mt-8 w-full max-w-sm"
+                    >
+                      <div className="relative rounded-2xl border border-accent/20 bg-accent/5 dark:bg-accent/10 p-5 shadow-lg shadow-accent/5">
+                        <div className="flex items-start gap-3">
+                          <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-accent/15 dark:bg-accent/20 flex items-center justify-center">
+                            <Globe className="w-5 h-5 text-accent" />
+                          </div>
+                          <div className="flex-1 text-left">
+                            <p className="text-sm font-semibold text-stone-800 dark:text-stone-100 mb-1">
+                              {t('emailVerification.domainSuggestion.title', { defaultValue: 'Did you know? Aphylia in English is on {{domain}}!', domain: suggestion.targetDomain })}
+                            </p>
+                            <p className="text-xs text-stone-500 dark:text-stone-400 leading-relaxed mb-3">
+                              {t('emailVerification.domainSuggestion.description', { defaultValue: 'Get the full experience in English on our main site. Your account works on both domains — no need to sign up again!', domain: suggestion.targetDomain })}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <a
+                                href={suggestion.targetUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent text-white text-xs font-medium hover:bg-accent/90 transition-colors shadow-sm"
+                              >
+                                {t('emailVerification.domainSuggestion.visit', { defaultValue: 'Go to {{domain}}', domain: suggestion.targetDomain })}
+                                <ExternalLink className="w-3 h-3" />
+                              </a>
+                              <button
+                                type="button"
+                                onClick={() => setDomainSuggestionDismissed(true)}
+                                className="px-3 py-1.5 rounded-lg text-xs font-medium text-stone-500 dark:text-stone-400 hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+                              >
+                                {t('emailVerification.domainSuggestion.dismiss', 'Stay here')}
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </motion.div>
+                  )
+                })()}
               </motion.div>
             ) : (
               <motion.div
