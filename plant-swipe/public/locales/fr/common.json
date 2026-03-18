@@ -2491,7 +2491,13 @@
     "successTitle": "Email vérifié !",
     "successDescription": "Redirection vers votre jardin...",
     "invalidCode": "Code de vérification invalide. Veuillez vérifier et réessayer.",
-    "expiredCode": "Ce code a expiré. Veuillez en demander un nouveau."
+    "expiredCode": "Ce code a expiré. Veuillez en demander un nouveau.",
+    "domainSuggestion": {
+      "title": "Le saviez-vous ? Aphylia est aussi sur {{domain}} !",
+      "description": "Pour une meilleure expérience dans votre langue, vous pouvez aussi utiliser {{domain}}. Votre compte fonctionne sur les deux !",
+      "visit": "Visiter {{domain}}",
+      "dismiss": "Non merci"
+    }
   },
   "admin": {
     "impressions": "impressions"
