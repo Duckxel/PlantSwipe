@@ -13,6 +13,8 @@ import {
   ChevronRight,
   Sparkles,
   Home,
+  CloudSun,
+  Target,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 
@@ -50,6 +52,8 @@ interface GardenSettingsSectionProps {
   GardenPrivacyToggle: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean; ownerIsPrivate: boolean }>;
   GardenAiChatToggle: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   GardenLivingSpaceEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
+  GardenClimateEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
+  GardenUsageEditor: React.ComponentType<{ garden: Garden | null; onSaved: () => Promise<void>; canEdit: boolean }>;
   MemberCard: React.ComponentType<{ member: GardenSettingsSectionProps["members"][0]; gardenId: string; onChanged: () => Promise<void>; viewerIsOwner: boolean; ownerCount: number; currentUserId: string | null }>;
 }
 
@@ -74,6 +78,8 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
   GardenPrivacyToggle,
   GardenAiChatToggle,
   GardenLivingSpaceEditor,
+  GardenClimateEditor,
+  GardenUsageEditor,
   MemberCard,
 }) => {
   const { t } = useTranslation("common");
@@ -210,6 +216,40 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
               </p>
               <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
                 <GardenLivingSpaceEditor
+                  garden={garden}
+                  onSaved={onRefreshGarden}
+                  canEdit={viewerIsOwner}
+                />
+              </Card>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                <CloudSun className="w-5 h-5 text-sky-600" />
+                {t("gardenDashboard.settingsSection.climate", { defaultValue: "Climate" })}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("gardenDashboard.settingsSection.climateDescription", { defaultValue: "What's your local climate? This helps match you with plants that will thrive in your conditions." })}
+              </p>
+              <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
+                <GardenClimateEditor
+                  garden={garden}
+                  onSaved={onRefreshGarden}
+                  canEdit={viewerIsOwner}
+                />
+              </Card>
+            </div>
+
+            <div>
+              <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                <Target className="w-5 h-5 text-violet-600" />
+                {t("gardenDashboard.settingsSection.usage", { defaultValue: "Garden Usage" })}
+              </h3>
+              <p className="text-sm text-muted-foreground mb-4">
+                {t("gardenDashboard.settingsSection.usageDescription", { defaultValue: "What do you want from your garden? Select all that apply to get better plant suggestions." })}
+              </p>
+              <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
+                <GardenUsageEditor
                   garden={garden}
                   onSaved={onRefreshGarden}
                   canEdit={viewerIsOwner}

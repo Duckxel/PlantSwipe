@@ -83,6 +83,8 @@ import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLang
 import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
 import { GardenLivingSpaceEditor } from "@/components/garden/GardenLivingSpaceEditor";
+import { GardenClimateEditor } from "@/components/garden/GardenClimateEditor";
+import { GardenUsageEditor } from "@/components/garden/GardenUsageEditor";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
@@ -3414,6 +3416,8 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenPrivacyToggle={GardenPrivacyToggle}
                       GardenAiChatToggle={GardenAiChatToggle}
                       GardenLivingSpaceEditor={GardenLivingSpaceEditor}
+                      GardenClimateEditor={GardenClimateEditor}
+                      GardenUsageEditor={GardenUsageEditor}
                       MemberCard={MemberCard}
                     />
                   ) : (

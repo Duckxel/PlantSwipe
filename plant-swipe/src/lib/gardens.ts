@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant, GardenPrivacy, GardenType, GardenLivingSpace } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy, GardenType, GardenLivingSpace, GardenClimate, GardenUsage } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant, PlantImage } from '@/types/plant'
@@ -382,7 +382,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   let gerr: any = null
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, garden_type, living_space')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, garden_type, living_space, climate, usage')
     .in('id', gardenIds)
   gardens = result.data || []
   gerr = result.error
@@ -391,7 +391,7 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
     const fallbackResult = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak, garden_type, living_space')
+      .select('id, name, cover_image_url, created_by, created_at, streak, garden_type, living_space, climate, usage')
       .in('id', gardenIds)
     gardens = fallbackResult.data || []
     gerr = fallbackResult.error
@@ -409,6 +409,8 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
     privacy: (g.privacy || 'public') as GardenPrivacy,
     gardenType: (g.garden_type || 'default') as GardenType,
     livingSpace: (Array.isArray(g.living_space) ? g.living_space : []) as GardenLivingSpace[],
+    climate: (Array.isArray(g.climate) ? g.climate : []) as GardenClimate[],
+    usage: (Array.isArray(g.usage) ? g.usage : []) as GardenUsage[],
   }))
 }
 
@@ -468,7 +470,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage')
     .eq('id', gardenId)
     .maybeSingle()
 
@@ -476,7 +478,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     // New column doesn't exist, try old is_public column
     const fallback1 = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage')
       .eq('id', gardenId)
       .maybeSingle()
 
@@ -484,7 +486,7 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
       // Neither column exists, use base schema
       const fallback2 = await supabase
         .from('gardens')
-        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space')
+        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage')
         .eq('id', gardenId)
         .maybeSingle()
       data = fallback2.data
@@ -527,6 +529,8 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     hideAiChat: Boolean(data.hide_ai_chat ?? false),
     gardenType: (data.garden_type || 'default') as GardenType,
     livingSpace: (Array.isArray(data.living_space) ? data.living_space : []) as GardenLivingSpace[],
+    climate: (Array.isArray(data.climate) ? data.climate : []) as GardenClimate[],
+    usage: (Array.isArray(data.usage) ? data.usage : []) as GardenUsage[],
   }
 }
 
