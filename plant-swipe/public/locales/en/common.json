@@ -2493,10 +2493,10 @@
     "invalidCode": "Invalid verification code. Please check and try again.",
     "expiredCode": "This code has expired. Please request a new one.",
     "domainSuggestion": {
-      "title": "Did you know? Aphylia is also on {{domain}}!",
-      "description": "For the best experience in your language, you can also use {{domain}}. Your account works on both!",
-      "visit": "Visit {{domain}}",
-      "dismiss": "No thanks"
+      "title": "Did you know? Aphylia in English is on {{domain}}!",
+      "description": "Get the full experience in English on our main site. Your account works on both domains — no need to sign up again!",
+      "visit": "Go to {{domain}}",
+      "dismiss": "Stay here"
     }
   },
   "admin": {
