@@ -3036,32 +3036,47 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by variety or common_names in translations table
+      // Also search by variety, common_names, or translated name in translations table (current language)
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
-        .eq("language", "en")
+        .select("plant_id, name, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
+        .eq("language", currentLang)
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where variety or common_names contains the search term
+      // Filter translation matches where variety, common_names, or translated name contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
-      const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
+      const translationPlants: Array<{ id: string; name: string; translatedName?: string | null; scientific_name_species?: string | null; status?: string | null }> = [];
+      // Build a map of plant_id -> translated name for display
+      const translatedNameMap = new Map<string, string>();
 
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
         const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
         const varietyStr = typeof r?.variety === 'string' ? r.variety : '';
-        const matchesGivenName = givenNames.some(
+        const translatedName = typeof r?.name === 'string' ? r.name : '';
+        const matchesTerm = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
-        ) || varietyStr.toLowerCase().includes(termLower);
-        if (matchesGivenName && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
+        ) || varietyStr.toLowerCase().includes(termLower)
+          || translatedName.toLowerCase().includes(termLower);
+
+        // Store translated name for all entries regardless of match (for display of direct matches)
+        if (r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants) {
+          const plants = r.plants as Record<string, unknown>;
+          const pid = String(plants.id);
+          if (translatedName) {
+            translatedNameMap.set(pid, translatedName);
+          }
+        }
+
+        if (matchesTerm && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
           const plants = r.plants as Record<string, unknown>;
           translationPlantIds.add(String(plants.id));
           translationPlants.push({
             id: String(plants.id),
             name: String(plants.name || ""),
+            translatedName: translatedName || null,
             scientific_name_species: plants.scientific_name_species || null,
             status: plants.status || null,
           });
@@ -3070,7 +3085,7 @@ export const AdminPage: React.FC = () => {
 
       // Merge results, avoiding duplicates
       const seenIds = new Set<string>();
-      const merged: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
+      const merged: Array<{ id: string; name: string; translatedName?: string | null; scientific_name_species?: string | null; status?: string | null }> = [];
 
       (directMatches || []).forEach((plant: unknown) => {
         const p = plant as Record<string, unknown>;
@@ -3079,6 +3094,7 @@ export const AdminPage: React.FC = () => {
           merged.push({
             id: String(p.id),
             name: String(p.name || ""),
+            translatedName: translatedNameMap.get(String(p.id)) || null,
             scientific_name_species: p.scientific_name_species ?? null,
             status: p.status ?? null,
           });
@@ -3092,11 +3108,15 @@ export const AdminPage: React.FC = () => {
         }
       });
 
-      // Sort by name and limit to 20, then map to SearchItemOption
-      merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+      // Sort by display name and limit to 20, then map to SearchItemOption
+      merged.sort((a, b) => {
+        const nameA = a.translatedName || a.name || "";
+        const nameB = b.translatedName || b.name || "";
+        return nameA.localeCompare(nameB);
+      });
       return merged.slice(0, 20).map((plant) => ({
         id: plant.id,
-        label: plant.name,
+        label: plant.translatedName || plant.name,
         description: plant.scientific_name_species || null,
         meta: plant.status || null,
       }));
@@ -3104,7 +3124,7 @@ export const AdminPage: React.FC = () => {
       console.error("Failed to search plants:", err);
       return [];
     }
-  }, []);
+  }, [currentLang]);
 
   const handleSelectPlantForPrefill = React.useCallback(
     async (plantId: string, plantName: string) => {
