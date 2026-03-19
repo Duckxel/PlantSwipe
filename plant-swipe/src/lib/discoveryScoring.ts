@@ -28,6 +28,8 @@ export interface DiscoveryConfig {
   /** Map of plant ID → seen count (how many times the user has swiped past it) */
   seenIds: Map<string, number>
   sessionSeed: number
+  /** When true, build per-plant score breakdowns (admin only) */
+  includeBreakdowns?: boolean
 }
 
 /** Breakdown of how a plant's discovery score was computed */
@@ -167,33 +169,43 @@ export function scoreDiscoveryPlants(
   const canPersonalize =
     config.profile !== null &&
     config.profile.personalized_recommendations !== false
+  const wantBreakdowns = config.includeBreakdowns === true
 
   const breakdowns = new Map<string, ScoreBreakdown>()
 
   const scored = plants.map(plant => {
-    const b: ScoreBreakdown = {
-      total: 0,
-      featuredMonth: isPlantOfTheMonth(plant, now) ? W_FEATURED_MONTH : 0,
-      seasonal: isRelevantThisMonth(plant, currentMonth) ? W_SEASONAL : 0,
-      newPlant: isNewPlant(plant, now) ? W_NEW_PLANT : 0,
-      status: plant.status === 'approved' ? W_STATUS_APPROVED
-        : plant.status === 'in_progress' ? W_STATUS_WIP
-        : plant.status === 'rework' ? W_STATUS_REWORK : 0,
-      interestMatch: canPersonalize ? scoreInterestMatch(plant, config.profile!) : 0,
-      gardenType: canPersonalize ? scoreGardenTypeMatch(plant, config.profile!) : 0,
-      experience: canPersonalize ? scoreExperienceMatch(plant, config.profile!) : 0,
-      parentSafety: canPersonalize ? scoreParentSafety(plant, config.profile!) : 0,
-      alreadySeen: ((config.seenIds.get(plant.id) ?? 0) > 0)
-        ? W_ALREADY_SEEN * (config.seenIds.get(plant.id)!) : 0,
-      alreadyLiked: config.likedIds.has(plant.id) ? W_ALREADY_LIKED : 0,
-      random: Math.round(seededRandom(config.sessionSeed, plant.id) * W_RANDOM_MAX * 10) / 10,
-    }
-    b.total = b.featuredMonth + b.seasonal + b.newPlant + b.status
-      + b.interestMatch + b.gardenType + b.experience + b.parentSafety
-      + b.alreadySeen + b.alreadyLiked + b.random
+    let score = 0
 
-    breakdowns.set(plant.id, b)
-    return { plant, score: b.total }
+    const featuredMonth = isPlantOfTheMonth(plant, now) ? W_FEATURED_MONTH : 0
+    const seasonal = isRelevantThisMonth(plant, currentMonth) ? W_SEASONAL : 0
+    const newPlant = isNewPlant(plant, now) ? W_NEW_PLANT : 0
+    const status = plant.status === 'approved' ? W_STATUS_APPROVED
+      : plant.status === 'in_progress' ? W_STATUS_WIP
+      : plant.status === 'rework' ? W_STATUS_REWORK : 0
+    const interestMatch = canPersonalize ? scoreInterestMatch(plant, config.profile!) : 0
+    const gardenType = canPersonalize ? scoreGardenTypeMatch(plant, config.profile!) : 0
+    const experience = canPersonalize ? scoreExperienceMatch(plant, config.profile!) : 0
+    const parentSafety = canPersonalize ? scoreParentSafety(plant, config.profile!) : 0
+    const seenCount = config.seenIds.get(plant.id) ?? 0
+    const alreadySeen = seenCount > 0 ? W_ALREADY_SEEN * seenCount : 0
+    const alreadyLiked = config.likedIds.has(plant.id) ? W_ALREADY_LIKED : 0
+    const random = seededRandom(config.sessionSeed, plant.id) * W_RANDOM_MAX
+
+    score = featuredMonth + seasonal + newPlant + status
+      + interestMatch + gardenType + experience + parentSafety
+      + alreadySeen + alreadyLiked + random
+
+    if (wantBreakdowns) {
+      breakdowns.set(plant.id, {
+        total: score,
+        featuredMonth, seasonal, newPlant, status,
+        interestMatch, gardenType, experience, parentSafety,
+        alreadySeen, alreadyLiked,
+        random: Math.round(random * 10) / 10,
+      })
+    }
+
+    return { plant, score }
   })
 
   scored.sort((a, b) => b.score - a.score)

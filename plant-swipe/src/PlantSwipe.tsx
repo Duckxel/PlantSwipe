@@ -1431,11 +1431,13 @@ export default function PlantSwipe() {
     if (user?.id && !seenLoaded) return
 
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
+      const isAdmin = profile?.is_admin === true
       const { sorted, breakdowns } = scoreDiscoveryPlants(swipeablePlants, {
         profile: profile ?? null,
         likedIds: likedSet,
         seenIds: seenPlantIds,
         sessionSeed: sessionSeedRef.current,
+        includeBreakdowns: isAdmin,
       })
       setShuffledPlantIds(sorted.map(p => p.id))
       setScoreBreakdowns(breakdowns)
