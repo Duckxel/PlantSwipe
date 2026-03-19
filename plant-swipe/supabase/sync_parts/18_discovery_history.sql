@@ -6,7 +6,7 @@
 create table if not exists public.discovery_seen_plants (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   seen_at timestamptz not null default now(),
   seen_count int not null default 1,
   unique(user_id, plant_id)
