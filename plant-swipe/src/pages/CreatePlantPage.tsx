@@ -1123,7 +1123,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.medicinalHistory = translation?.medicinal_history || undefined
   flat.aromatherapyBenefits = translation?.aromatherapy_benefits || undefined
   flat.essentialOilBlends = translation?.essential_oil_blends || undefined
-  flat.edibleOil = data.edible_oil || undefined
+  flat.edibleOil = data.edible_oil ?? undefined
   flat.spiceMixes = translation?.spice_mixes || plant.usage?.spiceMixes || []
   flat.infusionMixes = infusionMix || undefined
   flat.recipes = plant.usage?.recipes || []
@@ -1807,7 +1807,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
-            edible_oil: p.edibleOil || null,
+            edible_oil: p.edibleOil ?? false,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
             biotope_plants: p.biotopePlants || [],
@@ -1907,7 +1907,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
-            edible_oil: p.edibleOil || null,
+            edible_oil: p.edibleOil ?? false,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
             biotope_plants: p.biotopePlants || [],

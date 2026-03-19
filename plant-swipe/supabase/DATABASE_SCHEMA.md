@@ -623,7 +623,7 @@ name                      TEXT NOT NULL           -- Canonical English name (non
 
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
-plant_part                TEXT[]                 -- CHECK: roots, bulbs, stems, leaves, flowers, fruits, spores
+plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, stems, leaves, flowers, fruits, spores
 habitat                   TEXT[]                 -- CHECK: aquatic, hygrophytic, terrestrial, xerophytic, halophytic, epiphytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
@@ -721,7 +721,7 @@ ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, p
 
 -- Section 7: Consumption
 infusion_parts            TEXT[]                 -- Which plant parts can be used for infusion
-edible_oil                TEXT                   -- CHECK: yes, no, unknown
+edible_oil                BOOLEAN                -- Whether the plant produces an edible oil
 
 -- Section 8: Misc
 companion_plants          TEXT[]                 -- Plant IDs for garden pairing

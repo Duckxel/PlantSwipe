@@ -389,7 +389,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 
     // Section 7: Consumption (non-translatable)
     infusionParts: data.infusion_parts || [],
-    edibleOil: data.edible_oil || undefined,
+    edibleOil: data.edible_oil ?? undefined,
     // Section 7: Consumption (translatable)
     nutritionalValue: translation?.nutritional_value || undefined,
     recipesIdeas: translation?.recipes_ideas || [],
@@ -1324,7 +1324,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'lifeCycle', 'averageLifespan', 'foliagePersistence',
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
-      'ecologicalTolerance', 'ecologicalImpact', 'edibleOil',
+      'ecologicalTolerance', 'ecologicalImpact',
       'status', 'month',
     ]
     
@@ -1518,7 +1518,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
-        { label: tp('labels.edibleOil'), value: plant.edibleOil ? translateEnum(plant.edibleOil) : null },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('yes', 'Yes') : t('no', 'No')) : null },
         { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
       const consumptionMedicinalItems = filterInfoItems([

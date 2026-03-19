@@ -171,7 +171,7 @@ const MONTH_FIELDS = new Set([
 // Boolean fields
 const BOOLEAN_FIELDS = new Set([
   'thorny', 'multicolor', 'bicolor', 'mulchingNeeded', 'staking',
-  'transplanting', 'pruning',
+  'transplanting', 'pruning', 'edibleOil',
 ])
 
 // Integer fields
@@ -291,7 +291,7 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
 
   // plantPart multi-select
   if (fieldKey === 'plantPart') {
-    const valid = new Set(['roots', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
+    const valid = new Set(['roots', 'rhizomes', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
     const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
     next.plantPart = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['plantPart']
     return next
@@ -302,15 +302,6 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     const valid = new Set(['aquatic', 'terrestrial', 'epiphytic', 'lithophytic', 'parasitic'])
     const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
     next.habitat = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['habitat']
-    return next
-  }
-
-  // edibleOil special case
-  if (fieldKey === 'edibleOil') {
-    if (typeof data === 'string') {
-      const lower = data.toLowerCase().trim()
-      if (['yes', 'no', 'unknown'].includes(lower)) next.edibleOil = lower as 'yes' | 'no' | 'unknown'
-    }
     return next
   }
 

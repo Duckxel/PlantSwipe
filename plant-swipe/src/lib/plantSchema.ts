@@ -13,7 +13,7 @@ export const plantSchema = {
   },
   plantPart: {
     type: 'enum[]',
-    options: ['roots','bulbs','stems','leaves','flowers','fruits','spores'],
+    options: ['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores'],
     description: 'Main anatomical parts of the plant',
   },
   habitat: {
@@ -313,8 +313,7 @@ export const plantSchema = {
   aromatherapyBenefits: { type: 'text', description: 'Aromatherapy benefits' },
   essentialOilBlends: { type: 'text', description: 'Essential oil blend ideas' },
   edibleOil: {
-    type: 'enum',
-    options: ['yes', 'no', 'unknown'],
+    type: 'boolean',
     description: 'Whether the plant produces an edible oil',
   },
   spiceMixes: { type: 'tag[]', description: 'Spice blend uses' },
