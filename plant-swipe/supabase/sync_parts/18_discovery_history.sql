@@ -15,6 +15,7 @@ create table if not exists public.discovery_seen_plants (
 -- Indexes for fast lookups
 create index if not exists idx_discovery_seen_user on public.discovery_seen_plants(user_id);
 create index if not exists idx_discovery_seen_user_plant on public.discovery_seen_plants(user_id, plant_id);
+create index if not exists idx_discovery_seen_at on public.discovery_seen_plants(seen_at);
 
 -- RLS: users can only read/write their own seen history
 alter table public.discovery_seen_plants enable row level security;
@@ -36,3 +37,28 @@ BEGIN
       FOR UPDATE TO authenticated USING (user_id = auth.uid());
   END IF;
 END $$;
+
+-- ========== Purge expired discovery seen-plants (30-day retention) ==========
+-- Rows older than 30 days are no longer used by the scoring algorithm.
+-- Runs daily at 3:30 AM UTC.
+do $$ begin
+  begin
+    perform cron.unschedule('purge_old_discovery_seen_plants');
+  exception
+    when others then
+      null;
+  end;
+  begin
+    perform cron.schedule(
+      'purge_old_discovery_seen_plants',
+      '30 3 * * *',
+      $_cron$
+      delete from public.discovery_seen_plants
+      where seen_at < (now() at time zone 'utc') - interval '30 days';
+      $_cron$
+    );
+  exception
+    when others then
+      null;
+  end;
+end $$;

@@ -18157,7 +18157,16 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
 
     try {
-      // 17. Clear task cache
+      // 17a. Delete discovery seen-plants history
+      if (sql) {
+        await sql`DELETE FROM public.discovery_seen_plants WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('discovery_seen_plants').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Discovery seen-plants deletion partial:', err?.message) }
+
+    try {
+      // 17b. Clear task cache
       if (sql) {
         await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
       } else {
