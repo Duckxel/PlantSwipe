@@ -211,7 +211,7 @@ function mapDbRowToPlant(
 
     // Section 7: Consumption (non-translatable)
     infusionParts: (basePlant.infusion_parts as string[]) || [],
-    edibleOil: basePlant.edible_oil ?? undefined,
+    edibleOil: (basePlant.edible_oil as boolean) ?? undefined,
     // Translatable
     nutritionalValue: (translation.nutritional_value as string) || undefined,
     recipesIdeas: (translation.recipes_ideas as string[]) || [],
