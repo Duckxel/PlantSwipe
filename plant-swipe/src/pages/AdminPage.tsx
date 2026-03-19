@@ -3108,17 +3108,51 @@ export const AdminPage: React.FC = () => {
         }
       });
 
-      // Sort by display name and limit to 20, then map to SearchItemOption
+      // Sort by display name and limit to 20
       merged.sort((a, b) => {
         const nameA = a.translatedName || a.name || "";
         const nameB = b.translatedName || b.name || "";
         return nameA.localeCompare(nameB);
       });
-      return merged.slice(0, 20).map((plant) => ({
+      const limited = merged.slice(0, 20);
+
+      // Fetch primary images for results
+      const imageMap = new Map<string, string>();
+      if (limited.length > 0) {
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', limited.map(p => p.id))
+          .eq('use', 'primary');
+        if (imagesData) imagesData.forEach((img: any) => {
+          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link);
+        });
+      }
+
+      // Fetch variety from translations for results
+      const varietyMap = new Map<string, string>();
+      if (limited.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', currentLang)
+          .in('plant_id', limited.map(p => p.id));
+        if (varData) varData.forEach((v: any) => {
+          if (v.plant_id && v.variety) varietyMap.set(v.plant_id, v.variety);
+        });
+      }
+
+      return limited.map((plant) => ({
         id: plant.id,
         label: plant.translatedName || plant.name,
-        description: plant.scientific_name_species || null,
-        meta: plant.status || null,
+        // Store image URL in description (used by renderItem)
+        description: imageMap.get(plant.id) || null,
+        // Store variety, scientific name, and status as JSON in meta for renderItem
+        meta: JSON.stringify({
+          variety: varietyMap.get(plant.id) || null,
+          scientificName: plant.scientific_name_species || null,
+          status: plant.status || null,
+        }),
       }));
     } catch (err) {
       console.error("Failed to search plants:", err);
@@ -13402,21 +13436,48 @@ export const AdminPage: React.FC = () => {
       placeholder="Add FROM..."
       disabled={addFromDuplicating}
       className="hidden"
-      renderItem={(option, isSelected) => (
-        <div className="flex flex-col items-center text-center gap-1.5 w-full p-4">
-          <span className={`text-sm font-semibold truncate ${isSelected ? "text-emerald-700 dark:text-emerald-300" : "text-stone-900 dark:text-white"}`}>
-            {option.label}
-          </span>
-          {option.description && (
-            <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{option.description}</p>
-          )}
-          {option.meta && (
-            <span className="px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] text-stone-500 dark:text-stone-400">
-              {option.meta}
-            </span>
-          )}
-        </div>
-      )}
+      renderItem={(option, isSelected) => {
+        let variety: string | null = null;
+        let scientificName: string | null = null;
+        let status: string | null = null;
+        try {
+          const parsed = JSON.parse(option.meta || '{}');
+          variety = parsed.variety || null;
+          scientificName = parsed.scientificName || null;
+          status = parsed.status || null;
+        } catch {}
+        return (
+          <div className="flex flex-col w-full h-full">
+            <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+              {option.description ? (
+                <img src={option.description} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
+                  <Leaf className="h-8 w-8" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
+              <p className={`text-sm font-medium truncate ${isSelected ? "text-emerald-700 dark:text-emerald-300" : "text-stone-900 dark:text-white"}`}>
+                {option.label}
+              </p>
+              {variety && (
+                <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">
+                  &apos;{variety}&apos;
+                </p>
+              )}
+              {scientificName && (
+                <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{scientificName}</p>
+              )}
+              {status && (
+                <span className="mt-1 self-start px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] text-stone-500 dark:text-stone-400">
+                  {status}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      }}
       ref={(el) => {
         // Store ref so we can programmatically click to open the dialog
         if (el) (el as HTMLElement).setAttribute("data-add-from-trigger", "true");
