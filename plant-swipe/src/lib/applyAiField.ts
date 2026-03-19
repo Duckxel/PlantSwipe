@@ -291,7 +291,7 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
 
   // plantPart multi-select
   if (fieldKey === 'plantPart') {
-    const valid = new Set(['roots', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
+    const valid = new Set(['roots', 'rhizomes', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
     const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
     next.plantPart = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['plantPart']
     return next

@@ -13,7 +13,7 @@ export const plantSchema = {
   },
   plantPart: {
     type: 'enum[]',
-    options: ['roots','bulbs','stems','leaves','flowers','fruits','spores'],
+    options: ['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores'],
     description: 'Main anatomical parts of the plant',
   },
   habitat: {
