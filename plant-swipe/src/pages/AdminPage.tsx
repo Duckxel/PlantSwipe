@@ -9265,7 +9265,7 @@ export const AdminPage: React.FC = () => {
                                         {plant.primaryImage ? (
                                           <img
                                             src={plant.primaryImage}
-                                            alt={plant.name}
+                                            alt={plant.localizedName || plant.name}
                                             className="h-full w-full object-cover transition-transform group-hover:scale-105"
                                             loading="lazy"
                                           />
@@ -9278,10 +9278,10 @@ export const AdminPage: React.FC = () => {
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                           <span className="font-medium text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                                            {plant.name}
-                                            {plant.variety && (
+                                            {plant.localizedName || plant.name}
+                                            {(plant.localizedVariety || plant.variety) && (
                                               <span className="ml-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xs sm:text-sm font-extrabold tracking-tight">
-                                                &lsquo;{plant.variety}&rsquo;
+                                                &lsquo;{plant.localizedVariety || plant.variety}&rsquo;
                                               </span>
                                             )}
                                           </span>
@@ -9563,7 +9563,7 @@ export const AdminPage: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleSelectPlantForPrefill(plant.id, plant.name);
+                                            handleSelectPlantForPrefill(plant.id, plant.localizedName || plant.name);
                                           }}
                                           className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
                                           title="Duplicate plant (Add From)"
@@ -9575,7 +9575,7 @@ export const AdminPage: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setPlantToDelete({ id: plant.id, name: plant.name });
+                                            setPlantToDelete({ id: plant.id, name: plant.localizedName || plant.name });
                                             setDeletePlantDialogOpen(true);
                                           }}
                                           className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
@@ -13664,7 +13664,7 @@ export const AdminPage: React.FC = () => {
               .map((plant) => (
                 <div key={plant.id} className="px-4 py-2">
                   <div className="font-medium text-sm text-stone-900 dark:text-white">
-                    {plant.name}
+                    {plant.localizedName || plant.name}
                   </div>
                   <div className="text-xs text-stone-500 dark:text-stone-400 font-mono">
                     {plant.id.slice(0, 8)}...
