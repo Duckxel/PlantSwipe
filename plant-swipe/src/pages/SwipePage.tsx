@@ -73,6 +73,7 @@ import { cn, deriveWaterLevelFromFrequency } from "@/lib/utils"
 import { useAuth } from "@/context/AuthContext"
 import { resolveColorValue } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import type { ScoreBreakdown } from "@/lib/discoveryScoring"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -87,6 +88,8 @@ interface SwipePageProps {
   liked?: boolean
   onToggleLike?: () => void
   boostImagePriority?: boolean
+  scoreBreakdown?: ScoreBreakdown
+  isAdmin?: boolean
 }
 
 export const SwipePage = React.memo<SwipePageProps>(({
@@ -102,6 +105,8 @@ export const SwipePage = React.memo<SwipePageProps>(({
   liked = false,
   onToggleLike,
   boostImagePriority = false,
+  scoreBreakdown,
+  isAdmin = false,
 }) => {
   void _index // Prop kept for interface compatibility
       const { t } = useTranslation("common")
@@ -341,6 +346,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
             ))}
           </div>
         )}
+        {isAdmin && scoreBreakdown && (
+          <div className="absolute top-4 right-4 z-20">
+            <AdminScoreBadge breakdown={scoreBreakdown} />
+          </div>
+        )}
         {/* Next chevron - top center */}
         <div className="absolute top-3 left-0 right-0 z-40 flex justify-center">
           <button
@@ -501,7 +511,12 @@ export const SwipePage = React.memo<SwipePageProps>(({
                       ))}
                     </div>
                   )}
-                  
+                  {isAdmin && scoreBreakdown && (
+                    <div className="absolute top-4 right-4 z-20">
+                      <AdminScoreBadge breakdown={scoreBreakdown} />
+                    </div>
+                  )}
+
                   {/* Next chevron - top center */}
                   <div
                     className="absolute top-3 left-0 right-0 z-[100] flex justify-center"
@@ -751,6 +766,57 @@ export const SwipePage = React.memo<SwipePageProps>(({
       </div>
     )
 })
+
+// ---------------------------------------------------------------------------
+// Admin-only: score badge with hover breakdown
+// ---------------------------------------------------------------------------
+const SCORE_LABELS: Array<{ key: keyof ScoreBreakdown; label: string }> = [
+  { key: 'featuredMonth', label: 'Featured Month' },
+  { key: 'seasonal', label: 'Seasonal' },
+  { key: 'newPlant', label: 'New Plant' },
+  { key: 'status', label: 'Status' },
+  { key: 'interestMatch', label: 'Interest Match' },
+  { key: 'gardenType', label: 'Garden Type' },
+  { key: 'experience', label: 'Experience' },
+  { key: 'parentSafety', label: 'Parent Safety' },
+  { key: 'alreadySeen', label: 'Already Seen' },
+  { key: 'alreadyLiked', label: 'Already Liked' },
+  { key: 'random', label: 'Random' },
+]
+
+const AdminScoreBadge = ({ breakdown }: { breakdown: ScoreBreakdown }) => {
+  const [open, setOpen] = React.useState(false)
+  const activeFactors = SCORE_LABELS.filter(f => breakdown[f.key] !== 0)
+
+  return (
+    <div
+      className="relative z-50"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onClick={() => setOpen(o => !o)}
+    >
+      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600/90 px-2.5 py-1 text-xs font-bold text-white backdrop-blur cursor-default shadow-lg">
+        Score: {Math.round(breakdown.total)} pts
+      </span>
+      {open && (
+        <div className="absolute top-full right-0 mt-1.5 w-56 rounded-xl bg-stone-900/95 backdrop-blur-sm border border-stone-700/50 shadow-2xl p-3 text-xs text-stone-200 space-y-1">
+          {activeFactors.map(f => (
+            <div key={f.key} className="flex justify-between">
+              <span className="text-stone-400">{f.label}</span>
+              <span className={breakdown[f.key] > 0 ? 'text-emerald-400 font-medium' : 'text-red-400 font-medium'}>
+                {breakdown[f.key] > 0 ? '+' : ''}{Math.round(breakdown[f.key] * 10) / 10}
+              </span>
+            </div>
+          ))}
+          <div className="border-t border-stone-700 pt-1 mt-1 flex justify-between font-bold">
+            <span>Total</span>
+            <span className="text-white">{Math.round(breakdown.total)} pts</span>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 const EmptyState = ({ onReset }: { onReset: () => void }) => {
   const { t } = useTranslation("common")

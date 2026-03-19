@@ -30,6 +30,22 @@ export interface DiscoveryConfig {
   sessionSeed: number
 }
 
+/** Breakdown of how a plant's discovery score was computed */
+export interface ScoreBreakdown {
+  total: number
+  featuredMonth: number
+  seasonal: number
+  newPlant: number
+  status: number
+  interestMatch: number
+  gardenType: number
+  experience: number
+  parentSafety: number
+  alreadySeen: number
+  alreadyLiked: number
+  random: number
+}
+
 // ---------------------------------------------------------------------------
 // Scoring weights
 // ---------------------------------------------------------------------------
@@ -145,47 +161,43 @@ function seededRandom(seed: number, plantId: string): number {
 export function scoreDiscoveryPlants(
   plants: Plant[],
   config: DiscoveryConfig,
-): Plant[] {
+): { sorted: Plant[]; breakdowns: Map<string, ScoreBreakdown> } {
   const now = new Date()
   const currentMonth = now.getMonth() + 1
   const canPersonalize =
     config.profile !== null &&
     config.profile.personalized_recommendations !== false
 
+  const breakdowns = new Map<string, ScoreBreakdown>()
+
   const scored = plants.map(plant => {
-    let score = 0
-
-    // --- Universal factors (always applied) ---
-    if (isPlantOfTheMonth(plant, now)) score += W_FEATURED_MONTH
-    if (isRelevantThisMonth(plant, currentMonth)) score += W_SEASONAL
-    if (isNewPlant(plant, now)) score += W_NEW_PLANT
-
-    // Plant status
-    if (plant.status === 'approved') score += W_STATUS_APPROVED
-    if (plant.status === 'in_progress') score += W_STATUS_WIP
-    if (plant.status === 'rework') score += W_STATUS_REWORK
-
-    // --- Personalized factors (only if consented & logged in) ---
-    if (canPersonalize) {
-      score += scoreInterestMatch(plant, config.profile!)
-      score += scoreGardenTypeMatch(plant, config.profile!)
-      score += scoreExperienceMatch(plant, config.profile!)
-      score += scoreParentSafety(plant, config.profile!)
+    const b: ScoreBreakdown = {
+      total: 0,
+      featuredMonth: isPlantOfTheMonth(plant, now) ? W_FEATURED_MONTH : 0,
+      seasonal: isRelevantThisMonth(plant, currentMonth) ? W_SEASONAL : 0,
+      newPlant: isNewPlant(plant, now) ? W_NEW_PLANT : 0,
+      status: plant.status === 'approved' ? W_STATUS_APPROVED
+        : plant.status === 'in_progress' ? W_STATUS_WIP
+        : plant.status === 'rework' ? W_STATUS_REWORK : 0,
+      interestMatch: canPersonalize ? scoreInterestMatch(plant, config.profile!) : 0,
+      gardenType: canPersonalize ? scoreGardenTypeMatch(plant, config.profile!) : 0,
+      experience: canPersonalize ? scoreExperienceMatch(plant, config.profile!) : 0,
+      parentSafety: canPersonalize ? scoreParentSafety(plant, config.profile!) : 0,
+      alreadySeen: ((config.seenIds.get(plant.id) ?? 0) > 0)
+        ? W_ALREADY_SEEN * (config.seenIds.get(plant.id)!) : 0,
+      alreadyLiked: config.likedIds.has(plant.id) ? W_ALREADY_LIKED : 0,
+      random: Math.round(seededRandom(config.sessionSeed, plant.id) * W_RANDOM_MAX * 10) / 10,
     }
+    b.total = b.featuredMonth + b.seasonal + b.newPlant + b.status
+      + b.interestMatch + b.gardenType + b.experience + b.parentSafety
+      + b.alreadySeen + b.alreadyLiked + b.random
 
-    // --- Exploration factors (logged-in users) ---
-    const seenCount = config.seenIds.get(plant.id) ?? 0
-    if (seenCount > 0) score += W_ALREADY_SEEN * seenCount
-    if (config.likedIds.has(plant.id)) score += W_ALREADY_LIKED
-
-    // --- Session randomness ---
-    score += seededRandom(config.sessionSeed, plant.id) * W_RANDOM_MAX
-
-    return { plant, score }
+    breakdowns.set(plant.id, b)
+    return { plant, score: b.total }
   })
 
   scored.sort((a, b) => b.score - a.score)
-  return scored.map(s => s.plant)
+  return { sorted: scored.map(s => s.plant), breakdowns }
 }
 
 // ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
-import { scoreDiscoveryPlants, loadSeenPlantIds, markPlantSeen } from "@/lib/discoveryScoring";
+import { scoreDiscoveryPlants, loadSeenPlantIds, markPlantSeen, type ScoreBreakdown } from "@/lib/discoveryScoring";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
@@ -259,6 +259,7 @@ export default function PlantSwipe() {
   const hasInitialShuffleRef = React.useRef(false)
   const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
   const [seenLoaded, setSeenLoaded] = useState(false)
+  const [scoreBreakdowns, setScoreBreakdowns] = useState<Map<string, ScoreBreakdown>>(new Map())
 
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -1430,13 +1431,14 @@ export default function PlantSwipe() {
     if (user?.id && !seenLoaded) return
 
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
-      const sorted = scoreDiscoveryPlants(swipeablePlants, {
+      const { sorted, breakdowns } = scoreDiscoveryPlants(swipeablePlants, {
         profile: profile ?? null,
         likedIds: likedSet,
         seenIds: seenPlantIds,
         sessionSeed: sessionSeedRef.current,
       })
       setShuffledPlantIds(sorted.map(p => p.id))
+      setScoreBreakdowns(breakdowns)
       hasInitialShuffleRef.current = true
     }
   }, [swipeablePlants, shuffleEpoch, seenPlantIds, seenLoaded, user?.id, profile, likedSet])
@@ -2810,6 +2812,8 @@ export default function PlantSwipe() {
                     liked={current ? likedIds.includes(current.id) : false}
                     onToggleLike={handleToggleLike}
                     boostImagePriority={boostImagePriority}
+                    scoreBreakdown={current ? scoreBreakdowns.get(current.id) : undefined}
+                    isAdmin={profile?.is_admin === true}
                   />
                 </Suspense>
               ) : (
