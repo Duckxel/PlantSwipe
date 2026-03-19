@@ -222,13 +222,20 @@ export function scoreDiscoveryPlants(
 // DB helpers for seen-plants history
 // ---------------------------------------------------------------------------
 
-/** Load all plant IDs the user has previously seen, with their seen counts */
+/** How many days before seen-plant history expires and the plant resurfaces */
+const SEEN_DECAY_DAYS = 30
+
+/** Load plant IDs the user has seen within the last SEEN_DECAY_DAYS, with their seen counts */
 export async function loadSeenPlantIds(userId: string): Promise<Map<string, number>> {
   try {
+    const cutoff = new Date()
+    cutoff.setDate(cutoff.getDate() - SEEN_DECAY_DAYS)
+
     const { data } = await supabase
       .from('discovery_seen_plants')
       .select('plant_id, seen_count')
       .eq('user_id', userId)
+      .gte('seen_at', cutoff.toISOString())
 
     const map = new Map<string, number>()
     for (const r of data || []) {
