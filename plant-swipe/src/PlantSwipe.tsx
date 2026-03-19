@@ -257,6 +257,7 @@ export default function PlantSwipe() {
   // Discovery scoring state
   const sessionSeedRef = React.useRef(Math.random())
   const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
+  const [seenLoaded, setSeenLoaded] = useState(false)
 
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -478,9 +479,14 @@ export default function PlantSwipe() {
   React.useEffect(() => {
     if (!user?.id) {
       setSeenPlantIds(new Map())
+      setSeenLoaded(true)
       return
     }
-    loadSeenPlantIds(user.id).then(ids => setSeenPlantIds(ids)).catch(() => {})
+    setSeenLoaded(false)
+    loadSeenPlantIds(user.id)
+      .then(ids => setSeenPlantIds(ids))
+      .catch(() => {})
+      .finally(() => setSeenLoaded(true))
   }, [user?.id])
 
   // Read search query and filter params from URL when on search page
@@ -1409,15 +1415,18 @@ export default function PlantSwipe() {
   // Track if we've done initial shuffle
   const hasInitialShuffleRef = React.useRef(false)
   
-  // Create/update scored order only when plants change or explicit reshuffle
-  // Uses the personalized discovery scoring algorithm based on user preferences,
-  // seasonal relevance, plant status, and exploration history.
+  // Create/update scored order only when plants change or explicit reshuffle.
+  // Waits for seen-plant history to load from DB before initial scoring so
+  // the seen penalty is applied on page load (not just mid-session).
   React.useEffect(() => {
     if (swipeablePlants.length === 0) {
       setShuffledPlantIds([])
       hasInitialShuffleRef.current = false
       return
     }
+
+    // Wait for seen data from DB before scoring for the first time
+    if (!seenLoaded) return
 
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
       const sorted = scoreDiscoveryPlants(swipeablePlants, {
@@ -1429,7 +1438,7 @@ export default function PlantSwipe() {
       setShuffledPlantIds(sorted.map(p => p.id))
       hasInitialShuffleRef.current = true
     }
-  }, [swipeablePlants, shuffleEpoch, seenPlantIds, profile, likedSet])
+  }, [swipeablePlants, shuffleEpoch, seenPlantIds, seenLoaded, profile, likedSet])
   
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
@@ -1519,6 +1528,24 @@ export default function PlantSwipe() {
   const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
   const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
 
+  // Mark every displayed plant as seen (persists to DB for scoring on next reload)
+  React.useEffect(() => {
+    if (!current || currentView !== 'discovery') return
+    const plantId = current.id
+    const currentCount = seenPlantIds.get(plantId) ?? 0
+    // Update local state so in-session scoring also benefits
+    setSeenPlantIds(prev => {
+      if (prev.get(plantId) === currentCount + 1) return prev // already tracked
+      const next = new Map(prev)
+      next.set(plantId, currentCount + 1)
+      return next
+    })
+    // Persist to DB
+    if (user?.id) {
+      markPlantSeen(user.id, plantId, currentCount)
+    }
+  }, [current?.id, currentView]) // eslint-disable-line react-hooks/exhaustive-deps
+
   React.useEffect(() => {
     if (!initialCardBoostRef.current) return
     if (!heroImageCandidate) return
@@ -1590,19 +1617,7 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
-    // Track current plant as seen (local state + DB persistence)
-    const currentPlant = swipeList[index % swipeList.length]
-    if (currentPlant) {
-      const currentCount = seenPlantIds.get(currentPlant.id) ?? 0
-      setSeenPlantIds(prev => {
-        const next = new Map(prev)
-        next.set(currentPlant.id, currentCount + 1)
-        return next
-      })
-      if (user?.id) {
-        markPlantSeen(user.id, currentPlant.id, currentCount) // fire-and-forget
-      }
-    }
+    // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
       // When we complete a full cycle, reshuffle with a new seed for variety
@@ -1612,7 +1627,7 @@ export default function PlantSwipe() {
       }
       return next
     })
-  }, [swipeList, index, user?.id, seenPlantIds])
+  }, [swipeList])
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
