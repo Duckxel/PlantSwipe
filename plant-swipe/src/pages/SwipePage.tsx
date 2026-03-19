@@ -789,16 +789,16 @@ const AdminScoreBadge = ({ breakdown }: { breakdown: ScoreBreakdown }) => {
 
   return (
     <div
-      className="relative z-50"
+      className="relative z-50 pb-2"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onClick={() => setOpen(o => !o)}
     >
-      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600/90 px-2.5 py-1 text-xs font-bold text-white backdrop-blur cursor-default shadow-lg">
+      <span className="inline-flex items-center gap-1 rounded-full bg-indigo-600/90 px-2.5 py-1 text-xs font-bold text-white backdrop-blur cursor-pointer shadow-lg">
         Score: {Math.round(breakdown.total)} pts
       </span>
       {open && (
-        <div className="absolute top-full left-0 mt-1.5 w-56 rounded-xl bg-stone-900/95 backdrop-blur-sm border border-stone-700/50 shadow-2xl p-3 text-xs text-stone-200 space-y-1">
+        <div className="absolute top-full left-0 w-56 rounded-xl bg-stone-900/95 backdrop-blur-sm border border-stone-700/50 shadow-2xl p-3 text-xs text-stone-200 space-y-1">
           {activeFactors.map(f => (
             <div key={f.key} className="flex justify-between">
               <span className="text-stone-400">{f.label}</span>
