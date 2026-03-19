@@ -1807,7 +1807,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
-            edible_oil: p.edibleOil || null,
+            edible_oil: p.edibleOil?.toLowerCase() || null,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
             biotope_plants: p.biotopePlants || [],
@@ -1907,7 +1907,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
-            edible_oil: p.edibleOil || null,
+            edible_oil: p.edibleOil?.toLowerCase() || null,
             // Section 8: Misc
             companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
             biotope_plants: p.biotopePlants || [],

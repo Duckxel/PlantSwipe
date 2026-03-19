@@ -781,7 +781,7 @@ export async function processPlantRequest(
       ecological_impact: ecologicalImpactEnum.toDbArray(plant.ecologicalImpact),
       // Section 7: Consumption
       infusion_parts: plant.infusionParts || [],
-      edible_oil: plant.edibleOil || null,
+      edible_oil: plant.edibleOil?.toLowerCase() || null,
       // Section 8: Misc
       companion_plants: plant.companionPlants || [],
       biotope_plants: plant.biotopePlants || [],
