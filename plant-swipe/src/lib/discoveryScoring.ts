@@ -25,7 +25,8 @@ import { supabase } from '@/lib/supabaseClient'
 export interface DiscoveryConfig {
   profile: ProfileRow | null
   likedIds: Set<string>
-  seenIds: Set<string>
+  /** Map of plant ID → seen count (how many times the user has swiped past it) */
+  seenIds: Map<string, number>
   sessionSeed: number
 }
 
@@ -173,7 +174,8 @@ export function scoreDiscoveryPlants(
     }
 
     // --- Exploration factors (logged-in users) ---
-    if (config.seenIds.has(plant.id)) score += W_ALREADY_SEEN
+    const seenCount = config.seenIds.get(plant.id) ?? 0
+    if (seenCount > 0) score += W_ALREADY_SEEN * seenCount
     if (config.likedIds.has(plant.id)) score += W_ALREADY_LIKED
 
     // --- Session randomness ---
@@ -190,18 +192,22 @@ export function scoreDiscoveryPlants(
 // DB helpers for seen-plants history
 // ---------------------------------------------------------------------------
 
-/** Load all plant IDs the user has previously seen (from discovery_seen_plants table) */
-export async function loadSeenPlantIds(userId: string): Promise<Set<string>> {
+/** Load all plant IDs the user has previously seen, with their seen counts */
+export async function loadSeenPlantIds(userId: string): Promise<Map<string, number>> {
   try {
     const { data } = await supabase
       .from('discovery_seen_plants')
-      .select('plant_id')
+      .select('plant_id, seen_count')
       .eq('user_id', userId)
 
-    return new Set((data || []).map(r => r.plant_id as string))
+    const map = new Map<string, number>()
+    for (const r of data || []) {
+      map.set(r.plant_id as string, (r.seen_count as number) || 1)
+    }
+    return map
   } catch {
     // Non-critical — if the table doesn't exist yet or query fails, return empty
-    return new Set()
+    return new Map()
   }
 }
 
@@ -209,26 +215,26 @@ export async function loadSeenPlantIds(userId: string): Promise<Set<string>> {
  * Record that a user has seen a plant in discovery (fire-and-forget).
  * Uses upsert: on first sight inserts; on repeat updates seen_at and increments seen_count.
  */
-export async function markPlantSeen(userId: string, plantId: string): Promise<void> {
+export async function markPlantSeen(userId: string, plantId: string, currentCount: number): Promise<void> {
   try {
-    // Try insert first; if conflict, update seen_at and bump seen_count
-    const { error } = await supabase
-      .from('discovery_seen_plants')
-      .upsert(
-        {
+    if (currentCount === 0) {
+      // First time seeing this plant — insert
+      await supabase
+        .from('discovery_seen_plants')
+        .insert({
           user_id: userId,
           plant_id: plantId,
           seen_at: new Date().toISOString(),
           seen_count: 1,
-        },
-        { onConflict: 'user_id,plant_id' },
-      )
-
-    if (error) {
-      // Fallback: if upsert doesn't increment, just update
+        })
+    } else {
+      // Already seen — increment seen_count
       await supabase
         .from('discovery_seen_plants')
-        .update({ seen_at: new Date().toISOString() })
+        .update({
+          seen_at: new Date().toISOString(),
+          seen_count: currentCount + 1,
+        })
         .eq('user_id', userId)
         .eq('plant_id', plantId)
     }

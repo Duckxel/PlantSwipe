@@ -256,7 +256,7 @@ export default function PlantSwipe() {
 
   // Discovery scoring state
   const sessionSeedRef = React.useRef(Math.random())
-  const [seenPlantIds, setSeenPlantIds] = useState<Set<string>>(new Set())
+  const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
 
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -477,7 +477,7 @@ export default function PlantSwipe() {
   // Load seen-plant history from DB for discovery scoring
   React.useEffect(() => {
     if (!user?.id) {
-      setSeenPlantIds(new Set())
+      setSeenPlantIds(new Map())
       return
     }
     loadSeenPlantIds(user.id).then(ids => setSeenPlantIds(ids)).catch(() => {})
@@ -1593,13 +1593,14 @@ export default function PlantSwipe() {
     // Track current plant as seen (local state + DB persistence)
     const currentPlant = swipeList[index % swipeList.length]
     if (currentPlant) {
+      const currentCount = seenPlantIds.get(currentPlant.id) ?? 0
       setSeenPlantIds(prev => {
-        const next = new Set(prev)
-        next.add(currentPlant.id)
+        const next = new Map(prev)
+        next.set(currentPlant.id, currentCount + 1)
         return next
       })
       if (user?.id) {
-        markPlantSeen(user.id, currentPlant.id) // fire-and-forget
+        markPlantSeen(user.id, currentPlant.id, currentCount) // fire-and-forget
       }
     }
     setIndex((i) => {
@@ -1611,7 +1612,7 @@ export default function PlantSwipe() {
       }
       return next
     })
-  }, [swipeList, index, user?.id])
+  }, [swipeList, index, user?.id, seenPlantIds])
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
