@@ -1434,24 +1434,15 @@ export default function PlantSwipe() {
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
     if (shuffledPlantIds.length === 0) return []
-
+    
     // Create a map for O(1) lookups
     const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
-
-    // Return plants in shuffled order, filtering out already-seen plants
-    const unseen = shuffledPlantIds
+    
+    // Return plants in shuffled order, filtering out any that no longer exist
+    return shuffledPlantIds
       .map(id => plantMap.get(id))
-      .filter((p): p is PreparedPlant => p !== undefined && !seenPlantIds.has(p.id))
-
-    // If all plants have been seen, fall back to showing all plants
-    if (unseen.length === 0) {
-      return shuffledPlantIds
-        .map(id => plantMap.get(id))
-        .filter((p): p is PreparedPlant => p !== undefined)
-    }
-
-    return unseen
-  }, [shuffledPlantIds, swipeablePlants, seenPlantIds])
+      .filter((p): p is PreparedPlant => p !== undefined)
+  }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
     // Compare by name, then by variety (no variety first, then alphabetical)
