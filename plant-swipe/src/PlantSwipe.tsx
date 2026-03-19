@@ -1530,6 +1530,8 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet, plantImpressions])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+  // Scoring is still in progress when we have swipeable plants but haven't produced a scored order yet
+  const scoringInProgress = swipeablePlants.length > 0 && shuffledPlantIds.length === 0
   const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
   const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
 
@@ -2816,6 +2818,7 @@ export default function PlantSwipe() {
                     boostImagePriority={boostImagePriority}
                     scoreBreakdown={current ? scoreBreakdowns.get(current.id) : undefined}
                     isAdmin={profile?.is_admin === true}
+                    scoringInProgress={scoringInProgress}
                   />
                 </Suspense>
               ) : (

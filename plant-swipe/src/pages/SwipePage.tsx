@@ -74,6 +74,7 @@ import { useAuth } from "@/context/AuthContext"
 import { resolveColorValue } from "@/lib/colors"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import type { ScoreBreakdown } from "@/lib/discoveryScoring"
+import { SwipeCardSkeleton } from "@/components/plant/SwipeCardSkeleton"
 
 interface SwipePageProps {
   current: Plant | undefined
@@ -90,6 +91,7 @@ interface SwipePageProps {
   boostImagePriority?: boolean
   scoreBreakdown?: ScoreBreakdown
   isAdmin?: boolean
+  scoringInProgress?: boolean
 }
 
 export const SwipePage = React.memo<SwipePageProps>(({
@@ -107,6 +109,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
   boostImagePriority = false,
   scoreBreakdown,
   isAdmin = false,
+  scoringInProgress = false,
 }) => {
   void _index // Prop kept for interface compatibility
       const { t } = useTranslation("common")
@@ -630,6 +633,8 @@ export const SwipePage = React.memo<SwipePageProps>(({
                   </div>
                 </Card>
               </motion.div>
+            ) : scoringInProgress ? (
+              <SwipeCardSkeleton />
             ) : (
               <div className="absolute inset-0 flex items-center justify-center bg-stone-100 dark:bg-[#1e1e1e] rounded-[24px]">
                 <EmptyState onReset={() => setIndex(0)} />
@@ -719,6 +724,8 @@ export const SwipePage = React.memo<SwipePageProps>(({
                   >
                     {cardContent}
                   </motion.div>
+                ) : scoringInProgress ? (
+                  <SwipeCardSkeleton />
                 ) : (
                   <div className="absolute inset-0 flex items-center justify-center">
                     <EmptyState onReset={() => setIndex(0)} />
