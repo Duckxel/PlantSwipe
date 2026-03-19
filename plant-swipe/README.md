@@ -28,7 +28,6 @@
 - [Internationalization](#-internationalization)
 - [Translation System](#-translation-system)
 - [Authentication](#-authentication)
-- [State Management](#-state-management)
 - [Progressive Web App](#-progressive-web-app)
 - [Performance](#-performance)
 - [Testing](#-testing)
@@ -307,7 +306,7 @@ SITEMAP_MAX_PLANT_URLS=1000
 |--------|---------|---------|
 | `dev` | `bun run dev` | Start Vite dev server (port 5173) |
 | `serve` | `bun run serve` | Start Express API server (port 3000) |
-| `build` | `bun run build` | Build production bundle (includes sitemap) |
+| `build` | `bun run build` | Build production bundle |
 | `build:low-mem` | `bun run build:low-mem` | Build with reduced memory usage |
 | `preview` | `bun run preview` | Preview production build |
 | `lint` | `bun run lint` | Run ESLint |
@@ -354,7 +353,7 @@ bun run dev
 
 ```bash
 bun install              # Install dependencies
-bun run build            # TypeScript compilation + sitemap + Vite build
+bun run build            # TypeScript compilation + Vite build
 # Output: dist/
 ```
 
@@ -715,15 +714,19 @@ Located in `public/locales/{lang}/`:
 ```
 public/locales/
 ├── en/
-│   ├── common.json     # Common UI strings
-│   ├── About.json      # About page strings
-│   ├── Landing.json    # Landing page strings
-│   └── email.json      # Email templates
+│   ├── common.json       # Common UI strings
+│   ├── About.json        # About page strings
+│   ├── Landing.json      # Landing page strings
+│   ├── email.json        # Email templates
+│   ├── plantAdmin.json   # Plant admin strings
+│   └── plantInfo.json    # Plant info strings
 └── fr/
     ├── common.json
     ├── About.json
     ├── Landing.json
-    └── email.json
+    ├── email.json
+    ├── plantAdmin.json
+    └── plantInfo.json
 ```
 
 ### Usage in Components
@@ -983,16 +986,17 @@ bun run check-translations
 bun install
 bun run build
 # Output: dist/
-# Includes: optimized assets, sitemap.xml, service worker
+# Includes: optimized assets, service worker
 ```
 
 ### Deployment Steps
 
 1. **Build**: `bun run build`
-2. **Copy**: Deploy `dist/` to server
-3. **Configure**: Set up nginx/server config
-4. **Start**: Run Express server for API
-5. **Environment**: Set production environment variables
+2. **Sitemap** (optional): `bun run generate:sitemap` (requires database connection)
+3. **Copy**: Deploy `dist/` to server
+4. **Configure**: Set up nginx/server config
+5. **Start**: Run Express server for API
+6. **Environment**: Set production environment variables
 
 ### Server Configuration (nginx)
 
