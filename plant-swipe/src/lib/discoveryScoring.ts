@@ -45,6 +45,7 @@ export interface ScoreBreakdown {
   parentSafety: number
   alreadySeen: number
   alreadyLiked: number
+  noImage: number
   random: number
 }
 
@@ -64,6 +65,7 @@ const W_STATUS_REWORK = -5
 const W_PARENT_TOXIC = -30
 const W_ALREADY_LIKED = -25
 const W_ALREADY_SEEN = -15
+const W_NO_IMAGE = -500
 const W_RANDOM_MAX = 12
 
 // ---------------------------------------------------------------------------
@@ -189,18 +191,22 @@ export function scoreDiscoveryPlants(
     const seenCount = config.seenIds.get(plant.id) ?? 0
     const alreadySeen = seenCount > 0 ? W_ALREADY_SEEN * seenCount : 0
     const alreadyLiked = config.likedIds.has(plant.id) ? W_ALREADY_LIKED : 0
+    const hasImages = (plant.images && plant.images.length > 0)
+      || (plant.photos && plant.photos.length > 0)
+      || !!plant.image
+    const noImage = hasImages ? 0 : W_NO_IMAGE
     const random = seededRandom(config.sessionSeed, plant.id) * W_RANDOM_MAX
 
     score = featuredMonth + seasonal + newPlant + status
       + interestMatch + gardenType + experience + parentSafety
-      + alreadySeen + alreadyLiked + random
+      + alreadySeen + alreadyLiked + noImage + random
 
     if (wantBreakdowns) {
       breakdowns.set(plant.id, {
         total: score,
         featuredMonth, seasonal, newPlant, status,
         interestMatch, gardenType, experience, parentSafety,
-        alreadySeen, alreadyLiked,
+        alreadySeen, alreadyLiked, noImage,
         random: Math.round(random * 10) / 10,
       })
     }

@@ -780,6 +780,7 @@ const SCORE_LABELS: Array<{ key: keyof ScoreBreakdown; label: string }> = [
   { key: 'parentSafety', label: 'Parent Safety' },
   { key: 'alreadySeen', label: 'Already Seen' },
   { key: 'alreadyLiked', label: 'Already Liked' },
+  { key: 'noImage', label: 'No Image' },
   { key: 'random', label: 'Random' },
 ]
 
