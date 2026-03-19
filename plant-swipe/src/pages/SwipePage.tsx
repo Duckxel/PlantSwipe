@@ -340,7 +340,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
         <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
         <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
         {(highlightBadges.length > 0 || (isAdmin && scoreBreakdown)) && (
-          <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+          <div className="absolute top-4 left-4 z-[60] flex flex-col gap-2">
             {highlightBadges.map((badge) => (
               <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
                 {badge.icon}
@@ -501,7 +501,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                   <div className="absolute inset-0 z-10 bg-gradient-to-t from-black/80 via-black/30 to-transparent" aria-hidden="true" />
                   <div className="absolute inset-0 z-10 bg-gradient-to-b from-black/10 via-transparent to-black/80" aria-hidden="true" />
                   {(highlightBadges.length > 0 || (isAdmin && scoreBreakdown)) && (
-                    <div className="absolute top-4 left-4 z-20 flex flex-col gap-2">
+                    <div className="absolute top-4 left-4 z-[110] flex flex-col gap-2">
                       {highlightBadges.map((badge) => (
                         <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center backdrop-blur ${badge.className}`}>
                           {badge.icon}
@@ -789,7 +789,7 @@ const AdminScoreBadge = ({ breakdown }: { breakdown: ScoreBreakdown }) => {
 
   return (
     <div
-      className="relative z-50 pb-2"
+      className="relative"
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onClick={() => setOpen(o => !o)}
@@ -798,7 +798,7 @@ const AdminScoreBadge = ({ breakdown }: { breakdown: ScoreBreakdown }) => {
         Score: {Math.round(breakdown.total)} pts
       </span>
       {open && (
-        <div className="absolute top-full left-0 w-56 rounded-xl bg-stone-900/95 backdrop-blur-sm border border-stone-700/50 shadow-2xl p-3 text-xs text-stone-200 space-y-1">
+        <div className="absolute top-full left-0 mt-1 w-56 rounded-xl bg-stone-900/95 backdrop-blur-sm border border-stone-700/50 shadow-2xl p-3 text-xs text-stone-200 space-y-1">
           {activeFactors.map(f => (
             <div key={f.key} className="flex justify-between">
               <span className="text-stone-400">{f.label}</span>
