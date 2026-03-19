@@ -24,7 +24,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption, type AccentKey } from "@/lib/accent";
 import { Link } from "@/components/i18n/Link";
-import { useLanguageNavigate } from "@/lib/i18nRouting";
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -514,6 +514,11 @@ type PlantDashboardRow = {
   variety: string | null;
   givenNames: string[];
   tags: string[];
+  // Localized fields for the user's current language (used for search)
+  localizedName: string | null;
+  localizedVariety: string | null;
+  localizedGivenNames: string[];
+  localizedTags: string[];
   status: NormalizedPlantStatus;
   featuredMonths: FeaturedMonthSlug[];
   primaryImage: string | null;
@@ -646,6 +651,7 @@ const saveAdminPlantsState = (state: AdminPlantsListState): void => {
 
 export const AdminPage: React.FC = () => {
   const navigate = useLanguageNavigate();
+  const currentLang = useLanguage();
   const location = useLocation();
   const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
@@ -3410,6 +3416,53 @@ export const AdminPage: React.FC = () => {
         }
       });
 
+      // Fetch translations for the user's current language (if not English)
+      // so admins can search plants in their own language
+      const localizedNameMap = new Map<string, string>();
+      const localizedGivenNamesMap = new Map<string, string[]>();
+      const localizedVarietyMap = new Map<string, string>();
+      const localizedTagsMap = new Map<string, string[]>();
+      if (currentLang !== "en") {
+        const allLocalizedTranslations: unknown[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error: trError } = await supabase
+            .from("plant_translations")
+            .select("plant_id, name, common_names, variety, plant_tags")
+            .eq("language", currentLang)
+            .range(offset, offset + pageSize - 1);
+          if (trError) break;
+          if (!data || data.length === 0) { hasMore = false; break; }
+          allLocalizedTranslations.push(...data);
+          offset += data.length;
+          if (data.length < pageSize) hasMore = false;
+        }
+        const localizedTranslationsData = allLocalizedTranslations.filter((t: unknown) => {
+          const tr = t as Record<string, unknown>;
+          return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
+        });
+        (localizedTranslationsData || []).forEach((t: unknown) => {
+          const tr = t as Record<string, unknown>;
+          if (tr?.plant_id) {
+            const pid = String(tr.plant_id);
+            if (tr.name && typeof tr.name === "string") {
+              localizedNameMap.set(pid, tr.name);
+            }
+            if (Array.isArray(tr.common_names)) {
+              localizedGivenNamesMap.set(pid, (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+            }
+            if (tr.variety && typeof tr.variety === "string") {
+              localizedVarietyMap.set(pid, tr.variety);
+            }
+            if (Array.isArray(tr.plant_tags)) {
+              localizedTagsMap.set(pid, (tr.plant_tags as unknown[]).map((tag: unknown) => String(tag || "")));
+            }
+          }
+        });
+      }
+
       // Fetch garden counts per plant (how many gardens each plant appears in)
       const gardensCountMap = new Map<string, number>();
       {
@@ -3487,6 +3540,10 @@ export const AdminPage: React.FC = () => {
               variety: varietyMap.get(plantId) || null,
               givenNames,
               tags,
+              localizedName: localizedNameMap.get(plantId) || null,
+              localizedVariety: localizedVarietyMap.get(plantId) || null,
+              localizedGivenNames: localizedGivenNamesMap.get(plantId) || [],
+              localizedTags: localizedTagsMap.get(plantId) || [],
               status: normalizePlantStatus(r?.status),
               featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
@@ -3535,7 +3592,7 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardInitialized(true);
       setPlantDashboardLoading(false);
     }
-  }, []);
+  }, [currentLang]);
 
   const handleDeletePlant = React.useCallback(async () => {
     if (!plantToDelete) return;
@@ -3912,12 +3969,16 @@ export const AdminPage: React.FC = () => {
               ? plant.featuredMonths.length === 0
               : plant.featuredMonths.includes(selectedFeaturedMonth);
         if (!matchesFeaturedMonth) return false;
-        // Search by name, variety, common names, or tags
+        // Search by name, variety, common names, or tags (in both English and user's language)
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
             (plant.variety && plant.variety.toLowerCase().includes(term)) ||
             plant.givenNames.some((gn) => gn.toLowerCase().includes(term)) ||
-            plant.tags.some((tag) => tag.toLowerCase().includes(term))
+            plant.tags.some((tag) => tag.toLowerCase().includes(term)) ||
+            (plant.localizedName && plant.localizedName.toLowerCase().includes(term)) ||
+            (plant.localizedVariety && plant.localizedVariety.toLowerCase().includes(term)) ||
+            plant.localizedGivenNames.some((gn) => gn.toLowerCase().includes(term)) ||
+            plant.localizedTags.some((tag) => tag.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })
