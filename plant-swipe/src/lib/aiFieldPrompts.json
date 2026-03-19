@@ -120,7 +120,7 @@
     "- `medicinalHistory`: text (max 50 chars, historical use, e.g. \"Used in China since X century\")",
     "- `aromatherapyBenefits`: text (max 50 chars, if utility includes \"aromatic\")",
     "- `essentialOilBlends`: text with blend ideas (max 50 chars)",
-    "- `edibleOil`: \"yes\", \"no\", or \"unknown\"",
+    "- `edibleOil`: boolean (true if the plant produces an edible oil, false otherwise)",
     "- `spiceMixes`: array of spice blend uses",
     "Note: infusion/medicinal/aromatic/fragrant are set in the utility field (identity section), not here.",
     "IMPORTANT: All text/string fields must be max 50 characters. Be concise."

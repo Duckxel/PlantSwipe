@@ -305,11 +305,13 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     return next
   }
 
-  // edibleOil special case
+  // edibleOil special case (boolean)
   if (fieldKey === 'edibleOil') {
-    if (typeof data === 'string') {
+    if (typeof data === 'boolean') {
+      next.edibleOil = data
+    } else if (typeof data === 'string') {
       const lower = data.toLowerCase().trim()
-      if (['yes', 'no', 'unknown'].includes(lower)) next.edibleOil = lower as 'yes' | 'no' | 'unknown'
+      next.edibleOil = lower === 'yes' || lower === 'true'
     }
     return next
   }

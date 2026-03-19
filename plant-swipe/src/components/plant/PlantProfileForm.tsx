@@ -1134,7 +1134,7 @@ const consumptionFields: FieldConfig[] = [
   { key: "medicinalHistory", label: "Medicinal History", description: "Historical use (e.g. used in China since X century)", type: "textarea", gatedBy: "utility:medicinal" },
   { key: "aromatherapyBenefits", label: "Aromatherapy Benefits", description: "Benefits for aromatherapy", type: "textarea", gatedBy: "utility:aromatic" },
   { key: "essentialOilBlends", label: "Essential Oil Blends", description: "Essential oil blend ideas", type: "textarea", gatedBy: "utility:aromatic" },
-  { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "select", options: ["Yes","No","Unknown"] },
+  { key: "edibleOil", label: "Edible Oil?", description: "Does the plant produce an edible oil?", type: "boolean" },
   { key: "spiceMixes", label: "Spice Mixes", description: "Spice blend uses", type: "tags" },
   { key: "infusionMixes", label: "Infusion Mixes", description: "Infusion mix name → benefit", type: "dict", gatedBy: "utility:infusion" },
 ]

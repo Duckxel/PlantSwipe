@@ -313,8 +313,7 @@ export const plantSchema = {
   aromatherapyBenefits: { type: 'text', description: 'Aromatherapy benefits' },
   essentialOilBlends: { type: 'text', description: 'Essential oil blend ideas' },
   edibleOil: {
-    type: 'enum',
-    options: ['yes', 'no', 'unknown'],
+    type: 'boolean',
     description: 'Whether the plant produces an edible oil',
   },
   spiceMixes: { type: 'tag[]', description: 'Spice blend uses' },

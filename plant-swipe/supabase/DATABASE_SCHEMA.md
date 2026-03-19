@@ -721,7 +721,7 @@ ecological_impact         TEXT[]                 -- CHECK: neutral, favorable, p
 
 -- Section 7: Consumption
 infusion_parts            TEXT[]                 -- Which plant parts can be used for infusion
-edible_oil                TEXT                   -- CHECK: yes, no, unknown
+edible_oil                BOOLEAN                -- Whether the plant produces an edible oil
 
 -- Section 8: Misc
 companion_plants          TEXT[]                 -- Plant IDs for garden pairing

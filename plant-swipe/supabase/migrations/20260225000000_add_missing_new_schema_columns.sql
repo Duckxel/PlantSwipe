@@ -84,7 +84,7 @@ declare
     array['medicinal', 'boolean default false'],
     array['aromatherapy', 'boolean default false'],
     array['fragrance', 'boolean default false'],
-    array['edible_oil', 'text'],
+    array['edible_oil', 'boolean default false'],
     -- Section 8: Misc
     array['companion_plants', 'text[] not null default ''{}''::text[]'],
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],
