@@ -256,6 +256,7 @@ export default function PlantSwipe() {
 
   // Discovery scoring state
   const sessionSeedRef = React.useRef(Math.random())
+  const hasInitialShuffleRef = React.useRef(false)
   const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
   const [seenLoaded, setSeenLoaded] = useState(false)
 
@@ -483,6 +484,8 @@ export default function PlantSwipe() {
       return
     }
     setSeenLoaded(false)
+    // Reset so scoring re-runs once seen data arrives
+    hasInitialShuffleRef.current = false
     loadSeenPlantIds(user.id)
       .then(ids => setSeenPlantIds(ids))
       .catch(() => {})
@@ -1412,9 +1415,6 @@ export default function PlantSwipe() {
     return preparedPlants.filter((p) => p._hasImage)
   }, [preparedPlants])
   
-  // Track if we've done initial shuffle
-  const hasInitialShuffleRef = React.useRef(false)
-  
   // Create/update scored order only when plants change or explicit reshuffle.
   // Waits for seen-plant history to load from DB before initial scoring so
   // the seen penalty is applied on page load (not just mid-session).
@@ -1425,8 +1425,9 @@ export default function PlantSwipe() {
       return
     }
 
-    // Wait for seen data from DB before scoring for the first time
-    if (!seenLoaded) return
+    // Wait for seen data from DB before scoring for the first time.
+    // Skip the gate for anonymous users (nothing to load).
+    if (user?.id && !seenLoaded) return
 
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
       const sorted = scoreDiscoveryPlants(swipeablePlants, {
@@ -1438,7 +1439,7 @@ export default function PlantSwipe() {
       setShuffledPlantIds(sorted.map(p => p.id))
       hasInitialShuffleRef.current = true
     }
-  }, [swipeablePlants, shuffleEpoch, seenPlantIds, seenLoaded, profile, likedSet])
+  }, [swipeablePlants, shuffleEpoch, seenPlantIds, seenLoaded, user?.id, profile, likedSet])
   
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
@@ -1533,17 +1534,16 @@ export default function PlantSwipe() {
     if (!current || currentView !== 'discovery') return
     const plantId = current.id
     const currentCount = seenPlantIds.get(plantId) ?? 0
+    // Persist to DB (fire-and-forget)
+    if (user?.id) {
+      markPlantSeen(user.id, plantId, currentCount)
+    }
     // Update local state so in-session scoring also benefits
     setSeenPlantIds(prev => {
-      if (prev.get(plantId) === currentCount + 1) return prev // already tracked
       const next = new Map(prev)
       next.set(plantId, currentCount + 1)
       return next
     })
-    // Persist to DB
-    if (user?.id) {
-      markPlantSeen(user.id, plantId, currentCount)
-    }
   }, [current?.id, currentView]) // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
