@@ -3185,7 +3185,7 @@ export const AdminPage: React.FC = () => {
           name: newName,
           // Keep scientific_name - no unique constraint exists on this field
           // Update meta fields
-          status: 'in progres',
+          status: 'in_progress',
           created_by: profile?.display_name || sourcePlant.created_by,
           created_time: timestamp,
           updated_by: profile?.display_name || null,
