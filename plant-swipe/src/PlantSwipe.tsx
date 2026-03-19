@@ -1537,12 +1537,12 @@ export default function PlantSwipe() {
 
   // Mark every displayed plant as seen (persists to DB for scoring on next reload)
   React.useEffect(() => {
-    if (!current || currentView !== 'discovery') return
+    if (!current || currentView !== 'discovery' || !seenLoaded) return
     const plantId = current.id
     const currentCount = seenPlantIds.get(plantId) ?? 0
-    // Persist to DB (fire-and-forget)
+    // Persist to DB (fire-and-forget, atomic upsert handles count)
     if (user?.id) {
-      markPlantSeen(user.id, plantId, currentCount)
+      markPlantSeen(user.id, plantId)
     }
     // Update local state so in-session scoring also benefits
     setSeenPlantIds(prev => {
@@ -1550,7 +1550,7 @@ export default function PlantSwipe() {
       next.set(plantId, currentCount + 1)
       return next
     })
-  }, [current?.id, currentView]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [current?.id, currentView, seenLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!initialCardBoostRef.current) return

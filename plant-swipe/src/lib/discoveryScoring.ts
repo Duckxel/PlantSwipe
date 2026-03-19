@@ -250,30 +250,31 @@ export async function loadSeenPlantIds(userId: string): Promise<Map<string, numb
 
 /**
  * Record that a user has seen a plant in discovery (fire-and-forget).
- * Uses upsert: on first sight inserts; on repeat updates seen_at and increments seen_count.
+ * Uses a true upsert so it works correctly even if local state is stale
+ * (e.g. effect fires before loadSeenPlantIds completes after a reload).
  */
-export async function markPlantSeen(userId: string, plantId: string, currentCount: number): Promise<void> {
+export async function markPlantSeen(userId: string, plantId: string): Promise<void> {
   try {
-    if (currentCount === 0) {
-      // First time seeing this plant — insert
+    // Use raw rpc to do an atomic upsert with seen_count increment.
+    // ON CONFLICT increments seen_count by 1 instead of relying on a
+    // client-side currentCount that may be stale.
+    const { error } = await supabase.rpc('upsert_discovery_seen_plant', {
+      p_user_id: userId,
+      p_plant_id: plantId,
+    })
+    if (error) {
+      // Fallback: try simple upsert if the rpc doesn't exist yet
       await supabase
         .from('discovery_seen_plants')
-        .insert({
-          user_id: userId,
-          plant_id: plantId,
-          seen_at: new Date().toISOString(),
-          seen_count: 1,
-        })
-    } else {
-      // Already seen — increment seen_count
-      await supabase
-        .from('discovery_seen_plants')
-        .update({
-          seen_at: new Date().toISOString(),
-          seen_count: currentCount + 1,
-        })
-        .eq('user_id', userId)
-        .eq('plant_id', plantId)
+        .upsert(
+          {
+            user_id: userId,
+            plant_id: plantId,
+            seen_at: new Date().toISOString(),
+            seen_count: 1,
+          },
+          { onConflict: 'user_id,plant_id' }
+        )
     }
   } catch {
     // Fire-and-forget — don't let tracking failures affect the UI

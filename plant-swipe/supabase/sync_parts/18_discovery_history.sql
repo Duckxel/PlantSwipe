@@ -38,6 +38,25 @@ BEGIN
   END IF;
 END $$;
 
+-- ========== Atomic upsert function for seen-plant tracking ==========
+-- Inserts a new row or increments seen_count atomically in the DB,
+-- so the client doesn't need to know the current count.
+create or replace function public.upsert_discovery_seen_plant(
+  p_user_id uuid,
+  p_plant_id text
+) returns void
+language sql
+security invoker
+as $$
+  insert into public.discovery_seen_plants (user_id, plant_id, seen_at, seen_count)
+  values (p_user_id, p_plant_id, now(), 1)
+  on conflict (user_id, plant_id)
+  do update set
+    seen_at = now(),
+    seen_count = discovery_seen_plants.seen_count + 1;
+$$;
+grant execute on function public.upsert_discovery_seen_plant(uuid, text) to authenticated;
+
 -- ========== Purge expired discovery seen-plants (30-day retention) ==========
 -- Rows older than 30 days are no longer used by the scoring algorithm.
 -- Runs daily at 3:30 AM UTC.
