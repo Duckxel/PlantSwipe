@@ -166,6 +166,9 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
     // Multi-select: working set of selected IDs (initialized from `values` on open)
     const [workingIds, setWorkingIds] = React.useState<Set<string>>(new Set())
+    // Multi-select: accumulated option data for all items ever toggled on during this session.
+    // This prevents losing option data when async search results change after selection.
+    const workingOptionsRef = React.useRef<Map<string, SearchItemOption>>(new Map())
 
     // In static mode keep a reference to all options for lookup
     const allOptions = staticOptions ?? asyncResults
@@ -189,12 +192,23 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       else if (!search.trim()) result = staticOptions
       else result = staticOptions.filter((o) => filterFn(o, search))
 
-      // In multi-select mode, merge selectedOptions and sort selected to top
-      if (multiSelect && selectedOptions.length > 0) {
-        // Merge: add selectedOptions that aren't already in the result
+      // In multi-select mode, merge selected items and sort them to top
+      if (multiSelect) {
         const resultIds = new Set(result.map((o) => o.id))
-        const missing = selectedOptions.filter((o) => !resultIds.has(o.id))
-        if (missing.length > 0) result = [...result, ...missing]
+
+        // Merge: add selectedOptions that aren't already in the result
+        const missingSelected = selectedOptions.filter((o) => !resultIds.has(o.id))
+        for (const o of missingSelected) { resultIds.add(o.id) }
+
+        // Also merge any newly-selected items from workingOptionsRef that are
+        // no longer in the current search results (e.g. user searched, selected,
+        // then changed the search query).
+        const missingWorking = Array.from(workingOptionsRef.current.values())
+          .filter((o) => workingIds.has(o.id) && !resultIds.has(o.id))
+
+        if (missingSelected.length > 0 || missingWorking.length > 0) {
+          result = [...result, ...missingSelected, ...missingWorking]
+        }
 
         // Sort: selected items first
         const selected = result.filter((o) => workingIds.has(o.id))
@@ -241,35 +255,43 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     React.useEffect(() => {
       if (open) {
         setWorkingIds(new Set(values))
+        // Seed the working options ref with already-selected options so they can
+        // always be resolved on confirm, even if async results change.
+        const map = new Map<string, SearchItemOption>()
+        for (const o of selectedOptions) map.set(o.id, o)
+        workingOptionsRef.current = map
       } else {
         setSearch("")
         setWorkingIds(new Set())
+        workingOptionsRef.current = new Map()
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open])
 
     // ------ Multi-select helpers ------
-    const toggleWorking = (id: string) => {
+    const toggleWorking = (id: string, option?: SearchItemOption) => {
       setWorkingIds(prev => {
         const next = new Set(prev)
-        if (next.has(id)) next.delete(id)
-        else next.add(id)
+        if (next.has(id)) {
+          next.delete(id)
+        } else {
+          next.add(id)
+          // Store the full option data so it survives async result changes
+          if (option) workingOptionsRef.current.set(id, option)
+        }
         return next
       })
     }
 
-    // Build a map of all known options for lookup during confirm
-    const optionMap = React.useMemo(() => {
-      const map = new Map<string, SearchItemOption>()
-      for (const o of selectedOptions) map.set(o.id, o)
-      for (const o of allOptions) map.set(o.id, o)
-      return map
-    }, [selectedOptions, allOptions])
-
     const confirmMultiSelect = () => {
       if (!onMultiSelect) return
+      // Build a complete lookup from all sources: the accumulated working options
+      // (which persist across search changes), plus selectedOptions and current results.
+      const lookup = new Map<string, SearchItemOption>(workingOptionsRef.current)
+      for (const o of selectedOptions) { if (!lookup.has(o.id)) lookup.set(o.id, o) }
+      for (const o of allOptions) { if (!lookup.has(o.id)) lookup.set(o.id, o) }
       const finalOptions = Array.from(workingIds)
-        .map(id => optionMap.get(id))
+        .map(id => lookup.get(id))
         .filter((o): o is SearchItemOption => !!o)
       onMultiSelect(finalOptions)
       setOpen(false)
@@ -466,7 +488,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                           disabled={isItemDisabled}
                           onClick={() => {
                             if (multiSelect) {
-                              toggleWorking(option.id)
+                              toggleWorking(option.id, option)
                             } else {
                               onSelect(option)
                               setOpen(false)
