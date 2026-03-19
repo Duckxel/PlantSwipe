@@ -171,7 +171,7 @@ const MONTH_FIELDS = new Set([
 // Boolean fields
 const BOOLEAN_FIELDS = new Set([
   'thorny', 'multicolor', 'bicolor', 'mulchingNeeded', 'staking',
-  'transplanting', 'pruning',
+  'transplanting', 'pruning', 'edibleOil',
 ])
 
 // Integer fields
@@ -302,17 +302,6 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
     const valid = new Set(['aquatic', 'terrestrial', 'epiphytic', 'lithophytic', 'parasitic'])
     const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
     next.habitat = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['habitat']
-    return next
-  }
-
-  // edibleOil special case (boolean)
-  if (fieldKey === 'edibleOil') {
-    if (typeof data === 'boolean') {
-      next.edibleOil = data
-    } else if (typeof data === 'string') {
-      const lower = data.toLowerCase().trim()
-      next.edibleOil = lower === 'yes' || lower === 'true'
-    }
     return next
   }
 
