@@ -176,6 +176,8 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
           <Button
             variant="ghost"
             size="icon"
+            aria-label={t('common.close', { defaultValue: 'Close' })}
+            title={t('common.close', { defaultValue: 'Close' })}
             className="rounded-full h-11 w-11 min-w-11 flex-shrink-0"
             onClick={onClose}
           >
@@ -205,6 +207,8 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
               {query && (
                 <button
                   onClick={handleClear}
+                  aria-label={t('common.clear', { defaultValue: 'Clear' })}
+                  title={t('common.clear', { defaultValue: 'Clear' })}
                   className="p-1.5 -mr-1.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-600 active:bg-stone-300 dark:active:bg-stone-500 transition-colors"
                 >
                   <X className="h-5 w-5 text-stone-500 dark:text-stone-400" />

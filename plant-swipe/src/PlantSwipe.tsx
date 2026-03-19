@@ -24,7 +24,7 @@ import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
 // GardenListPage and GardenDashboardPage are lazy loaded below
-import type { Plant, PlantColor } from "@/types/plant";
+import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
@@ -891,20 +891,23 @@ export default function PlantSwipe() {
       }
 
       // Split compound colors and add individual tokens
-      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE).filter(Boolean)
-      splitTokens.forEach(token => {
-        tokens.add(token)
+      const splitTokens = color.replace(RE_SPLIT_COLOR, ' ').split(RE_WHITESPACE)
+      for (let i = 0; i < splitTokens.length; i++) {
+        const token = splitTokens[i]
+        if (token) {
+          tokens.add(token)
 
-        // O(1) expansion of tokens to all their aliases (canonical + translations)
-        // Uses the pre-calculated aliasMap to avoid object iteration
-        const aliases = aliasMap.get(token)
-        if (aliases) {
-          // Fast add of all aliases
-          for (const alias of aliases) {
-            tokens.add(alias)
+          // O(1) expansion of tokens to all their aliases (canonical + translations)
+          // Uses the pre-calculated aliasMap to avoid object iteration
+          const aliases = aliasMap.get(token)
+          if (aliases) {
+            // Fast add of all aliases
+            for (const alias of aliases) {
+              tokens.add(alias)
+            }
           }
         }
-      })
+      }
 
       colorTokenCache.set(color, tokens)
       return tokens
@@ -953,10 +956,16 @@ export default function PlantSwipe() {
 
       // Living space — new flat: livingSpace (array), legacy: identity nested
       const livingSpaceArr = Array.isArray(p.livingSpace) ? p.livingSpace : []
-      const livingSpaceLower = livingSpaceArr.length > 0
-        ? livingSpaceArr.map(s => String(s).toLowerCase())
-        : [(p.identity?.livingSpace as string || '').toLowerCase()].filter(Boolean)
-      const livingSpaceSet = new Set(livingSpaceLower.filter(Boolean))
+      const livingSpaceSet = new Set<string>()
+      if (livingSpaceArr.length > 0) {
+        for (let i = 0; i < livingSpaceArr.length; i++) {
+          const s = String(livingSpaceArr[i]).toLowerCase()
+          if (s) livingSpaceSet.add(s)
+        }
+      } else {
+        const s = (p.identity?.livingSpace as string || '').toLowerCase()
+        if (s) livingSpaceSet.add(s)
+      }
 
       // Pre-parse createdAt for faster sorting
       const createdAtValue = p.createdTime ?? (p.meta?.createdAt as string | undefined)
@@ -983,10 +992,21 @@ export default function PlantSwipe() {
       const getColors = () => {
         if (_cachedColors) return _cachedColors
         const colorNames = Array.isArray(p.colorNames) ? p.colorNames : []
-        const colorObjects = Array.isArray(p.colors)
-          ? p.colors.map((c: PlantColor | string) => typeof c === 'string' ? c : c.name)
-          : []
-        _cachedColors = (colorNames.length > 0 ? colorNames : colorObjects).filter((c): c is string => typeof c === 'string' && c.length > 0)
+        const result: string[] = []
+        if (colorNames.length > 0) {
+          for (let i = 0; i < colorNames.length; i++) {
+            const c = colorNames[i]
+            if (typeof c === 'string' && c.length > 0) result.push(c)
+          }
+        } else {
+          const colorsArr = Array.isArray(p.colors) ? p.colors : []
+          for (let i = 0; i < colorsArr.length; i++) {
+            const c = colorsArr[i]
+            const name = typeof c === 'string' ? c : c.name
+            if (typeof name === 'string' && name.length > 0) result.push(name)
+          }
+        }
+        _cachedColors = result
         return _cachedColors
       }
 
@@ -3034,15 +3054,13 @@ function getPlantUsageLabels(plant: Plant): string[] {
     })
   }
 
-  // Also check ediblePart (new schema) / comestiblePart (legacy) for edible-related labels
-  const edibleParts = (plant.ediblePart && Array.isArray(plant.ediblePart) && plant.ediblePart.length > 0)
-    ? plant.ediblePart
-    : (plant.comestiblePart && Array.isArray(plant.comestiblePart) && plant.comestiblePart.length > 0)
-      ? plant.comestiblePart
-      : null
-  if (edibleParts) {
-    const hasEdible = edibleParts.some(part => part && part.trim().length > 0)
-    if (hasEdible) {
+  // Only infer "Edible" from ediblePart/comestiblePart when the plant's utility
+  // already includes "edible". Some plants (e.g. Arum) have edible_part data but
+  // are actually toxic — relying on edible_part alone produces false positives.
+  const alreadyEdible = labels.some(l => l.toLowerCase() === 'edible')
+  if (!alreadyEdible) {
+    const hasEdibleUtility = (plant.utility || []).some(u => u?.toLowerCase() === 'edible')
+    if (hasEdibleUtility) {
       const edibleLabel = formatClassificationLabel('edible')
       if (edibleLabel && !labels.includes(edibleLabel)) {
         labels.push(edibleLabel)

@@ -4,6 +4,7 @@ import {
   MessageSquarePlus,
   Plus,
   Sprout,
+  ChevronDown,
 } from "lucide-react"
 import React, { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -23,12 +24,19 @@ interface Category {
   defaultDesc: string
 }
 
-const categories: Category[] = [
-  { key: "tree", params: "?type=Tree", defaultName: "Tree", defaultDesc: "Large woody plants with a single trunk" },
-  { key: "shrub", params: "?type=Shrub", defaultName: "Shrub", defaultDesc: "Multi-stemmed woody plants" },
-  { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Tree", defaultDesc: "Trees that bear edible fruits" },
-  { key: "bamboo", params: "?q=bamboo", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
-  { key: "cactusSucculent", params: "?type=Succulent", defaultName: "Cactus & Succulent", defaultDesc: "Drought-tolerant water-storing plants" },
+/** Main categories — always visible */
+const mainCategories: Category[] = [
+  { key: "cactusSucculent", params: "?type=Succulent", defaultName: "Cacti & Succulents", defaultDesc: "Drought-tolerant water-storing plants with unique shapes" },
+  { key: "treesAndShrubs", params: "?type=Tree,Shrub", defaultName: "Trees & Shrubs", defaultDesc: "Woody plants from towering trees to compact shrubs" },
+  { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
+  { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
+  { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
+  { key: "vegetableGarden", params: "?usage=Edible&type=Herb", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
+]
+
+/** Advanced categories — shown when expanded */
+const advancedCategories: Category[] = [
+  { key: "grasses", params: "?type=Grass", defaultName: "Grasses", defaultDesc: "Ornamental and lawn grasses for every landscape" },
   { key: "herbaceous", params: "?type=Herb,Grass", defaultName: "Herbaceous", defaultDesc: "Non-woody flowering plants" },
   { key: "fruitPlant", params: "?plantPart=fruits&usage=Edible", defaultName: "Fruit Plant", defaultDesc: "Plants grown for edible fruits" },
   { key: "aromatic", params: "?usage=Aromatic", defaultName: "Aromatic Plant", defaultDesc: "Fragrant herbs and spice plants" },
@@ -36,10 +44,22 @@ const categories: Category[] = [
   { key: "climbing", params: "?type=Climber", defaultName: "Climbing Plant", defaultDesc: "Vines and climbers for vertical spaces" },
   { key: "perennial", params: "?lifeCycle=perennial,succulent_perennial", defaultName: "Perennial Plant", defaultDesc: "Plants that return year after year" },
   { key: "bulb", params: "?plantPart=bulbs", defaultName: "Bulb Plant", defaultDesc: "Plants that grow from bulbs or tubers" },
-  { key: "indoor", params: "?livingSpace=indoor", defaultName: "Indoor Plant", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "fern", params: "?type=Fern", defaultName: "Fern", defaultDesc: "Shade-loving non-flowering plants" },
   { key: "aquatic", params: "?habitat=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
+  { key: "bamboo", params: "?q=bamboo", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
+  { key: "orchid", params: "?q=orchid", defaultName: "Orchids", defaultDesc: "Elegant flowering plants prized for their blooms" },
+  { key: "bonsai", params: "?q=bonsai", defaultName: "Bonsai", defaultDesc: "Miniature trees shaped through careful cultivation" },
+  { key: "carnivorous", params: "?q=carnivorous", defaultName: "Carnivorous Plants", defaultDesc: "Insect-eating plants with fascinating traps" },
+  { key: "moss", params: "?type=Moss", defaultName: "Mosses", defaultDesc: "Low-growing plants that carpet shady areas" },
+  { key: "tropical", params: "?q=tropical", defaultName: "Tropical Plants", defaultDesc: "Lush plants from warm, humid climates" },
+  { key: "ornamental", params: "?usage=Ornamental", defaultName: "Ornamental", defaultDesc: "Plants grown primarily for their beauty" },
+  { key: "fragrant", params: "?usage=Fragrant", defaultName: "Fragrant Plants", defaultDesc: "Plants known for their delightful scent" },
+  { key: "droughtTolerant", params: "?habitat=xerophytic", defaultName: "Drought Tolerant", defaultDesc: "Resilient plants that thrive with minimal water" },
+  { key: "edible", params: "?usage=Edible", defaultName: "Edible Plants", defaultDesc: "All plants with edible parts" },
 ]
+
+/** Combined list for data fetching */
+const categories: Category[] = [...mainCategories, ...advancedCategories]
 
 interface CategoryPlantPreview {
   id: string
@@ -163,6 +183,96 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
   return true
 }
 
+function CategoryCard({
+  category,
+  previews,
+  navigate,
+  t,
+}: {
+  category: Category
+  previews: CategoryPlantPreview[]
+  navigate: (path: string) => void
+  t: (key: string, opts?: Record<string, string>) => string
+}) {
+  const { key, params, defaultName, defaultDesc } = category
+  const heroPlant = previews[0]
+  const remainingPlants = previews.slice(1)
+
+  return (
+    <Card
+      role="button"
+      tabIndex={0}
+      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+      onClick={() => navigate(`/search${params}`)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault()
+          navigate(`/search${params}`)
+        }
+      }}
+    >
+      {/* Hero image */}
+      <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+        {heroPlant ? (
+          <img
+            src={heroPlant.imageUrl}
+            alt={heroPlant.name}
+            className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
+            loading="lazy"
+            draggable={false}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <Sprout className="h-10 w-10 text-emerald-400/50 dark:text-emerald-500/40" />
+          </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/50 to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <span className="text-sm font-semibold text-white drop-shadow-md leading-tight">
+            {t(`categories.${key}`, { defaultValue: defaultName })}
+          </span>
+        </div>
+      </div>
+      {/* Description + plant preview circles */}
+      <div className="flex flex-col items-start gap-2 p-3">
+        <span className="text-[11px] leading-snug text-muted-foreground line-clamp-2">
+          {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
+        </span>
+        {remainingPlants.length > 0 && (
+          <div className="flex items-center -space-x-1.5">
+            {remainingPlants.map((plant) => (
+              <button
+                key={plant.id}
+                type="button"
+                title={plant.name}
+                className="relative h-7 w-7 rounded-full overflow-hidden border-2 border-white dark:border-[#1f1f1f] hover:z-10 hover:scale-125 hover:border-emerald-400 transition-all duration-200 flex-shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  navigate(`/plants/${plant.id}`)
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.stopPropagation()
+                    e.preventDefault()
+                    navigate(`/plants/${plant.id}`)
+                  }
+                }}
+              >
+                <img
+                  src={plant.imageUrl}
+                  alt={plant.name}
+                  className="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    </Card>
+  )
+}
+
 export default function CategoriesPage() {
   const { t } = useTranslation("common")
   const navigate = useLanguageNavigate()
@@ -171,6 +281,7 @@ export default function CategoriesPage() {
   const [searchValue, setSearchValue] = React.useState("")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [categoryPreviews, setCategoryPreviews] = useState<Record<string, CategoryPlantPreview[]>>({})
+  const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -221,6 +332,10 @@ export default function CategoriesPage() {
       if (cancelled) return
 
       const previews: Record<string, CategoryPlantPreview[]> = {}
+      // Track which plant IDs are already used as hero images across categories
+      // so each category shows a unique hero when possible
+      const usedHeroIds = new Set<string>()
+
       for (const cat of categories) {
         const matching = typedPlants.filter((p) => matchesCategoryFilter(p, cat.params))
         // Sort by most viewed (descending), then alphabetically as tiebreaker
@@ -230,7 +345,21 @@ export default function CategoriesPage() {
           if (viewsB !== viewsA) return viewsB - viewsA
           return a.name.localeCompare(b.name)
         })
-        previews[cat.key] = matching.slice(0, 5).map((p) => ({
+
+        // If the top plant is already a hero in another category, swap it
+        // with the first non-hero plant so each card shows a unique hero
+        if (matching.length > 1 && usedHeroIds.has(matching[0].id)) {
+          const altIdx = matching.findIndex((p) => !usedHeroIds.has(p.id))
+          if (altIdx > 0) {
+            const [alt] = matching.splice(altIdx, 1)
+            matching.unshift(alt)
+          }
+        }
+
+        const top5 = matching.slice(0, 5)
+        if (top5.length > 0) usedHeroIds.add(top5[0].id)
+
+        previews[cat.key] = top5.map((p) => ({
           id: p.id,
           name: translationMap.get(p.id) || p.name,
           imageUrl: p.plant_images?.[0]?.link || "",
@@ -329,89 +458,38 @@ export default function CategoriesPage() {
         </form>
       </div>
 
+      {/* Main categories grid */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
-        {categories.map(({ key, params, defaultName, defaultDesc }) => {
-          const previews = categoryPreviews[key] || []
-          const heroPlant = previews[0]
-          const remainingPlants = previews.slice(1)
+        {mainCategories.map((cat) => (
+          <CategoryCard key={cat.key} category={cat} previews={categoryPreviews[cat.key] || []} navigate={navigate} t={t} />
+        ))}
+      </div>
 
-          return (
-            <Card
-              key={key}
-              role="button"
-              tabIndex={0}
-              className="group relative flex cursor-pointer flex-col overflow-hidden rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
-              onClick={() => navigate(`/search${params}`)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault()
-                  navigate(`/search${params}`)
-                }
-              }}
-            >
-              {/* Hero image */}
-              <div className="relative aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
-                {heroPlant ? (
-                  <img
-                    src={heroPlant.imageUrl}
-                    alt={heroPlant.name}
-                    className="absolute inset-0 h-full w-full object-cover object-center select-none transition-transform duration-300 group-hover:scale-105"
-                    loading="lazy"
-                    draggable={false}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <Sprout className="h-10 w-10 text-emerald-400/50 dark:text-emerald-500/40" />
-                  </div>
-                )}
-                {/* Bottom gradient overlay for text readability */}
-                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/50 to-transparent" />
-                {/* Category name over the image */}
-                <div className="absolute inset-x-0 bottom-0 p-3">
-                  <span className="text-sm font-semibold text-white drop-shadow-md leading-tight">
-                    {t(`categories.${key}`, { defaultValue: defaultName })}
-                  </span>
-                </div>
-              </div>
-              {/* Description + plant preview circles */}
-              <div className="flex flex-col items-start gap-2 p-3">
-                <span className="text-[11px] leading-snug text-muted-foreground line-clamp-2">
-                  {t(`categories.${key}Desc`, { defaultValue: defaultDesc })}
-                </span>
-                {remainingPlants.length > 0 && (
-                  <div className="flex items-center -space-x-1.5">
-                    {remainingPlants.map((plant) => (
-                      <button
-                        key={plant.id}
-                        type="button"
-                        title={plant.name}
-                        className="relative h-7 w-7 rounded-full overflow-hidden border-2 border-white dark:border-[#1f1f1f] hover:z-10 hover:scale-125 hover:border-emerald-400 transition-all duration-200 flex-shrink-0"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          navigate(`/plants/${plant.id}`)
-                        }}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.stopPropagation()
-                            e.preventDefault()
-                            navigate(`/plants/${plant.id}`)
-                          }
-                        }}
-                      >
-                        <img
-                          src={plant.imageUrl}
-                          alt={plant.name}
-                          className="h-full w-full object-cover"
-                          loading="lazy"
-                        />
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Card>
-          )
-        })}
+      {/* Advanced toggle */}
+      <div className="mt-8 mb-4">
+        <button
+          type="button"
+          onClick={() => setAdvancedOpen((prev) => !prev)}
+          className="group flex w-full items-center gap-3 text-left"
+        >
+          <div className="h-px flex-1 bg-stone-200 dark:bg-[#3e3e42]" />
+          <span className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors group-hover:text-foreground">
+            {t("categories.advanced", { defaultValue: "Advanced" })}
+            <ChevronDown className={`h-4 w-4 transition-transform duration-200 ${advancedOpen ? "rotate-180" : ""}`} />
+          </span>
+          <div className="h-px flex-1 bg-stone-200 dark:bg-[#3e3e42]" />
+        </button>
+      </div>
+
+      {/* Advanced categories grid — collapsible */}
+      <div
+        className={`grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 overflow-hidden transition-all duration-300 ${
+          advancedOpen ? "max-h-[5000px] opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        {advancedCategories.map((cat) => (
+          <CategoryCard key={cat.key} category={cat} previews={categoryPreviews[cat.key] || []} navigate={navigate} t={t} />
+        ))}
       </div>
 
       <RequestPlantDialog open={requestDialogOpen} onOpenChange={setRequestDialogOpen} />

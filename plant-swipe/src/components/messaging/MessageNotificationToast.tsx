@@ -156,6 +156,8 @@ export const MessageNotificationToast: React.FC<MessageNotificationToastProps> =
               e.stopPropagation()
               handleDismiss()
             }}
+            aria-label={t('common.close', { defaultValue: 'Close' })}
+            title={t('common.close', { defaultValue: 'Close' })}
             className="p-1.5 rounded-full hover:bg-stone-100 dark:hover:bg-[#3a3a3d] text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors flex-shrink-0"
           >
             <X className="h-4 w-4" />
