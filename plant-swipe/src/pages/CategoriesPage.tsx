@@ -31,7 +31,7 @@ const mainCategories: Category[] = [
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
   { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
-  { key: "vegetableGarden", params: "?usage=Edible&type=Herb", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
+  { key: "vegetableGarden", params: "?vegetable=true", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
 ]
 
 /** Advanced categories — shown when expanded */
@@ -48,13 +48,8 @@ const advancedCategories: Category[] = [
   { key: "aquatic", params: "?habitat=aquatic", defaultName: "Aquatic & Semi-Aquatic", defaultDesc: "Plants that thrive in or near water" },
   { key: "bamboo", params: "?q=bamboo", defaultName: "Bamboo", defaultDesc: "Fast-growing grass family members" },
   { key: "orchid", params: "?q=orchid", defaultName: "Orchids", defaultDesc: "Elegant flowering plants prized for their blooms" },
-  { key: "bonsai", params: "?q=bonsai", defaultName: "Bonsai", defaultDesc: "Miniature trees shaped through careful cultivation" },
-  { key: "carnivorous", params: "?q=carnivorous", defaultName: "Carnivorous Plants", defaultDesc: "Insect-eating plants with fascinating traps" },
-  { key: "moss", params: "?type=Moss", defaultName: "Mosses", defaultDesc: "Low-growing plants that carpet shady areas" },
-  { key: "tropical", params: "?q=tropical", defaultName: "Tropical Plants", defaultDesc: "Lush plants from warm, humid climates" },
   { key: "ornamental", params: "?usage=Ornamental", defaultName: "Ornamental", defaultDesc: "Plants grown primarily for their beauty" },
   { key: "fragrant", params: "?usage=Fragrant", defaultName: "Fragrant Plants", defaultDesc: "Plants known for their delightful scent" },
-  { key: "droughtTolerant", params: "?habitat=xerophytic", defaultName: "Drought Tolerant", defaultDesc: "Resilient plants that thrive with minimal water" },
   { key: "edible", params: "?usage=Edible", defaultName: "Edible Plants", defaultDesc: "All plants with edible parts" },
 ]
 
@@ -78,6 +73,7 @@ type PlantRow = {
   life_cycle: string[] | null
   edible_part: string[] | null
   living_space: string[] | null
+  vegetable: boolean | null
   scientific_name_species: string | null
   plant_images: { link: string }[]
 }
@@ -178,6 +174,12 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     const spaces = livingSpace.split(",").map((s) => s.trim().toLowerCase())
     const plantSpaces = (plant.living_space || []).map((s) => s.toLowerCase())
     if (!spaces.some((s) => plantSpaces.includes(s))) return false
+  }
+
+  const vegetable = sp.get("vegetable")
+  if (vegetable) {
+    if (vegetable === "true" && !plant.vegetable) return false
+    if (vegetable === "false" && plant.vegetable) return false
   }
 
   return true
@@ -302,7 +304,7 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),
