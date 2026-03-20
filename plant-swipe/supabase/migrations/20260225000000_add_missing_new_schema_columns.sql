@@ -20,6 +20,7 @@ declare
     array['climate', 'text[] not null default ''{}''::text[]'],
     array['season', 'text[] not null default ''{}''::text[]'],
     array['utility', 'text[] not null default ''{}''::text[]'],
+    array['vegetable', 'boolean default false'],
     array['edible_part', 'text[] not null default ''{}''::text[]'],
     array['thorny', 'boolean default false'],
     array['toxicity_human', 'text'],

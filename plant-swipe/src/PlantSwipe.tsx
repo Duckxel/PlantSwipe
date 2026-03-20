@@ -187,6 +187,7 @@ export default function PlantSwipe() {
   const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
   const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
   const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
+  const [vegetableFilter, setVegetableFilter] = useState<boolean | null>(null)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -487,8 +488,9 @@ export default function PlantSwipe() {
       const urlPlantHabit = searchParams.get("plantHabit")
       const urlEdiblePart = searchParams.get("ediblePart")
       const urlPlantPart = searchParams.get("plantPart")
+      const urlVegetable = searchParams.get("vegetable")
 
-      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart || urlVegetable)
 
       if (hasParams) {
         // Reset all filters before applying URL params so previous
@@ -506,6 +508,7 @@ export default function PlantSwipe() {
         setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
         setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
         setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
+        setVegetableFilter(urlVegetable === "true" ? true : urlVegetable === "false" ? false : null)
         setColorFilter([])
 
         // Clear URL parameters after applying to keep URL clean
@@ -1212,7 +1215,8 @@ export default function PlantSwipe() {
     plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
     ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
     plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters])
+    vegetable: vegetableFilter,
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1220,7 +1224,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet, vegetable: normalizedVegetable } = normalizedFilters
     
     // Pre-compute living space filter
     const livingSpaceCount = livingSpaceSet.size
@@ -1233,6 +1237,7 @@ export default function PlantSwipe() {
       // Boolean checks are O(1) and fastest
       if (petSafe && !p._petSafe) return false
       if (humanSafe && !p._humanSafe) return false
+      if (normalizedVegetable !== null && Boolean(p.vegetable) !== normalizedVegetable) return false
       // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
       if (normalizedType) {
         if (typeTokens) {
@@ -2327,6 +2332,8 @@ export default function PlantSwipe() {
                     setEdiblePartFilters={setEdiblePartFilters}
                     plantPartFilters={plantPartFilters}
                     setPlantPartFilters={setPlantPartFilters}
+                    vegetableFilter={vegetableFilter}
+                    setVegetableFilter={setVegetableFilter}
                     colorOptions={colorOptions}
                     primaryColors={primaryColors}
                     advancedColors={advancedColors}
@@ -2450,6 +2457,8 @@ export default function PlantSwipe() {
                         setEdiblePartFilters={setEdiblePartFilters}
                         plantPartFilters={plantPartFilters}
                         setPlantPartFilters={setPlantPartFilters}
+                        vegetableFilter={vegetableFilter}
+                        setVegetableFilter={setVegetableFilter}
                         colorOptions={colorOptions}
                         primaryColors={primaryColors}
                         advancedColors={advancedColors}
