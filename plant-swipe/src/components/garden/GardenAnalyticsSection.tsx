@@ -40,8 +40,10 @@ const ChartContainer: React.FC<
   const w = width ?? "100%";
   const h = height ?? "100%";
   if (!ready) {
-    // Placeholder that occupies the same space so layout doesn't jump
-    return <div style={{ width: typeof w === "number" ? w : "100%", height: typeof h === "number" ? h : 0 }} />;
+    // Placeholder that occupies the same space so layout doesn't jump.
+    // Use "100%" (not 0) for percentage heights so the parent layout is established
+    // before ResponsiveContainer measures — avoids the recharts -1 dimension warning.
+    return <div style={{ width: typeof w === "number" ? w : "100%", height: typeof h === "number" ? h : "100%", minHeight: 1 }} />;
   }
   return (
     <ResponsiveContainer width={w} height={h} minWidth={1} minHeight={1} {...rest}>

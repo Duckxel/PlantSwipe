@@ -23,23 +23,10 @@ async function fastCheckPendingTasks(userId: string): Promise<boolean | null> {
     const startOfDay = `${today}T00:00:00.000Z`
     const endOfDay = `${today}T23:59:59.999Z`
 
-    // Single query: join through garden_plant_tasks to garden_members, filtering by
-    // user_id directly.  This eliminates the previous two-query round-trip.
-    const { data: incomplete, error } = await supabase
-      .from("garden_plant_task_occurrences")
-      .select("id, completed_count, required_count, completed_at, garden_plant_tasks!inner(garden_id, garden_members!inner(user_id))")
-      .gte("due_at", startOfDay)
-      .lte("due_at", endOfDay)
-      .eq("garden_plant_tasks.garden_members.user_id", userId)
-      .is("completed_at", null)
-      .limit(1) // We only need to know if ANY exist
-
-    if (error) {
-      // Fallback: if the nested join isn't supported, try the two-query approach
-      return await fastCheckPendingTasksFallback(userId, startOfDay, endOfDay)
-    }
-
-    return (incomplete?.length ?? 0) > 0
+    // Use two-query approach: there is no direct FK from garden_plant_tasks
+    // to garden_members (they are siblings through gardens), so PostgREST
+    // cannot resolve the nested !inner join and always returns 400.
+    return await fastCheckPendingTasksFallback(userId, startOfDay, endOfDay)
   } catch {
     return null // Fallback to cache
   }
