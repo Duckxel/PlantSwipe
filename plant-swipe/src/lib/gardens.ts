@@ -2326,55 +2326,32 @@ export async function listOccurrencesForMultipleGardens(
 // Return a mapping from occurrenceId -> list of users who progressed/completed it
 export async function listCompletionsForOccurrences(occurrenceIds: string[]): Promise<Record<string, Array<{ userId: string; displayName: string | null }>>> {
   if (occurrenceIds.length === 0) return {}
-  // Single query with join to profiles — eliminates the second sequential round-trip
-  const { data: rows, error } = await supabase
+  // garden_task_user_completions.user_id has a FK to auth.users, not profiles,
+  // so PostgREST cannot resolve the `profiles:user_id(...)` join and returns 400.
+  // Use two separate queries: completions + profiles lookup.
+  const { data: rawRows, error: rawErr } = await supabase
     .from('garden_task_user_completions')
-    .select('occurrence_id, user_id, profiles:user_id(display_name)')
+    .select('occurrence_id, user_id')
     .in('occurrence_id', occurrenceIds)
-
-  if (error) {
-    // Fallback: if join isn't supported, fetch separately
-    const { data: rawRows, error: rawErr } = await supabase
-      .from('garden_task_user_completions')
-      .select('occurrence_id, user_id')
-      .in('occurrence_id', occurrenceIds)
-    if (rawErr) throw new Error(rawErr.message)
-    const uniqueUserIds = Array.from(new Set((rawRows || []).map((r: { user_id: string }) => r.user_id)))
-    const { data: profs } = await supabase
-      .from('profiles')
-      .select('id, display_name')
-      .in('id', uniqueUserIds)
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const idToName: Record<string, string | null> = Object.fromEntries((profs || []).map((p: any) => [String(p.id), p.display_name || null]))
-    const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
-    const seen = new Set<string>()
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    for (const r of (rawRows || []) as any[]) {
-      const occId = String(r.occurrence_id)
-      const uid = String(r.user_id)
-      const key = `${occId}::${uid}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      if (!map[occId]) map[occId] = []
-      map[occId].push({ userId: uid, displayName: idToName[uid] ?? null })
-    }
-    return map
-  }
-
+  if (rawErr) throw new Error(rawErr.message)
+  const uniqueUserIds = Array.from(new Set((rawRows || []).map((r: { user_id: string }) => r.user_id)))
+  const { data: profs } = await supabase
+    .from('profiles')
+    .select('id, display_name')
+    .in('id', uniqueUserIds)
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const idToName: Record<string, string | null> = Object.fromEntries((profs || []).map((p: any) => [String(p.id), p.display_name || null]))
   const map: Record<string, Array<{ userId: string; displayName: string | null }>> = {}
   const seen = new Set<string>()
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  for (const r of (rows || []) as any[]) {
+  for (const r of (rawRows || []) as any[]) {
     const occId = String(r.occurrence_id)
     const uid = String(r.user_id)
     const key = `${occId}::${uid}`
     if (seen.has(key)) continue
     seen.add(key)
     if (!map[occId]) map[occId] = []
-    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-    const profile = r.profiles as any
-    const displayName = profile?.display_name || null
-    map[occId].push({ userId: uid, displayName })
+    map[occId].push({ userId: uid, displayName: idToName[uid] ?? null })
   }
   return map
 }
