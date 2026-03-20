@@ -115,7 +115,7 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
             <div className="flex justify-center pt-2">
               <button
                 onClick={() => setExpanded(!expanded)}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors rounded-xl hover:bg-emerald-50 dark:hover:bg-emerald-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
               >
                 {expanded ? (
                   <>
