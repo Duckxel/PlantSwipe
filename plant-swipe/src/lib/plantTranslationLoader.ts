@@ -118,6 +118,7 @@ function mapDbRowToPlant(
     climate: climateEnum.toDbArray(basePlant.climate) as Plant['climate'],
     season: seasonEnum.toDbArray(basePlant.season) as Plant['season'],
     utility: utilityEnum.toDbArray(basePlant.utility) as Plant['utility'],
+    vegetable: (basePlant.vegetable as boolean) ?? false,
     ediblePart: ediblePartEnum.toDbArray(basePlant.edible_part) as Plant['ediblePart'],
     thorny: (basePlant.thorny as boolean) ?? false,
     toxicityHuman: (toxicityEnum.toDb(basePlant.toxicity_human) as Plant['toxicityHuman']) || undefined,
