@@ -112,13 +112,14 @@
     },
     "options": {
       "plantType": {
-        "plant": "Plante",
-        "flower": "Fleur",
-        "bamboo": "Bambou",
+        "herb": "Herbe",
         "shrub": "Arbuste",
         "tree": "Arbre",
-        "cactus": "Cactus",
-        "succulent": "Plante grasse"
+        "climber": "Grimpante",
+        "succulent": "Succulente",
+        "fern": "Fougère",
+        "moss": "Mousse",
+        "grass": "Graminée"
       },
       "utility": {
         "comestible": "Comestible",
@@ -467,6 +468,11 @@
       "cockchafer": "Hanneton",
       "dungbeetle": "Bousier",
       "weevil": "Charançon",
+      "herb": "Herbe",
+      "climber": "Grimpante",
+      "fern": "Fougère",
+      "moss": "Mousse",
+      "grass": "Graminée",
       "week": "Semaine",
       "month": "Mois",
       "year": "An",
@@ -477,11 +483,13 @@
       "approved": "Approuvé",
       "safe": "En sécurité",
       "at_risk": "À risque",
-      "plant": "Plante",
-      "bamboo": "Bambou",
+      "herb": "Herbe",
       "shrub": "Arbuste",
       "tree": "Arbre",
-      "cactus": "Cactus"
+      "climber": "Grimpante",
+      "fern": "Fougère",
+      "moss": "Mousse",
+      "grass": "Graminée"
     },
     "fields": {
       "commonNames": {

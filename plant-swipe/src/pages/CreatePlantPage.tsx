@@ -1057,17 +1057,17 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.wateringType = wateringTypeEnum.toUiArray(data.watering_type) as string[]
   flat.hygrometry = data.hygrometry ?? undefined
   flat.mistingFrequency = data.misting_frequency ?? undefined
-  flat.specialNeeds = data.special_needs || []
+  flat.specialNeeds = (translation?.special_needs?.length ? translation.special_needs : null) || data.special_needs || []
 
   // Section 3b: Care Details
   flat.substrate = data.substrate || []
   flat.substrateMix = data.substrate_mix || []
   flat.soilAdvice = translation?.soil_advice || plant.plantCare?.adviceSoil || undefined
   flat.mulchingNeeded = data.mulching_needed || false
-  flat.mulchType = data.mulch_type || []
+  flat.mulchType = (translation?.mulch_type?.length ? translation.mulch_type : null) || data.mulch_type || []
   flat.mulchAdvice = translation?.mulch_advice || plant.plantCare?.adviceMulching || undefined
-  flat.nutritionNeed = data.nutrition_need || []
-  flat.fertilizer = data.fertilizer || []
+  flat.nutritionNeed = (translation?.nutrition_need?.length ? translation.nutrition_need : null) || data.nutrition_need || []
+  flat.fertilizer = (translation?.fertilizer?.length ? translation.fertilizer : null) || data.fertilizer || []
   flat.fertilizerAdvice = translation?.fertilizer_advice || plant.plantCare?.adviceFertilizer || undefined
 
   // Section 4: Growth
@@ -1098,15 +1098,15 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   // Section 6: Ecology
   flat.conservationStatus = conservationStatusEnum.toUiArray(data.conservation_status) as string[]
   flat.ecologicalStatus = data.ecological_status || []
-  flat.biotopes = data.biotopes || []
+  flat.biotopes = (translation?.biotopes?.length ? translation.biotopes : null) || data.biotopes || []
   flat.urbanBiotopes = data.urban_biotopes || []
   flat.ecologicalTolerance = ecologicalToleranceEnum.toUiArray(data.ecological_tolerance) as string[]
   flat.biodiversityRole = data.biodiversity_role || []
   flat.beneficialRoles = translation?.beneficial_roles || []
   flat.harmfulRoles = translation?.harmful_roles || []
-  flat.pollinatorsAttracted = data.pollinators_attracted || []
-  flat.birdsAttracted = data.birds_attracted || []
-  flat.mammalsAttracted = data.mammals_attracted || []
+  flat.pollinatorsAttracted = (translation?.pollinators_attracted?.length ? translation.pollinators_attracted : null) || data.pollinators_attracted || []
+  flat.birdsAttracted = (translation?.birds_attracted?.length ? translation.birds_attracted : null) || data.birds_attracted || []
+  flat.mammalsAttracted = (translation?.mammals_attracted?.length ? translation.mammals_attracted : null) || data.mammals_attracted || []
   flat.symbiosis = translation?.symbiosis || []
   flat.symbiosisNotes = translation?.symbiosis_notes || undefined
   flat.ecologicalManagement = data.ecological_management || []
@@ -2545,6 +2545,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           source_name: translatedSourceName || null,
           source_url: primarySource?.url || null,
           spice_mixes: await translateArrSafe(p2.spiceMixes || p2.usage?.spiceMixes),
+          // Care tag fields
+          mulch_type: await translateArrSafe(p2.mulchType),
+          nutrition_need: await translateArrSafe(p2.nutritionNeed),
+          fertilizer: await translateArrSafe(p2.fertilizer),
+          special_needs: await translateArrSafe(p2.specialNeeds),
+          // Ecology tag fields
+          biotopes: await translateArrSafe(p2.biotopes),
+          pollinators_attracted: await translateArrSafe(p2.pollinatorsAttracted),
+          birds_attracted: await translateArrSafe(p2.birdsAttracted),
+          mammals_attracted: await translateArrSafe(p2.mammalsAttracted),
         })
       }
 
