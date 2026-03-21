@@ -323,7 +323,7 @@ export default function CategoriesPage() {
           )
           .eq("plant_images.use", "primary")
         if (cancelled) return
-        plantsData = fallback.data
+        plantsData = fallback.data as typeof plantsData
         if (!plantsData) return
       }
 
