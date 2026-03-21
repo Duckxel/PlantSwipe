@@ -316,7 +316,6 @@ export const plantSchema = {
   recipesIdeas: { type: 'tag[]', description: 'Quick recipe or dish ideas using this plant (short names, e.g. ["Pesto", "Salad", "Soup"])' },
   aromatherapyBenefits: { type: 'text', description: 'Aromatherapy benefits' },
   essentialOilBlends: { type: 'text', description: 'Essential oil blend ideas' },
-  recipesIdeas: { type: 'tag[]', description: 'Quick recipe or dish ideas using this plant (short names, e.g. ["Pesto", "Salad", "Soup"])' },
   edibleOil: {
     type: 'boolean',
     description: 'Whether the plant produces an edible oil',
