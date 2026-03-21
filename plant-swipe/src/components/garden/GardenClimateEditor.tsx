@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { supabase } from "@/lib/supabaseClient";
 import {
   Snowflake, Mountain, CloudRain, Wind,
-  Thermometer, Sun, CloudSun, Palmtree,
+  Thermometer, Sun, Palmtree,
   Flame, CloudLightning, Waves, Droplets,
   TreePalm, Anchor, Loader2, Check,
 } from "lucide-react";
