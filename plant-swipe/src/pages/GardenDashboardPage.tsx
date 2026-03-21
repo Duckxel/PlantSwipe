@@ -1516,7 +1516,11 @@ export const GardenDashboardPage: React.FC = () => {
                 prev.locationCountry === g0.locationCountry &&
                 prev.locationTimezone === g0.locationTimezone &&
                 prev.hideAiChat === g0.hideAiChat &&
-                prev.preferredLanguage === g0.preferredLanguage
+                prev.preferredLanguage === g0.preferredLanguage &&
+                prev.gardenType === g0.gardenType &&
+                JSON.stringify(prev.livingSpace) === JSON.stringify(g0.livingSpace) &&
+                JSON.stringify(prev.climate) === JSON.stringify(g0.climate) &&
+                JSON.stringify(prev.usage) === JSON.stringify(g0.usage)
               ) {
                 return prev; // No change, skip re-render
               }
