@@ -9,6 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
 import { supabase } from "@/lib/supabaseClient"
+import { EasterEgg } from "@/components/events/EasterEgg"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 
@@ -118,7 +119,9 @@ export default function AboutPage() {
   const meetBadge = t("meet.badge")
 
   return (
-    <div className="max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-12">
+    <div className="relative max-w-5xl mx-auto mt-8 px-4 md:px-0 pb-16 space-y-12">
+      {/* Easter Egg Hunt */}
+      <EasterEgg pagePath="/about" />
       <section className="relative overflow-hidden rounded-[32px] border border-stone-200 dark:border-[#3e3e42] bg-gradient-to-br from-emerald-50 via-white to-stone-100 dark:from-[#252526] dark:via-[#1e1e1e] dark:to-[#171717]">
         <div className="absolute -right-24 -top-24 h-64 w-64 rounded-full bg-emerald-200/40 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
         <div className="absolute -left-16 bottom-[-30%] h-72 w-72 rounded-full bg-emerald-100/50 dark:bg-emerald-500/10 blur-3xl" aria-hidden="true" />
