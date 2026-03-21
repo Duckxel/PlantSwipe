@@ -75,7 +75,7 @@ type PlantRow = {
   living_space: string[] | null
   vegetable: boolean | null
   scientific_name_species: string | null
-  plant_images: { link: string }[]
+  plant_images: { link: string; use: string }[]
 }
 
 /** Cache TTL for category previews (1 hour) */
@@ -304,7 +304,7 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link,use)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),
