@@ -458,6 +458,9 @@ export const GardenDashboardPage: React.FC = () => {
                   preferredLanguage: data.garden.preferredLanguage || null,
                   hideAiChat: Boolean(data.garden.hideAiChat ?? data.garden.hide_ai_chat ?? false),
                   gardenType: (data.garden.gardenType || data.garden.garden_type || 'default') as GardenType,
+                  livingSpace: (Array.isArray(data.garden.livingSpace ?? data.garden.living_space) ? (data.garden.livingSpace ?? data.garden.living_space) : []) as GardenLivingSpace[],
+                  climate: (Array.isArray(data.garden.climate) ? data.garden.climate : []) as GardenClimate[],
+                  usage: (Array.isArray(data.garden.usage) ? data.garden.usage : []) as GardenUsage[],
                 });
                 hydratedGarden = true;
               }
