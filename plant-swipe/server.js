@@ -3128,8 +3128,8 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
 const SIMPLE_ENUM_FIELDS = new Set([
   'plantType',    // Single enum selection
   'utility',      // Array of enum values
-  'comestiblePart', // Array of enum values  
-  'fruitType',    // Array of enum values
+  'ediblePart',   // Array of enum values
+  'vegetable',    // Boolean field
   'seasons',      // Array of enum values
 ])
 
