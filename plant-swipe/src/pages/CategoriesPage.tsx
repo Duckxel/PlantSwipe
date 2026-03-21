@@ -31,7 +31,7 @@ const mainCategories: Category[] = [
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
   { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
-  { key: "vegetableGarden", params: "?usage=Edible&ediblePart=leaf,stem,bulb,rhizome,seed,fruit", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
+  { key: "vegetableGarden", params: "?vegetable=true", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
 ]
 
 /** Advanced categories — shown when expanded */
@@ -303,7 +303,7 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link,use)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link,use)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),
@@ -319,7 +319,7 @@ export default function CategoriesPage() {
         const fallback = await supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images(link,use)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images(link,use)",
           )
           .eq("plant_images.use", "primary")
         if (cancelled) return
