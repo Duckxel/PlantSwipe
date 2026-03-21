@@ -311,9 +311,24 @@ export default function CategoriesPage() {
         translationsPromise,
       ])
 
-      if (cancelled || !plantsResult.data) return
+      if (cancelled) return
 
-      const typedPlants = plantsResult.data as unknown as PlantRow[]
+      // Fallback: if the full query fails (e.g. missing columns), retry with core columns
+      let plantsData = plantsResult.data
+      if (plantsResult.error || !plantsData) {
+        console.warn("Categories plant query failed, retrying with core columns:", plantsResult.error?.message)
+        const fallback = await supabase
+          .from("plants")
+          .select(
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images(link,use)",
+          )
+          .eq("plant_images.use", "primary")
+        if (cancelled) return
+        plantsData = fallback.data
+        if (!plantsData) return
+      }
+
+      const typedPlants = plantsData as unknown as PlantRow[]
 
       // Build view-count map: plant_id -> views
       const viewCountMap = new Map<string, number>()
