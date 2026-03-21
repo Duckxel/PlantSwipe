@@ -43,9 +43,10 @@ export const GardenClimateEditor: React.FC<{
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
 
+  const gardenClimateJson = JSON.stringify(garden?.climate ?? []);
   React.useEffect(() => {
-    setSelected(garden?.climate ?? []);
-  }, [garden?.climate]);
+    setSelected(JSON.parse(gardenClimateJson));
+  }, [gardenClimateJson]);
 
   const toggle = (value: GardenClimate) => {
     if (!canEdit) return;
@@ -60,7 +61,7 @@ export const GardenClimateEditor: React.FC<{
     const orig = garden?.climate ?? [];
     if (orig.length !== selected.length) return true;
     return !orig.every((v) => selected.includes(v));
-  }, [garden?.climate, selected]);
+  }, [gardenClimateJson, selected]);
 
   const save = async () => {
     if (!garden || !dirty || saving) return;

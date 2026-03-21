@@ -30,9 +30,10 @@ export const GardenUsageEditor: React.FC<{
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
 
+  const gardenUsageJson = JSON.stringify(garden?.usage ?? []);
   React.useEffect(() => {
-    setSelected(garden?.usage ?? []);
-  }, [garden?.usage]);
+    setSelected(JSON.parse(gardenUsageJson));
+  }, [gardenUsageJson]);
 
   const toggle = (value: GardenUsage) => {
     if (!canEdit) return;
@@ -47,7 +48,7 @@ export const GardenUsageEditor: React.FC<{
     const orig = garden?.usage ?? [];
     if (orig.length !== selected.length) return true;
     return !orig.every((v) => selected.includes(v));
-  }, [garden?.usage, selected]);
+  }, [gardenUsageJson, selected]);
 
   const save = async () => {
     if (!garden || !dirty || saving) return;

@@ -28,16 +28,18 @@ export const GardenLivingSpaceEditor: React.FC<{
   const [saveError, setSaveError] = React.useState<string | null>(null);
   const [saved, setSaved] = React.useState(false);
 
+  const gardenLivingSpaceJson = JSON.stringify(garden?.livingSpace ?? []);
   React.useEffect(() => {
-    setSelected(garden?.livingSpace ?? []);
-  }, [garden?.livingSpace]);
+    setSelected(JSON.parse(gardenLivingSpaceJson));
+  }, [gardenLivingSpaceJson]);
 
   const toggle = (value: GardenLivingSpace) => {
     if (!canEdit) return;
     setSaveError(null);
     setSaved(false);
+    // Single-select: always replace with the clicked value (or deselect if same)
     setSelected((prev) =>
-      prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+      prev.includes(value) ? [] : [value]
     );
   };
 
@@ -45,7 +47,7 @@ export const GardenLivingSpaceEditor: React.FC<{
     const orig = garden?.livingSpace ?? [];
     if (orig.length !== selected.length) return true;
     return !orig.every((v) => selected.includes(v));
-  }, [garden?.livingSpace, selected]);
+  }, [gardenLivingSpaceJson, selected]);
 
   const save = async () => {
     if (!garden || !dirty || saving) return;
