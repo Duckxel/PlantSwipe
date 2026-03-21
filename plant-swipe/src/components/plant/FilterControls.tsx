@@ -43,6 +43,8 @@ interface FilterControlsProps {
   setEdiblePartFilters: React.Dispatch<React.SetStateAction<string[]>>
   plantPartFilters: string[]
   setPlantPartFilters: React.Dispatch<React.SetStateAction<string[]>>
+  vegetableFilter: boolean | null
+  setVegetableFilter: React.Dispatch<React.SetStateAction<boolean | null>>
 
   // Data Options
   colorOptions: ColorOption[]
@@ -82,6 +84,8 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
   setEdiblePartFilters,
   plantPartFilters,
   setPlantPartFilters,
+  vegetableFilter,
+  setVegetableFilter,
   colorOptions,
   primaryColors,
   advancedColors,
@@ -154,7 +158,8 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     lifeCycleFilters.length > 0 ||
     plantHabitFilters.length > 0 ||
     ediblePartFilters.length > 0 ||
-    plantPartFilters.length > 0
+    plantPartFilters.length > 0 ||
+    vegetableFilter !== null
 
   const clearAllFilters = () => {
     setSeasonFilter(null)
@@ -170,6 +175,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
     setPlantHabitFilters([])
     setEdiblePartFilters([])
     setPlantPartFilters([])
+    setVegetableFilter(null)
   }
 
   const habitatOptions = [
@@ -611,7 +617,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         />
         {plantPartSectionOpen && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {(["roots", "bulbs", "stems", "leaves", "flowers", "fruits", "spores"] as const).map((option) => {
+            {(["roots", "rhizomes", "bulbs", "stems", "leaves", "flowers", "fruits", "spores"] as const).map((option) => {
               const isSelected = plantPartFilters.includes(option)
               return (
                 <button
@@ -707,7 +713,8 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
           {plantPartFilters.map((pp) => (
             <Badge key={pp} variant="secondary" className="rounded-xl">{t(`plantInfo:enums.plantPart.${pp}`, { defaultValue: pp })}</Badge>
           ))}
-          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && lifeCycleFilters.length === 0 && plantHabitFilters.length === 0 && ediblePartFilters.length === 0 && plantPartFilters.length === 0 && (
+          {vegetableFilter !== null && <Badge variant="secondary" className="rounded-xl">{t("categories.vegetableGarden", { defaultValue: "Vegetable Garden" })}</Badge>}
+          {!seasonFilter && colorFilter.length === 0 && !typeFilter && usageFilters.length === 0 && habitatFilters.length === 0 && !maintenanceFilter && !petSafe && !humanSafe && livingSpaceFilters.length === 0 && lifeCycleFilters.length === 0 && plantHabitFilters.length === 0 && ediblePartFilters.length === 0 && plantPartFilters.length === 0 && vegetableFilter === null && (
             <span className="opacity-50">{t("plant.none")}</span>
           )}
         </div>

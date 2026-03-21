@@ -24,7 +24,7 @@ import { useTheme } from "@/context/ThemeContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAccentOption, type AccentKey } from "@/lib/accent";
 import { Link } from "@/components/i18n/Link";
-import { useLanguageNavigate } from "@/lib/i18nRouting";
+import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting";
 // Re-export for convenience
 import {
   RefreshCw,
@@ -117,6 +117,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { SearchInput } from "@/components/ui/search-input";
+import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
 import { setUserThreatLevel, getReportCounts } from "@/lib/moderation";
@@ -514,6 +515,11 @@ type PlantDashboardRow = {
   variety: string | null;
   givenNames: string[];
   tags: string[];
+  // Localized fields for the user's current language (used for search)
+  localizedName: string | null;
+  localizedVariety: string | null;
+  localizedGivenNames: string[];
+  localizedTags: string[];
   status: NormalizedPlantStatus;
   featuredMonths: FeaturedMonthSlug[];
   primaryImage: string | null;
@@ -646,6 +652,7 @@ const saveAdminPlantsState = (state: AdminPlantsListState): void => {
 
 export const AdminPage: React.FC = () => {
   const navigate = useLanguageNavigate();
+  const currentLang = useLanguage();
   const location = useLocation();
   const currentPath = location.pathname;
   const { effectiveTheme } = useTheme();
@@ -2179,12 +2186,6 @@ export const AdminPage: React.FC = () => {
   const [deletingPlant, setDeletingPlant] = React.useState(false);
   const [isAnalyticsPanelCollapsed, setIsAnalyticsPanelCollapsed] =
     React.useState<boolean>(true);
-  const [addFromDialogOpen, setAddFromDialogOpen] = React.useState(false);
-  const [addFromSearchQuery, setAddFromSearchQuery] = React.useState("");
-  const [addFromSearchResults, setAddFromSearchResults] = React.useState<
-    Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }>
-  >([]);
-  const [addFromSearchLoading, setAddFromSearchLoading] = React.useState(false);
   const [addButtonExpanded, setAddButtonExpanded] = React.useState(false);
   const [addFromDuplicating, setAddFromDuplicating] = React.useState(false);
   const [addFromDuplicateError, setAddFromDuplicateError] = React.useState<string | null>(null);
@@ -3019,13 +3020,11 @@ export const AdminPage: React.FC = () => {
     [],
   );
 
-  const searchPlantsForAddFrom = React.useCallback(async (query: string) => {
+  const searchPlantsForAddFrom = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
     const trimmed = query.trim();
     if (!trimmed) {
-      setAddFromSearchResults([]);
-      return;
+      return [];
     }
-    setAddFromSearchLoading(true);
     try {
       // Search by name, scientific_name, or given_names (common names from translations)
       // First, search plants by name or scientific_name
@@ -3037,32 +3036,47 @@ export const AdminPage: React.FC = () => {
         .limit(20);
       if (directError) throw directError;
 
-      // Also search by variety or common_names in translations table
+      // Also search by variety, common_names, or translated name in translations table (current language)
       const { data: translationMatches, error: transError } = await supabase
         .from("plant_translations")
-        .select("plant_id, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
-        .eq("language", "en")
+        .select("plant_id, name, variety, common_names, plants!inner(id, name, scientific_name_species, status)")
+        .eq("language", currentLang)
         .limit(100);
       if (transError) throw transError;
 
-      // Filter translation matches where variety or common_names contains the search term
+      // Filter translation matches where variety, common_names, or translated name contains the search term
       const termLower = trimmed.toLowerCase();
       const translationPlantIds = new Set<string>();
-      const translationPlants: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
+      const translationPlants: Array<{ id: string; name: string; translatedName?: string | null; scientific_name_species?: string | null; status?: string | null }> = [];
+      // Build a map of plant_id -> translated name for display
+      const translatedNameMap = new Map<string, string>();
 
       (translationMatches || []).forEach((row: unknown) => {
         const r = row as Record<string, unknown>;
         const givenNames = Array.isArray(r?.common_names) ? r.common_names : [];
         const varietyStr = typeof r?.variety === 'string' ? r.variety : '';
-        const matchesGivenName = givenNames.some(
+        const translatedName = typeof r?.name === 'string' ? r.name : '';
+        const matchesTerm = givenNames.some(
           (gn: unknown) => typeof gn === "string" && gn.toLowerCase().includes(termLower)
-        ) || varietyStr.toLowerCase().includes(termLower);
-        if (matchesGivenName && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
+        ) || varietyStr.toLowerCase().includes(termLower)
+          || translatedName.toLowerCase().includes(termLower);
+
+        // Store translated name for all entries regardless of match (for display of direct matches)
+        if (r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants) {
+          const plants = r.plants as Record<string, unknown>;
+          const pid = String(plants.id);
+          if (translatedName) {
+            translatedNameMap.set(pid, translatedName);
+          }
+        }
+
+        if (matchesTerm && r?.plants && typeof r.plants === "object" && r.plants !== null && "id" in r.plants && !translationPlantIds.has(String((r.plants as Record<string, unknown>).id))) {
           const plants = r.plants as Record<string, unknown>;
           translationPlantIds.add(String(plants.id));
           translationPlants.push({
             id: String(plants.id),
             name: String(plants.name || ""),
+            translatedName: translatedName || null,
             scientific_name_species: plants.scientific_name_species || null,
             status: plants.status || null,
           });
@@ -3071,8 +3085,8 @@ export const AdminPage: React.FC = () => {
 
       // Merge results, avoiding duplicates
       const seenIds = new Set<string>();
-      const merged: Array<{ id: string; name: string; scientific_name_species?: string | null; status?: string | null }> = [];
-      
+      const merged: Array<{ id: string; name: string; translatedName?: string | null; scientific_name_species?: string | null; status?: string | null }> = [];
+
       (directMatches || []).forEach((plant: unknown) => {
         const p = plant as Record<string, unknown>;
         if (p?.id && !seenIds.has(String(p.id))) {
@@ -3080,12 +3094,13 @@ export const AdminPage: React.FC = () => {
           merged.push({
             id: String(p.id),
             name: String(p.name || ""),
+            translatedName: translatedNameMap.get(String(p.id)) || null,
             scientific_name_species: p.scientific_name_species ?? null,
             status: p.status ?? null,
           });
         }
       });
-      
+
       translationPlants.forEach((plant) => {
         if (!seenIds.has(plant.id)) {
           seenIds.add(plant.id);
@@ -3093,16 +3108,57 @@ export const AdminPage: React.FC = () => {
         }
       });
 
-      // Sort by name and limit to 20
-      merged.sort((a, b) => (a.name || "").localeCompare(b.name || ""));
-      setAddFromSearchResults(merged.slice(0, 20));
+      // Sort by display name and limit to 20
+      merged.sort((a, b) => {
+        const nameA = a.translatedName || a.name || "";
+        const nameB = b.translatedName || b.name || "";
+        return nameA.localeCompare(nameB);
+      });
+      const limited = merged.slice(0, 20);
+
+      // Fetch primary images for results
+      const imageMap = new Map<string, string>();
+      if (limited.length > 0) {
+        const { data: imagesData } = await supabase
+          .from('plant_images')
+          .select('plant_id, link')
+          .in('plant_id', limited.map(p => p.id))
+          .eq('use', 'primary');
+        if (imagesData) imagesData.forEach((img: any) => {
+          if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link);
+        });
+      }
+
+      // Fetch variety from translations for results
+      const varietyMap = new Map<string, string>();
+      if (limited.length > 0) {
+        const { data: varData } = await supabase
+          .from('plant_translations')
+          .select('plant_id, variety')
+          .eq('language', currentLang)
+          .in('plant_id', limited.map(p => p.id));
+        if (varData) varData.forEach((v: any) => {
+          if (v.plant_id && v.variety) varietyMap.set(v.plant_id, v.variety);
+        });
+      }
+
+      return limited.map((plant) => ({
+        id: plant.id,
+        label: plant.translatedName || plant.name,
+        // Store image URL in description (used by renderItem)
+        description: imageMap.get(plant.id) || null,
+        // Store variety, scientific name, and status as JSON in meta for renderItem
+        meta: JSON.stringify({
+          variety: varietyMap.get(plant.id) || null,
+          scientificName: plant.scientific_name_species || null,
+          status: plant.status || null,
+        }),
+      }));
     } catch (err) {
       console.error("Failed to search plants:", err);
-      setAddFromSearchResults([]);
-    } finally {
-      setAddFromSearchLoading(false);
+      return [];
     }
-  }, []);
+  }, [currentLang]);
 
   const handleSelectPlantForPrefill = React.useCallback(
     async (plantId: string, plantName: string) => {
@@ -3185,7 +3241,7 @@ export const AdminPage: React.FC = () => {
           name: newName,
           // Keep scientific_name - no unique constraint exists on this field
           // Update meta fields
-          status: 'in progres',
+          status: 'in_progress',
           created_by: profile?.display_name || sourcePlant.created_by,
           created_time: timestamp,
           updated_by: profile?.display_name || null,
@@ -3410,6 +3466,53 @@ export const AdminPage: React.FC = () => {
         }
       });
 
+      // Fetch translations for the user's current language (if not English)
+      // so admins can search plants in their own language
+      const localizedNameMap = new Map<string, string>();
+      const localizedGivenNamesMap = new Map<string, string[]>();
+      const localizedVarietyMap = new Map<string, string>();
+      const localizedTagsMap = new Map<string, string[]>();
+      if (currentLang !== "en") {
+        const allLocalizedTranslations: unknown[] = [];
+        let offset = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+        while (hasMore) {
+          const { data, error: trError } = await supabase
+            .from("plant_translations")
+            .select("plant_id, name, common_names, variety, plant_tags")
+            .eq("language", currentLang)
+            .range(offset, offset + pageSize - 1);
+          if (trError) break;
+          if (!data || data.length === 0) { hasMore = false; break; }
+          allLocalizedTranslations.push(...data);
+          offset += data.length;
+          if (data.length < pageSize) hasMore = false;
+        }
+        const localizedTranslationsData = allLocalizedTranslations.filter((t: unknown) => {
+          const tr = t as Record<string, unknown>;
+          return tr?.plant_id && plantIdSet.has(String(tr.plant_id));
+        });
+        (localizedTranslationsData || []).forEach((t: unknown) => {
+          const tr = t as Record<string, unknown>;
+          if (tr?.plant_id) {
+            const pid = String(tr.plant_id);
+            if (tr.name && typeof tr.name === "string") {
+              localizedNameMap.set(pid, tr.name);
+            }
+            if (Array.isArray(tr.common_names)) {
+              localizedGivenNamesMap.set(pid, (tr.common_names as unknown[]).map((n: unknown) => String(n || "")));
+            }
+            if (tr.variety && typeof tr.variety === "string") {
+              localizedVarietyMap.set(pid, tr.variety);
+            }
+            if (Array.isArray(tr.plant_tags)) {
+              localizedTagsMap.set(pid, (tr.plant_tags as unknown[]).map((tag: unknown) => String(tag || "")));
+            }
+          }
+        });
+      }
+
       // Fetch garden counts per plant (how many gardens each plant appears in)
       const gardensCountMap = new Map<string, number>();
       {
@@ -3487,6 +3590,10 @@ export const AdminPage: React.FC = () => {
               variety: varietyMap.get(plantId) || null,
               givenNames,
               tags,
+              localizedName: localizedNameMap.get(plantId) || null,
+              localizedVariety: localizedVarietyMap.get(plantId) || null,
+              localizedGivenNames: localizedGivenNamesMap.get(plantId) || [],
+              localizedTags: localizedTagsMap.get(plantId) || [],
               status: normalizePlantStatus(r?.status),
               featuredMonths: toFeaturedMonthSlugs(r?.featured_month),
               primaryImage: (primaryImage as Record<string, unknown>)?.link
@@ -3535,7 +3642,7 @@ export const AdminPage: React.FC = () => {
       setPlantDashboardInitialized(true);
       setPlantDashboardLoading(false);
     }
-  }, []);
+  }, [currentLang]);
 
   const handleDeletePlant = React.useCallback(async () => {
     if (!plantToDelete) return;
@@ -3912,12 +4019,16 @@ export const AdminPage: React.FC = () => {
               ? plant.featuredMonths.length === 0
               : plant.featuredMonths.includes(selectedFeaturedMonth);
         if (!matchesFeaturedMonth) return false;
-        // Search by name, variety, common names, or tags
+        // Search by name, variety, common names, or tags (in both English and user's language)
         const matchesSearch = term
           ? plant.name.toLowerCase().includes(term) ||
             (plant.variety && plant.variety.toLowerCase().includes(term)) ||
             plant.givenNames.some((gn) => gn.toLowerCase().includes(term)) ||
-            plant.tags.some((tag) => tag.toLowerCase().includes(term))
+            plant.tags.some((tag) => tag.toLowerCase().includes(term)) ||
+            (plant.localizedName && plant.localizedName.toLowerCase().includes(term)) ||
+            (plant.localizedVariety && plant.localizedVariety.toLowerCase().includes(term)) ||
+            plant.localizedGivenNames.some((gn) => gn.toLowerCase().includes(term)) ||
+            plant.localizedTags.some((tag) => tag.toLowerCase().includes(term))
           : true;
         return matchesSearch;
       })
@@ -5284,16 +5395,6 @@ export const AdminPage: React.FC = () => {
     loadPlantDashboard,
   ]);
 
-  // Auto-navigate to the new plant when duplication succeeds from the plant list (not via dialog)
-  React.useEffect(() => {
-    if (addFromDuplicateSuccess && !addFromDialogOpen) {
-      const { id, originalName } = addFromDuplicateSuccess;
-      // Clear the success state before navigating
-      setAddFromDuplicateSuccess(null);
-      // Navigate to the new plant's edit page
-      navigate(`/create/${id}?duplicatedFrom=${encodeURIComponent(originalName)}`);
-    }
-  }, [addFromDuplicateSuccess, addFromDialogOpen, navigate]);
 
   const membersView: "search" | "list" | "reports" = React.useMemo(() => {
     if (currentPath.includes("/admin/members/reports")) return "reports";
@@ -9204,7 +9305,7 @@ export const AdminPage: React.FC = () => {
                                         {plant.primaryImage ? (
                                           <img
                                             src={plant.primaryImage}
-                                            alt={plant.name}
+                                            alt={plant.localizedName || plant.name}
                                             className="h-full w-full object-cover transition-transform group-hover:scale-105"
                                             loading="lazy"
                                           />
@@ -9217,10 +9318,10 @@ export const AdminPage: React.FC = () => {
                                       <div className="flex-1 min-w-0">
                                         <div className="flex items-center gap-2">
                                           <span className="font-medium text-stone-900 dark:text-white text-sm sm:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                                            {plant.name}
-                                            {plant.variety && (
+                                            {plant.localizedName || plant.name}
+                                            {(plant.localizedVariety || plant.variety) && (
                                               <span className="ml-1.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xs sm:text-sm font-extrabold tracking-tight">
-                                                &lsquo;{plant.variety}&rsquo;
+                                                &lsquo;{plant.localizedVariety || plant.variety}&rsquo;
                                               </span>
                                             )}
                                           </span>
@@ -9502,7 +9603,7 @@ export const AdminPage: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            handleSelectPlantForPrefill(plant.id, plant.name);
+                                            handleSelectPlantForPrefill(plant.id, plant.localizedName || plant.name);
                                           }}
                                           className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-emerald-100 dark:hover:bg-emerald-900/30 text-stone-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-all"
                                           title="Duplicate plant (Add From)"
@@ -9514,7 +9615,7 @@ export const AdminPage: React.FC = () => {
                                           type="button"
                                           onClick={(e) => {
                                             e.stopPropagation();
-                                            setPlantToDelete({ id: plant.id, name: plant.name });
+                                            setPlantToDelete({ id: plant.id, name: plant.localizedName || plant.name });
                                             setDeletePlantDialogOpen(true);
                                           }}
                                           className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-stone-400 hover:text-red-600 dark:hover:text-red-400 transition-all"
@@ -9635,7 +9736,8 @@ export const AdminPage: React.FC = () => {
                                     className="w-full px-4 py-2.5 text-sm text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors flex items-center gap-2"
                                     onClick={() => {
                                       setAddButtonExpanded(false);
-                                      setAddFromDialogOpen(true);
+                                      const trigger = document.querySelector<HTMLButtonElement>('[data-add-from-trigger="true"]');
+                                      if (trigger) trigger.click();
                                     }}
                                   >
                                     <Copy className="h-4 w-4 opacity-60" />
@@ -13320,12 +13422,71 @@ export const AdminPage: React.FC = () => {
       </div>
     </div>
 
-    {/* Add FROM Plant Dialog */}
-    <Dialog open={addFromDialogOpen} onOpenChange={(open) => {
-      setAddFromDialogOpen(open);
-      if (!open) {
-        setAddFromSearchQuery("");
-        setAddFromSearchResults([]);
+    {/* Add FROM Plant – SearchItem (hidden trigger, opened programmatically) */}
+    <SearchItem
+      value={null}
+      onSelect={(option: SearchItemOption) => {
+        handleSelectPlantForPrefill(option.id, option.label);
+      }}
+      onSearch={searchPlantsForAddFrom}
+      title="Add Plant FROM Existing"
+      description="Search for an existing plant to duplicate. All data including translations will be copied to a new plant."
+      searchPlaceholder="Search plants by name..."
+      emptyMessage="No plants found."
+      placeholder="Add FROM..."
+      disabled={addFromDuplicating}
+      className="hidden"
+      renderItem={(option, isSelected) => {
+        let variety: string | null = null;
+        let scientificName: string | null = null;
+        let status: string | null = null;
+        try {
+          const parsed = JSON.parse(option.meta || '{}');
+          variety = parsed.variety || null;
+          scientificName = parsed.scientificName || null;
+          status = parsed.status || null;
+        } catch {}
+        return (
+          <div className="flex flex-col w-full h-full">
+            <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+              {option.description ? (
+                <img src={option.description} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-stone-400">
+                  <Leaf className="h-8 w-8" />
+                </div>
+              )}
+            </div>
+            <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
+              <p className={`text-sm font-medium truncate ${isSelected ? "text-emerald-700 dark:text-emerald-300" : "text-stone-900 dark:text-white"}`}>
+                {option.label}
+              </p>
+              {variety && (
+                <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">
+                  &apos;{variety}&apos;
+                </p>
+              )}
+              {scientificName && (
+                <p className="text-xs italic text-stone-500 dark:text-stone-400 truncate">{scientificName}</p>
+              )}
+              {status && (
+                <span className="mt-1 self-start px-1.5 py-0.5 rounded-md bg-stone-100 dark:bg-[#2a2a2d] text-[10px] text-stone-500 dark:text-stone-400">
+                  {status}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      }}
+      ref={(el) => {
+        // Store ref so we can programmatically click to open the dialog
+        if (el) (el as HTMLElement).setAttribute("data-add-from-trigger", "true");
+      }}
+    />
+
+    {/* Add FROM – Duplication Status Dialog */}
+    <Dialog open={addFromDuplicating || !!addFromDuplicateSuccess || !!addFromDuplicateError} onOpenChange={(open) => {
+      if (!open && !addFromDuplicating) {
         setAddFromDuplicateError(null);
         setAddFromDuplicateSuccess(null);
       }
@@ -13334,11 +13495,10 @@ export const AdminPage: React.FC = () => {
         <DialogHeader>
           <DialogTitle>Add Plant FROM Existing</DialogTitle>
           <DialogDescription>
-            Search for an existing plant to duplicate. All data including translations will be copied to a new plant.
+            {addFromDuplicateSuccess ? "Duplication complete" : addFromDuplicateError ? "Duplication failed" : "Duplicating plant..."}
           </DialogDescription>
         </DialogHeader>
-        
-        {/* Success State */}
+
         {addFromDuplicateSuccess ? (
           <div className="space-y-4">
             <div className="flex items-start gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800">
@@ -13348,7 +13508,7 @@ export const AdminPage: React.FC = () => {
                   Plant duplicated successfully!
                 </div>
                 <div className="text-sm text-emerald-700 dark:text-emerald-300">
-                  Created "<span className="font-medium">{addFromDuplicateSuccess.name}</span>"
+                  Created &ldquo;<span className="font-medium">{addFromDuplicateSuccess.name}</span>&rdquo;
                 </div>
                 <div className="text-xs text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5 mt-2">
                   <Info className="h-3.5 w-3.5" />
@@ -13362,20 +13522,15 @@ export const AdminPage: React.FC = () => {
                 className="flex-1 rounded-xl"
                 onClick={() => {
                   setAddFromDuplicateSuccess(null);
-                  setAddFromSearchQuery("");
-                  setAddFromSearchResults([]);
                 }}
               >
-                Duplicate Another
+                Close
               </Button>
               <Button
                 className="flex-1 rounded-xl"
                 onClick={() => {
                   const successId = addFromDuplicateSuccess.id;
                   const originalName = addFromDuplicateSuccess.originalName;
-                  setAddFromDialogOpen(false);
-                  setAddFromSearchQuery("");
-                  setAddFromSearchResults([]);
                   setAddFromDuplicateSuccess(null);
                   navigate(`/create/${successId}?duplicatedFrom=${encodeURIComponent(originalName)}`);
                 }}
@@ -13385,77 +13540,32 @@ export const AdminPage: React.FC = () => {
               </Button>
             </div>
           </div>
-        ) : addFromDuplicating ? (
-          /* Duplicating State */
+        ) : addFromDuplicateError ? (
+          <div className="space-y-4">
+            <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
+              <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <div className="font-medium text-red-900 dark:text-red-100">
+                  Duplication failed
+                </div>
+                <div className="text-sm text-red-700 dark:text-red-300">
+                  {addFromDuplicateError}
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" className="rounded-xl" onClick={() => setAddFromDuplicateError(null)}>
+                Close
+              </Button>
+            </DialogFooter>
+          </div>
+        ) : (
           <div className="flex flex-col items-center justify-center py-8 space-y-3">
             <RefreshCw className="h-8 w-8 text-emerald-600 dark:text-emerald-400 animate-spin" />
             <div className="text-sm font-medium">Duplicating plant...</div>
             <div className="text-xs opacity-60">Copying all data and translations</div>
           </div>
-        ) : (
-          /* Search State */
-          <div className="space-y-4">
-            {addFromDuplicateError && (
-              <div className="flex items-start gap-3 p-4 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-800">
-                <AlertTriangle className="h-5 w-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <div className="font-medium text-red-900 dark:text-red-100">
-                    Duplication failed
-                  </div>
-                  <div className="text-sm text-red-700 dark:text-red-300">
-                    {addFromDuplicateError}
-                  </div>
-                </div>
-              </div>
-            )}
-            <SearchInput
-              value={addFromSearchQuery}
-              onChange={(e) => {
-                setAddFromSearchQuery(e.target.value);
-                searchPlantsForAddFrom(e.target.value);
-              }}
-              placeholder="Search plants by name..."
-            />
-            <div className="max-h-[300px] overflow-y-auto rounded-xl border border-stone-200 dark:border-[#3e3e42]">
-              {addFromSearchLoading ? (
-                <div className="p-4 text-sm text-center opacity-60">Searching...</div>
-              ) : addFromSearchQuery.trim() && addFromSearchResults.length === 0 ? (
-                <div className="p-4 text-sm text-center opacity-60">No plants found</div>
-              ) : addFromSearchResults.length === 0 ? (
-                <div className="p-4 text-sm text-center opacity-60">Type to search for plants</div>
-              ) : (
-                <div className="divide-y divide-stone-200 dark:divide-[#2f2f35]">
-                  {addFromSearchResults.map((plant) => (
-                    <button
-                      key={plant.id}
-                      type="button"
-                      onClick={() => handleSelectPlantForPrefill(plant.id, plant.name)}
-                      className="w-full px-4 py-3 text-left hover:bg-stone-100 dark:hover:bg-[#2a2a2d] transition-colors"
-                    >
-                      <div className="font-medium text-sm">{plant.name}</div>
-                      {plant.scientific_name_species && (
-                        <div className="text-xs italic opacity-60">{plant.scientific_name_species}</div>
-                      )}
-                      {plant.status && (
-                        <Badge variant="outline" className="mt-1 text-[10px]">
-                          {plant.status}
-                        </Badge>
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
         )}
-        
-        <DialogFooter>
-          <DialogClose asChild>
-            <Button variant="outline" className="rounded-xl" disabled={addFromDuplicating}>
-              {addFromDuplicateSuccess ? 'Close' : 'Cancel'}
-            </Button>
-          </DialogClose>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
 
@@ -13603,7 +13713,7 @@ export const AdminPage: React.FC = () => {
               .map((plant) => (
                 <div key={plant.id} className="px-4 py-2">
                   <div className="font-medium text-sm text-stone-900 dark:text-white">
-                    {plant.name}
+                    {plant.localizedName || plant.name}
                   </div>
                   <div className="text-xs text-stone-500 dark:text-stone-400 font-mono">
                     {plant.id.slice(0, 8)}...

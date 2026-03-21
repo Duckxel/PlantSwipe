@@ -20,6 +20,7 @@ declare
     array['climate', 'text[] not null default ''{}''::text[]'],
     array['season', 'text[] not null default ''{}''::text[]'],
     array['utility', 'text[] not null default ''{}''::text[]'],
+    array['vegetable', 'boolean default false'],
     array['edible_part', 'text[] not null default ''{}''::text[]'],
     array['thorny', 'boolean default false'],
     array['toxicity_human', 'text'],
@@ -84,7 +85,7 @@ declare
     array['medicinal', 'boolean default false'],
     array['aromatherapy', 'boolean default false'],
     array['fragrance', 'boolean default false'],
-    array['edible_oil', 'text'],
+    array['edible_oil', 'boolean default false'],
     -- Section 8: Misc
     array['companion_plants', 'text[] not null default ''{}''::text[]'],
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],

@@ -21427,19 +21427,14 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             gp.last_health_update,
             p.id as p_id,
             p.name as p_name,
-            p.scientific_name as p_scientific_name,
-            p.colors as p_colors,
-            p.seasons as p_seasons,
-            p.rarity as p_rarity,
-            p.meaning as p_meaning,
-            p.description as p_description,
-            p.image_url as p_image_url,
-            p.photos as p_photos,
-            p.level_sun as p_level_sun,
+            p.scientific_name_species as p_scientific_name,
+            p.season as p_seasons,
+            p.sunlight as p_level_sun,
             p.watering_type as p_watering_type,
-            p.soil as p_soil,
-            p.maintenance_level as p_maintenance_level,
-            p.seeds_available as p_seeds_available
+            p.substrate as p_soil,
+            p.care_level as p_maintenance_level,
+            (select pi.link from public.plant_images pi where pi.plant_id = p.id and pi.use = 'primary' limit 1) as p_image_url,
+            (select pt.presentation from public.plant_translations pt where pt.plant_id = p.id and pt.language = 'en' limit 1) as p_description
           from public.garden_plants gp
           left join public.plants p on p.id = gp.plant_id
           where gp.garden_id = ${gardenId}
@@ -21452,8 +21447,6 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         gpRows = []
       }
       plants = (gpRows || []).map((r) => {
-        const plantPhotos = Array.isArray(r.p_photos) ? r.p_photos : undefined
-        const plantImage = pickPrimaryPhotoUrlFromArray(plantPhotos, r.p_image_url || '')
         return {
           id: String(r.id),
           gardenId: String(r.garden_id),
@@ -21473,20 +21466,15 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             id: String(r.p_id),
             name: String(r.p_name || ''),
             scientificName: String(r.p_scientific_name || ''),
-            colors: Array.isArray(r.p_colors) ? r.p_colors.map(String) : [],
             seasons: Array.isArray(r.p_seasons) ? r.p_seasons.map(String) : [],
-            rarity: r.p_rarity,
-            meaning: r.p_meaning || '',
             description: r.p_description || '',
-            photos: plantPhotos,
-            image: plantImage,
+            image: r.p_image_url || '',
             care: {
-              sunlight: r.p_level_sun || null,
+              sunlight: Array.isArray(r.p_level_sun) ? r.p_level_sun.join(', ') : (r.p_level_sun || null),
               water: Array.isArray(r.p_watering_type) ? r.p_watering_type.join(', ') : null,
               soil: Array.isArray(r.p_soil) ? r.p_soil.join(', ') : null,
-              difficulty: r.p_maintenance_level || null,
+              difficulty: Array.isArray(r.p_maintenance_level) ? r.p_maintenance_level.join(', ') : (r.p_maintenance_level || null),
             },
-            seedsAvailable: Boolean(r.p_seeds_available ?? false),
           } : null,
         }
       })
@@ -21563,25 +21551,19 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         const pResp = await fetch(pUrl, { headers })
         const pRows = pResp.ok ? (await pResp.json().catch(() => [])) : []
         for (const p of pRows) {
-          const plantPhotos = Array.isArray(p.photos) ? p.photos : undefined
           plantsMap[String(p.id)] = {
             id: String(p.id),
             name: String(p.name || ''),
-            scientificName: String(p.scientific_name || ''),
-            colors: Array.isArray(p.colors) ? p.colors.map(String) : [],
-            seasons: Array.isArray(p.seasons) ? p.seasons.map(String) : [],
-            rarity: p.rarity,
-            meaning: p.meaning || '',
-            description: p.description || '',
-            photos: plantPhotos,
-            image: pickPrimaryPhotoUrlFromArray(plantPhotos, p.image_url || ''),
+            scientificName: String(p.scientific_name_species || ''),
+            seasons: Array.isArray(p.season) ? p.season.map(String) : [],
+            description: '',
+            image: '',
             care: {
-              sunlight: p.level_sun || null,
+              sunlight: Array.isArray(p.sunlight) ? p.sunlight.join(', ') : (p.sunlight || null),
               water: Array.isArray(p.watering_type) ? p.watering_type.join(', ') : null,
-              soil: Array.isArray(p.soil) ? p.soil.join(', ') : null,
-              difficulty: p.maintenance_level || null,
+              soil: Array.isArray(p.substrate) ? p.substrate.join(', ') : null,
+              difficulty: Array.isArray(p.care_level) ? p.care_level.join(', ') : (p.care_level || null),
             },
-            seedsAvailable: Boolean(p.seeds_available ?? false),
           }
         }
       }
@@ -22340,27 +22322,27 @@ app.get('/api/garden/:id/advice', async (req, res) => {
         gp.override_water_freq_unit, gp.override_water_freq_value,
         gp.created_at as added_at,
         -- Base plant info
-        p.name as plant_name, p.scientific_name, p.plant_type,
-        p.utility as plant_utility, p.comestible_part,
+        p.name as plant_name, p.scientific_name_species, p.plant_type,
+        p.utility as plant_utility, p.edible_part,
         -- Care requirements
-        p.watering_type, p.level_sun,
+        p.watering_type, p.sunlight,
         p.temperature_min, p.temperature_max, p.temperature_ideal,
-        p.hygrometry, p.soil, p.nutrition_need, p.fertilizer,
+        p.hygrometry, p.substrate, p.nutrition_need, p.fertilizer,
         -- Growing info
         p.sowing_month, p.flowering_month, p.fruiting_month, p.harvesting_month,
         p.height_cm, p.wingspan_cm, p.separation_cm,
-        p.tutoring, p.transplanting, p.sow_type, p.division,
+        p.staking, p.transplanting, p.sowing_method, p.division,
         -- Characteristics
-        p.spiked, p.scent, p.multicolor,
-        p.melliferous, p.conservation_status,
+        p.thorny, p.multicolor,
+        p.biodiversity_role, p.conservation_status,
         p.toxicity_human, p.toxicity_pets,
-        ('comestible' = ANY(p.utility)) as is_edible,
+        ('edible' = ANY(p.utility)) as is_edible,
         -- Companions (pests/diseases now in plant_translations)
-        p.companions,
+        p.companion_plants,
         -- Translated fields including pests and diseases
         (
-          select pt.overview 
-          from public.plant_translations pt 
+          select pt.presentation
+          from public.plant_translations pt
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
         ) as plant_overview,
@@ -22572,7 +22554,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     const plantList = plants.map(p => {
       const lines = []
       const displayName = p.nickname || p.plant_name || 'Unknown'
-      lines.push(`### ${displayName}${p.scientific_name ? ` (${p.scientific_name})` : ''}`)
+      lines.push(`### ${displayName}${p.scientific_name_species ? ` (${p.scientific_name_species})` : ''}`)
       
       // Basic info
       const basicInfo = []
@@ -22591,7 +22573,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       if (p.override_water_freq_value) {
         careInfo.push(`Watering: ${p.override_water_freq_value}x per ${p.override_water_freq_unit || 'week'} (custom)`)
       }
-      if (p.level_sun) careInfo.push(`Light: ${p.level_sun}`)
+      if (p.sunlight) careInfo.push(`Light: ${Array.isArray(p.sunlight) ? p.sunlight.join(', ') : p.sunlight}`)
       if (p.temperature_min && p.temperature_max) {
         careInfo.push(`Temp: ${p.temperature_min}°C-${p.temperature_max}°C${p.temperature_ideal ? ` (ideal: ${p.temperature_ideal}°C)` : ''}`)
       }
@@ -22611,7 +22593,7 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       if (p.is_edible) chars.push('Edible')
       if (p.toxicity_human === 'highly toxic' || p.toxicity_human === 'lethally toxic') chars.push('⚠️ Toxic to humans')
       if (p.toxicity_pets === 'highly toxic' || p.toxicity_pets === 'lethally toxic') chars.push('⚠️ Toxic to pets')
-      if (p.melliferous) chars.push('Melliferous')
+      if (Array.isArray(p.biodiversity_role) && p.biodiversity_role.includes('melliferous')) chars.push('Melliferous')
       if (chars.length > 0) lines.push(`- Traits: ${chars.join(', ')}`)
       
       // Problems
@@ -23823,8 +23805,8 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
     const plants = await sql`
       select gp.id, gp.nickname, gp.plants_on_hand, gp.health_status, gp.notes, 
              gp.last_health_update, gp.planted_at, gp.expected_bloom_date,
-             p.id as plant_id, p.name as plant_name, p.scientific_name,
-             p.watering_type, p.level_sun, p.maintenance_level
+             p.id as plant_id, p.name as plant_name, p.scientific_name_species,
+             p.watering_type, p.sunlight, p.care_level
       from public.garden_plants gp
       left join public.plants p on p.id = gp.plant_id
       where gp.id = ${plantId} and gp.garden_id = ${gardenId}
@@ -23850,10 +23832,10 @@ app.get('/api/garden/:gardenId/plant/:plantId', async (req, res) => {
         expectedBloomDate: plant.expected_bloom_date,
         plantId: plant.plant_id,
         plantName: plant.plant_name,
-        scientificName: plant.scientific_name,
+        scientificName: plant.scientific_name_species,
         wateringType: plant.watering_type,
-        levelSun: plant.level_sun,
-        maintenanceLevel: plant.maintenance_level,
+        sunlight: plant.sunlight,
+        careLevel: plant.care_level,
       }
     })
   } catch (e) {
@@ -25181,7 +25163,7 @@ app.post('/api/push/instant', async (req, res) => {
   }
   
   // Validate notification type
-  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted', 'new_message']
+  const validTypes = ['friend_request', 'garden_invite', 'friend_request_accepted', 'garden_invite_accepted', 'new_message', 'system']
   if (!validTypes.includes(type)) {
     res.status(400).json({ error: `Invalid notification type. Must be one of: ${validTypes.join(', ')}` })
     return
@@ -26950,18 +26932,18 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         gp.sort_index as display_order,
         -- Base plant info
         p.name as plant_name,
-        p.scientific_name,
+        p.scientific_name_species,
         p.plant_type,
         p.utility as plant_utility,
-        p.comestible_part,
+        p.edible_part,
         -- Care requirements
-        p.level_sun,
+        p.sunlight,
         p.temperature_min,
         p.temperature_max,
         p.temperature_ideal,
         p.hygrometry,
         p.watering_type,
-        p.soil,
+        p.substrate,
         p.nutrition_need,
         p.fertilizer,
         -- Growing info
@@ -26972,25 +26954,24 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
         p.height_cm,
         p.wingspan_cm,
         p.separation_cm,
-        p.tutoring,
+        p.staking,
         p.transplanting,
-        p.sow_type,
+        p.sowing_method,
         p.division,
         -- Characteristics
-        ('comestible' = ANY(p.utility)) as is_edible,
+        ('edible' = ANY(p.utility)) as is_edible,
         p.toxicity_human,
         p.toxicity_pets,
-        p.spiked,
-        p.scent,
+        p.thorny,
         p.multicolor,
-        p.melliferous,
+        p.biodiversity_role,
         p.conservation_status,
         -- Companions (pests/diseases now in plant_translations)
-        p.companions,
+        p.companion_plants,
         -- Get translated fields including pests and diseases
         (
-          select pt.overview 
-          from public.plant_translations pt 
+          select pt.presentation
+          from public.plant_translations pt
           where pt.plant_id = p.id and pt.language = 'en'
           limit 1
         ) as plant_overview,
@@ -27067,7 +27048,7 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       gardenPlantId: row.garden_plant_id,
       plantId: row.plant_id,
       plantName: row.plant_name || 'Unknown plant',
-      scientificName: row.scientific_name,
+      scientificName: row.scientific_name_species,
       nickname: row.nickname,
       healthStatus: row.health_status,
       lastHealthUpdate: row.last_health_update,
@@ -27083,13 +27064,13 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       waterFrequency: row.override_water_freq_value 
         ? `${row.override_water_freq_value}x per ${row.override_water_freq_unit || 'week'} (custom)`
         : null,
-      lightLevel: row.level_sun,
+      lightLevel: row.sunlight,
       temperatureRange: row.temperature_min && row.temperature_max 
         ? { min: row.temperature_min, max: row.temperature_max, ideal: row.temperature_ideal }
         : null,
       humidity: row.hygrometry,
       wateringType: row.watering_type,
-      soilType: row.soil,
+      soilType: row.substrate,
       nutritionNeeds: row.nutrition_need,
       fertilizerTypes: row.fertilizer,
       // Growing info
@@ -27100,26 +27081,25 @@ async function fetchPlantsContext(gardenId, plantIds = null) {
       heightCm: row.height_cm,
       wingspanCm: row.wingspan_cm,
       separationCm: row.separation_cm,
-      needsTutoring: row.tutoring,
+      needsStaking: row.staking,
       canTransplant: row.transplanting,
-      sowType: row.sow_type,
+      sowingMethod: row.sowing_method,
       propagationMethods: row.division,
       // Characteristics
       isEdible: row.is_edible,
       toxicityHuman: row.toxicity_human,
       toxicityPets: row.toxicity_pets,
-      hasSpikes: row.spiked,
-      hasScent: row.scent,
+      hasThorns: row.thorny,
       isMulticolor: row.multicolor,
-      isMelliferous: row.melliferous,
+      biodiversityRole: row.biodiversity_role,
       conservationStatus: row.conservation_status,
       plantType: row.plant_type,
       utility: row.plant_utility,
-      edibleParts: row.comestible_part,
+      edibleParts: row.edible_part,
       // Problems and companions
       commonPests: row.pests,
       commonDiseases: row.diseases,
-      companionPlants: row.companions,
+      companionPlants: row.companion_plants,
       // Instance data
       taskCount: taskCounts[row.garden_plant_id] || 0,
       schedule: schedules[row.garden_plant_id] || null,
@@ -29763,7 +29743,7 @@ app.get('/llms-full.txt', async (req, res) => {
     while (true) {
       const { data: batch, error } = await db
         .from('plants')
-        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, soil, sowing_month, flowering_month, fruiting_month, harvesting_month, melliferous, infusion, aromatherapy, conservation_status, companions, utility, comestible_part')
+        .select('id, name, plant_type, temperature_min, temperature_max, temperature_ideal, height_cm, wingspan_cm, watering_type, substrate, sunlight, care_level, life_cycle, living_space, habitat, sowing_month, flowering_month, fruiting_month, harvesting_month, biodiversity_role, conservation_status, companion_plants, utility, edible_part, toxicity_human, toxicity_pets, scientific_name_species, family')
         .order('name', { ascending: true })
         .range(offset, offset + batchSize - 1)
       if (error) { console.error('[llms-full] plants error:', error.message); break }
@@ -29779,7 +29759,7 @@ app.get('/llms-full.txt', async (req, res) => {
     while (true) {
       const { data: batch, error } = await db
         .from('plant_translations')
-        .select('plant_id, scientific_name, family, overview, tags, level_sun, maintenance_level, life_cycle, toxicity_human, toxicity_pets, habitat, origin, living_space')
+        .select('plant_id, presentation, plant_tags, origin')
         .eq('language', 'en')
         .range(offset, offset + batchSize - 1)
       if (error) { console.error('[llms-full] translations error:', error.message); break }
@@ -29793,18 +29773,18 @@ app.get('/llms-full.txt', async (req, res) => {
 
     for (const p of allPlants) {
       const t = translationMap[p.id] || {}
-      const scientificName = t.scientific_name || ''
-      const family = t.family || ''
-      const overview = (t.overview || '').replace(/\n/g, ' ').slice(0, 300)
-      const tags = (t.tags || []).join(', ')
-      const lightReq = t.level_sun || ''
-      const maintenance = t.maintenance_level || ''
-      const lifeCycle = t.life_cycle || ''
-      const toxHuman = t.toxicity_human || ''
-      const toxPets = t.toxicity_pets || ''
-      const habitat = (t.habitat || []).join(', ')
+      const scientificName = p.scientific_name_species || ''
+      const family = p.family || ''
+      const overview = (t.presentation || '').replace(/\n/g, ' ').slice(0, 300)
+      const tags = (t.plant_tags || []).join(', ')
+      const lightReq = Array.isArray(p.sunlight) ? p.sunlight.join(', ') : (p.sunlight || '')
+      const maintenance = Array.isArray(p.care_level) ? p.care_level.join(', ') : (p.care_level || '')
+      const lifeCycle = Array.isArray(p.life_cycle) ? p.life_cycle.join(', ') : (p.life_cycle || '')
+      const toxHuman = p.toxicity_human || ''
+      const toxPets = p.toxicity_pets || ''
+      const habitat = Array.isArray(p.habitat) ? p.habitat.join(', ') : ''
       const origin = (t.origin || []).join(', ')
-      const livingSpace = t.living_space || ''
+      const livingSpace = Array.isArray(p.living_space) ? p.living_space.join(', ') : ''
 
       lines.push(`### ${p.name}`)
       lines.push(`- URL: ${siteUrl}/plants/${encodeURIComponent(p.id)}`)
@@ -29821,7 +29801,7 @@ app.get('/llms-full.txt', async (req, res) => {
         if (p.temperature_max) temps.push(`max ${p.temperature_max}°C`)
         lines.push(`- Temperature: ${temps.join(', ')}`)
       }
-      if (p.soil?.length) lines.push(`- Soil: ${p.soil.join(', ')}`)
+      if (p.substrate?.length) lines.push(`- Substrate: ${p.substrate.join(', ')}`)
       if (p.height_cm) lines.push(`- Height: ${p.height_cm} cm`)
       if (p.wingspan_cm) lines.push(`- Wingspan: ${p.wingspan_cm} cm`)
       if (lifeCycle) lines.push(`- Life cycle: ${lifeCycle}`)
@@ -29831,16 +29811,14 @@ app.get('/llms-full.txt', async (req, res) => {
       if (p.fruiting_month?.length) lines.push(`- Fruiting: ${p.fruiting_month.join(', ')}`)
       if (p.harvesting_month?.length) lines.push(`- Harvesting: ${p.harvesting_month.join(', ')}`)
       if (p.utility?.length) lines.push(`- Uses: ${p.utility.join(', ')}`)
-      if (p.comestible_part?.length) lines.push(`- Edible parts: ${p.comestible_part.join(', ')}`)
-      if (p.infusion) lines.push(`- Infusion: yes`)
-      if (p.aromatherapy) lines.push(`- Aromatherapy: yes`)
-      if (p.melliferous) lines.push(`- Melliferous: yes`)
+      if (p.edible_part?.length) lines.push(`- Edible parts: ${p.edible_part.join(', ')}`)
+      if (Array.isArray(p.biodiversity_role) && p.biodiversity_role.includes('melliferous')) lines.push(`- Melliferous: yes`)
       if (toxHuman) lines.push(`- Human toxicity: ${toxHuman}`)
       if (toxPets) lines.push(`- Pet toxicity: ${toxPets}`)
       if (habitat) lines.push(`- Habitat: ${habitat}`)
       if (origin) lines.push(`- Origin: ${origin}`)
-      if (p.conservation_status) lines.push(`- Conservation: ${p.conservation_status}`)
-      if (p.companions?.length) lines.push(`- Companions: ${p.companions.slice(0, 10).join(', ')}`)
+      if (p.conservation_status) lines.push(`- Conservation: ${Array.isArray(p.conservation_status) ? p.conservation_status.join(', ') : p.conservation_status}`)
+      if (p.companion_plants?.length) lines.push(`- Companions: ${p.companion_plants.slice(0, 10).join(', ')}`)
       if (tags) lines.push(`- Tags: ${tags}`)
       if (overview) lines.push(`- Overview: ${overview}`)
       lines.push('')

@@ -104,6 +104,7 @@ export const plantTypeEnum = createEnumTools([
 
 export const plantPartEnum = createEnumTools([
   { dbValue: 'roots', uiValue: 'Roots', aliases: ['root'] },
+  { dbValue: 'rhizomes', uiValue: 'Rhizomes', aliases: ['rhizome'] },
   { dbValue: 'bulbs', uiValue: 'Bulbs', aliases: ['bulb'] },
   { dbValue: 'stems', uiValue: 'Stems', aliases: ['stem'] },
   { dbValue: 'leaves', uiValue: 'Leaves', aliases: ['leaf', 'foliage'] },

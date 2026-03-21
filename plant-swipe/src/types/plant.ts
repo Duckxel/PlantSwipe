@@ -9,7 +9,7 @@ export type PlantTypeValue =
   | "succulent" | "fern" | "moss" | "grass"
 
 export type PlantPartValue =
-  | "roots" | "bulbs" | "stems" | "leaves"
+  | "roots" | "rhizomes" | "bulbs" | "stems" | "leaves"
   | "flowers" | "fruits" | "spores"
 
 export type HabitatValue =
@@ -284,7 +284,7 @@ export interface Plant {
 
   // -- Section 7: Consumption -------------------------------------------------
   infusionParts?: string[]
-  edibleOil?: "yes" | "no" | "unknown"
+  edibleOil?: boolean
   // Translatable
   nutritionalValue?: string
   recipesIdeas?: string[]

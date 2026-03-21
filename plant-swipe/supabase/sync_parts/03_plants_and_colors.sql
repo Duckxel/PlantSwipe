@@ -59,7 +59,7 @@ create table if not exists public.plants (
 
   -- Section 1: Base — Identity & naming
   plant_type text check (plant_type is null or plant_type in ('herb','shrub','tree','climber','succulent','fern','moss','grass')),
-  plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','bulbs','stems','leaves','flowers','fruits','spores']),
+  plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores']),
   habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','parasitic']),
   scientific_name_species text,
   family text,
@@ -273,7 +273,7 @@ create table if not exists public.plants (
 
   -- Section 7: Consumption
   infusion_parts text[] not null default '{}'::text[],
-  edible_oil text check (edible_oil in ('yes','no','unknown')),
+  edible_oil boolean default false,
 
   -- Section 8: Misc
   companion_plants text[] not null default '{}'::text[],
@@ -564,7 +564,7 @@ declare
     array['ecological_impact', 'text[] not null default ''{}''::text[]'],
     -- Section 7: Consumption
     array['infusion_parts', 'text[] not null default ''{}''::text[]'],
-    array['edible_oil', 'text'],
+    array['edible_oil', 'boolean default false'],
     -- Section 8: Misc
     array['companion_plants', 'text[] not null default ''{}''::text[]'],
     array['biotope_plants', 'text[] not null default ''{}''::text[]'],
@@ -1076,7 +1076,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','bulbs','stems','leaves','flowers','fruits','spores']) not valid;
+    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1350,14 +1350,15 @@ begin
   exception when duplicate_object then null; when check_violation then null;
   end;
 
-  -- edible_oil
+  -- edible_oil: convert text -> boolean (drop old check constraint if exists)
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'edible_oil') loop
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
-  begin
-    alter table public.plants add constraint plants_edible_oil_check check (edible_oil in ('yes','no','unknown')) not valid;
-  exception when duplicate_object then null; when check_violation then null;
-  end;
+  if exists (select 1 from information_schema.columns where table_schema='public' and table_name='plants' and column_name='edible_oil' and data_type='text') then
+    alter table public.plants alter column edible_oil type boolean
+      using case when edible_oil = 'yes' then true else false end;
+    alter table public.plants alter column edible_oil set default false;
+  end if;
 
   -- status
   for r in (select c.conname from pg_constraint c join pg_attribute a on a.attnum = any(c.conkey) and a.attrelid = c.conrelid where c.conrelid = 'public.plants'::regclass and c.contype = 'c' and a.attname = 'status') loop

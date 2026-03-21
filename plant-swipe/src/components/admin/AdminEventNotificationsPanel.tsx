@@ -297,7 +297,13 @@ export function AdminEventNotificationsPanel() {
       {error && (
         <div className="p-4 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 text-sm flex items-center justify-between">
           <span>{error}</span>
-          <Button variant="ghost" size="icon" onClick={() => setError(null)}>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setError(null)}
+            aria-label="Dismiss error"
+            title="Dismiss error"
+          >
             <X className="h-4 w-4" />
           </Button>
         </div>

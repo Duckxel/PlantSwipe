@@ -294,21 +294,23 @@ flowchart TB
 | Page | Route | Features |
 |------|-------|----------|
 | 🏠 **Landing** | `/` | Hero, features, call-to-action |
-| 🔄 **Swipe** | `/swipe` | Discover, like/pass, open details, filters |
-| 🖼️ **Gallery** | `/gallery` | Browse all plants with advanced filters |
+| 🔄 **Discovery** | `/discovery` | Swipe cards, like/pass, open details, filters |
 | 🔍 **Search** | `/search` | Combine text + color + season + rarity |
+| 📂 **Categories** | `/search/categories` | Browse plants by category |
+| 🌿 **Plant Detail** | `/plants/:id` | Full plant profile with care info and translations |
 | 🌱 **Gardens** | `/gardens` | List gardens, create new ones |
 | 📊 **Dashboard** | `/garden/:id` | Track inventory, events, streaks, tasks, journal |
 | 👤 **Profile** | `/u/:username` | Public profile with stats, gardens, and heatmap |
 | 👥 **Friends** | `/friends` | Manage friends, send requests |
 | 💬 **Messages** | `/messages` | Private conversations with media sharing |
-| 📚 **Bookmarks** | `/bookmarks` | Organized plant collections |
+| 📚 **Bookmarks** | `/bookmarks/:id` | Organized plant collections |
 | 📝 **Blog** | `/blog` | Read and create blog posts |
+| 📝 **Blog Post** | `/blog/:slug` | Read individual blog post |
 | 🔬 **Scan** | `/scan` | AI plant identification via camera |
 | ⚙️ **Settings** | `/settings` | Account, privacy, language, notifications |
 | 🧙 **Setup** | `/setup` | New user onboarding wizard |
 | ➕ **Create Plant** | `/create` | Add new plants with translations |
-| ✏️ **Edit Plant** | `/edit/:id` | Update plant information |
+| ✏️ **Edit Plant** | `/plants/:id/edit` | Update plant information |
 | 🐛 **Bug Catcher** | `/bug-catcher` | Report bugs with screenshots |
 | 📥 **Download** | `/download` | Install app instructions |
 | 💰 **Pricing** | `/pricing` | Subscription plans |
@@ -418,9 +420,10 @@ bun run build
 
 The `dist/` folder contains the production build including:
 - Optimized assets with code splitting
-- Generated sitemap
 - PWA service worker and manifest
 - Pre-rendered offline page
+
+> 💡 To generate the sitemap, run `bun run generate:sitemap` separately (requires database connection).
 
 Deploy to your static hosting:
 
@@ -613,14 +616,11 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | Resource | Description |
 |----------|-------------|
 | [**robots.txt**](./plant-swipe/public/robots.txt) | Crawl directives for search engines and AI bots |
-| [**llms.txt**](./plant-swipe/public/llms.txt) | AI crawler instructions and website structure information |
 | **sitemap.xml** | Dynamically generated at `/sitemap.xml` |
 
 Aphylia provides comprehensive SEO and crawler support:
 - **Structured Data**: JSON-LD schemas for plants, blog posts, and pages
 - **Open Graph**: Rich social media previews for Discord, Twitter, LinkedIn
-- **Server-Side Rendering**: Pre-rendered HTML for crawlers and archives
-- **AI-Friendly**: Explicit instructions for GPT, Claude, Gemini, and other LLM crawlers
 - **Multi-language**: Language-specific content with proper hreflang tags
 
 ---

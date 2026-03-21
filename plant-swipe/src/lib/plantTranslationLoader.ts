@@ -118,6 +118,7 @@ function mapDbRowToPlant(
     climate: climateEnum.toDbArray(basePlant.climate) as Plant['climate'],
     season: seasonEnum.toDbArray(basePlant.season) as Plant['season'],
     utility: utilityEnum.toDbArray(basePlant.utility) as Plant['utility'],
+    vegetable: (basePlant.vegetable as boolean) ?? false,
     ediblePart: ediblePartEnum.toDbArray(basePlant.edible_part) as Plant['ediblePart'],
     thorny: (basePlant.thorny as boolean) ?? false,
     toxicityHuman: (toxicityEnum.toDb(basePlant.toxicity_human) as Plant['toxicityHuman']) || undefined,
@@ -211,7 +212,7 @@ function mapDbRowToPlant(
 
     // Section 7: Consumption (non-translatable)
     infusionParts: (basePlant.infusion_parts as string[]) || [],
-    edibleOil: (basePlant.edible_oil as Plant['edibleOil']) || undefined,
+    edibleOil: (basePlant.edible_oil as boolean) ?? undefined,
     // Translatable
     nutritionalValue: (translation.nutritional_value as string) || undefined,
     recipesIdeas: (translation.recipes_ideas as string[]) || [],
@@ -430,7 +431,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       'plant_type', 'plant_part', 'habitat',
       'scientific_name_species', 'family',
       'featured_month',
-      'climate', 'season', 'utility', 'edible_part',
+      'climate', 'season', 'utility', 'vegetable', 'edible_part',
       'thorny', 'toxicity_human', 'toxicity_pets',
       'life_cycle', 'foliage_persistence',
       'living_space', 'landscaping', 'plant_habit',
