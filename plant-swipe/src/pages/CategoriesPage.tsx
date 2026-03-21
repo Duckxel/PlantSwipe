@@ -319,7 +319,7 @@ export default function CategoriesPage() {
         const fallback = await supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images(link,use)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images(link,use)",
           )
           .eq("plant_images.use", "primary")
         if (cancelled) return

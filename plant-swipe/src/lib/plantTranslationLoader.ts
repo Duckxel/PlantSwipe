@@ -465,7 +465,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         'plant_type', 'plant_part', 'habitat',
         'scientific_name_species', 'family',
         'featured_month',
-        'climate', 'season', 'utility', 'vegetable', 'edible_part',
+        'climate', 'season', 'utility', 'edible_part',
         'thorny', 'toxicity_human', 'toxicity_pets',
         'life_cycle', 'foliage_persistence',
         'living_space', 'landscaping', 'plant_habit',
