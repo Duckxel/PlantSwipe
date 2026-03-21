@@ -3128,8 +3128,8 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
 const SIMPLE_ENUM_FIELDS = new Set([
   'plantType',    // Single enum selection
   'utility',      // Array of enum values
-  'comestiblePart', // Array of enum values  
-  'fruitType',    // Array of enum values
+  'ediblePart',   // Array of enum values
+  'vegetable',    // Boolean field
   'seasons',      // Array of enum values
 ])
 
@@ -18157,7 +18157,16 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
 
     try {
-      // 17. Clear task cache
+      // 17a. Delete discovery seen-plants history
+      if (sql) {
+        await sql`DELETE FROM public.discovery_seen_plants WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('discovery_seen_plants').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Discovery seen-plants deletion partial:', err?.message) }
+
+    try {
+      // 17b. Clear task cache
       if (sql) {
         await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
       } else {

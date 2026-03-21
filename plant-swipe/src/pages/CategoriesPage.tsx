@@ -73,6 +73,7 @@ type PlantRow = {
   life_cycle: string[] | null
   edible_part: string[] | null
   living_space: string[] | null
+  vegetable: boolean | null
   scientific_name_species: string | null
   plant_images: { link: string; use: string }[]
 }
@@ -166,6 +167,11 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     const habitats = habitat.split(",").map((h) => h.trim().toLowerCase())
     const plantHabitats = (plant.habitat || []).map((h) => h.toLowerCase())
     if (!habitats.some((h) => plantHabitats.includes(h))) return false
+  }
+
+  const vegetable = sp.get("vegetable")
+  if (vegetable === "true") {
+    if (!plant.vegetable) return false
   }
 
   const livingSpace = sp.get("livingSpace")
