@@ -31,7 +31,7 @@ const mainCategories: Category[] = [
   { key: "indoor", params: "?livingSpace=indoor", defaultName: "Houseplants", defaultDesc: "Plants suited for indoor living spaces" },
   { key: "outdoor", params: "?livingSpace=outdoor", defaultName: "Outdoor Plants", defaultDesc: "Hardy plants that thrive in gardens and yards" },
   { key: "fruitTree", params: "?type=Tree&usage=Edible", defaultName: "Fruit Trees", defaultDesc: "Trees that bear delicious edible fruits" },
-  { key: "vegetableGarden", params: "?usage=Edible&type=Herb", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
+  { key: "vegetableGarden", params: "?vegetable=true", defaultName: "Vegetable Garden", defaultDesc: "Edible plants for your kitchen garden" },
 ]
 
 /** Advanced categories — shown when expanded */
@@ -78,6 +78,7 @@ type PlantRow = {
   life_cycle: string[] | null
   edible_part: string[] | null
   living_space: string[] | null
+  vegetable: boolean | null
   scientific_name_species: string | null
   plant_images: { link: string }[]
 }
@@ -171,6 +172,11 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     const habitats = habitat.split(",").map((h) => h.trim().toLowerCase())
     const plantHabitats = (plant.habitat || []).map((h) => h.toLowerCase())
     if (!habitats.some((h) => plantHabitats.includes(h))) return false
+  }
+
+  const vegetable = sp.get("vegetable")
+  if (vegetable === "true") {
+    if (!plant.vegetable) return false
   }
 
   const livingSpace = sp.get("livingSpace")
@@ -302,7 +308,7 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images!inner(link)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),

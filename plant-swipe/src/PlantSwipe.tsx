@@ -99,6 +99,7 @@ type PreparedPlant = Plant & {
   _maintenance: string
   _petSafe: boolean
   _humanSafe: boolean
+  _vegetable: boolean
   _livingSpaceSet: Set<string>    // O(1) living space lookups
   _seasonsSet: Set<string>         // O(1) season lookups
   _lifeCycleSet: Set<string>       // O(1) life cycle lookups
@@ -188,6 +189,7 @@ export default function PlantSwipe() {
   const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
   const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
   const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
+  const [vegetableFilter, setVegetableFilter] = useState(false)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -511,8 +513,9 @@ export default function PlantSwipe() {
       const urlPlantHabit = searchParams.get("plantHabit")
       const urlEdiblePart = searchParams.get("ediblePart")
       const urlPlantPart = searchParams.get("plantPart")
+      const urlVegetable = searchParams.get("vegetable")
 
-      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart || urlVegetable)
 
       if (hasParams) {
         // Reset all filters before applying URL params so previous
@@ -530,6 +533,7 @@ export default function PlantSwipe() {
         setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
         setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
         setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
+        setVegetableFilter(urlVegetable === "true")
         setColorFilter([])
 
         // Clear URL parameters after applying to keep URL clean
@@ -1117,6 +1121,7 @@ export default function PlantSwipe() {
         _maintenance: maintenance,
         _petSafe: petSafe,
         _humanSafe: humanSafe,
+        _vegetable: !!(p as any).vegetable,
         _livingSpaceSet: livingSpaceSet,
         get _seasonsSet() {
            if (_cachedSeasonsSet) return _cachedSeasonsSet
@@ -1257,6 +1262,7 @@ export default function PlantSwipe() {
       // Boolean checks are O(1) and fastest
       if (petSafe && !p._petSafe) return false
       if (humanSafe && !p._humanSafe) return false
+      if (vegetableFilter && !p._vegetable) return false
       // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
       if (normalizedType) {
         if (typeTokens) {
@@ -1403,7 +1409,7 @@ export default function PlantSwipe() {
       
       return true
     })
-  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe, vegetableFilter])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
