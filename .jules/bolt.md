@@ -10,3 +10,7 @@
 ## 2026-03-01 - Optimizing chained array allocations in components
 **Learning:** Chaining `.map().filter()` or `.split().filter()` within hot loops or frequently re-rendered components (e.g., inside `preparedPlants` memo or `SwipePage` rendering) creates multiple intermediate arrays, compounding garbage collection overhead.
 **Action:** Replace map/filter chains and split/filter chains with single-pass `for` loops in hot data preparation and render paths to avoid intermediate array allocation and improve performance.
+
+## 2026-03-05 - Avoid chained string and array methods for hot render paths
+**Learning:** Functions like `formatIndicatorValue` in `SwipePage.tsx` were heavily used during rendering (via `buildIndicatorItems` and `buildColorSwatches`), executing on every component update. The chained execution of `.toString().replace(/[_\-/+]/g, " ").trim().split(/\s+/).map(...).join(" ")` resulted in multiple allocations of strings and arrays per call, creating unnecessary garbage collection overhead in hot render loops.
+**Action:** Replace functional array method chains (`.split().map().join()`) with single-pass `for` loops in hot render paths when processing simple string formatting. This eliminates intermediate array allocations and string creation entirely for high-frequency renders.

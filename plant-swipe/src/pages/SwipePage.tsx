@@ -1432,15 +1432,32 @@ const MultiColorFlowerIcon: React.FC<MultiColorFlowerIconProps> = ({ colors, siz
   )
 }
 
+// ⚡ Bolt: Replaced chained string/array methods with a single-pass loop.
+// Avoids intermediate array allocations from .split() and .map() in a render-heavy hot path.
 const formatIndicatorValue = (value?: string | null): string => {
   if (!value) return ""
-  return value
-    .toString()
-    .replace(/[_\-/+]/g, " ")
-    .trim()
-    .split(/\s+/)
-    .map((word) => (word ? word[0].toUpperCase() + word.slice(1).toLowerCase() : ""))
-    .join(" ")
+  const str = value.toString()
+  let result = ""
+  let capitalizeNext = true
+
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i]
+    if (char === "_" || char === "-" || char === "/" || char === "+" || char === " " || char === "\t" || char === "\n") {
+      if (!capitalizeNext && result.length > 0) {
+        result += " "
+        capitalizeNext = true
+      }
+    } else {
+      if (capitalizeNext) {
+        result += char.toUpperCase()
+        capitalizeNext = false
+      } else {
+        result += char.toLowerCase()
+      }
+    }
+  }
+
+  return result.trim()
 }
 
 const buildColorSwatches = (plant: Plant): ColorSwatchDescriptor[] => {
