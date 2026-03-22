@@ -75,7 +75,7 @@ type PlantRow = {
   living_space: string[] | null
   vegetable: boolean | null
   scientific_name_species: string | null
-  plant_images: { link: string }[]
+  plant_images: { link: string; use: string }[]
 }
 
 /** Cache TTL for category previews (1 hour) */
@@ -169,17 +169,16 @@ function matchesCategoryFilter(plant: PlantRow, params: string): boolean {
     if (!habitats.some((h) => plantHabitats.includes(h))) return false
   }
 
+  const vegetable = sp.get("vegetable")
+  if (vegetable === "true") {
+    if (!plant.vegetable) return false
+  }
+
   const livingSpace = sp.get("livingSpace")
   if (livingSpace) {
     const spaces = livingSpace.split(",").map((s) => s.trim().toLowerCase())
     const plantSpaces = (plant.living_space || []).map((s) => s.toLowerCase())
     if (!spaces.some((s) => plantSpaces.includes(s))) return false
-  }
-
-  const vegetable = sp.get("vegetable")
-  if (vegetable) {
-    if (vegetable === "true" && !plant.vegetable) return false
-    if (vegetable === "false" && plant.vegetable) return false
   }
 
   return true
@@ -304,16 +303,31 @@ export default function CategoriesPage() {
         supabase
           .from("plants")
           .select(
-            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link)",
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, vegetable, scientific_name_species, plant_images!inner(link,use)",
           )
           .eq("plant_images.use", "primary"),
         supabase.rpc("top_viewed_plants", { _limit: 500 }),
         translationsPromise,
       ])
 
-      if (cancelled || !plantsResult.data) return
+      if (cancelled) return
 
-      const typedPlants = plantsResult.data as unknown as PlantRow[]
+      // Fallback: if the full query fails (e.g. missing columns), retry with core columns
+      let plantsData = plantsResult.data
+      if (plantsResult.error || !plantsData) {
+        console.warn("Categories plant query failed, retrying with core columns:", plantsResult.error?.message)
+        const fallback = await supabase
+          .from("plants")
+          .select(
+            "id, name, plant_type, plant_part, habitat, utility, plant_habit, life_cycle, edible_part, living_space, scientific_name_species, plant_images(link,use)",
+          )
+          .eq("plant_images.use", "primary")
+        if (cancelled) return
+        plantsData = fallback.data as typeof plantsData
+        if (!plantsData) return
+      }
+
+      const typedPlants = plantsData as unknown as PlantRow[]
 
       // Build view-count map: plant_id -> views
       const viewCountMap = new Map<string, number>()

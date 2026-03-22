@@ -33,12 +33,16 @@ export function TaskCreateDialog({
   gardenId,
   gardenPlantId,
   onCreated,
+  wateringFrequencyWarm,
+  wateringFrequencyCold,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   gardenId: string
   gardenPlantId: string
   onCreated?: () => Promise<void> | void
+  wateringFrequencyWarm?: number | null
+  wateringFrequencyCold?: number | null
 }) {
   const { user } = useAuth()
   const { t } = useTranslation('common')
@@ -240,6 +244,27 @@ export function TaskCreateDialog({
                     </button>
                   ))}
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Recommended watering frequency hint */}
+          {type === 'water' && (wateringFrequencyWarm || wateringFrequencyCold) && (
+            <div className="flex items-start gap-2 rounded-xl bg-sky-50 dark:bg-sky-900/20 border border-sky-200/60 dark:border-sky-700/40 px-3.5 py-2.5">
+              <span className="text-sm mt-0.5">💡</span>
+              <div className="text-xs text-sky-800 dark:text-sky-200">
+                <span className="font-semibold">{t('gardenDashboard.taskDialog.recommendedFrequency', 'Recommended:')}</span>{' '}
+                {wateringFrequencyWarm && (
+                  <span>
+                    {t('gardenDashboard.taskDialog.warmSeason', '{{count}}x/week (warm)', { count: wateringFrequencyWarm })}
+                  </span>
+                )}
+                {wateringFrequencyWarm && wateringFrequencyCold && <span> · </span>}
+                {wateringFrequencyCold && (
+                  <span>
+                    {t('gardenDashboard.taskDialog.coldSeason', '{{count}}x/week (cold)', { count: wateringFrequencyCold })}
+                  </span>
+                )}
               </div>
             </div>
           )}
