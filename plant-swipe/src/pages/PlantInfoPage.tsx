@@ -1324,7 +1324,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'lifeCycle', 'averageLifespan', 'foliagePersistence',
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
-      'ecologicalTolerance', 'ecologicalImpact',
+      'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
       'status', 'month',
     ]
     
