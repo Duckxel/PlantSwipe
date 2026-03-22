@@ -1554,6 +1554,7 @@ function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantIm
           <button
             type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-expanded={!isCollapsed}
             className="flex items-center gap-1 text-sm font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
             <Label className="font-semibold cursor-pointer">Images</Label>
@@ -1846,6 +1847,7 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
           <button
             type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
+            aria-expanded={!isCollapsed}
             className="flex items-center gap-1 text-sm font-semibold hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
           >
             <Label className="font-semibold cursor-pointer">Recipe Ideas</Label>

@@ -146,6 +146,7 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
             <div className="flex justify-center pt-2">
               <button
                 onClick={() => setExpanded(!expanded)}
+                aria-expanded={expanded}
                 className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20"
               >
                 {expanded ? (
