@@ -850,6 +850,10 @@
     "createGarden": "Create a Garden",
     "name": "Name",
     "namePlaceholder": "My balcony garden",
+    "gardenType": "Garden Type",
+    "gardenTypeDefault": "Default",
+    "gardenTypeBeginners": "Beginners",
+    "beginnerTag": "Beginner",
     "coverImageUrl": "Cover image URL (optional)",
     "coverImageUrlPlaceholder": "https://?",
     "creating": "Creating?",
@@ -1285,6 +1289,26 @@
       "completed": "Completed",
       "missed": "Missed"
     },
+    "beginnerRoadmap": {
+      "title": "Getting Started",
+      "addPlant": "Add 1 plant to your garden",
+      "addPlantAction": "Add a plant",
+      "scheduleWater": "Schedule watering tasks for your plant",
+      "scheduleWaterAction": "Set up watering",
+      "readPlantInfo": "Read the info page of your plant",
+      "readPlantInfoAction": "View plant",
+      "scheduleFertilize": "Schedule fertilization tasks for your plant",
+      "scheduleFertilizeAction": "Set up fertilizing",
+      "createJournal": "Create an entry in your journal",
+      "createJournalAction": "Open journal",
+      "allDone": "Great job! You've completed all the steps."
+    },
+    "beginnerSuggestions": {
+      "title": "Suggested for you",
+      "learnMore": "Learn more",
+      "exploreMore": "Explore more",
+      "browseSucculents": "Browse succulents"
+    },
     "analyticsSection": {
       "title": "Analytics & Insights",
       "subtitle": "Track your garden's progress and get personalized advice",
@@ -1685,6 +1709,9 @@
       "daysPerMonth": "day(s) per month",
       "timesPerYear": "time(s) per year",
       "selectExactly": "Select exactly {{amount}} {{period}}",
+      "recommendedFrequency": "Recommended:",
+      "warmSeason": "{{count}}x/week (warm)",
+      "coldSeason": "{{count}}x/week (cold)",
       "creating": "Creating…",
       "createTaskButton": "Create task",
       "failedToCreate": "Failed to create task",

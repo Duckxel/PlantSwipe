@@ -850,6 +850,10 @@
     "createGarden": "Créer un jardin",
     "name": "Nom",
     "namePlaceholder": "Mon jardin de balcon",
+    "gardenType": "Type de jardin",
+    "gardenTypeDefault": "Par défaut",
+    "gardenTypeBeginners": "Débutants",
+    "beginnerTag": "Débutant",
     "coverImageUrl": "URL de l'image de couverture (optionnel)",
     "coverImageUrlPlaceholder": "https://?",
     "creating": "Création ?",
@@ -1285,6 +1289,26 @@
       "completed": "Complété",
       "missed": "Manqué"
     },
+    "beginnerRoadmap": {
+      "title": "Pour bien commencer",
+      "addPlant": "Ajouter 1 plante à votre jardin",
+      "addPlantAction": "Ajouter une plante",
+      "scheduleWater": "Planifier l'arrosage de votre plante",
+      "scheduleWaterAction": "Configurer l'arrosage",
+      "readPlantInfo": "Consulter la fiche de votre plante",
+      "readPlantInfoAction": "Voir la plante",
+      "scheduleFertilize": "Planifier la fertilisation de votre plante",
+      "scheduleFertilizeAction": "Configurer la fertilisation",
+      "createJournal": "Créer une entrée dans votre journal",
+      "createJournalAction": "Ouvrir le journal",
+      "allDone": "Bravo ! Vous avez complété toutes les étapes."
+    },
+    "beginnerSuggestions": {
+      "title": "Suggestions pour vous",
+      "learnMore": "En savoir plus",
+      "exploreMore": "Explorer plus",
+      "browseSucculents": "Parcourir les succulentes"
+    },
     "analyticsSection": {
       "title": "Statistiques et analyses",
       "subtitle": "Suivez les progrès de votre jardin et recevez des conseils personnalisés",
@@ -1685,6 +1709,9 @@
       "daysPerMonth": "jour(s) par mois",
       "timesPerYear": "fois par an",
       "selectExactly": "Sélectionnez exactement {{amount}} {{period}}",
+      "recommendedFrequency": "Recommandé :",
+      "warmSeason": "{{count}}x/semaine (chaud)",
+      "coldSeason": "{{count}}x/semaine (froid)",
       "creating": "Création…",
       "createTaskButton": "Créer une tâche",
       "failedToCreate": "Échec de la création de la tâche",

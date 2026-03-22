@@ -183,6 +183,7 @@ const ContextChipBadge: React.FC<{
   selectable?: boolean
   onSelect?: () => void
 }> = ({ chip, onRemove, selectable, onSelect }) => {
+  const { t } = useTranslation('common')
   const chipIcons: Record<string, React.ReactNode> = {
     garden: <Leaf className="w-3 h-3" />,
     plant: <Leaf className="w-3 h-3" />,
@@ -212,6 +213,8 @@ const ContextChipBadge: React.FC<{
             onRemove()
           }}
           className="ml-0.5 hover:bg-black/10 rounded-full p-0.5"
+          aria-label={t('common.remove', { defaultValue: 'Remove' })}
+          title={t('common.remove', { defaultValue: 'Remove' })}
         >
           <X className="w-3 h-3" />
         </button>
@@ -584,6 +587,8 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                         <button
                           onClick={() => onRemoveAttachment(att.id)}
                           className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          aria-label={t('common.remove', { defaultValue: 'Remove' })}
+                          title={t('common.remove', { defaultValue: 'Remove' })}
                         >
                           <X className="w-3 h-3" />
                         </button>

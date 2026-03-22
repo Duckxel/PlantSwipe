@@ -130,6 +130,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   infusionParts: 'consumption',
   infusionBenefits: 'consumption',
   infusionRecipeIdeas: 'consumption',
+  infusionMixes: 'consumption',
   medicinalBenefits: 'consumption',
   medicinalUsage: 'consumption',
   medicinalWarning: 'consumption',

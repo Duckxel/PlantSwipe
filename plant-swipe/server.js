@@ -3128,8 +3128,8 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
 const SIMPLE_ENUM_FIELDS = new Set([
   'plantType',    // Single enum selection
   'utility',      // Array of enum values
-  'comestiblePart', // Array of enum values  
-  'fruitType',    // Array of enum values
+  'ediblePart',   // Array of enum values
+  'vegetable',    // Boolean field
   'seasons',      // Array of enum values
 ])
 
@@ -18157,7 +18157,16 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
 
     try {
-      // 17. Clear task cache
+      // 17a. Delete discovery seen-plants history
+      if (sql) {
+        await sql`DELETE FROM public.discovery_seen_plants WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('discovery_seen_plants').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Discovery seen-plants deletion partial:', err?.message) }
+
+    try {
+      // 17b. Clear task cache
       if (sql) {
         await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
       } else {
@@ -21362,7 +21371,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
                  location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                 coalesce(hide_ai_chat, false) as hide_ai_chat
+                 coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type,
+                 coalesce(living_space, '{}') as living_space, coalesce(climate, '{}') as climate, coalesce(usage, '{}') as usage
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -21376,7 +21386,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
                    location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                   coalesce(hide_ai_chat, false) as hide_ai_chat
+                   coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type,
+                   coalesce(living_space, '{}') as living_space, coalesce(climate, '{}') as climate, coalesce(usage, '{}') as usage
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -21390,7 +21401,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             gRows = await sql`
               select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
                      location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language,
-                     false as hide_ai_chat
+                     false as hide_ai_chat, 'default' as garden_type,
+                     '{}'::text[] as living_space, '{}'::text[] as climate, '{}'::text[] as usage
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -21526,13 +21538,13 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
       // Garden (include privacy field and location if available)
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon,preferred_language,hide_ai_chat,garden_type,living_space,climate,usage&limit=1`
       console.log('[overview] Fetching garden via REST API')
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null, preferred_language: row.preferred_language || null, hide_ai_chat: row.hide_ai_chat || false, garden_type: row.garden_type || 'default', living_space: Array.isArray(row.living_space) ? row.living_space : [], climate: Array.isArray(row.climate) ? row.climate : [], usage: Array.isArray(row.usage) ? row.usage : [] }
         console.log('[overview] Garden found via REST:', !!garden)
       } else {
         console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
@@ -21627,6 +21639,10 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       locationLon: garden.location_lon || null,
       preferredLanguage: garden.preferred_language || 'en',
       hideAiChat: Boolean(garden.hide_ai_chat ?? false),
+      gardenType: garden.garden_type || 'default',
+      livingSpace: Array.isArray(garden.living_space) ? garden.living_space : [],
+      climate: Array.isArray(garden.climate) ? garden.climate : [],
+      usage: Array.isArray(garden.usage) ? garden.usage : [],
     } : null
 
     // Check access: members always allowed, otherwise check privacy

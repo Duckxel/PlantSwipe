@@ -61,7 +61,17 @@ create table if not exists public.plant_translations (
   aromatherapy_benefits text,
   essential_oil_blends text,
 
+  -- Care translatable tag fields
+  mulch_type text[] not null default '{}',
+  nutrition_need text[] not null default '{}',
+  fertilizer text[] not null default '{}',
+  special_needs text[] not null default '{}',
+
   -- Ecology translatable fields
+  biotopes text[] not null default '{}',
+  pollinators_attracted text[] not null default '{}',
+  birds_attracted text[] not null default '{}',
+  mammals_attracted text[] not null default '{}',
   beneficial_roles text[] not null default '{}',
   harmful_roles text[] not null default '{}',
   symbiosis text[] not null default '{}',
@@ -131,7 +141,16 @@ alter table if exists public.plant_translations add column if not exists medicin
 alter table if exists public.plant_translations add column if not exists medicinal_history text;
 alter table if exists public.plant_translations add column if not exists aromatherapy_benefits text;
 alter table if exists public.plant_translations add column if not exists essential_oil_blends text;
+-- Care tag fields
+alter table if exists public.plant_translations add column if not exists mulch_type text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists nutrition_need text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists fertilizer text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists special_needs text[] not null default '{}';
 -- Ecology
+alter table if exists public.plant_translations add column if not exists biotopes text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists pollinators_attracted text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists birds_attracted text[] not null default '{}';
+alter table if exists public.plant_translations add column if not exists mammals_attracted text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists beneficial_roles text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists harmful_roles text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists symbiosis text[] not null default '{}';

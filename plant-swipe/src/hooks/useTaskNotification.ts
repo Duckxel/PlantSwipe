@@ -44,6 +44,7 @@ async function fastCheckPendingTasksFallback(userId: string, startOfDay: string,
 
     const gardenIds = gardens.map(g => g.garden_id)
 
+    // Step 2: check for any incomplete occurrences in those gardens today
     const { data: incomplete, error: incompleteError } = await supabase
       .from("garden_plant_task_occurrences")
       .select("id, completed_at, garden_plant_tasks!inner(garden_id)")
@@ -56,7 +57,7 @@ async function fastCheckPendingTasksFallback(userId: string, startOfDay: string,
     if (incompleteError) return null
     return (incomplete?.length ?? 0) > 0
   } catch {
-    return null
+    return null // Fallback to cache
   }
 }
 

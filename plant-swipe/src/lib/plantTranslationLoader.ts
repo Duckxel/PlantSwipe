@@ -454,11 +454,38 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       supabase.rpc('top_liked_plants', { limit_count: TOP_LIKED_LIMIT }),
     ])
 
-    const { data: plantsData, error } = plantsResponse
-    const plants = plantsData as unknown as Record<string, unknown>[]
+    let { data: plantsData, error } = plantsResponse
     const { data: topLiked, error: topLikedError } = topLikedResponse
 
+    // Fallback: if the full query fails (e.g. missing columns), retry with core columns only
+    if (error) {
+      console.warn('Full plant query failed, retrying with core columns:', error.message)
+      const coreColumns = [
+        'id', 'name',
+        'plant_type', 'plant_part', 'habitat',
+        'scientific_name_species', 'family',
+        'featured_month',
+        'climate', 'season', 'utility', 'edible_part',
+        'thorny', 'toxicity_human', 'toxicity_pets',
+        'life_cycle', 'foliage_persistence',
+        'living_space', 'landscaping', 'plant_habit',
+        'multicolor', 'bicolor',
+        'care_level', 'sunlight',
+        'status', 'created_time', 'updated_time',
+        'plant_images (link,use)',
+        'plant_colors (colors (id,name,hex_code))',
+        'plant_watering_schedules (season,quantity,time_period)',
+      ].join(',')
+      const fallback = await supabase
+        .from('plants')
+        .select(coreColumns)
+        .order('name', { ascending: true })
+      plantsData = fallback.data
+      error = fallback.error
+    }
+
     if (error) throw error
+    const plants = plantsData as unknown as Record<string, unknown>[]
     if (!plants || plants.length === 0) return []
 
     if (topLikedError) console.warn('Failed to load top liked plants', topLikedError)

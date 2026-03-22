@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase data */
 // @ts-nocheck
 import React from "react";
+import { Leaf, Sprout, Home, Trees, FlaskConical, Warehouse } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -69,7 +70,8 @@ export const GardenListPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [imageUrl, setImageUrl] = React.useState("");
+  const [gardenType, setGardenType] = React.useState<"default" | "beginners">("default");
+  const [livingSpace, setLivingSpace] = React.useState<Array<"indoor" | "outdoor" | "terrarium" | "greenhouse">>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [progressByGarden, setProgressByGarden] = React.useState<
     Record<string, { due: number; completed: number }>
@@ -1788,13 +1790,15 @@ export const GardenListPage: React.FC = () => {
       const defaultPrivacy = profile?.is_private ? 'friends_only' : 'public';
       const garden = await createGarden({
         name: name.trim(),
-        coverImageUrl: imageUrl.trim() || null,
         ownerUserId: user.id,
         privacy: defaultPrivacy as any,
+        gardenType,
+        livingSpace,
       });
       setOpen(false);
       setName("");
-      setImageUrl("");
+      setGardenType("default");
+      setLivingSpace([]);
       // Navigate to the new garden dashboard
       navigate(`/garden/${garden.id}`);
     } catch (e: any) {
@@ -2178,9 +2182,16 @@ export const GardenListPage: React.FC = () => {
                     <div className="p-3 md:p-4 bg-transparent relative z-10">
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex-1 min-w-0">
-                          <h3 className="font-semibold text-sm md:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors mb-1">
-                            {g.name}
-                          </h3>
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold text-sm md:text-base truncate group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {g.name}
+                            </h3>
+                            {g.gardenType === 'beginners' && (
+                              <span className="flex-shrink-0 text-[10px] md:text-xs font-medium bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-2 py-0.5">
+                                {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center flex-wrap gap-2 md:gap-3 text-xs md:text-sm text-stone-600 dark:text-stone-300">
                             <div className="flex items-center gap-1.5">
                               <svg
@@ -2285,17 +2296,76 @@ export const GardenListPage: React.FC = () => {
                   />
                 </div>
                 <div className="grid gap-2">
-                  <Label htmlFor="garden-image">
-                    {t("garden.coverImageUrl")}
-                  </Label>
-                  <Input
-                    id="garden-image"
-                    value={imageUrl}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
-                      setImageUrl(e.target.value)
-                    }
-                    placeholder={t("garden.coverImageUrlPlaceholder")}
-                  />
+                  <Label>{t("garden.gardenType", { defaultValue: "Garden Type" })}</Label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setGardenType("default")}
+                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
+                        gardenType === "default"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                      }`}
+                    >
+                      <div className={`rounded-xl p-2.5 ${
+                        gardenType === "default"
+                          ? "bg-emerald-100 dark:bg-emerald-800/40"
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Leaf className="h-6 w-6" />
+                      </div>
+                      <span>{t("garden.gardenTypeDefault", { defaultValue: "Default" })}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setGardenType("beginners")}
+                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
+                        gardenType === "beginners"
+                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                      }`}
+                    >
+                      <div className={`rounded-xl p-2.5 ${
+                        gardenType === "beginners"
+                          ? "bg-emerald-100 dark:bg-emerald-800/40"
+                          : "bg-stone-100 dark:bg-stone-800"
+                      }`}>
+                        <Sprout className="h-6 w-6" />
+                      </div>
+                      <span>{t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}</span>
+                    </button>
+                  </div>
+                </div>
+                <div className="grid gap-2">
+                  <Label>{t("garden.livingSpace", { defaultValue: "Living Space" })}</Label>
+                  <p className="text-xs text-muted-foreground -mt-1">
+                    {t("garden.livingSpaceHint", { defaultValue: "Where will your plants grow? Select all that apply." })}
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {([
+                      { value: "indoor" as const, icon: <Home className="h-4 w-4" />, label: t("garden.livingSpace.indoor", { defaultValue: "Indoor" }) },
+                      { value: "outdoor" as const, icon: <Trees className="h-4 w-4" />, label: t("garden.livingSpace.outdoor", { defaultValue: "Outdoor" }) },
+                      { value: "terrarium" as const, icon: <FlaskConical className="h-4 w-4" />, label: t("garden.livingSpace.terrarium", { defaultValue: "Terrarium" }) },
+                      { value: "greenhouse" as const, icon: <Warehouse className="h-4 w-4" />, label: t("garden.livingSpace.greenhouse", { defaultValue: "Greenhouse" }) },
+                    ]).map((opt) => {
+                      const active = livingSpace.includes(opt.value);
+                      return (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => setLivingSpace((prev) => active ? prev.filter((v) => v !== opt.value) : [...prev, opt.value])}
+                          className={`flex items-center gap-2 rounded-xl border-2 px-3 py-2.5 text-sm font-medium transition-all cursor-pointer ${
+                            active
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                              : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                          }`}
+                        >
+                          <span className={active ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400"}>{opt.icon}</span>
+                          <span>{opt.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div className="flex gap-2 justify-end pt-2">
                   <Button

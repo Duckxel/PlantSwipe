@@ -771,6 +771,58 @@ alter table if exists public.gardens add column if not exists preferred_language
 -- Migration: Add hide_ai_chat column to gardens (default false = chat visible by default)
 alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
 
+-- Migration: Add garden_type column to gardens (default 'default')
+alter table if exists public.gardens add column if not exists garden_type text not null default 'default' check (garden_type in ('default', 'beginners'));
+
+-- Migration: Add living_space to gardens (mirrors plant LivingSpace values)
+alter table if exists public.gardens
+  add column if not exists living_space text[] not null default '{}'::text[];
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.check_constraints
+    where constraint_name = 'gardens_living_space_values'
+  ) then
+    alter table public.gardens
+      add constraint gardens_living_space_values
+      check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']::text[]);
+  end if;
+end $$;
+
+-- ========== Garden Roadmap Completions ==========
+create table if not exists public.garden_roadmap_completions (
+  garden_id   uuid   not null references public.gardens(id) on delete cascade,
+  step_key    text   not null,
+  completed_at timestamptz not null default now(),
+  completed_by uuid  references auth.users(id) on delete set null,
+  primary key (garden_id, step_key)
+);
+create index if not exists grc_garden_idx on public.garden_roadmap_completions (garden_id);
+alter table public.garden_roadmap_completions enable row level security;
+grant select, insert on public.garden_roadmap_completions to authenticated;
+
+drop policy if exists "Garden members can view roadmap completions" on public.garden_roadmap_completions;
+create policy "Garden members can view roadmap completions"
+  on public.garden_roadmap_completions for select
+  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_roadmap_completions.garden_id and gm.user_id = auth.uid()));
+
+drop policy if exists "Garden members can insert roadmap completions" on public.garden_roadmap_completions;
+create policy "Garden members can insert roadmap completions"
+  on public.garden_roadmap_completions for insert
+  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_roadmap_completions.garden_id and gm.user_id = auth.uid()));
+
+create or replace function public.complete_roadmap_step(_garden_id uuid, _step_key text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.garden_members where garden_id = _garden_id and user_id = auth.uid()) then
+    raise exception 'Not a member of this garden';
+  end if;
+  insert into public.garden_roadmap_completions (garden_id, step_key, completed_by)
+  values (_garden_id, _step_key, auth.uid())
+  on conflict (garden_id, step_key) do nothing;
+end;
+$$;
+
 -- ========== Plant Stocks Management ==========
 -- Table to manage plant seed/plant availability, quantity, and pricing for the shop
 create table if not exists public.plant_stocks (
