@@ -25,13 +25,13 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import type { Bookmark as BookmarkType } from "@/types/bookmark";
 import { motion } from "framer-motion";
-import type { Garden, GardenPrivacy } from "@/types/garden";
+import type { Garden, GardenPrivacy, GardenType } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import {
   getGarden,
@@ -82,6 +82,9 @@ import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
 import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
 import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
+import { GardenLivingSpaceEditor } from "@/components/garden/GardenLivingSpaceEditor";
+import { GardenClimateEditor } from "@/components/garden/GardenClimateEditor";
+import { GardenUsageEditor } from "@/components/garden/GardenUsageEditor";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
@@ -153,6 +156,11 @@ export const GardenDashboardPage: React.FC = () => {
   const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<
     Record<string, number>
   >({});
+  // Beginner roadmap flags
+  const [hasWaterTask, setHasWaterTask] = React.useState(false);
+  const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
+  const [hasJournalEntry, setHasJournalEntry] = React.useState(false);
+  const [roadmapCompletions, setRoadmapCompletions] = React.useState<Set<string>>(new Set());
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<
     Array<{
       id: string;
@@ -449,6 +457,10 @@ export const GardenDashboardPage: React.FC = () => {
                   locationLon: data.garden.locationLon || null,
                   preferredLanguage: data.garden.preferredLanguage || null,
                   hideAiChat: Boolean(data.garden.hideAiChat ?? data.garden.hide_ai_chat ?? false),
+                  gardenType: (data.garden.gardenType || data.garden.garden_type || 'default') as GardenType,
+                  livingSpace: (Array.isArray(data.garden.livingSpace ?? data.garden.living_space) ? (data.garden.livingSpace ?? data.garden.living_space) : []) as GardenLivingSpace[],
+                  climate: (Array.isArray(data.garden.climate) ? data.garden.climate : []) as GardenClimate[],
+                  usage: (Array.isArray(data.garden.usage) ? data.garden.usage : []) as GardenUsage[],
                 });
                 hydratedGarden = true;
               }
@@ -968,6 +980,10 @@ export const GardenDashboardPage: React.FC = () => {
             taskCountMap[t.gardenPlantId] =
               (taskCountMap[t.gardenPlantId] || 0) + 1;
           setTaskCountsByPlant(taskCountMap);
+
+          // Beginner roadmap: track task types
+          setHasWaterTask(allTasks.some((t) => t.type === 'water'));
+          setHasFertilizeTask(allTasks.some((t) => t.type === 'fertilize'));
 
           const dueMap: Record<string, number> = {};
           for (const o of occsDetailed) {
@@ -1503,7 +1519,11 @@ export const GardenDashboardPage: React.FC = () => {
                 prev.locationCountry === g0.locationCountry &&
                 prev.locationTimezone === g0.locationTimezone &&
                 prev.hideAiChat === g0.hideAiChat &&
-                prev.preferredLanguage === g0.preferredLanguage
+                prev.preferredLanguage === g0.preferredLanguage &&
+                prev.gardenType === g0.gardenType &&
+                JSON.stringify(prev.livingSpace) === JSON.stringify(g0.livingSpace) &&
+                JSON.stringify(prev.climate) === JSON.stringify(g0.climate) &&
+                JSON.stringify(prev.usage) === JSON.stringify(g0.usage)
               ) {
                 return prev; // No change, skip re-render
               }
@@ -1630,6 +1650,142 @@ export const GardenDashboardPage: React.FC = () => {
       if (privacy === 'friends_only' && isFriendOfMember) return true;
       return false;
     }, [isMember, garden?.privacy, profile?.is_admin, isFriendOfMember]);
+
+    // Beginner garden suggestions: fetch random succulents when garden is beginners + no plants + user is a member
+    const [suggestedPlants, setSuggestedPlants] = React.useState<
+      Array<{ id: string; name: string; variety: string | null; imageUrl: string | null }>
+    >([]);
+
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !isMember) {
+        setSuggestedPlants([]);
+        return;
+      }
+      let ignore = false;
+      (async () => {
+        try {
+          let query = supabase
+            .from('plants')
+            .select('id, name, plant_images (link, use)')
+            .neq('status', 'in_progress');
+
+          // Filter by garden living space if set, otherwise fall back to easy care
+          const gardenSpaces = garden?.livingSpace ?? [];
+          if (gardenSpaces.length > 0) {
+            query = query.overlaps('living_space', gardenSpaces);
+          } else {
+            query = query.contains('care_level', ['easy']);
+          }
+
+          const { data: plantRows } = await query.limit(50);
+          if (ignore || !plantRows || plantRows.length === 0) return;
+
+          const plantIds = plantRows.map((p: any) => p.id);
+          const { data: translations } = await supabase
+            .from('plant_translations')
+            .select('plant_id, name, variety')
+            .eq('language', currentLang)
+            .in('plant_id', plantIds);
+          const trMap = new Map<string, { name?: string; variety?: string }>();
+          if (translations) {
+            for (const tr of translations as any[]) {
+              trMap.set(tr.plant_id, { name: tr.name || undefined, variety: tr.variety || undefined });
+            }
+          }
+
+          const shuffled = plantRows.sort(() => Math.random() - 0.5).slice(0, 4);
+          const result = shuffled.map((p: any) => {
+            const tr = trMap.get(p.id);
+            const images = p.plant_images || [];
+            const primary = images.find((img: any) => img.use === 'primary' && img.link);
+            const firstImg = images.find((img: any) => img.link);
+            return {
+              id: p.id,
+              name: tr?.name || p.name,
+              variety: tr?.variety || null,
+              imageUrl: primary?.link || firstImg?.link || null,
+            };
+          });
+          if (!ignore) setSuggestedPlants(result);
+        } catch {}
+      })();
+      return () => { ignore = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [garden?.gardenType, garden?.livingSpace?.join(','), currentLang, isMember]);
+
+    // Beginner roadmap: check if garden has any journal entries
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      let ignore = false;
+      (async () => {
+        try {
+          const { count } = await supabase
+            .from('garden_journal_entries')
+            .select('id', { count: 'exact', head: true })
+            .eq('garden_id', id)
+            .limit(1);
+          if (!ignore) setHasJournalEntry((count ?? 0) > 0);
+        } catch {}
+      })();
+      return () => { ignore = true; };
+    }, [garden?.gardenType, id, isMember]);
+
+    // Beginner roadmap: load persistent completions from DB
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      let ignore = false;
+      (async () => {
+        try {
+          const { data } = await supabase
+            .from('garden_roadmap_completions')
+            .select('step_key')
+            .eq('garden_id', id);
+          if (!ignore && data) {
+            setRoadmapCompletions(new Set(data.map((r: any) => r.step_key)));
+          }
+        } catch {}
+      })();
+      return () => { ignore = true; };
+    }, [garden?.gardenType, id, isMember]);
+
+    // Beginner roadmap: sync live completions to DB
+    // Detect when steps are completed live and persist them
+    const syncRoadmapRef = React.useRef<Set<string>>(new Set());
+    React.useEffect(() => {
+      if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
+      const firstPlantId = plants[0]?.plant?.id;
+      const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
+      const liveSteps: Array<{ key: string; done: boolean }> = [
+        { key: 'set_living_space', done: hasLivingSpace },
+        { key: 'add_plant', done: plants.length > 0 },
+        { key: 'read_plant_info', done: firstPlantId ? localStorage.getItem(`beginner_read_plant_${id}`) === 'true' : false },
+        { key: 'schedule_water', done: hasWaterTask },
+        { key: 'schedule_fertilize', done: hasFertilizeTask },
+        { key: 'create_journal', done: hasJournalEntry },
+      ];
+      const newCompletions: string[] = [];
+      for (const step of liveSteps) {
+        if (step.done && !roadmapCompletions.has(step.key) && !syncRoadmapRef.current.has(step.key)) {
+          newCompletions.push(step.key);
+          syncRoadmapRef.current.add(step.key);
+        }
+      }
+      if (newCompletions.length > 0) {
+        (async () => {
+          for (const key of newCompletions) {
+            try {
+              await supabase.rpc('complete_roadmap_step', { _garden_id: id, _step_key: key });
+            } catch {}
+          }
+          setRoadmapCompletions((prev) => {
+            const next = new Set(prev);
+            for (const k of newCompletions) next.add(k);
+            return next;
+          });
+        })();
+      }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [garden?.gardenType, garden?.livingSpace, id, isMember, user?.id, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry]);
 
     React.useEffect(() => {
       load();
@@ -2774,6 +2930,10 @@ export const GardenDashboardPage: React.FC = () => {
                     onNavigateToPlants={() => navigate(`/garden/${id}/tasks`)}
                     shareStatus={shareStatus}
                     isMember={isMember}
+                    hasWaterTask={hasWaterTask}
+                    hasFertilizeTask={hasFertilizeTask}
+                    hasJournalEntry={hasJournalEntry}
+                    roadmapCompletions={roadmapCompletions}
                   />
                 }
               />
@@ -3072,6 +3232,83 @@ export const GardenDashboardPage: React.FC = () => {
                         {t("gardenDashboard.plantsSection.noPlantsYet")}
                       </div>
                     )}
+                    {/* Beginner Suggestions - collapsible at bottom of Plants tab */}
+                    {garden?.gardenType === 'beginners' && isMember && suggestedPlants.length > 0 && (
+                      <details className="mt-4" open={plants.length === 0}>
+                        <summary className="cursor-pointer list-none">
+                          <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur px-5 py-4 shadow-sm">
+                            <div className="flex items-center gap-2">
+                              <Sprout className="w-5 h-5 text-emerald-500" />
+                              <span className="font-semibold text-base flex-1">
+                                {t("gardenDashboard.beginnerSuggestions.title", { defaultValue: "Suggested for you" })}
+                              </span>
+                              <ChevronDown className="w-5 h-5 opacity-50 transition-transform [details[open]>summary_&]:rotate-180" />
+                            </div>
+                          </Card>
+                        </summary>
+                        <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden mt-1 border-t-0 rounded-t-none">
+                          <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
+                            {suggestedPlants.map((sp) => (
+                              <div
+                                key={sp.id}
+                                className="flex-shrink-0 w-[160px] snap-start group"
+                              >
+                                <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
+                                  {sp.imageUrl ? (
+                                    <img
+                                      src={sp.imageUrl}
+                                      alt={sp.name}
+                                      className="absolute inset-0 w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+                                      loading="lazy"
+                                    />
+                                  ) : (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                      <span className="text-3xl opacity-40">🌵</span>
+                                    </div>
+                                  )}
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
+                                </div>
+                                <div className="px-1">
+                                  <div className="font-medium text-sm truncate">{sp.name}</div>
+                                  {sp.variety && (
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
+                                  )}
+                                  <button
+                                    onClick={() => navigate(`/plants/${sp.id}`)}
+                                    className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
+                                  >
+                                    {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                            {/* Explore more card */}
+                            <div
+                              className="flex-shrink-0 w-[160px] snap-start cursor-pointer group"
+                              onClick={() => {
+                                const spaces = garden?.livingSpace ?? [];
+                                const params = spaces.length > 0 ? `?living_space=${spaces.join(',')}` : '?maintenance=easy';
+                                navigate(`/search${params}`);
+                              }}
+                            >
+                              <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/40 dark:to-teal-900/40 border-2 border-dashed border-emerald-300 dark:border-emerald-700 flex items-center justify-center mb-2 transition-all group-hover:border-emerald-500 dark:group-hover:border-emerald-500">
+                                <div className="flex flex-col items-center gap-2 text-emerald-600 dark:text-emerald-400">
+                                  <ArrowUpRight className="w-8 h-8" />
+                                  <span className="text-sm font-semibold text-center px-2">
+                                    {t("gardenDashboard.beginnerSuggestions.exploreMore", { defaultValue: "Explore more" })}
+                                  </span>
+                                </div>
+                              </div>
+                              <div className="px-1">
+                                <div className="font-medium text-sm text-emerald-600 dark:text-emerald-400 truncate">
+                                  {t("gardenDashboard.beginnerSuggestions.browseSucculents", { defaultValue: "Browse succulents" })}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </Card>
+                      </details>
+                    )}
                   </div>
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
@@ -3185,6 +3422,9 @@ export const GardenDashboardPage: React.FC = () => {
                       GardenAdviceLanguageEditor={GardenAdviceLanguageEditor}
                       GardenPrivacyToggle={GardenPrivacyToggle}
                       GardenAiChatToggle={GardenAiChatToggle}
+                      GardenLivingSpaceEditor={GardenLivingSpaceEditor}
+                      GardenClimateEditor={GardenClimateEditor}
+                      GardenUsageEditor={GardenUsageEditor}
                       MemberCard={MemberCard}
                     />
                   ) : (
@@ -3454,6 +3694,8 @@ export const GardenDashboardPage: React.FC = () => {
             }}
             gardenId={id!}
             gardenPlantId={pendingGardenPlantId || ""}
+            wateringFrequencyWarm={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyWarm}
+            wateringFrequencyCold={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyCold}
             onChanged={async () => {
               // Ensure page reflects latest tasks after create/update/delete
               await load({ silent: true, preserveHeavy: true });
@@ -4148,6 +4390,10 @@ function OverviewSection({
   completeAllTodayForPlant,
   onNavigateToPlants,
   isMember = true,
+  hasWaterTask = false,
+  hasFertilizeTask = false,
+  hasJournalEntry = false,
+  roadmapCompletions = new Set<string>(),
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4193,6 +4439,10 @@ function OverviewSection({
   completeAllTodayForPlant: (gardenPlantId: string) => Promise<void>;
   onNavigateToPlants: () => void;
   isMember?: boolean;
+  hasWaterTask?: boolean;
+  hasFertilizeTask?: boolean;
+  hasJournalEntry?: boolean;
+  roadmapCompletions?: Set<string>;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -4464,6 +4714,11 @@ function OverviewSection({
                     </h1>
                   )}
                   <div className="flex flex-wrap items-center gap-4 text-white/90">
+                    {garden?.gardenType === 'beginners' && (
+                      <div className="flex items-center gap-1.5 bg-sky-500/30 backdrop-blur-sm text-white rounded-full px-3 py-1.5 text-sm font-medium">
+                        {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🌱</span>
                       <span className="font-medium">{totalOnHand}</span>
@@ -4556,6 +4811,11 @@ function OverviewSection({
                   </h1>
                 )}
                 <div className="flex flex-wrap items-center gap-3">
+                  {garden?.gardenType === 'beginners' && (
+                    <div className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-3 py-1.5 border border-sky-200/50 dark:border-sky-500/20 text-sm font-medium">
+                      {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                    </div>
+                  )}
                   <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
                     <span className="text-lg">🌱</span>
                     <span className="font-semibold text-emerald-700 dark:text-emerald-300">
@@ -4631,6 +4891,446 @@ function OverviewSection({
           </div>
         )}
       </div>
+
+      {/* Beginner Roadmap - Duolingo/CandyCrush map style */}
+      {garden?.gardenType === 'beginners' && isMember && (() => {
+        const firstPlantId = plants[0]?.plant?.id;
+        const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
+        const roadmapSteps = [
+          {
+            key: 'set_living_space',
+            done: hasLivingSpace || roadmapCompletions.has('set_living_space'),
+            label: t("gardenDashboard.beginnerRoadmap.setLivingSpace", { defaultValue: "Set your garden space" }),
+            desc: t("gardenDashboard.beginnerRoadmap.setLivingSpaceDesc", { defaultValue: "Choose where your plants will live — indoor, outdoor, terrarium, or greenhouse." }),
+            tip: t("gardenDashboard.beginnerRoadmap.setLivingSpaceTip", { defaultValue: "Picking the right space helps us recommend plants that thrive in your environment. You can always change this later in Settings." }),
+            icon: <Home className="w-5 h-5" />,
+            action: () => navigate(`/garden/${gardenId}/settings?section=general`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.setLivingSpaceAction", { defaultValue: "Set space" }),
+          },
+          {
+            key: 'add_plant',
+            done: plants.length > 0 || roadmapCompletions.has('add_plant'),
+            label: t("gardenDashboard.beginnerRoadmap.addPlant", { defaultValue: "Add your first plant" }),
+            desc: t("gardenDashboard.beginnerRoadmap.addPlantDesc", { defaultValue: "Browse the catalog and add a plant to start growing your garden." }),
+            tip: t("gardenDashboard.beginnerRoadmap.addPlantTip", { defaultValue: "Not sure where to start? Try a low-maintenance plant like a pothos or snake plant — they're perfect for beginners!" }),
+            icon: <Sprout className="w-5 h-5" />,
+            action: () => navigate(`/garden/${gardenId}/plants`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.addPlantAction", { defaultValue: "Add a plant" }),
+          },
+          {
+            key: 'read_plant_info',
+            done: (firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false) || roadmapCompletions.has('read_plant_info'),
+            label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read your plant's info" }),
+            desc: t("gardenDashboard.beginnerRoadmap.readPlantInfoDesc", { defaultValue: "Learn about care requirements, growing conditions, and tips for your plant." }),
+            tip: t("gardenDashboard.beginnerRoadmap.readPlantInfoTip", { defaultValue: "Each plant page shows light, water, and soil needs. Understanding these basics will help your plant stay happy and healthy." }),
+            icon: <BookOpen className="w-5 h-5" />,
+            action: firstPlantId ? () => {
+              localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
+              navigate(`/plants/${firstPlantId}`);
+            } : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.readPlantInfoAction", { defaultValue: "View plant" }),
+          },
+          {
+            key: 'schedule_water',
+            done: hasWaterTask || roadmapCompletions.has('schedule_water'),
+            label: t("gardenDashboard.beginnerRoadmap.scheduleWater", { defaultValue: "Schedule watering" }),
+            desc: t("gardenDashboard.beginnerRoadmap.scheduleWaterDesc", { defaultValue: "Set up a watering schedule so you never forget to water your plant." }),
+            tip: t("gardenDashboard.beginnerRoadmap.scheduleWaterTip", { defaultValue: "Overwatering is the #1 mistake new gardeners make. When in doubt, let the soil dry out a bit between waterings." }),
+            icon: <Droplets className="w-5 h-5" />,
+            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleWaterAction", { defaultValue: "Set up watering" }),
+          },
+          {
+            key: 'schedule_fertilize',
+            done: hasFertilizeTask || roadmapCompletions.has('schedule_fertilize'),
+            label: t("gardenDashboard.beginnerRoadmap.scheduleFertilize", { defaultValue: "Schedule fertilization" }),
+            desc: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeDesc", { defaultValue: "Keep your plant healthy by scheduling regular fertilization." }),
+            tip: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeTip", { defaultValue: "Most indoor plants only need fertilizing during spring and summer. Less is more — always dilute to half strength if unsure." }),
+            icon: <FlaskConical className="w-5 h-5" />,
+            action: plants.length > 0 ? () => navigate(`/garden/${gardenId}/tasks`) : undefined,
+            actionLabel: t("gardenDashboard.beginnerRoadmap.scheduleFertilizeAction", { defaultValue: "Set up fertilizing" }),
+          },
+          {
+            key: 'create_journal',
+            done: hasJournalEntry || roadmapCompletions.has('create_journal'),
+            label: t("gardenDashboard.beginnerRoadmap.createJournal", { defaultValue: "Write a journal entry" }),
+            desc: t("gardenDashboard.beginnerRoadmap.createJournalDesc", { defaultValue: "Document your garden journey with photos and notes." }),
+            tip: t("gardenDashboard.beginnerRoadmap.createJournalTip", { defaultValue: "Take a photo of your plant today! Looking back at your journal in a few weeks will show you how much it's grown." }),
+            icon: <BookOpen className="w-5 h-5" />,
+            action: () => navigate(`/garden/${gardenId}/journal`),
+            actionLabel: t("gardenDashboard.beginnerRoadmap.createJournalAction", { defaultValue: "Open journal" }),
+          },
+        ];
+
+        const completedCount = roadmapSteps.filter((s) => s.done).length;
+        const allDone = completedCount === roadmapSteps.length;
+        const currentIdx = roadmapSteps.findIndex((s) => !s.done);
+
+        // === Map geometry (bottom-to-top, liana S-curve like /setup) ===
+        const nodeCount = roadmapSteps.length;
+        const nodeSpacing = 130;
+        const svgPadTop = 60;
+        const svgPadBot = 60;
+        const svgHeight = svgPadTop + (nodeCount - 1) * nodeSpacing + svgPadBot;
+        const svgWidth = 260;
+        const centerX = svgWidth / 2;
+        const amplitude = 50; // horizontal swing for the S-curve
+
+        // Smooth S-curve: sine wave alternating left/right
+        const nodeX = (i: number) => {
+          return centerX + Math.sin(((i) / Math.max(nodeCount - 1, 1)) * Math.PI * 2) * amplitude;
+        };
+        // Y goes from bottom (high value) to top (low value)
+        const nodeY = (i: number) => svgHeight - svgPadBot - i * nodeSpacing;
+
+        // Helper: get x,y at any fractional position along the vine (0 = node 0, 1 = last node)
+        const getVinePos = (frac: number) => {
+          const angle = frac * Math.PI * 2;
+          const x = centerX + Math.sin(angle) * amplitude;
+          const y = svgHeight - svgPadBot - frac * (nodeCount - 1) * nodeSpacing;
+          return { x, y };
+        };
+
+        // Build liana path: smooth S-curve through nodes with small oscillation (wave) between them
+        // like the setup page's vine with mini sine bumps
+        const buildLianaPath = () => {
+          if (nodeCount < 2) return '';
+          // Generate many intermediate points for the wavy liana effect
+          const totalSteps = (nodeCount - 1) * 12; // 12 sub-steps per segment
+          const pts: Array<{ x: number; y: number }> = [];
+          for (let s = 0; s <= totalSteps; s++) {
+            const frac = s / totalSteps;
+            const base = getVinePos(frac);
+            // Add small liana oscillation perpendicular to the path
+            const waveFreq = 8; // number of mini-waves along entire path
+            const waveAmp = 5; // small oscillation amplitude
+            // Direction of the wave is perpendicular: approximate tangent direction
+            const eps = 0.001;
+            const ahead = getVinePos(Math.min(1, frac + eps));
+            const dx = ahead.x - base.x;
+            const dy = ahead.y - base.y;
+            const len = Math.sqrt(dx * dx + dy * dy) || 1;
+            // Perpendicular direction
+            const perpX = -dy / len;
+            const perpY = dx / len;
+            const wave = Math.sin(frac * Math.PI * 2 * waveFreq) * waveAmp;
+            pts.push({
+              x: base.x + perpX * wave,
+              y: base.y + perpY * wave,
+            });
+          }
+
+          // Convert points to smooth cubic bezier using Catmull-Rom
+          let d = `M ${pts[0].x} ${pts[0].y}`;
+          for (let i = 0; i < pts.length - 1; i++) {
+            const p0 = pts[Math.max(0, i - 1)];
+            const p1 = pts[i];
+            const p2 = pts[i + 1];
+            const p3 = pts[Math.min(pts.length - 1, i + 2)];
+            const cp1x = p1.x + (p2.x - p0.x) / 6;
+            const cp1y = p1.y + (p2.y - p0.y) / 6;
+            const cp2x = p2.x - (p3.x - p1.x) / 6;
+            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
+          }
+          return d;
+        };
+
+        const vinePath = buildLianaPath();
+        // Progress: 0 completed = 0%, all completed = 100%
+        // Map to segments: completedCount steps done means vine reaches up to that node
+        const progressFraction = nodeCount > 1 ? Math.min(1, completedCount / (nodeCount - 1)) : (completedCount > 0 ? 1 : 0);
+
+        // Decorations: leaves sprouting from the liana + flowers at select points
+        type DecType = 'leaf' | 'flower';
+        const decorations: Array<{ x: number; y: number; rotation: number; type: DecType; segIdx: number }> = [];
+        for (let i = 0; i < nodeCount - 1; i++) {
+          const x0 = nodeX(i), y0 = nodeY(i);
+          const x1 = nodeX(i + 1), y1 = nodeY(i + 1);
+          // Direction of the segment
+          const segDx = x1 - x0;
+          const segAngle = Math.atan2(y1 - y0, segDx) * (180 / Math.PI);
+          // Leaves at 30% and 70% along segment, alternating sides, pointing upward
+          for (const [t, side] of [[0.3, 1], [0.7, -1]] as [number, number][]) {
+            const mx = x0 + (x1 - x0) * t;
+            const my = y0 + (y1 - y0) * t;
+            // Leaves tilt outward from the vine and point upward (negative Y = up)
+            const leafAngle = -45 * side + (segDx > 0 ? -10 : 10);
+            decorations.push({
+              x: mx + side * 10,
+              y: my,
+              rotation: leafAngle,
+              type: 'leaf',
+              segIdx: i,
+            });
+          }
+          // One flower at midpoint of every other segment
+          if (i % 2 === 0) {
+            decorations.push({
+              x: (x0 + x1) / 2 + (segDx > 0 ? 18 : -18),
+              y: (y0 + y1) / 2,
+              rotation: 0,
+              type: 'flower',
+              segIdx: i,
+            });
+          }
+        }
+
+        // Ref for auto-scrolling to current step
+        const mapScrollRef = React.useRef<HTMLDivElement>(null);
+        React.useEffect(() => {
+          const container = mapScrollRef.current;
+          if (!container) return;
+          const targetIdx = currentIdx >= 0 ? currentIdx : 0;
+          const targetY = nodeY(targetIdx);
+          const containerH = container.clientHeight;
+          // Center the current node in the visible area
+          const scrollTo = targetY - containerH / 2;
+          container.scrollTop = Math.max(0, Math.min(scrollTo, container.scrollHeight - containerH));
+        }, [currentIdx]);
+
+        return (
+          <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between mb-1">
+              <h3 className="font-semibold text-lg flex items-center gap-2">
+                <ListChecks className="w-5 h-5 text-emerald-500" />
+                {t("gardenDashboard.beginnerRoadmap.title", { defaultValue: "Garden Guide" })}
+              </h3>
+              <span className="text-xs font-medium text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded-full px-2.5 py-1">
+                {completedCount}/{roadmapSteps.length}
+              </span>
+            </div>
+            <div className="text-xs font-medium text-stone-400 dark:text-stone-500 mb-4">
+              {t("gardenDashboard.beginnerRoadmap.chapter1", { defaultValue: "Chapter 1 — Creating a Garden" })}
+            </div>
+
+            {/* Two-column 50/50 layout: current task left, map right */}
+            <div className="grid grid-cols-2 gap-4" style={{ minHeight: 380 }}>
+              {/* Left column: Current task focus */}
+              <div className="min-w-0 flex flex-col">
+                {!allDone && currentIdx >= 0 ? (() => {
+                  const step = roadmapSteps[currentIdx];
+                  return (
+                    <>
+                      {/* Current task card */}
+                      <div className="rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200/60 dark:border-emerald-800/40 p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-8 h-8 rounded-full bg-emerald-500 text-white flex items-center justify-center flex-shrink-0">
+                            {step.icon}
+                          </div>
+                          <div>
+                            <div className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600 dark:text-emerald-400">
+                              {t("gardenDashboard.beginnerRoadmap.currentTask", { defaultValue: "Current task" })}
+                            </div>
+                            <div className="text-sm font-semibold text-stone-800 dark:text-stone-100">
+                              {step.label}
+                            </div>
+                          </div>
+                        </div>
+                        <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed mb-3">
+                          {step.desc}
+                        </p>
+                        {step.action && (
+                          <button
+                            onClick={step.action}
+                            className="w-full flex items-center justify-between rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 transition-colors"
+                          >
+                            <span>{step.actionLabel}</span>
+                            <ArrowUpRight className="w-4 h-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Tip / help section */}
+                      {step.tip && (
+                        <div className="mt-3 rounded-xl bg-amber-50/70 dark:bg-amber-900/10 border border-amber-200/50 dark:border-amber-800/30 p-3">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-amber-600 dark:text-amber-400 mb-1">
+                            {t("gardenDashboard.beginnerRoadmap.tip", { defaultValue: "Tip" })}
+                          </div>
+                          <p className="text-xs text-stone-600 dark:text-stone-400 leading-relaxed">
+                            {step.tip}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Progress summary */}
+                      <div className="mt-3 flex items-center gap-2">
+                        <div className="flex-1 h-1.5 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${(completedCount / roadmapSteps.length) * 100}%` }}
+                          />
+                        </div>
+                        <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 whitespace-nowrap">
+                          {t("gardenDashboard.beginnerRoadmap.stepOf", { defaultValue: "Step {{current}} of {{total}}", current: currentIdx + 1, total: roadmapSteps.length })}
+                        </span>
+                      </div>
+
+                      {/* Up next preview */}
+                      {currentIdx < roadmapSteps.length - 1 && (
+                        <div className="mt-3 rounded-xl bg-stone-50 dark:bg-stone-800/30 border border-stone-200/50 dark:border-stone-700/30 p-3">
+                          <div className="text-[10px] uppercase tracking-wider font-semibold text-stone-400 dark:text-stone-500 mb-1.5">
+                            {t("gardenDashboard.beginnerRoadmap.upNext", { defaultValue: "Up next" })}
+                          </div>
+                          <div className="flex items-center gap-2 text-stone-500 dark:text-stone-400">
+                            <Lock className="w-3.5 h-3.5 flex-shrink-0" />
+                            <span className="text-xs">{roadmapSteps[currentIdx + 1].label}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
+                })() : (
+                  <div className="flex-1 flex flex-col items-center justify-center text-center py-6">
+                    <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-3">
+                      <Star className="w-7 h-7 text-amber-500" />
+                    </div>
+                    <div className="font-semibold text-emerald-700 dark:text-emerald-300 mb-1">
+                      {t("gardenDashboard.beginnerRoadmap.allDoneTitle", { defaultValue: "All done!" })}
+                    </div>
+                    <p className="text-xs text-stone-500 dark:text-stone-400 max-w-[200px]">
+                      {t("gardenDashboard.beginnerRoadmap.allDone", { defaultValue: "Great job! You've completed all the steps." })}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Right column: Scrollable roadmap (50/50, hidden scrollbar) */}
+              <style dangerouslySetInnerHTML={{ __html: `.roadmap-scroll::-webkit-scrollbar { display: none; }` }} />
+              <div
+                ref={mapScrollRef}
+                className="roadmap-scroll min-w-0 overflow-y-auto overflow-x-hidden rounded-2xl bg-gradient-to-b from-emerald-50/50 via-white to-amber-50/30 dark:from-emerald-950/20 dark:via-[#1a1a1e] dark:to-amber-950/10 border border-stone-200/50 dark:border-stone-700/50"
+                style={{ maxHeight: 420, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+              >
+                <div className="relative" style={{ height: svgHeight, minHeight: '100%' }}>
+                  {/* SVG vine */}
+                  <svg
+                    className="absolute inset-0 w-full h-full pointer-events-none"
+                    viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                    preserveAspectRatio="xMidYMid meet"
+                  >
+                    {/* Background path (dashed grey) */}
+                    <path
+                      d={vinePath}
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="3"
+                      strokeLinecap="round"
+                      strokeDasharray="6 5"
+                      className="text-stone-200 dark:text-stone-700"
+                    />
+
+                    {/* Growing vine (green) — only up to completed nodes */}
+                    <path
+                      d={vinePath}
+                      fill="none"
+                      stroke="#10b981"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                      style={{
+                        strokeDasharray: '5000',
+                        strokeDashoffset: `${5000 - progressFraction * 5000}`,
+                        transition: 'stroke-dashoffset 0.8s ease-out',
+                      }}
+                    />
+
+                    {/* Decorations: leaves and flowers on the liana */}
+                    {decorations.map((dec, di) => {
+                      const segProgress = (dec.segIdx + 1) / nodeCount;
+                      const visible = progressFraction >= segProgress - 0.08;
+                      if (dec.type === 'leaf') {
+                        return (
+                          <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y}) rotate(${dec.rotation})`}
+                            style={{ opacity: visible ? 0.7 : 0.12, transition: 'opacity 0.4s ease' }}>
+                            <path d="M 0 -6 Q 4 -1.5, 0 6 Q -4 -1.5, 0 -6" fill="#10b981" />
+                            <line x1="0" y1="-4" x2="0" y2="4" stroke="#059669" strokeWidth="0.5" />
+                          </g>
+                        );
+                      }
+                      // flower
+                      return (
+                        <g key={`dec-${di}`} transform={`translate(${dec.x}, ${dec.y})`}
+                          style={{ opacity: visible ? 0.9 : 0.1, transition: 'opacity 0.5s ease' }}>
+                          {[0, 72, 144, 216, 288].map((angle) => (
+                            <ellipse key={angle} cx="0" cy="-3.5" rx="2" ry="3" transform={`rotate(${angle})`}
+                              className="fill-pink-300 dark:fill-pink-400" opacity="0.7" />
+                          ))}
+                          <circle cx="0" cy="0" r="2" fill="#fbbf24" />
+                        </g>
+                      );
+                    })}
+                  </svg>
+
+                  {/* Step nodes */}
+                  {roadmapSteps.map((step, i) => {
+                    const x = nodeX(i);
+                    const y = nodeY(i);
+                    const isCompleted = step.done;
+                    const isCurrent = i === currentIdx;
+                    const isLocked = !isCompleted && i > 0 && !roadmapSteps[i - 1].done;
+                    const nodeSize = isCurrent ? 52 : 44;
+
+                    return (
+                      <div
+                        key={step.key}
+                        className="absolute flex flex-col items-center pointer-events-auto"
+                        style={{
+                          left: (x / svgWidth) * 100 + '%',
+                          top: y,
+                          transform: `translate(-50%, -50%)`,
+                          width: nodeSize + 40,
+                        }}
+                      >
+                        <button
+                          disabled={isLocked || isCompleted}
+                          onClick={() => {
+                            if (!isLocked && !isCompleted && step.action) step.action();
+                          }}
+                          className={`
+                            relative flex items-center justify-center rounded-full transition-all duration-300
+                            ${isCompleted
+                              ? 'bg-emerald-500 text-white shadow-md shadow-emerald-300/40 dark:shadow-emerald-800/40'
+                              : isCurrent
+                                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-300/60 dark:shadow-emerald-800/60 ring-[3px] ring-amber-400/70'
+                                : isLocked
+                                  ? 'bg-stone-200 dark:bg-stone-700 text-stone-400 dark:text-stone-500'
+                                  : 'bg-stone-100 dark:bg-stone-800 text-stone-500 hover:bg-stone-200'
+                            }
+                          `}
+                          style={{ width: nodeSize, height: nodeSize }}
+                        >
+                          {isCompleted ? (
+                            <CheckCircle2 className={isCurrent ? 'w-6 h-6' : 'w-5 h-5'} />
+                          ) : isLocked ? (
+                            <Lock className="w-4 h-4" />
+                          ) : (
+                            step.icon
+                          )}
+
+                          {/* START badge */}
+                          {isCurrent && !isCompleted && (
+                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-amber-400 text-amber-900 text-[9px] font-bold px-1.5 py-0.5 rounded-full whitespace-nowrap shadow">
+                              START
+                            </span>
+                          )}
+
+                          {/* Finish star on last node */}
+                          {i === nodeCount - 1 && allDone && (
+                            <span className="absolute -top-2.5 left-1/2 -translate-x-1/2">
+                              <Star className="w-4 h-4 text-amber-500 fill-amber-400" />
+                            </span>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Members Section */}
       {members.length > 0 && (

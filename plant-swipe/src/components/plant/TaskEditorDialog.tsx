@@ -20,7 +20,7 @@ const TASK_EMOJIS: Record<string, string> = {
   cut: '✂️',
 }
 
-export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void }) {
+export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, onChanged, wateringFrequencyWarm, wateringFrequencyCold }: { open: boolean; onOpenChange: (o: boolean) => void; gardenId: string; gardenPlantId: string; onChanged?: () => Promise<void> | void; wateringFrequencyWarm?: number | null; wateringFrequencyCold?: number | null }) {
   const { user } = useAuth()
   const { t } = useTranslation('common')
   const [tasks, setTasks] = React.useState<GardenPlantTask[]>([])
@@ -336,6 +336,8 @@ export function TaskEditorDialog({ open, onOpenChange, gardenId, gardenPlantId, 
         onOpenChange={(o) => setCreateOpen(o)}
         gardenId={gardenId}
         gardenPlantId={gardenPlantId}
+        wateringFrequencyWarm={wateringFrequencyWarm}
+        wateringFrequencyCold={wateringFrequencyCold}
         onCreated={async () => {
           emitTasksRealtime({ action: 'create', gardenPlantId }).catch(() => {})
           try { window.dispatchEvent(new CustomEvent('garden:tasks_changed')) } catch {}

@@ -4,6 +4,21 @@ export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
 
 export type GardenPrivacy = 'public' | 'friends_only' | 'private'
 
+export type GardenType = 'default' | 'beginners'
+
+export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse'
+
+export type GardenClimate =
+  | 'polar' | 'montane' | 'oceanic' | 'degraded_oceanic'
+  | 'temperate_continental' | 'mediterranean' | 'tropical_dry'
+  | 'tropical_humid' | 'tropical_volcanic' | 'tropical_cyclonic'
+  | 'humid_insular' | 'subtropical_humid' | 'equatorial'
+  | 'windswept_coastal'
+
+export type GardenUsage =
+  | 'decorative' | 'edible' | 'medicinal' | 'aromatic'
+  | 'pollinator_friendly' | 'air_purifying'
+
 export interface Garden {
   id: string
   name: string
@@ -20,6 +35,10 @@ export interface Garden {
   preferredLanguage?: string | null
   /** If true, hide the AI chat bubble for this garden */
   hideAiChat?: boolean
+  gardenType?: GardenType
+  livingSpace?: GardenLivingSpace[]
+  climate?: GardenClimate[]
+  usage?: GardenUsage[]
 }
 
 export interface GardenMember {

@@ -35,6 +35,7 @@ import { useLanguage } from "@/lib/i18nRouting";
 import { loadPlantPreviews } from "@/lib/plantTranslationLoader";
 import { getDiscoveryPageImageUrl } from "@/lib/photos";
 import { isPlantOfTheMonth } from "@/lib/plantHighlights";
+import { scoreDiscoveryPlants, loadSeenPlantIds, markPlantSeen, type ScoreBreakdown } from "@/lib/discoveryScoring";
 import { formatClassificationLabel } from "@/constants/classification";
 import { useTranslation } from "react-i18next";
 import { validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation";
@@ -98,6 +99,7 @@ type PreparedPlant = Plant & {
   _maintenance: string
   _petSafe: boolean
   _humanSafe: boolean
+  _vegetable: boolean
   _livingSpaceSet: Set<string>    // O(1) living space lookups
   _seasonsSet: Set<string>         // O(1) season lookups
   _lifeCycleSet: Set<string>       // O(1) life cycle lookups
@@ -187,6 +189,7 @@ export default function PlantSwipe() {
   const [plantHabitFilters, setPlantHabitFilters] = useState<string[]>([])
   const [ediblePartFilters, setEdiblePartFilters] = useState<string[]>([])
   const [plantPartFilters, setPlantPartFilters] = useState<string[]>([])
+  const [vegetableFilter, setVegetableFilter] = useState<boolean | null>(null)
   const [showFilters, setShowFilters] = useState(() => {
     if (typeof window === "undefined") return true
     return window.innerWidth >= 1024
@@ -252,6 +255,13 @@ export default function PlantSwipe() {
   const [index, setIndex] = useState(0)
   const [likedIds, setLikedIds] = useState<string[]>([])
   const initialCardBoostRef = React.useRef(true)
+
+  // Discovery scoring state
+  const sessionSeedRef = React.useRef(Math.random())
+  const hasInitialShuffleRef = React.useRef(false)
+  const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
+  const [seenLoaded, setSeenLoaded] = useState(false)
+  const [scoreBreakdowns, setScoreBreakdowns] = useState<Map<string, ScoreBreakdown>>(new Map())
 
   const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -469,6 +479,22 @@ export default function PlantSwipe() {
     }).catch(() => {})
   }, [user?.id])
 
+  // Load seen-plant history from DB for discovery scoring
+  React.useEffect(() => {
+    if (!user?.id) {
+      setSeenPlantIds(new Map())
+      setSeenLoaded(true)
+      return
+    }
+    setSeenLoaded(false)
+    // Reset so scoring re-runs once seen data arrives
+    hasInitialShuffleRef.current = false
+    loadSeenPlantIds(user.id)
+      .then(ids => setSeenPlantIds(ids))
+      .catch(() => {})
+      .finally(() => setSeenLoaded(true))
+  }, [user?.id])
+
   // Read search query and filter params from URL when on search page
   React.useEffect(() => {
     if (pathWithoutLang.startsWith("/search")) {
@@ -487,8 +513,9 @@ export default function PlantSwipe() {
       const urlPlantHabit = searchParams.get("plantHabit")
       const urlEdiblePart = searchParams.get("ediblePart")
       const urlPlantPart = searchParams.get("plantPart")
+      const urlVegetable = searchParams.get("vegetable")
 
-      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart)
+      hasParams = !!(urlQuery || urlType || urlUsage || urlLivingSpace || urlSeason || urlMaintenance || urlHabitat || urlPetSafe || urlHumanSafe || urlLifeCycle || urlPlantHabit || urlEdiblePart || urlPlantPart || urlVegetable)
 
       if (hasParams) {
         // Reset all filters before applying URL params so previous
@@ -506,6 +533,7 @@ export default function PlantSwipe() {
         setPlantHabitFilters(urlPlantHabit ? urlPlantHabit.split(",").map(h => h.trim()) : [])
         setEdiblePartFilters(urlEdiblePart ? urlEdiblePart.split(",").map(e => e.trim()) : [])
         setPlantPartFilters(urlPlantPart ? urlPlantPart.split(",").map(e => e.trim()) : [])
+        setVegetableFilter(urlVegetable === "true" ? true : urlVegetable === "false" ? false : null)
         setColorFilter([])
 
         // Clear URL parameters after applying to keep URL clean
@@ -1093,6 +1121,7 @@ export default function PlantSwipe() {
         _maintenance: maintenance,
         _petSafe: petSafe,
         _humanSafe: humanSafe,
+        _vegetable: !!(p as any).vegetable,
         _livingSpaceSet: livingSpaceSet,
         get _seasonsSet() {
            if (_cachedSeasonsSet) return _cachedSeasonsSet
@@ -1212,7 +1241,8 @@ export default function PlantSwipe() {
     plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
     ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
     plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters])
+    vegetable: vegetableFilter,
+  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
   // Reset index when search query changes
   React.useEffect(() => {
@@ -1220,7 +1250,7 @@ export default function PlantSwipe() {
   }, [debouncedQuery])
 
   const filtered = useMemo(() => {
-    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet } = normalizedFilters
+    const { query: lowerQuery, type: normalizedType, usageSet, habitatSet, maintenance: normalizedMaintenanceFilter, livingSpaceSet, lifeCycleSet, plantHabitSet, ediblePartSet, plantPartSet, vegetable: normalizedVegetable } = normalizedFilters
     
     // Pre-compute living space filter
     const livingSpaceCount = livingSpaceSet.size
@@ -1233,6 +1263,7 @@ export default function PlantSwipe() {
       // Boolean checks are O(1) and fastest
       if (petSafe && !p._petSafe) return false
       if (humanSafe && !p._humanSafe) return false
+      if (normalizedVegetable !== null && Boolean(p.vegetable) !== normalizedVegetable) return false
       // Type filter - supports comma-separated OR matching (e.g. "cactus,succulent")
       if (normalizedType) {
         if (typeTokens) {
@@ -1379,7 +1410,7 @@ export default function PlantSwipe() {
       
       return true
     })
-  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe])
+  }, [preparedPlants, normalizedFilters, seasonFilter, expandedColorFilterSet, petSafe, humanSafe, vegetableFilter])
 
   // Swiping-only randomized order with continuous wrap-around
   const [shuffleEpoch, setShuffleEpoch] = useState(0)
@@ -1392,54 +1423,34 @@ export default function PlantSwipe() {
     return preparedPlants.filter((p) => p._hasImage)
   }, [preparedPlants])
   
-  // Track if we've done initial shuffle
-  const hasInitialShuffleRef = React.useRef(false)
-  
-  // Create/update shuffled order only when plants change or explicit reshuffle
+  // Create/update scored order only when plants change or explicit reshuffle.
+  // Waits for seen-plant history to load from DB before initial scoring so
+  // the seen penalty is applied on page load (not just mid-session).
   React.useEffect(() => {
     if (swipeablePlants.length === 0) {
       setShuffledPlantIds([])
       hasInitialShuffleRef.current = false
       return
     }
-    
-    // Only shuffle if we haven't done initial shuffle yet, or explicit epoch triggered
+
+    // Wait for seen data from DB before scoring for the first time.
+    // Skip the gate for anonymous users (nothing to load).
+    if (user?.id && !seenLoaded) return
+
     if (!hasInitialShuffleRef.current || shuffleEpoch > 0) {
-      // Fisher-Yates shuffle for unbiased randomization
-      const shuffleArray = <T,>(arr: T[]): T[] => {
-        const result = arr.slice()
-        for (let i = result.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1))
-          ;[result[i], result[j]] = [result[j], result[i]]
-        }
-        return result
-      }
-      
-      // Discovery Algorithm:
-      // 1. Plants with featured_month matching current month appear FIRST (shuffled among themselves)
-      // 2. All other plants follow (shuffled among themselves)
-      // This ensures "Plant of the Month" plants get priority visibility in Discovery
-      const now = new Date()
-      const promoted: string[] = []
-      const regular: string[] = []
-      
-      swipeablePlants.forEach((plant) => {
-        if (isPlantOfTheMonth(plant, now)) {
-          promoted.push(plant.id)
-        } else {
-          regular.push(plant.id)
-        }
+      const isAdmin = profile?.is_admin === true
+      const { sorted, breakdowns } = scoreDiscoveryPlants(swipeablePlants, {
+        profile: profile ?? null,
+        likedIds: likedSet,
+        seenIds: seenPlantIds,
+        sessionSeed: sessionSeedRef.current,
+        includeBreakdowns: isAdmin,
       })
-      
-      // Promoted plants first, then regular plants (both groups shuffled internally)
-      const newOrder = promoted.length === 0
-        ? shuffleArray(swipeablePlants.map(p => p.id))
-        : [...shuffleArray(promoted), ...shuffleArray(regular)]
-      
-      setShuffledPlantIds(newOrder)
+      setShuffledPlantIds(sorted.map(p => p.id))
+      setScoreBreakdowns(breakdowns)
       hasInitialShuffleRef.current = true
     }
-  }, [swipeablePlants, shuffleEpoch])
+  }, [swipeablePlants, shuffleEpoch, seenPlantIds, seenLoaded, user?.id, profile, likedSet])
   
   // Build the actual swipe list from the stable shuffled IDs
   const swipeList = useMemo(() => {
@@ -1526,8 +1537,27 @@ export default function PlantSwipe() {
   }, [filtered, searchSort, likedSet, plantImpressions])
 
   const current = swipeList.length > 0 ? swipeList[index % swipeList.length] : undefined
+  // Scoring is still in progress when we have swipeable plants but haven't produced a scored order yet
+  const scoringInProgress = swipeablePlants.length > 0 && shuffledPlantIds.length === 0
   const heroImageCandidate = current ? getDiscoveryPageImageUrl(current) : ""
   const boostImagePriority = initialCardBoostRef.current && index === 0 && Boolean(heroImageCandidate)
+
+  // Mark every displayed plant as seen (persists to DB for scoring on next reload)
+  React.useEffect(() => {
+    if (!current || currentView !== 'discovery' || !seenLoaded) return
+    const plantId = current.id
+    const currentCount = seenPlantIds.get(plantId) ?? 0
+    // Persist to DB (fire-and-forget, atomic upsert handles count)
+    if (user?.id) {
+      markPlantSeen(user.id, plantId)
+    }
+    // Update local state so in-session scoring also benefits
+    setSeenPlantIds(prev => {
+      const next = new Map(prev)
+      next.set(plantId, currentCount + 1)
+      return next
+    })
+  }, [current?.id, currentView, seenLoaded]) // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!initialCardBoostRef.current) return
@@ -1600,15 +1630,17 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
+    // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
-      // When we complete a full cycle, reshuffle for variety
+      // When we complete a full cycle, reshuffle with a new seed for variety
       if (swipeList.length > 0 && next % swipeList.length === 0) {
+        sessionSeedRef.current = Math.random()
         setShuffleEpoch((e) => e + 1)
       }
       return next
     })
-  }, [swipeList.length])
+  }, [swipeList])
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
@@ -2327,6 +2359,8 @@ export default function PlantSwipe() {
                     setEdiblePartFilters={setEdiblePartFilters}
                     plantPartFilters={plantPartFilters}
                     setPlantPartFilters={setPlantPartFilters}
+                    vegetableFilter={vegetableFilter}
+                    setVegetableFilter={setVegetableFilter}
                     colorOptions={colorOptions}
                     primaryColors={primaryColors}
                     advancedColors={advancedColors}
@@ -2450,6 +2484,8 @@ export default function PlantSwipe() {
                         setEdiblePartFilters={setEdiblePartFilters}
                         plantPartFilters={plantPartFilters}
                         setPlantPartFilters={setPlantPartFilters}
+                        vegetableFilter={vegetableFilter}
+                        setVegetableFilter={setVegetableFilter}
                         colorOptions={colorOptions}
                         primaryColors={primaryColors}
                         advancedColors={advancedColors}
@@ -2791,6 +2827,9 @@ export default function PlantSwipe() {
                     liked={current ? likedIds.includes(current.id) : false}
                     onToggleLike={handleToggleLike}
                     boostImagePriority={boostImagePriority}
+                    scoreBreakdown={current ? scoreBreakdowns.get(current.id) : undefined}
+                    isAdmin={profile?.is_admin === true}
+                    scoringInProgress={scoringInProgress}
                   />
                 </Suspense>
               ) : (
