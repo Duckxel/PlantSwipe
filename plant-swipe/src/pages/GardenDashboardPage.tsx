@@ -5026,10 +5026,9 @@ function OverviewSection({
         const currentIdx = roadmapSteps.findIndex((step) => !step.done);
         const activeIndex = currentIdx >= 0 ? currentIdx : roadmapSteps.length - 1;
         const progressPct = Math.round((completedCount / roadmapSteps.length) * 100);
-        const currentStepKey = roadmapSteps[activeIndex]?.key ?? null;
         const expandedStepKey = roadmapSteps.some((step) => step.key === expandedBeginnerRoadmapStep)
           ? expandedBeginnerRoadmapStep
-          : currentStepKey;
+          : null;
         const activeLessonKey = lessonCards.some((lessonCard) => lessonCard.key === expandedBeginnerLessonKey)
           ? expandedBeginnerLessonKey
           : lesson.key;
@@ -5108,6 +5107,19 @@ function OverviewSection({
               visibleAt: (index + fraction) / Math.max(1, nodeCount - 1),
             };
           });
+        });
+
+        const vineDewDrops = nodePositions.slice(0, -1).flatMap((point, index) => {
+          const next = nodePositions[index + 1];
+          const dx = next.x - point.x;
+          const dy = next.y - point.y;
+          return [0.22, 0.5, 0.78].map((fraction, dewIndex) => ({
+            key: `dew-${index}-${dewIndex}`,
+            x: point.x + dx * fraction + ((dewIndex % 2 === 0) ? 10 : -10),
+            y: point.y + dy * fraction + ((dewIndex % 2 === 0) ? -8 : 8),
+            visibleAt: (index + fraction) / Math.max(1, nodeCount - 1),
+            radius: dewIndex === 1 ? 4.5 : 3,
+          }));
         });
 
         return (
@@ -5404,6 +5416,13 @@ function OverviewSection({
                           <path d="M 0 -8 L 0 8" stroke="#166534" strokeWidth="1.2" strokeLinecap="round" />
                         </g>
                       ))}
+
+                      {vineDewDrops.map((dew) => (
+                        <g key={dew.key} style={{ opacity: progressFraction >= Math.max(0.08, dew.visibleAt - 0.05) ? 0.85 : 0.22, transition: 'opacity 0.4s ease' }}>
+                          <circle cx={dew.x} cy={dew.y} r={dew.radius + 4} fill="#34d399" opacity="0.08" />
+                          <circle cx={dew.x} cy={dew.y} r={dew.radius} fill="#a7f3d0" opacity="0.75" />
+                        </g>
+                      ))}
                     </svg>
 
                     {roadmapSteps.map((step, index) => {
@@ -5421,23 +5440,26 @@ function OverviewSection({
                           className="absolute"
                           style={{ left: `${(point.x / svgWidth) * 100}%`, top: point.y, transform: 'translate(-50%, -50%)' }}
                         >
-                          <div className={`flex items-start gap-3 ${cardOnRight ? '' : 'flex-row-reverse'}`}>
+                          <div className="flex flex-col items-center gap-3">
                             <button
                               type="button"
                               aria-expanded={isExpanded}
                               aria-controls={detailsId}
-                              onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? currentStepKey : step.key)}
-                              className={`relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
+                              onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? null : step.key)}
+                              className={`relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
                                 isCompleted
-                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-[0_0_0_10px_rgba(16,185,129,0.12)]'
+                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-[0_0_0_12px_rgba(16,185,129,0.16)]'
                                   : isCurrent
-                                    ? 'border-emerald-400 bg-emerald-500 text-white shadow-[0_0_0_12px_rgba(74,222,128,0.18)] ring-4 ring-emerald-200/80 dark:ring-emerald-900/45'
+                                    ? 'border-emerald-300 bg-emerald-500 text-white shadow-[0_0_0_16px_rgba(74,222,128,0.2)] ring-4 ring-emerald-200/80 dark:ring-emerald-900/45'
                                     : isLocked
                                       ? 'border-stone-300 bg-stone-200 text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400'
                                       : 'border-emerald-200 bg-white text-emerald-700 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
                               }`}
                             >
-                              {isCompleted ? <CheckCircle2 className="h-6 w-6" /> : isLocked ? <Lock className="h-5 w-5" /> : step.icon}
+                              <span className={`absolute inset-2 rounded-full blur-md ${
+                                isCompleted || isCurrent ? 'bg-emerald-300/30' : isLocked ? 'bg-stone-300/20 dark:bg-stone-700/25' : 'bg-emerald-200/20 dark:bg-emerald-900/20'
+                              }`} />
+                              <span className="relative z-10">{isCompleted ? <CheckCircle2 className="h-6 w-6" /> : isLocked ? <Lock className="h-5 w-5" /> : step.icon}</span>
                               {isCurrent && (
                                 <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-950 shadow-sm">
                                   {t("gardenDashboard.beginnerRoadmap.nowLabel", { defaultValue: "Now" })}
@@ -5445,56 +5467,70 @@ function OverviewSection({
                               )}
                             </button>
 
-                            <div
-                              className={`w-[210px] rounded-2xl border shadow-sm backdrop-blur transition-all ${
-                                isCompleted
-                                  ? 'border-emerald-200/90 bg-white/90 dark:border-emerald-900/40 dark:bg-emerald-950/15'
-                                  : isCurrent
-                                    ? 'border-emerald-300 bg-white/95 dark:border-emerald-800/70 dark:bg-[#142118]/95'
+                            <button
+                              type="button"
+                              onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? null : step.key)}
+                              aria-expanded={isExpanded}
+                              aria-controls={detailsId}
+                              className={`rounded-full border px-3 py-1 text-xs font-bold tracking-[0.24em] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
+                                isCurrent
+                                  ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-300'
+                                  : isCompleted
+                                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
                                     : isLocked
-                                      ? 'border-stone-200/80 bg-stone-50/92 text-stone-500 dark:border-stone-800 dark:bg-stone-900/65 dark:text-stone-400'
-                                      : 'border-stone-200/80 bg-white/88 dark:border-stone-800 dark:bg-white/5'
+                                      ? 'border-stone-300 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-900/40 dark:text-stone-300'
+                                      : 'border-emerald-200 bg-white/85 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
                               }`}
                             >
-                              <button
-                                type="button"
-                                aria-expanded={isExpanded}
-                                aria-controls={detailsId}
-                                onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? currentStepKey : step.key)}
-                                className="flex w-full items-start justify-between gap-3 px-3 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                              >
-                                <div className="min-w-0 flex-1">
-                                  <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                                    {t("gardenDashboard.beginnerRoadmap.taskLabel", { defaultValue: "Task" })} {index + 1}
-                                  </div>
-                                  <div className="mt-1 text-sm font-semibold leading-5 text-stone-900 dark:text-stone-100">
-                                    {step.shortLabel || step.label}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-2 pl-2">
-                                  <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
-                                    isCompleted
-                                      ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-300'
-                                      : isCurrent
-                                        ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300'
-                                        : isLocked
-                                          ? 'bg-stone-200 text-stone-500 dark:bg-stone-800 dark:text-stone-300'
-                                          : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
-                                  }`}>
-                                    {isCompleted
-                                      ? t("gardenDashboard.beginnerRoadmap.doneLabel", { defaultValue: "Done" })
-                                      : isCurrent
-                                        ? t("gardenDashboard.beginnerRoadmap.currentLabel", { defaultValue: "Current" })
-                                        : isLocked
-                                          ? t("gardenDashboard.beginnerRoadmap.upcoming", { defaultValue: "Upcoming" })
-                                          : t("gardenDashboard.beginnerRoadmap.readyLabel", { defaultValue: "Ready" })}
-                                  </span>
-                                  <ChevronDown className={`mt-0.5 h-4 w-4 shrink-0 text-stone-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                                </div>
-                              </button>
+                              {index + 1}
+                            </button>
 
-                              {isExpanded && (
-                                <div id={detailsId} className="border-t border-stone-200/70 px-3 pb-3 pt-3 text-xs leading-6 text-stone-500 dark:border-stone-800 dark:text-stone-400">
+                            {isExpanded && (
+                              <div
+                                id={detailsId}
+                                className={`absolute top-0 z-20 w-[228px] rounded-2xl border shadow-[0_18px_45px_-28px_rgba(15,81,50,0.7)] backdrop-blur ${
+                                  cardOnRight ? 'left-[92px]' : 'right-[92px]'
+                                } ${
+                                  isCompleted
+                                    ? 'border-emerald-200/90 bg-white/95 dark:border-emerald-900/40 dark:bg-emerald-950/20'
+                                    : isCurrent
+                                      ? 'border-emerald-300 bg-white/95 dark:border-emerald-800/70 dark:bg-[#142118]/95'
+                                      : isLocked
+                                        ? 'border-stone-200/80 bg-stone-50/95 dark:border-stone-800 dark:bg-stone-900/90'
+                                        : 'border-stone-200/80 bg-white/95 dark:border-stone-800 dark:bg-[#121614]/95'
+                                }`}
+                              >
+                                <div className="flex items-start justify-between gap-3 px-4 py-3">
+                                  <div className="min-w-0 flex-1">
+                                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
+                                      {t("gardenDashboard.beginnerRoadmap.taskLabel", { defaultValue: "Task" })} {index + 1}
+                                    </div>
+                                    <div className="mt-1 text-base font-semibold leading-6 text-stone-900 dark:text-stone-100">
+                                      {step.label}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2 pl-2">
+                                    <span className={`rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] ${
+                                      isCompleted
+                                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-300'
+                                        : isCurrent
+                                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300'
+                                          : isLocked
+                                            ? 'bg-stone-200 text-stone-500 dark:bg-stone-800 dark:text-stone-300'
+                                            : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
+                                    }`}>
+                                      {isCompleted
+                                        ? t("gardenDashboard.beginnerRoadmap.doneLabel", { defaultValue: "Done" })
+                                        : isCurrent
+                                          ? t("gardenDashboard.beginnerRoadmap.currentLabel", { defaultValue: "Current" })
+                                          : isLocked
+                                            ? t("gardenDashboard.beginnerRoadmap.upcoming", { defaultValue: "Upcoming" })
+                                            : t("gardenDashboard.beginnerRoadmap.readyLabel", { defaultValue: "Ready" })}
+                                    </span>
+                                    <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 rotate-180 text-stone-500" />
+                                  </div>
+                                </div>
+                                <div className="border-t border-stone-200/70 px-4 pb-4 pt-3 text-sm leading-7 text-stone-500 dark:border-stone-800 dark:text-stone-400">
                                   <p>{step.desc}</p>
                                   {!isLocked && step.action ? (
                                     <button
@@ -5511,8 +5547,8 @@ function OverviewSection({
                                     </div>
                                   ) : null}
                                 </div>
-                              )}
-                            </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       );
