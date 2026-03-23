@@ -221,20 +221,22 @@ const LinkPreviewCard: React.FC<{
           {/* Overlay with actions on hover */}
           {imageLoaded && (
             <div className={cn(
-              "absolute inset-0 bg-black/0 hover:bg-black/30 transition-colors",
-              "flex items-center justify-center gap-3 opacity-0 hover:opacity-100"
+              "absolute inset-0 bg-black/0 hover:bg-black/30 focus-within:bg-black/30 transition-colors",
+              "flex items-center justify-center gap-3 opacity-0 hover:opacity-100 focus-within:opacity-100"
             )}>
               <button
                 onClick={handleDownload}
-                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 title={t('messages.download', { defaultValue: 'Download' })}
+                aria-label={t('messages.download', { defaultValue: 'Download' })}
               >
                 <Download className="h-5 w-5" />
               </button>
               <button
                 onClick={handleClick}
-                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 title={t('messages.openInNewTab', { defaultValue: 'Open in new tab' })}
+                aria-label={t('messages.openInNewTab', { defaultValue: 'Open in new tab' })}
               >
                 <ExternalLink className="h-5 w-5" />
               </button>

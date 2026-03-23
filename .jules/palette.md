@@ -13,3 +13,7 @@
 ## 2024-03-22 - Add ARIA labels to AphyliaChatPanel remove buttons
 **Learning:** Icon-only remove buttons within nested UI components (like Context Chips and Image Attachments in `AphyliaChatPanel.tsx`) are often overlooked for accessibility. The `aria-label` attribute combined with a tooltip (`title`) is essential to prevent screen reader users from getting trapped or not understanding the button's purpose.
 **Action:** When creating new interactive elements like badges, chips, or preview cards, systematically verify that their remove/dismiss buttons have valid ARIA labels and tooltip text, using the `t()` translation function.
+
+## 2024-03-23 - Focus-within for Hover-Revealed Actions
+**Learning:** When icon-only action buttons are nested inside a container that only reveals them on hover (e.g., `opacity-0 hover:opacity-100`), keyboard users tabbing to those buttons cannot see what they are focusing on because the hover state isn't triggered.
+**Action:** Always add `focus-within:opacity-100` and `focus-within:bg-black/30` (or similar contrast background) to the revealing container, alongside `aria-label` and `focus-visible:ring-2` on the buttons themselves.
