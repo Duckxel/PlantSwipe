@@ -115,11 +115,6 @@ export const GardenDashboardPage: React.FC = () => {
   const [tab, setTab] = React.useState<TabKey>("overview");
   // derive tab from URL path segment after /garden/:id
   React.useEffect(() => {
-    setExpandedBeginnerRoadmapStep(null);
-    setExpandedBeginnerLessonKey('lesson_1');
-  }, [id]);
-
-  React.useEffect(() => {
     // Remove language prefix first to get the actual path
     const pathWithoutLang = removeLanguagePrefix(location.pathname);
     const base = `/garden/${id || ""}`;
@@ -166,8 +161,6 @@ export const GardenDashboardPage: React.FC = () => {
   const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
   const [hasJournalEntry, setHasJournalEntry] = React.useState(false);
   const [roadmapCompletions, setRoadmapCompletions] = React.useState<Set<string>>(new Set());
-  const [expandedBeginnerRoadmapStep, setExpandedBeginnerRoadmapStep] = React.useState<string | null>(null);
-  const [expandedBeginnerLessonKey, setExpandedBeginnerLessonKey] = React.useState<string>('lesson_1');
   const [todayTaskOccurrences, setTodayTaskOccurrences] = React.useState<
     Array<{
       id: string;
@@ -4454,6 +4447,13 @@ function OverviewSection({
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
   const { user: authUser } = useAuth();
+  const [expandedBeginnerRoadmapStep, setExpandedBeginnerRoadmapStep] = React.useState<string | null>(null);
+  const [expandedBeginnerLessonKey, setExpandedBeginnerLessonKey] = React.useState<string>('lesson_1');
+  React.useEffect(() => {
+    setExpandedBeginnerRoadmapStep(null);
+    setExpandedBeginnerLessonKey('lesson_1');
+  }, [gardenId]);
+
   const [activity, setActivity] = React.useState<
     Array<{
       id: string;
