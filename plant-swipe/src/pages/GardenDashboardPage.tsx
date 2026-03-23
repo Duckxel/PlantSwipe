@@ -1753,12 +1753,11 @@ export const GardenDashboardPage: React.FC = () => {
     const syncRoadmapRef = React.useRef<Set<string>>(new Set());
     React.useEffect(() => {
       if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
-      const firstPlantId = plants[0]?.plant?.id;
       const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
       const liveSteps: Array<{ key: string; done: boolean }> = [
         { key: 'set_living_space', done: hasLivingSpace },
         { key: 'add_plant', done: plants.length > 0 },
-        { key: 'read_plant_info', done: firstPlantId ? localStorage.getItem(`beginner_read_plant_${id}`) === 'true' : false },
+        { key: 'read_plant_info', done: false },
         { key: 'schedule_water', done: hasWaterTask },
         { key: 'schedule_fertilize', done: hasFertilizeTask },
         { key: 'create_journal', done: hasJournalEntry },
@@ -1786,6 +1785,18 @@ export const GardenDashboardPage: React.FC = () => {
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [garden?.gardenType, garden?.livingSpace, id, isMember, user?.id, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry]);
+
+    const completeBeginnerRoadmapStep = React.useCallback(async (stepKey: string) => {
+      if (!id || !user?.id) return;
+      try {
+        await supabase.rpc('complete_roadmap_step', { _garden_id: id, _step_key: stepKey });
+        setRoadmapCompletions((prev) => {
+          const next = new Set(prev);
+          next.add(stepKey);
+          return next;
+        });
+      } catch {}
+    }, [id, user?.id]);
 
     React.useEffect(() => {
       load();
@@ -2934,6 +2945,7 @@ export const GardenDashboardPage: React.FC = () => {
                     hasFertilizeTask={hasFertilizeTask}
                     hasJournalEntry={hasJournalEntry}
                     roadmapCompletions={roadmapCompletions}
+                    onCompleteRoadmapStep={completeBeginnerRoadmapStep}
                   />
                 }
               />
@@ -4394,6 +4406,7 @@ function OverviewSection({
   hasFertilizeTask = false,
   hasJournalEntry = false,
   roadmapCompletions = new Set<string>(),
+  onCompleteRoadmapStep,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4443,6 +4456,7 @@ function OverviewSection({
   hasFertilizeTask?: boolean;
   hasJournalEntry?: boolean;
   roadmapCompletions?: Set<string>;
+  onCompleteRoadmapStep: (stepKey: string) => Promise<void>;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -5030,16 +5044,17 @@ function OverviewSection({
             },
             {
               key: 'read_plant_info',
-              done: (firstPlantId ? localStorage.getItem(`beginner_read_plant_${gardenId}`) === 'true' : false) || roadmapCompletions.has('read_plant_info'),
+              done: roadmapCompletions.has('read_plant_info'),
               label: t("gardenDashboard.beginnerRoadmap.readPlantInfo", { defaultValue: "Read your plant's info" }),
               shortLabel: t("gardenDashboard.beginnerRoadmap.readPlantInfoShort", { defaultValue: "Learn the basics" }),
               desc: t("gardenDashboard.beginnerRoadmap.readPlantInfoDesc", { defaultValue: "Learn about care requirements, growing conditions, and tips for your plant." }),
               educational: t("gardenDashboard.beginnerRoadmap.readPlantInfoTip", { defaultValue: "Read light, water, and soil before doing anything else. Knowing the plant's native needs prevents most beginner mistakes." }),
               action: firstPlantId ? () => {
-                localStorage.setItem(`beginner_read_plant_${gardenId}`, 'true');
                 navigate(`/plants/${firstPlantId}`);
               } : undefined,
               actionLabel: t("gardenDashboard.beginnerRoadmap.readPlantInfoAction", { defaultValue: "Open plant guide" }),
+              onComplete: () => onCompleteRoadmapStep('read_plant_info'),
+              completeLabel: t("gardenDashboard.beginnerRoadmap.completeAction", { defaultValue: "Complete" }),
               icon: <BookOpen className="w-5 h-5" />,
             },
             {
@@ -5159,7 +5174,8 @@ function OverviewSection({
           return d;
         };
 
-        const vinePoints: Array<{ x: number; y: number }> = [];
+        const stemBasePoint = { x: nodePositions[0]?.x ?? centerX, y: (nodePositions[0]?.y ?? svgHeight) + 42 };
+        const vinePoints: Array<{ x: number; y: number }> = [stemBasePoint];
         nodePositions.forEach((point, index) => {
           if (index === 0) {
             vinePoints.push(point);
@@ -5183,8 +5199,8 @@ function OverviewSection({
         });
 
         const vinePath = buildSmoothPath(vinePoints);
-        const growthTargetIndex = allDone ? nodeCount - 1 : Math.max(0, activeIndex + 0.72);
-        const progressFraction = nodeCount > 1 ? Math.min(1, growthTargetIndex / (nodeCount - 1)) : 1;
+        const growthTargetIndex = allDone ? nodeCount : Math.max(1, activeIndex + 1);
+        const progressFraction = nodeCount > 0 ? Math.min(1, growthTargetIndex / nodeCount) : 1;
 
         const leafDecorations = nodePositions.slice(0, -1).flatMap((point, index) => {
           const next = nodePositions[index + 1];
@@ -5420,14 +5436,27 @@ function OverviewSection({
                           {roadmapSteps[activeIndex]?.educational}
                         </p>
                       </div>
-                      {roadmapSteps[activeIndex]?.action && (
-                        <button
-                          onClick={roadmapSteps[activeIndex].action}
-                          className="mt-4 flex w-full items-center justify-between rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                        >
-                          <span>{roadmapSteps[activeIndex].actionLabel}</span>
-                          <ArrowUpRight className="h-4 w-4" />
-                        </button>
+                      {(roadmapSteps[activeIndex]?.action || roadmapSteps[activeIndex]?.onComplete) && (
+                        <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+                          {roadmapSteps[activeIndex]?.action && (
+                            <button
+                              onClick={roadmapSteps[activeIndex].action}
+                              className="flex flex-1 items-center justify-between rounded-2xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                            >
+                              <span>{roadmapSteps[activeIndex].actionLabel}</span>
+                              <ArrowUpRight className="h-4 w-4" />
+                            </button>
+                          )}
+                          {roadmapSteps[activeIndex]?.onComplete && !roadmapSteps[activeIndex]?.done && (
+                            <button
+                              type="button"
+                              onClick={() => roadmapSteps[activeIndex].onComplete?.()}
+                              className="flex items-center justify-center rounded-2xl border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-700 transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 dark:border-emerald-900/40 dark:bg-emerald-950/15 dark:text-emerald-300 dark:hover:bg-emerald-950/25"
+                            >
+                              {roadmapSteps[activeIndex].completeLabel || t("gardenDashboard.beginnerRoadmap.completeAction", { defaultValue: "Complete" })}
+                            </button>
+                          )}
+                        </div>
                       )}
                     </>
                   ) : (
@@ -5524,11 +5553,11 @@ function OverviewSection({
                           <stop offset="100%" stopColor="#4ade80" />
                         </linearGradient>
                         <filter id="vineShadow" x="-20%" y="-20%" width="140%" height="140%">
-                          <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#14532d" floodOpacity="0.18" />
+                          <feDropShadow dx="0" dy="6" stdDeviation="7" floodColor="#14532d" floodOpacity="0.12" />
                         </filter>
                         <filter id="leafGlow" x="-80%" y="-80%" width="260%" height="260%">
-                          <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#86efac" floodOpacity="0.55" />
-                          <feDropShadow dx="0" dy="0" stdDeviation="7" floodColor="#22c55e" floodOpacity="0.22" />
+                          <feDropShadow dx="0" dy="0" stdDeviation="3" floodColor="#86efac" floodOpacity="0.34" />
+                          <feDropShadow dx="0" dy="0" stdDeviation="5" floodColor="#22c55e" floodOpacity="0.14" />
                         </filter>
                       </defs>
 
@@ -5561,11 +5590,12 @@ function OverviewSection({
                         d={vinePath}
                         fill="none"
                         stroke="url(#vineGlow)"
-                        strokeWidth="7"
+                        strokeWidth="5.5"
                         strokeLinecap="round"
+                        pathLength={1}
                         style={{
-                          strokeDasharray: '5000',
-                          strokeDashoffset: `${5000 - progressFraction * 5000}`,
+                          strokeDasharray: '1',
+                          strokeDashoffset: `${1 - progressFraction}`,
                           transition: 'stroke-dashoffset 0.9s ease-out',
                         }}
                       />
@@ -5618,16 +5648,16 @@ function OverviewSection({
                               onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? null : step.key)}
                               className={`relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
                                 isCompleted
-                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-[0_0_0_12px_rgba(16,185,129,0.16)]'
+                                  ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                                   : isCurrent
-                                    ? 'border-emerald-300 bg-emerald-500 text-white shadow-[0_0_0_16px_rgba(74,222,128,0.2)] ring-4 ring-emerald-200/80 dark:ring-emerald-900/45'
+                                    ? 'border-emerald-300 bg-emerald-500 text-white shadow-[0_0_0_10px_rgba(74,222,128,0.16)] ring-4 ring-emerald-200/80 dark:ring-emerald-900/45'
                                     : isLocked
                                       ? 'border-stone-300 bg-stone-200 text-stone-500 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-400'
                                       : 'border-emerald-200 bg-white text-emerald-700 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300'
                               }`}
                             >
                               <span className={`absolute inset-2 rounded-full blur-md ${
-                                isCompleted || isCurrent ? 'bg-emerald-300/30' : isLocked ? 'bg-stone-300/20 dark:bg-stone-700/25' : 'bg-emerald-200/20 dark:bg-emerald-900/20'
+                                isCurrent ? 'bg-emerald-300/30' : isLocked ? 'bg-stone-300/20 dark:bg-stone-700/25' : 'bg-transparent'
                               }`} />
                               <span className="relative z-10">{isCompleted ? <CheckCircle2 className="h-6 w-6" /> : isLocked ? <Lock className="h-5 w-5" /> : step.icon}</span>
                               {isCurrent && (
@@ -5669,13 +5699,6 @@ function OverviewSection({
                                 }`}
                               >
                                 {step.label}
-                              </div>
-                            )}
-
-                            {index === nodeCount - 1 && (
-                              <div className="absolute -top-16 flex flex-col items-center text-emerald-500 dark:text-emerald-300">
-                                <Leaf className="h-8 w-8 drop-shadow-[0_0_10px_rgba(74,222,128,0.35)]" />
-                                <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-300">Lesson leaf</span>
                               </div>
                             )}
 
