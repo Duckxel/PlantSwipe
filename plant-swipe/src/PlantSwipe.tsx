@@ -1460,9 +1460,17 @@ export default function PlantSwipe() {
     const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
     
     // Return plants in shuffled order, filtering out any that no longer exist
-    return shuffledPlantIds
-      .map(id => plantMap.get(id))
-      .filter((p): p is PreparedPlant => p !== undefined)
+    // ⚡ Bolt: Use a single-pass loop instead of chained .map().filter()
+    // to avoid intermediate array allocation on large lists of shuffled IDs (~O(N) memory savings)
+    const result: PreparedPlant[] = []
+    for (let i = 0; i < shuffledPlantIds.length; i++) {
+      const p = plantMap.get(shuffledPlantIds[i])
+      if (p !== undefined) {
+        result.push(p)
+      }
+    }
+
+    return result
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {
