@@ -5183,23 +5183,25 @@ function OverviewSection({
         });
 
         const vinePath = buildSmoothPath(vinePoints);
-        const progressFraction = nodeCount > 1 ? Math.min(1, completedCount / (nodeCount - 1)) : (completedCount > 0 ? 1 : 0);
+        const growthTargetIndex = allDone ? nodeCount - 1 : Math.max(0, activeIndex + 0.72);
+        const progressFraction = nodeCount > 1 ? Math.min(1, growthTargetIndex / (nodeCount - 1)) : 1;
 
         const leafDecorations = nodePositions.slice(0, -1).flatMap((point, index) => {
           const next = nodePositions[index + 1];
           const dx = next.x - point.x;
           const dy = next.y - point.y;
           const baseAngle = Math.atan2(dy, dx) * (180 / Math.PI);
-          return [0.28, 0.58, 0.82].map((fraction, decorationIndex) => {
+          return [0.22, 0.48, 0.74].map((fraction, decorationIndex) => {
             const side = (index + decorationIndex) % 2 === 0 ? 1 : -1;
             const midX = point.x + dx * fraction;
             const midY = point.y + dy * fraction;
             return {
               key: `${index}-${decorationIndex}`,
-              x: midX + side * 12,
+              x: midX + side * 16,
               y: midY,
               rotation: baseAngle + side * 92,
-              visibleAt: (index + fraction) / Math.max(1, nodeCount - 1),
+              scale: decorationIndex === 1 ? 1.18 : 1.02,
+              visibleAt: Math.max(0, (index + fraction - 0.16) / Math.max(1, nodeCount - 1)),
             };
           });
         });
@@ -5524,6 +5526,10 @@ function OverviewSection({
                         <filter id="vineShadow" x="-20%" y="-20%" width="140%" height="140%">
                           <feDropShadow dx="0" dy="8" stdDeviation="10" floodColor="#14532d" floodOpacity="0.18" />
                         </filter>
+                        <filter id="leafGlow" x="-80%" y="-80%" width="260%" height="260%">
+                          <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#86efac" floodOpacity="0.55" />
+                          <feDropShadow dx="0" dy="0" stdDeviation="7" floodColor="#22c55e" floodOpacity="0.22" />
+                        </filter>
                       </defs>
 
                       <path
@@ -5555,7 +5561,7 @@ function OverviewSection({
                         d={vinePath}
                         fill="none"
                         stroke="url(#vineGlow)"
-                        strokeWidth="5"
+                        strokeWidth="7"
                         strokeLinecap="round"
                         style={{
                           strokeDasharray: '5000',
@@ -5567,15 +5573,17 @@ function OverviewSection({
                       {leafDecorations.map((leaf) => (
                         <g
                           key={leaf.key}
-                          transform={`translate(${leaf.x}, ${leaf.y}) rotate(${leaf.rotation})`}
+                          transform={`translate(${leaf.x}, ${leaf.y}) rotate(${leaf.rotation}) scale(${leaf.scale})`}
                           style={{
-                            opacity: progressFraction >= Math.max(0.06, leaf.visibleAt - 0.04) ? 0.95 : 0.2,
-                            transition: 'opacity 0.45s ease',
+                            opacity: progressFraction >= leaf.visibleAt ? 1 : progressFraction >= Math.max(0.04, leaf.visibleAt - 0.1) ? 0.72 : 0.28,
+                            transition: 'opacity 0.45s ease, transform 0.45s ease',
                           }}
+                          filter="url(#leafGlow)"
                         >
-                          <path d="M 0 -10 C 7 -8, 8 5, 0 11 C -8 5, -7 -8, 0 -10" fill="#22c55e" opacity="0.9" />
-                          <path d="M 0 -8 C 4 -6, 5 3, 0 8 C -5 3, -4 -6, 0 -8" fill="#86efac" opacity="0.7" />
-                          <path d="M 0 -8 L 0 8" stroke="#166534" strokeWidth="1.2" strokeLinecap="round" />
+                          <ellipse cx="0" cy="0" rx="10" ry="6" fill="#34d399" opacity="0.14" />
+                          <path d="M 0 -12 C 8 -10, 10 6, 0 13 C -10 6, -8 -10, 0 -12" fill="#22c55e" opacity="0.98" />
+                          <path d="M 0 -9 C 5 -7, 6 4, 0 9 C -6 4, -5 -7, 0 -9" fill="#bbf7d0" opacity="0.85" />
+                          <path d="M 0 -9 L 0 9" stroke="#166534" strokeWidth="1.35" strokeLinecap="round" />
                         </g>
                       ))}
 
