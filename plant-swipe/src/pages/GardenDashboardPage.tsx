@@ -4449,10 +4449,22 @@ function OverviewSection({
   const { user: authUser } = useAuth();
   const [expandedBeginnerRoadmapStep, setExpandedBeginnerRoadmapStep] = React.useState<string | null>(null);
   const [expandedBeginnerLessonKey, setExpandedBeginnerLessonKey] = React.useState<string>('lesson_1');
+  const roadmapScrollRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     setExpandedBeginnerRoadmapStep(null);
     setExpandedBeginnerLessonKey('lesson_1');
   }, [gardenId]);
+
+  React.useEffect(() => {
+    const container = roadmapScrollRef.current;
+    if (!container) return;
+
+    const currentNode = container.querySelector('[data-roadmap-current="true"]');
+    if (!(currentNode instanceof HTMLElement)) return;
+
+    const targetTop = currentNode.offsetTop - container.clientHeight / 2 + currentNode.offsetHeight / 2;
+    container.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
+  }, [gardenId, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry, roadmapCompletions.size, expandedBeginnerRoadmapStep]);
 
   const [activity, setActivity] = React.useState<
     Array<{
@@ -5146,6 +5158,69 @@ function OverviewSection({
                   </p>
                 </div>
 
+                <div className="rounded-[24px] border border-stone-200/80 bg-white/80 p-4 shadow-sm dark:border-stone-800 dark:bg-white/5">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
+                        {t("gardenDashboard.beginnerRoadmap.lessonTrackLabel", { defaultValue: "Lesson tracker" })}
+                      </div>
+                      <div className="mt-1 text-base font-semibold text-stone-900 dark:text-stone-100">
+                        {t("gardenDashboard.beginnerRoadmap.availableNow", { defaultValue: "Available now + upcoming lessons" })}
+                      </div>
+                    </div>
+                    <div className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-500 dark:border-stone-700 dark:bg-stone-900/40 dark:text-stone-300">
+                      {t("gardenDashboard.beginnerRoadmap.courseCount", { defaultValue: "1 open · 2 locked" })}
+                    </div>
+                  </div>
+
+                  <div
+                    className="lesson-track-scroll mt-4 max-h-[240px] space-y-3 overflow-y-auto pr-1"
+                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
+                  >
+                    {lessonCards.map((lessonCard) => {
+                      const isExpanded = activeLessonKey === lessonCard.key;
+                      const isCurrentLesson = lessonCard.key === lesson.key;
+                      return (
+                        <div
+                          key={lessonCard.key}
+                          className={`rounded-2xl border transition-all ${
+                            isCurrentLesson
+                              ? 'border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-white dark:border-emerald-900/40 dark:from-emerald-950/25 dark:to-transparent'
+                              : 'border-dashed border-stone-300/90 bg-stone-50/85 dark:border-stone-700 dark:bg-stone-900/30'
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBeginnerLessonKey(isExpanded ? lesson.key : lessonCard.key)}
+                            aria-expanded={isExpanded}
+                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">{lessonCard.title}</div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
+                                isCurrentLesson
+                                  ? 'bg-emerald-500 text-white'
+                                  : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
+                              }`}>
+                                {lessonCard.status}
+                              </span>
+                              <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="border-t border-stone-200/70 px-4 pb-4 pt-3 text-sm leading-6 text-stone-600 dark:border-stone-800 dark:text-stone-300">
+                              <p>{lessonCard.summary}</p>
+                              <p className="mt-3 text-xs font-medium text-stone-500 dark:text-stone-400">{lessonCard.meta}</p>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
                 <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
                   <div className="rounded-2xl border border-emerald-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
@@ -5167,12 +5242,12 @@ function OverviewSection({
 
                   <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-stone-800 dark:bg-white/5 md:col-span-2 xl:col-span-1">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.lessonStateLabel", { defaultValue: "Course map" })}
+                      {t("gardenDashboard.beginnerRoadmap.lessonStateLabel", { defaultValue: "Next milestone" })}
                     </div>
                     <div className="mt-3 text-base font-semibold text-stone-800 dark:text-stone-100">
                       {allDone
                         ? t("gardenDashboard.beginnerRoadmap.completedState", { defaultValue: "Lesson complete" })
-                        : t("gardenDashboard.beginnerRoadmap.activeState", { defaultValue: "Lesson 1 available now" })}
+                        : t("gardenDashboard.beginnerRoadmap.nextMilestone", { defaultValue: `Task ${activeIndex + 1}: ${roadmapSteps[activeIndex]?.shortLabel || roadmapSteps[activeIndex]?.label}` })}
                     </div>
                     <div className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
                       {t("gardenDashboard.beginnerRoadmap.lockedHint", { defaultValue: "Future lessons stay locked and marked as upcoming until new content is added." })}
@@ -5255,92 +5330,18 @@ function OverviewSection({
                   </div>
                 </div>
 
-                <div className="rounded-[26px] border border-stone-200/80 bg-white/80 p-4 shadow-sm dark:border-stone-800 dark:bg-white/5">
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                        {t("gardenDashboard.beginnerRoadmap.lessonTrackLabel", { defaultValue: "Lesson track" })}
-                      </div>
-                      <div className="mt-1 text-base font-semibold text-stone-900 dark:text-stone-100">
-                        {t("gardenDashboard.beginnerRoadmap.availableNow", { defaultValue: "Available now + upcoming lessons" })}
-                      </div>
-                    </div>
-                    <div className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 text-xs font-medium text-stone-500 dark:border-stone-700 dark:bg-stone-900/40 dark:text-stone-300">
-                      {t("gardenDashboard.beginnerRoadmap.courseCount", { defaultValue: "1 open · 2 locked" })}
-                    </div>
-                  </div>
-
-                  <div
-                    className="lesson-track-scroll mt-4 max-h-[320px] space-y-3 overflow-y-auto pr-1"
-                    style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
-                  >
-                    {lessonCards.map((lessonCard) => {
-                      const isExpanded = activeLessonKey === lessonCard.key;
-                      const isCurrentLesson = lessonCard.key === lesson.key;
-                      return (
-                        <div
-                          key={lessonCard.key}
-                          className={`rounded-2xl border transition-all ${
-                            isCurrentLesson
-                              ? 'border-emerald-200/90 bg-gradient-to-r from-emerald-50 to-white dark:border-emerald-900/40 dark:from-emerald-950/25 dark:to-transparent'
-                              : 'border-dashed border-stone-300/90 bg-stone-50/85 dark:border-stone-700 dark:bg-stone-900/30'
-                          }`}
-                        >
-                          <button
-                            type="button"
-                            onClick={() => setExpandedBeginnerLessonKey(isExpanded ? lesson.key : lessonCard.key)}
-                            aria-expanded={isExpanded}
-                            className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                          >
-                            <div className="min-w-0 flex-1">
-                              <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">{lessonCard.title}</div>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-                                isCurrentLesson
-                                  ? 'bg-emerald-500 text-white'
-                                  : 'bg-stone-200 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
-                              }`}>
-                                {lessonCard.status}
-                              </span>
-                              <ChevronDown className={`h-4 w-4 text-stone-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                            </div>
-                          </button>
-                          {isExpanded && (
-                            <div className="border-t border-stone-200/70 px-4 pb-4 pt-3 text-sm leading-6 text-stone-600 dark:border-stone-800 dark:text-stone-300">
-                              <p>{lessonCard.summary}</p>
-                              <p className="mt-3 text-xs font-medium text-stone-500 dark:text-stone-400">{lessonCard.meta}</p>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </div>
 
               <div className="min-w-0 rounded-[26px] border border-stone-200/80 bg-[linear-gradient(180deg,_rgba(246,253,249,0.98),_rgba(238,248,241,0.92))] p-3 shadow-inner dark:border-stone-800 dark:bg-[linear-gradient(180deg,_rgba(19,27,22,0.98),_rgba(14,18,17,0.98))] sm:p-4">
-                <div className="mb-3 flex flex-col gap-3 px-1 lg:flex-row lg:items-start lg:justify-between">
-                  <div className="w-full">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.mapLabel", { defaultValue: "Liana lesson map" })}
-                    </div>
-                    <div className="mt-1 text-base font-semibold text-stone-900 dark:text-stone-100">
-                      {t("gardenDashboard.beginnerRoadmap.mapSummary", { defaultValue: "Start at the bottom and grow your garden upward, one task at a time" })}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">
-                    <span className="rounded-full border border-emerald-200 bg-white/85 px-3 py-1 dark:border-emerald-900/40 dark:bg-emerald-950/20">
-                      {t("gardenDashboard.beginnerRoadmap.legendCurrent", { defaultValue: "Glowing node = do now" })}
-                    </span>
-                    <span className="rounded-full border border-stone-200 bg-white/85 px-3 py-1 dark:border-stone-700 dark:bg-stone-900/40">
-                      {t("gardenDashboard.beginnerRoadmap.legendLocked", { defaultValue: "Locked nodes = upcoming" })}
-                    </span>
+                <div className="mb-3 px-1">
+                  <div className="text-lg font-semibold text-stone-900 dark:text-stone-100">
+                    {t("gardenDashboard.beginnerRoadmap.mapLabel", { defaultValue: "Roadmap" })}
                   </div>
                 </div>
 
                 <div
-                  className="roadmap-scroll overflow-y-auto rounded-[22px] border border-emerald-100/70 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(228,245,233,0.82))] px-2 py-4 dark:border-emerald-900/30 dark:bg-[radial-gradient(circle_at_top,_rgba(24,33,27,0.98),_rgba(14,20,17,0.98))]"
+                  ref={roadmapScrollRef}
+                  className="roadmap-scroll overflow-y-auto overflow-x-visible rounded-[22px] border border-emerald-100/70 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(228,245,233,0.82))] px-2 py-4 dark:border-emerald-900/30 dark:bg-[radial-gradient(circle_at_top,_rgba(24,33,27,0.98),_rgba(14,20,17,0.98))]"
                   style={{ maxHeight: 760, scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
                 >
                   <div className="relative mx-auto w-full max-w-[520px]" style={{ height: svgHeight }}>
@@ -5425,15 +5426,7 @@ function OverviewSection({
                       ))}
                     </svg>
 
-                    <div className="absolute left-1/2 top-6 z-10 -translate-x-1/2 rounded-full border border-emerald-200/80 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
-                      {t("gardenDashboard.beginnerRoadmap.goalMarker", { defaultValue: "Lesson goal" })}
-                    </div>
-
-                    <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border border-amber-200/80 bg-amber-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-300">
-                      {t("gardenDashboard.beginnerRoadmap.startMarker", { defaultValue: "Start here" })}
-                    </div>
-
-                    {roadmapSteps.map((step, index) => {
+                                        {roadmapSteps.map((step, index) => {
                       const point = nodePositions[index];
                       const isCompleted = step.done;
                       const isCurrent = !allDone && index === activeIndex;
@@ -5448,7 +5441,7 @@ function OverviewSection({
                           className="absolute"
                           style={{ left: `${(point.x / svgWidth) * 100}%`, top: point.y, transform: 'translate(-50%, -50%)' }}
                         >
-                          <div className="flex flex-col items-center gap-3">
+                          <div className="flex flex-col items-center gap-3" data-roadmap-current={isCurrent ? "true" : undefined}>
                             <button
                               type="button"
                               aria-expanded={isExpanded}
@@ -5492,6 +5485,23 @@ function OverviewSection({
                             >
                               {index + 1}
                             </button>
+
+                            {index === nodeCount - 1 && (
+                              <div className="absolute -top-16 flex flex-col items-center text-emerald-500 dark:text-emerald-300">
+                                <Leaf className="h-8 w-8 drop-shadow-[0_0_10px_rgba(74,222,128,0.35)]" />
+                                <span className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-emerald-600 dark:text-emerald-300">Lesson leaf</span>
+                              </div>
+                            )}
+
+                            {index === 0 && (
+                              <div className="absolute top-[104px] flex flex-col items-center">
+                                <div className="h-7 w-1 rounded-full bg-emerald-500/60" />
+                                <div className="relative mt-1 h-10 w-20">
+                                  <div className="absolute inset-x-1 top-0 h-3 rounded-full bg-amber-700/90" />
+                                  <div className="absolute inset-x-0 bottom-0 h-8 rounded-b-[28px] rounded-t-[12px] border border-amber-900/40 bg-gradient-to-b from-amber-600 to-amber-800 shadow-[0_12px_25px_-16px_rgba(120,53,15,0.9)]" />
+                                </div>
+                              </div>
+                            )}
 
                             {isExpanded && (
                               <div
