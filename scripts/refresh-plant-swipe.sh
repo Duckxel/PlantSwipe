@@ -617,10 +617,15 @@ fi
 fi
 
 # Sync email template (generates .mjs for Node.js + copies to Supabase _shared)
+# Run as repo owner to avoid permission denied when www-data executes the script
 SYNC_EMAIL_SCRIPT="$NODE_DIR/scripts/sync-email-template.sh"
 if [[ -f "$SYNC_EMAIL_SCRIPT" ]]; then
   log "Syncing email template…"
-  bash "$SYNC_EMAIL_SCRIPT"
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
+    "${RUN_AS_PREFIX[@]}" bash "$SYNC_EMAIL_SCRIPT"
+  else
+    bash "$SYNC_EMAIL_SCRIPT"
+  fi
 fi
 
 # Install and build Node app using Bun
