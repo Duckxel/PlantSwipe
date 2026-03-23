@@ -5042,7 +5042,7 @@ function OverviewSection({
         const centerX = svgWidth / 2;
         const swingPattern = [-0.42, 0.16, 0.48, -0.08, -0.54, 0.22, 0.5, -0.16];
         const amplitude = 150;
-        const nodeY = (index: number) => svgPadTop + index * nodeSpacing;
+        const nodeY = (index: number) => svgHeight - svgPadBot - index * nodeSpacing;
         const nodeX = (index: number) => centerX + swingPattern[index % swingPattern.length] * amplitude;
         const nodePositions = roadmapSteps.map((_, index) => ({ x: nodeX(index), y: nodeY(index) }));
 
@@ -5326,7 +5326,7 @@ function OverviewSection({
                       {t("gardenDashboard.beginnerRoadmap.mapLabel", { defaultValue: "Liana lesson map" })}
                     </div>
                     <div className="mt-1 text-base font-semibold text-stone-900 dark:text-stone-100">
-                      {t("gardenDashboard.beginnerRoadmap.mapSummary", { defaultValue: "Follow the vine from one task to the next" })}
+                      {t("gardenDashboard.beginnerRoadmap.mapSummary", { defaultValue: "Start at the bottom and grow your garden upward, one task at a time" })}
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2 text-[11px] font-medium text-stone-500 dark:text-stone-400">
@@ -5424,6 +5424,14 @@ function OverviewSection({
                         </g>
                       ))}
                     </svg>
+
+                    <div className="absolute left-1/2 top-6 z-10 -translate-x-1/2 rounded-full border border-emerald-200/80 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 shadow-sm dark:border-emerald-900/40 dark:bg-emerald-950/30 dark:text-emerald-300">
+                      {t("gardenDashboard.beginnerRoadmap.goalMarker", { defaultValue: "Lesson goal" })}
+                    </div>
+
+                    <div className="absolute bottom-6 left-1/2 z-10 -translate-x-1/2 rounded-full border border-amber-200/80 bg-amber-50/95 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700 shadow-sm dark:border-amber-900/40 dark:bg-amber-950/25 dark:text-amber-300">
+                      {t("gardenDashboard.beginnerRoadmap.startMarker", { defaultValue: "Start here" })}
+                    </div>
 
                     {roadmapSteps.map((step, index) => {
                       const point = nodePositions[index];
