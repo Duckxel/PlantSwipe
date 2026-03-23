@@ -5115,8 +5115,8 @@ function OverviewSection({
             <style dangerouslySetInnerHTML={{ __html: `.roadmap-scroll::-webkit-scrollbar, .lesson-track-scroll::-webkit-scrollbar { display: none; }` }} />
 
             <div className="border-b border-emerald-100/70 px-5 py-5 dark:border-emerald-900/30 sm:px-6 lg:px-7">
-              <div className="grid gap-4 xl:grid-cols-[minmax(0,1.45fr)_repeat(3,minmax(190px,1fr))]">
-                <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 via-white to-white p-5 dark:border-emerald-900/50 dark:bg-gradient-to-br dark:from-emerald-950/30 dark:via-transparent dark:to-transparent xl:row-span-1">
+              <div className="grid gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.45fr)_repeat(3,minmax(220px,1fr))]">
+                <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 via-white to-white p-5 dark:border-emerald-900/50 dark:bg-gradient-to-br dark:from-emerald-950/30 dark:via-transparent dark:to-transparent lg:col-span-2 2xl:col-span-1">
                   <div className="inline-flex max-w-full items-center gap-2 rounded-full border border-emerald-200/80 bg-white/90 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-300">
                     <Leaf className="h-3.5 w-3.5" />
                     <span className="truncate">{lesson.eyebrow}</span>
@@ -5168,7 +5168,7 @@ function OverviewSection({
               </div>
             </div>
 
-            <div className="grid gap-6 px-5 py-5 sm:px-6 lg:px-7 xl:grid-cols-[minmax(320px,0.92fr)_minmax(0,1.08fr)]">
+            <div className="grid gap-6 px-5 py-5 sm:px-6 lg:px-7 2xl:grid-cols-[minmax(340px,380px)_minmax(0,1fr)]">
               <div className="space-y-4">
                 <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -5242,7 +5242,7 @@ function OverviewSection({
                 </div>
 
                 <div className="rounded-[26px] border border-stone-200/80 bg-white/80 p-4 shadow-sm dark:border-stone-800 dark:bg-white/5">
-                  <div className="flex items-center justify-between gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
                         {t("gardenDashboard.beginnerRoadmap.lessonTrackLabel", { defaultValue: "Lesson track" })}
@@ -5306,8 +5306,8 @@ function OverviewSection({
               </div>
 
               <div className="min-w-0 rounded-[26px] border border-stone-200/80 bg-[linear-gradient(180deg,_rgba(246,253,249,0.98),_rgba(238,248,241,0.92))] p-3 shadow-inner dark:border-stone-800 dark:bg-[linear-gradient(180deg,_rgba(19,27,22,0.98),_rgba(14,18,17,0.98))] sm:p-4">
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-3 px-1">
-                  <div className="min-w-0 flex-1">
+                <div className="mb-3 flex flex-col gap-3 px-1 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="w-full">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
                       {t("gardenDashboard.beginnerRoadmap.mapLabel", { defaultValue: "Liana lesson map" })}
                     </div>
