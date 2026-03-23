@@ -11,26 +11,26 @@ type EasterEggProps = {
 
 /**
  * Renders a hidden egg icon on the page if there's an active event
- * with an egg assigned to the given page path.
- * Uses the egg's position_seed to pick a deterministic position.
+ * with an item assigned to the given page path.
+ * Uses the item's position_seed to pick a deterministic position.
  */
 export function EasterEgg({ pagePath }: EasterEggProps) {
-  const { getEggForPage, foundEggIds, collectEgg, event } = useEggHunt()
+  const { getItemForPage, foundItemIds, collectItem, event } = useEggHunt()
   const [modalDescription, setModalDescription] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
 
-  const egg = getEggForPage(pagePath)
-  if (!egg || !event) return null
+  const item = getItemForPage(pagePath)
+  if (!item || !event) return null
 
-  const alreadyFound = foundEggIds.has(egg.id)
+  const alreadyFound = foundItemIds.has(item.id)
 
   // Deterministic position from seed
-  const seed = egg.position_seed
+  const seed = item.position_seed
   const topPercent = 20 + (((seed * 7) % 60))    // 20-80%
   const leftPercent = 10 + (((seed * 13) % 75))   // 10-85%
 
   const handleClick = async () => {
-    const description = await collectEgg(egg.id)
+    const description = await collectItem(item.id)
     if (description !== null) {
       setModalDescription(description)
       setShowModal(true)

@@ -4,15 +4,15 @@ import { Egg, Trophy, ChevronUp, ChevronDown } from 'lucide-react'
 import { useEggHunt } from '@/context/EggHuntContext'
 
 /**
- * A floating counter widget that shows egg hunt progress.
- * Displays found/total eggs and a completion badge.
+ * A floating counter widget that shows event progress.
+ * Displays found/total items and a completion badge.
  * Collapsed by default on mobile, expandable.
  */
 export function EggHuntCounter() {
-  const { event, totalEggs, foundCount, completed, loading } = useEggHunt()
+  const { event, totalItems, foundCount, completed, loading } = useEggHunt()
   const [expanded, setExpanded] = useState(false)
 
-  if (loading || !event || totalEggs === 0) return null
+  if (loading || !event || totalItems === 0) return null
 
   return (
     <motion.div
@@ -26,7 +26,7 @@ export function EggHuntCounter() {
       >
         <Egg className="h-5 w-5 text-amber-500 dark:text-amber-300" />
         <span className="text-sm font-medium text-stone-800 dark:text-stone-200">
-          {foundCount}/{totalEggs}
+          {foundCount}/{totalItems}
         </span>
         {completed && (
           <Trophy className="h-4 w-4 text-emerald-500" />
@@ -60,14 +60,14 @@ export function EggHuntCounter() {
               <motion.div
                 className="h-full rounded-full bg-amber-400 dark:bg-amber-500"
                 initial={{ width: 0 }}
-                animate={{ width: `${totalEggs > 0 ? (foundCount / totalEggs) * 100 : 0}%` }}
+                animate={{ width: `${totalItems > 0 ? (foundCount / totalItems) * 100 : 0}%` }}
                 transition={{ duration: 0.5, ease: 'easeOut' }}
               />
             </div>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
               {completed
-                ? 'Congratulations! You found all the eggs!'
-                : `${totalEggs - foundCount} egg${totalEggs - foundCount !== 1 ? 's' : ''} remaining`}
+                ? 'Congratulations! You found them all!'
+                : `${totalItems - foundCount} remaining`}
             </p>
           </motion.div>
         )}
