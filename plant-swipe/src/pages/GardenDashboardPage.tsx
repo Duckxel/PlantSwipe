@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
@@ -4452,10 +4452,26 @@ function OverviewSection({
   const roadmapScrollRef = React.useRef<HTMLDivElement | null>(null);
   const beginnerRoadmapDetailsRef = React.useRef<HTMLDivElement | null>(null);
   const [beginnerRoadmapHeight, setBeginnerRoadmapHeight] = React.useState<number>(560);
+  const [showBeginnerRoadmapRecenter, setShowBeginnerRoadmapRecenter] = React.useState(false);
   React.useEffect(() => {
     setExpandedBeginnerRoadmapStep(null);
     setExpandedBeginnerLessonKey('lesson_1');
   }, [gardenId]);
+
+  const centerBeginnerRoadmapOnCurrentTask = React.useCallback((behavior: ScrollBehavior = 'auto') => {
+    const container = roadmapScrollRef.current;
+    if (!container) return false;
+
+    const currentNode = container.querySelector('[data-roadmap-current="true"]');
+    if (!(currentNode instanceof HTMLElement)) return false;
+
+    const containerRect = container.getBoundingClientRect();
+    const nodeRect = currentNode.getBoundingClientRect();
+    const targetTop = container.scrollTop + (nodeRect.top - containerRect.top) + nodeRect.height / 2 - container.clientHeight / 2;
+
+    container.scrollTo({ top: Math.max(0, targetTop), behavior });
+    return true;
+  }, []);
 
   React.useEffect(() => {
     const detailsColumn = beginnerRoadmapDetailsRef.current;
@@ -4481,31 +4497,51 @@ function OverviewSection({
   }, [gardenId, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry, roadmapCompletions.size, expandedBeginnerRoadmapStep]);
 
   React.useLayoutEffect(() => {
-    const container = roadmapScrollRef.current;
-    if (!container) return;
-
     let frameOne = 0;
     let frameTwo = 0;
-    const centerCurrentNode = () => {
-      const currentNode = container.querySelector('[data-roadmap-current="true"]');
-      if (!(currentNode instanceof HTMLElement)) return;
-
-      const containerRect = container.getBoundingClientRect();
-      const nodeRect = currentNode.getBoundingClientRect();
-      const targetTop = container.scrollTop + (nodeRect.top - containerRect.top) + nodeRect.height / 2 - container.clientHeight / 2;
-
-      container.scrollTo({ top: Math.max(0, targetTop), behavior: 'auto' });
-    };
 
     frameOne = window.requestAnimationFrame(() => {
-      frameTwo = window.requestAnimationFrame(centerCurrentNode);
+      frameTwo = window.requestAnimationFrame(() => {
+        centerBeginnerRoadmapOnCurrentTask('auto');
+      });
     });
 
     return () => {
       window.cancelAnimationFrame(frameOne);
       window.cancelAnimationFrame(frameTwo);
     };
-  }, [gardenId, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry, roadmapCompletions.size, expandedBeginnerRoadmapStep, beginnerRoadmapHeight]);
+  }, [gardenId, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry, roadmapCompletions.size, expandedBeginnerRoadmapStep, beginnerRoadmapHeight, centerBeginnerRoadmapOnCurrentTask]);
+
+  React.useEffect(() => {
+    const container = roadmapScrollRef.current;
+    if (!container) return;
+
+    const updateRecenterVisibility = () => {
+      const currentNode = container.querySelector('[data-roadmap-current="true"]');
+      if (!(currentNode instanceof HTMLElement)) {
+        setShowBeginnerRoadmapRecenter(false);
+        return;
+      }
+
+      const containerRect = container.getBoundingClientRect();
+      const nodeRect = currentNode.getBoundingClientRect();
+      const nodeCenter = nodeRect.top - containerRect.top + nodeRect.height / 2;
+      const containerCenter = container.clientHeight / 2;
+      const threshold = Math.max(36, container.clientHeight * 0.12);
+
+      setShowBeginnerRoadmapRecenter(Math.abs(nodeCenter - containerCenter) > threshold);
+    };
+
+    updateRecenterVisibility();
+
+    container.addEventListener('scroll', updateRecenterVisibility, { passive: true });
+    window.addEventListener('resize', updateRecenterVisibility);
+
+    return () => {
+      container.removeEventListener('scroll', updateRecenterVisibility);
+      window.removeEventListener('resize', updateRecenterVisibility);
+    };
+  }, [gardenId, plants.length, hasWaterTask, hasFertilizeTask, hasJournalEntry, roadmapCompletions.size, beginnerRoadmapHeight]);
 
   const [activity, setActivity] = React.useState<
     Array<{
@@ -4965,7 +5001,7 @@ function OverviewSection({
           summary: t("gardenDashboard.beginnerRoadmap.lessonSummary", {
             defaultValue: "A calmer, more educational roadmap that walks the gardener through the exact first habits they need to create.",
           }),
-          objective: t("gardenDashboard.beginnerRoadmap.objective", {
+          goal: t("gardenDashboard.beginnerRoadmap.objective", {
             defaultValue: "Goal: set up your space, understand your first plant, and create the two care routines that will keep it alive.",
           }),
           duration: t("gardenDashboard.beginnerRoadmap.duration", { defaultValue: "~15 min to set up" }),
@@ -5047,12 +5083,14 @@ function OverviewSection({
             key: 'lesson_2',
             title: t("gardenDashboard.beginnerRoadmap.upcomingLessonTwo", { defaultValue: "Lesson 2 · Reading plant signals" }),
             summary: t("gardenDashboard.beginnerRoadmap.upcomingLessonTwoDesc", { defaultValue: "Spot thirst, too much light, slowed growth, and recovery cues before problems get serious." }),
+            goal: t("gardenDashboard.beginnerRoadmap.upcomingLessonTwoGoal", { defaultValue: "Goal: learn to notice stress signals early and react before your plant declines." }),
             meta: t("gardenDashboard.beginnerRoadmap.upcomingLessonTwoMeta", { defaultValue: "Locked · 5 upcoming tasks" }),
           },
           {
             key: 'lesson_3',
             title: t("gardenDashboard.beginnerRoadmap.upcomingLessonThree", { defaultValue: "Lesson 3 · Repotting with confidence" }),
             summary: t("gardenDashboard.beginnerRoadmap.upcomingLessonThreeDesc", { defaultValue: "Learn when to repot, how to choose soil, and how to avoid stressing the roots." }),
+            goal: t("gardenDashboard.beginnerRoadmap.upcomingLessonThreeGoal", { defaultValue: "Goal: repot safely, choose the right mix, and protect roots during the transition." }),
             meta: t("gardenDashboard.beginnerRoadmap.upcomingLessonThreeMeta", { defaultValue: "Locked · resources and admin notes coming soon" }),
           },
         ];
@@ -5062,7 +5100,8 @@ function OverviewSection({
             key: lesson.key,
             title: lesson.eyebrow,
             summary: lesson.summary,
-            meta: lesson.objective,
+            goal: lesson.goal,
+            meta: lesson.duration,
             status: t("gardenDashboard.beginnerRoadmap.openLabel", { defaultValue: "Open" }),
             isCurrent: true,
           },
@@ -5085,23 +5124,8 @@ function OverviewSection({
         const activeLessonKey = lessonCards.some((lessonCard) => lessonCard.key === expandedBeginnerLessonKey)
           ? expandedBeginnerLessonKey
           : lesson.key;
-        const expandedRoadmapIndex = expandedStepKey ? roadmapSteps.findIndex((step) => step.key === expandedStepKey) : -1;
-        const expandedRoadmapStep = expandedRoadmapIndex >= 0 ? roadmapSteps[expandedRoadmapIndex] : null;
         const nextStep = !allDone && currentIdx >= 0 && currentIdx < roadmapSteps.length - 1
           ? roadmapSteps[currentIdx + 1]
-          : null;
-        const expandedRoadmapIsLocked = expandedRoadmapIndex > 0
-          && !!expandedRoadmapStep
-          && !expandedRoadmapStep.done
-          && !roadmapSteps[expandedRoadmapIndex - 1].done;
-        const expandedRoadmapStatus = expandedRoadmapStep
-          ? expandedRoadmapStep.done
-            ? t("gardenDashboard.beginnerRoadmap.doneLabel", { defaultValue: "Done" })
-            : expandedRoadmapIndex === activeIndex && !allDone
-              ? t("gardenDashboard.beginnerRoadmap.currentLabel", { defaultValue: "Current" })
-              : expandedRoadmapIsLocked
-                ? t("gardenDashboard.beginnerRoadmap.upcoming", { defaultValue: "Upcoming" })
-                : t("gardenDashboard.beginnerRoadmap.readyLabel", { defaultValue: "Ready" })
           : null;
 
         const nodeCount = roadmapSteps.length;
@@ -5271,6 +5295,10 @@ function OverviewSection({
                           {isExpanded && (
                             <div className="border-t border-stone-200/70 px-4 pb-4 pt-3 text-sm leading-6 text-stone-600 dark:border-stone-800 dark:text-stone-300">
                               <p>{lessonCard.summary}</p>
+                              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.16em] text-stone-500 dark:text-stone-400">
+                                {t("gardenDashboard.beginnerRoadmap.goalLabel", { defaultValue: "Lesson goal" })}
+                              </p>
+                              <p className="mt-1 text-sm leading-6 text-stone-600 dark:text-stone-300">{lessonCard.goal}</p>
                               <p className="mt-3 text-xs font-medium text-stone-500 dark:text-stone-400">{lessonCard.meta}</p>
                             </div>
                           )}
@@ -5280,36 +5308,72 @@ function OverviewSection({
                   </div>
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-                  <div className="rounded-2xl border border-emerald-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-emerald-900/50 dark:bg-emerald-950/20">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div className="rounded-[24px] border border-emerald-200/80 bg-[radial-gradient(circle_at_top,_rgba(52,211,153,0.2),_rgba(255,255,255,0.96)_58%)] px-4 py-4 shadow-sm dark:border-emerald-900/50 dark:bg-[radial-gradient(circle_at_top,_rgba(52,211,153,0.18),_rgba(6,20,15,0.96)_58%)]">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
                       {t("gardenDashboard.beginnerRoadmap.progressLabel", { defaultValue: "Lesson progress" })}
                     </div>
-                    <div className="mt-3 text-3xl font-semibold text-emerald-600 dark:text-emerald-400">{progressPct}%</div>
-                    <div className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.progressHint", { defaultValue: "Each dot is one real gardening task." })}
+                    <div className="mt-4 flex items-center justify-between gap-4">
+                      <div>
+                        <div className="text-4xl font-semibold tracking-tight text-emerald-600 dark:text-emerald-400">{progressPct}%</div>
+                        <div className="mt-1 text-sm font-medium text-stone-500 dark:text-stone-400">
+                          {completedCount}/{roadmapSteps.length}
+                        </div>
+                      </div>
+                      <div
+                        className="relative h-16 w-16 shrink-0 rounded-full"
+                        style={{
+                          background: `conic-gradient(#10b981 0deg ${progressPct * 3.6}deg, rgba(148,163,184,0.18) ${progressPct * 3.6}deg 360deg)`,
+                        }}
+                      >
+                        <div className="absolute inset-[7px] rounded-full bg-white/90 dark:bg-[#0f1713]" />
+                        <div className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-emerald-700 dark:text-emerald-300">
+                          {completedCount}/{roadmapSteps.length}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex flex-wrap gap-2">
+                      {roadmapSteps.map((step) => (
+                        <span
+                          key={`progress-dot-${step.key}`}
+                          className={`h-2.5 flex-1 rounded-full transition-colors ${
+                            step.done
+                              ? 'bg-emerald-500 dark:bg-emerald-400'
+                              : 'bg-stone-200 dark:bg-stone-700'
+                          }`}
+                        />
+                      ))}
                     </div>
                   </div>
 
-                  <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-stone-800 dark:bg-white/5">
+                  <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-stone-800 dark:bg-white/5 md:col-span-2">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.goalLabel", { defaultValue: "Learning goal" })}
+                      {t("gardenDashboard.beginnerRoadmap.goalLabel", { defaultValue: "Lesson goal" })}
                     </div>
-                    <div className="mt-3 text-base font-semibold text-stone-800 dark:text-stone-100">{lesson.duration}</div>
-                    <div className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">{lesson.objective}</div>
-                  </div>
-
-                  <div className="rounded-2xl border border-stone-200/80 bg-white/80 px-4 py-4 shadow-sm dark:border-stone-800 dark:bg-white/5 md:col-span-2 xl:col-span-1">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.lessonStateLabel", { defaultValue: "Next milestone" })}
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <div className="rounded-full bg-stone-900 px-3 py-1 text-xs font-semibold text-white dark:bg-stone-100 dark:text-stone-900">
+                        {lesson.duration}
+                      </div>
+                      <div className="text-sm font-medium text-stone-500 dark:text-stone-400">
+                        {lesson.title}
+                      </div>
                     </div>
-                    <div className="mt-3 text-base font-semibold text-stone-800 dark:text-stone-100">
-                      {allDone
-                        ? t("gardenDashboard.beginnerRoadmap.completedState", { defaultValue: "Lesson complete" })
-                        : t("gardenDashboard.beginnerRoadmap.nextMilestone", { defaultValue: `Task ${activeIndex + 1}: ${roadmapSteps[activeIndex]?.shortLabel || roadmapSteps[activeIndex]?.label}` })}
+                    <div className="mt-4 text-base leading-7 text-stone-700 dark:text-stone-200">
+                      {lesson.goal}
                     </div>
-                    <div className="mt-2 text-sm leading-6 text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.beginnerRoadmap.lockedHint", { defaultValue: "Future lessons stay locked and marked as upcoming until new content is added." })}
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs font-medium text-stone-500 dark:text-stone-400">
+                      <span className="rounded-full border border-stone-200 bg-stone-50 px-3 py-1 dark:border-stone-700 dark:bg-stone-900/50">
+                        {t("gardenDashboard.beginnerRoadmap.lessonLabel", { defaultValue: "Lesson 1 · Build your first healthy plant routine" })}
+                      </span>
+                      {!allDone && (
+                        <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
+                          {t("gardenDashboard.beginnerRoadmap.stepOf", {
+                            defaultValue: "Step {{current}} of {{total}}",
+                            current: activeIndex + 1,
+                            total: roadmapSteps.length,
+                          })}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -5420,73 +5484,21 @@ function OverviewSection({
                 className="min-w-0 rounded-[26px] border border-stone-200/80 bg-[linear-gradient(180deg,_rgba(246,253,249,0.98),_rgba(238,248,241,0.92))] p-3 shadow-inner dark:border-stone-800 dark:bg-[linear-gradient(180deg,_rgba(19,27,22,0.98),_rgba(14,18,17,0.98))] sm:p-4 flex flex-col overflow-visible"
                 style={{ height: beginnerRoadmapHeight }}
               >
-                <div className="mb-3 px-1">
+                <div className="mb-3 flex items-center justify-between gap-3 px-1">
                   <div className="text-lg font-semibold text-stone-900 dark:text-stone-100">
                     {t("gardenDashboard.beginnerRoadmap.mapLabel", { defaultValue: "Roadmap" })}
                   </div>
+                  {showBeginnerRoadmapRecenter && (
+                    <button
+                      type="button"
+                      onClick={() => centerBeginnerRoadmapOnCurrentTask('smooth')}
+                      className="inline-flex items-center gap-2 rounded-full border border-emerald-200 bg-white/90 px-3 py-1.5 text-xs font-semibold text-emerald-700 shadow-sm transition-colors hover:bg-emerald-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300 dark:hover:bg-emerald-950/30"
+                    >
+                      <LocateFixed className="h-3.5 w-3.5" />
+                      <span>{t("gardenDashboard.beginnerRoadmap.recenterLabel", { defaultValue: "Recenter" })}</span>
+                    </button>
+                  )}
                 </div>
-
-                {expandedRoadmapStep && (
-                  <div className="relative z-20 mb-3 rounded-[22px] border border-emerald-200/90 bg-white/95 p-4 shadow-[0_24px_60px_-30px_rgba(15,81,50,0.75)] backdrop-blur dark:border-emerald-900/40 dark:bg-[#121614]/95">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                            {t("gardenDashboard.beginnerRoadmap.taskLabel", { defaultValue: "Task" })} {expandedRoadmapIndex + 1}
-                          </span>
-                          {expandedRoadmapStatus && (
-                            <span className={`rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.16em] ${
-                              expandedRoadmapStep.done
-                                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/35 dark:text-emerald-300'
-                                : expandedRoadmapIndex === activeIndex && !allDone
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/25 dark:text-amber-300'
-                                  : expandedRoadmapIsLocked
-                                    ? 'bg-stone-200 text-stone-500 dark:bg-stone-800 dark:text-stone-300'
-                                    : 'bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-300'
-                            }`}>
-                              {expandedRoadmapStatus}
-                            </span>
-                          )}
-                        </div>
-                        <div className="mt-2 text-base font-semibold leading-6 text-stone-900 dark:text-stone-100">
-                          {expandedRoadmapStep.label}
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedBeginnerRoadmapStep(null)}
-                        className="rounded-full border border-stone-200 px-2 py-1 text-xs font-semibold text-stone-500 hover:bg-stone-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 dark:border-stone-700 dark:text-stone-300 dark:hover:bg-stone-900/40"
-                      >
-                        {t("gardenDashboard.beginnerRoadmap.closeLabel", { defaultValue: "Close" })}
-                      </button>
-                    </div>
-                    <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-300">
-                      {expandedRoadmapStep.desc}
-                    </p>
-                    <div className="mt-4 rounded-2xl border border-emerald-100 bg-white/85 p-4 dark:border-emerald-900/30 dark:bg-emerald-950/15">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-stone-500 dark:text-stone-400">
-                        {t("gardenDashboard.beginnerRoadmap.educationalWhy", { defaultValue: "Why this matters" })}
-                      </div>
-                      <p className="mt-2 text-sm leading-6 text-stone-600 dark:text-stone-300">
-                        {expandedRoadmapStep.educational}
-                      </p>
-                    </div>
-                    {!expandedRoadmapIsLocked && expandedRoadmapStep.action ? (
-                      <button
-                        type="button"
-                        onClick={() => expandedRoadmapStep.action?.()}
-                        className="mt-4 inline-flex items-center gap-2 rounded-full bg-emerald-500 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300"
-                      >
-                        {expandedRoadmapStep.actionLabel}
-                        <ArrowUpRight className="h-3.5 w-3.5" />
-                      </button>
-                    ) : (
-                      <div className="mt-4 rounded-xl border border-stone-200/80 bg-stone-50 px-3 py-2 text-xs text-stone-500 dark:border-stone-800 dark:bg-stone-900/45 dark:text-stone-400">
-                        {t("gardenDashboard.beginnerRoadmap.unlockHint", { defaultValue: "Finish the task before this one to unlock the full guidance." })}
-                      </div>
-                    )}
-                  </div>
-                )}
 
                 <div
                   ref={roadmapScrollRef}
@@ -5575,7 +5587,7 @@ function OverviewSection({
                       ))}
                     </svg>
 
-                                        {roadmapSteps.map((step, index) => {
+                    {roadmapSteps.map((step, index) => {
                       const point = nodePositions[index];
                       const isCompleted = step.done;
                       const isCurrent = !allDone && index === activeIndex;
@@ -5634,6 +5646,23 @@ function OverviewSection({
                             >
                               {index + 1}
                             </button>
+
+                            {isExpanded && (
+                              <div
+                                id={detailsId}
+                                className={`max-w-[200px] rounded-full border px-3 py-1.5 text-center text-xs font-semibold shadow-sm ${
+                                  isCurrent
+                                    ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-300'
+                                    : isCompleted
+                                      ? 'border-emerald-200 bg-white text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+                                      : isLocked
+                                        ? 'border-stone-300 bg-stone-100 text-stone-500 dark:border-stone-700 dark:bg-stone-900/50 dark:text-stone-300'
+                                        : 'border-emerald-200 bg-white/95 text-stone-700 dark:border-emerald-900/40 dark:bg-[#121614]/95 dark:text-stone-100'
+                                }`}
+                              >
+                                {step.label}
+                              </div>
+                            )}
 
                             {index === nodeCount - 1 && (
                               <div className="absolute -top-16 flex flex-col items-center text-emerald-500 dark:text-emerald-300">
