@@ -5151,10 +5151,9 @@ function OverviewSection({
         const svgHeight = svgPadTop + Math.max(0, nodeCount - 1) * nodeSpacing + svgPadBot;
         const svgWidth = 520;
         const centerX = svgWidth / 2;
-        const swingPattern = [-0.42, 0.16, 0.48, -0.08, -0.54, 0.22, 0.5, -0.16];
-        const amplitude = 150;
+        const amplitude = 80;
         const nodeY = (index: number) => svgHeight - svgPadBot - index * nodeSpacing;
-        const nodeX = (index: number) => centerX + swingPattern[index % swingPattern.length] * amplitude;
+        const nodeX = (index: number) => centerX + (index % 2 === 0 ? -1 : 1) * amplitude;
         const nodePositions = roadmapSteps.map((_, index) => ({ x: nodeX(index), y: nodeY(index) }));
 
         const buildSmoothPath = (points: Array<{ x: number; y: number }>) => {
@@ -5166,38 +5165,18 @@ function OverviewSection({
             const p1 = points[i];
             const p2 = points[i + 1];
             const p3 = points[Math.min(points.length - 1, i + 2)];
-            const cp1x = p1.x + (p2.x - p0.x) / 6;
-            const cp1y = p1.y + (p2.y - p0.y) / 6;
-            const cp2x = p2.x - (p3.x - p1.x) / 6;
-            const cp2y = p2.y - (p3.y - p1.y) / 6;
+            const tension = 3.5;
+            const cp1x = p1.x + (p2.x - p0.x) / tension;
+            const cp1y = p1.y + (p2.y - p0.y) / tension;
+            const cp2x = p2.x - (p3.x - p1.x) / tension;
+            const cp2y = p2.y - (p3.y - p1.y) / tension;
             d += ` C ${cp1x} ${cp1y}, ${cp2x} ${cp2y}, ${p2.x} ${p2.y}`;
           }
           return d;
         };
 
         const stemBasePoint = { x: nodePositions[0]?.x ?? centerX, y: (nodePositions[0]?.y ?? svgHeight) + 42 };
-        const vinePoints: Array<{ x: number; y: number }> = [stemBasePoint];
-        nodePositions.forEach((point, index) => {
-          if (index === 0) {
-            vinePoints.push(point);
-            return;
-          }
-          const prev = nodePositions[index - 1];
-          const segmentDx = point.x - prev.x;
-          const segmentDy = point.y - prev.y;
-          const segmentLength = Math.sqrt(segmentDx * segmentDx + segmentDy * segmentDy) || 1;
-          const perpX = -segmentDy / segmentLength;
-          const perpY = segmentDx / segmentLength;
-          for (let sample = 1; sample <= 4; sample += 1) {
-            const fraction = sample / 5;
-            const wave = Math.sin((index + fraction) * Math.PI * 1.15) * 10;
-            vinePoints.push({
-              x: prev.x + segmentDx * fraction + perpX * wave,
-              y: prev.y + segmentDy * fraction + perpY * wave,
-            });
-          }
-          vinePoints.push(point);
-        });
+        const vinePoints: Array<{ x: number; y: number }> = [stemBasePoint, ...nodePositions];
 
         const vinePath = buildSmoothPath(vinePoints);
         const growthTargetIndex = allDone ? nodeCount : Math.max(1, activeIndex + 1);
