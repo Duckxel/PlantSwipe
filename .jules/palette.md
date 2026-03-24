@@ -13,3 +13,7 @@
 ## 2024-03-22 - Add ARIA labels to AphyliaChatPanel remove buttons
 **Learning:** Icon-only remove buttons within nested UI components (like Context Chips and Image Attachments in `AphyliaChatPanel.tsx`) are often overlooked for accessibility. The `aria-label` attribute combined with a tooltip (`title`) is essential to prevent screen reader users from getting trapped or not understanding the button's purpose.
 **Action:** When creating new interactive elements like badges, chips, or preview cards, systematically verify that their remove/dismiss buttons have valid ARIA labels and tooltip text, using the `t()` translation function.
+
+## 2024-03-24 - Add Title to Icon-only Buttons for Sighted Mouse Users
+**Learning:** In deeply nested or complex interactive components like `AphyliaChatPanel.tsx`, developers often add `aria-label` for screen readers on icon-only buttons (like Minimize, Maximize, Close, Stop, Send) but forget the native `title` attribute. Sighted mouse users rely on the native hover tooltip (`title`) to understand what an obscure icon does.
+**Action:** When auditing or building icon-only buttons, always ensure that both `aria-label` and `title` attributes are present and bound to the same translated string (`t()`), so that both screen reader and sighted mouse users receive proper context.
