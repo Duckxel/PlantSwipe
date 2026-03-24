@@ -5126,7 +5126,13 @@ function OverviewSection({
         ];
 
         const roadmapSteps = lesson.tasks;
-        const completedCount = roadmapSteps.filter((step) => step.done).length;
+        // Only count consecutively completed tasks so out-of-order auto-completions
+        // (e.g. having a water task before reaching that step) don't inflate progress.
+        let completedCount = 0;
+        for (const step of roadmapSteps) {
+          if (step.done) completedCount++;
+          else break;
+        }
         const allDone = completedCount === roadmapSteps.length;
         const currentIdx = roadmapSteps.findIndex((step) => !step.done);
         const activeIndex = currentIdx >= 0 ? currentIdx : roadmapSteps.length - 1;
@@ -5317,11 +5323,11 @@ function OverviewSection({
                       </div>
                     </div>
                     <div className="mt-4 flex flex-wrap gap-2">
-                      {roadmapSteps.map((step) => (
+                      {roadmapSteps.map((step, idx) => (
                         <span
                           key={`progress-dot-${step.key}`}
                           className={`h-2.5 flex-1 rounded-full transition-colors ${
-                            step.done
+                            idx < completedCount
                               ? 'bg-emerald-500 dark:bg-emerald-400'
                               : 'bg-stone-200 dark:bg-stone-700'
                           }`}
