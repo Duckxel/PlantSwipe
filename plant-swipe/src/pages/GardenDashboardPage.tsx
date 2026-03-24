@@ -5583,11 +5583,9 @@ function OverviewSection({
                         stroke="url(#vineGlow)"
                         strokeWidth="5.5"
                         strokeLinecap="round"
-                        pathLength={1}
                         style={{
-                          strokeDasharray: `${Math.max(0.02, progressFraction)} 1`,
-                          strokeDashoffset: '0',
-                          transition: 'stroke-dasharray 0.9s ease-out',
+                          opacity: 0.28 + progressFraction * 0.52,
+                          transition: 'opacity 0.8s ease-out',
                         }}
                       />
 
@@ -5643,7 +5641,7 @@ function OverviewSection({
                           data-roadmap-current={isCurrent ? "true" : undefined}
                           style={{ left: `${(point.x / svgWidth) * 100}%`, top: point.y, transform: 'translate(-50%, -50%)' }}
                         >
-                          <div className="flex flex-col items-center gap-3">
+                          <div className="relative flex flex-col items-center gap-3">
                             <button
                               type="button"
                               aria-expanded={isExpanded}
@@ -5691,7 +5689,9 @@ function OverviewSection({
                             {isExpanded && (
                               <div
                                 id={detailsId}
-                                className={`max-w-[200px] rounded-full border px-3 py-1.5 text-center text-xs font-semibold shadow-sm ${
+                                className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[220px] -translate-x-1/2 rounded-full border px-3 py-1.5 text-center text-xs font-semibold shadow-sm ${
+                                  index > 0 ? '-top-9' : '-top-10'
+                                } ${
                                   isCurrent
                                     ? 'border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-700/50 dark:bg-amber-950/20 dark:text-amber-300'
                                     : isCompleted
