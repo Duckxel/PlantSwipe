@@ -334,7 +334,9 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       return val.charAt(0).toUpperCase() + val.slice(1)
     }
 
-    return plants.map((basePlant: Record<string, unknown>) => {
+    const result = new Array(plants.length)
+    for (let plantIdx = 0; plantIdx < plants.length; plantIdx++) {
+      const basePlant = plants[plantIdx] as Record<string, unknown>
       const translation = translationMap.get(basePlant.id as string) || {}
 
       const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
@@ -351,10 +353,15 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         }
       }
 
-      const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
-        link: img?.link as string,
-        use: img?.use as PlantImage['use'],
-      }))
+      const rawImages = (basePlant.plant_images as Record<string, unknown>[]) || []
+      const images: PlantImage[] = new Array(rawImages.length)
+      for (let i = 0; i < rawImages.length; i++) {
+        const img = rawImages[i]
+        images[i] = {
+          link: img?.link as string,
+          use: img?.use as PlantImage['use'],
+        }
+      }
 
       const schedules: Array<{ season?: string; quantity?: number; timePeriod?: string }> = []
       const waterSchedules = (basePlant.plant_watering_schedules as Record<string, unknown>[]) || []
@@ -399,7 +406,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 
       const recipes = (basePlant.plant_recipes as Record<string, unknown>[]) || []
 
-      return mapDbRowToPlant(
+      result[plantIdx] = mapDbRowToPlant(
         basePlant,
         translation,
         colorObjects,
@@ -411,7 +418,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         popularityMap.get(String(basePlant.id)),
         language,
       )
-    })
+    }
+    return result
   } catch (error) {
     console.error('Failed to load plants with translations:', error)
     return []
@@ -513,7 +521,9 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       (translationsData as Record<string, unknown>[]).forEach((t) => translationMap.set(t.plant_id as string, t))
     }
 
-    return plants.map((basePlant) => {
+    const result = new Array(plants.length)
+    for (let plantIdx = 0; plantIdx < plants.length; plantIdx++) {
+      const basePlant = plants[plantIdx] as Record<string, unknown>
       const translation = translationMap.get(basePlant.id as string) || {}
 
       const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
@@ -530,10 +540,15 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         }
       }
 
-      const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
-        link: img?.link as string,
-        use: img?.use as PlantImage['use'],
-      }))
+      const rawImages = (basePlant.plant_images as Record<string, unknown>[]) || []
+      const images: PlantImage[] = new Array(rawImages.length)
+      for (let i = 0; i < rawImages.length; i++) {
+        const img = rawImages[i]
+        images[i] = {
+          link: img?.link as string,
+          use: img?.use as PlantImage['use'],
+        }
+      }
 
       const toTitleCase = (val: string | null | undefined): string | undefined => {
         if (!val) return undefined
@@ -552,7 +567,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         }
       }
 
-      return mapDbRowToPlant(
+      result[plantIdx] = mapDbRowToPlant(
         basePlant,
         translation,
         colorObjects,
@@ -564,7 +579,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         popularityMap.get(String(basePlant.id)),
         language,
       )
-    })
+    }
+    return result
   } catch (error) {
     console.error('Failed to load plant previews:', error)
     return []

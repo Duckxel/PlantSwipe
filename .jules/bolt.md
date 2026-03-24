@@ -10,3 +10,7 @@
 ## 2026-03-01 - Optimizing chained array allocations in components
 **Learning:** Chaining `.map().filter()` or `.split().filter()` within hot loops or frequently re-rendered components (e.g., inside `preparedPlants` memo or `SwipePage` rendering) creates multiple intermediate arrays, compounding garbage collection overhead.
 **Action:** Replace map/filter chains and split/filter chains with single-pass `for` loops in hot data preparation and render paths to avoid intermediate array allocation and improve performance.
+
+## 2026-03-24 - Pre-allocate arrays instead of using map() in hot paths
+**Learning:** While map() is idiomatic and clean, in critical hot paths that process thousands of deeply nested objects (like loadPlantsWithTranslations), allocating a new array of the exact size and using a standard `for` loop avoids intermediate garbage collection pressure and is measurably faster in V8.
+**Action:** Identify hot paths that process large numbers of objects and replace `.map()` with `const result = new Array(len)` followed by a `for` loop.
