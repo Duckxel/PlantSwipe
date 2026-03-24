@@ -5398,7 +5398,7 @@ function OverviewSection({
               </div>
             </div>
 
-            <div className="grid grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)] gap-3 px-5 py-5 sm:gap-6 sm:px-6 lg:px-7">
+            <div className="grid grid-cols-1 gap-4 px-5 py-5 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:px-7">
               <div ref={beginnerRoadmapDetailsRef} className="space-y-4">
                 <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent">
                   <div className="flex flex-wrap items-start justify-between gap-3">
