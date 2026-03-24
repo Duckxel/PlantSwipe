@@ -2797,9 +2797,9 @@ export const GardenDashboardPage: React.FC = () => {
   const sidebarPanelBase =
     "md:sticky md:top-4 self-start rounded-[20px] md:rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-3 md:p-5 shadow-[0_25px_70px_-40px_rgba(15,23,42,0.65)]";
   const mainPanelClass =
-    "min-h-[60vh] rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-6 md:p-8 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]";
+    "min-h-[60vh] rounded-[20px] sm:rounded-[32px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-4 sm:p-6 md:p-8 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)]";
   return (
-    <div className="max-w-6xl mx-auto mt-8 px-4 md:px-0 pb-16 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-8">
+    <div className="max-w-6xl mx-auto mt-4 sm:mt-8 px-3 sm:px-4 md:px-0 pb-16 grid grid-cols-1 md:grid-cols-[220px_1fr] lg:grid-cols-[220px_1fr] gap-4 sm:gap-6 md:gap-8">
       {error && <div className="p-6 text-sm text-red-600">{error}</div>}
       {loading && (
         <>
@@ -3054,7 +3054,7 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="grid grid-cols-3 items-stretch gap-0">
                             <div className="col-span-1 relative h-full min-h-[148px] rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                               {(() => {
-                                const primaryImageUrl = gp.plant?.photos ? getPrimaryPhotoUrl(gp.plant.photos) : null;
+                                const primaryImageUrl = (gp.plant?.photos?.length ? getPrimaryPhotoUrl(gp.plant.photos) : null) || gp.plant?.image || null;
                                 return primaryImageUrl ? (
                                   <img
                                     src={primaryImageUrl}
@@ -4707,9 +4707,7 @@ function OverviewSection({
   // Get ALL plants for display (with or without images)
   const allPlantsDisplay = React.useMemo(() => {
     return plants.map((gp) => {
-      const primaryImageUrl = gp.plant?.photos
-        ? getPrimaryPhotoUrl(gp.plant.photos)
-        : gp.plant?.image || null;
+      const primaryImageUrl = (gp.plant?.photos?.length ? getPrimaryPhotoUrl(gp.plant.photos) : null) || gp.plant?.image || null;
       const taskInfo = taskCountsPerPlant[gp.id] || { total: 0, dueToday: 0 };
       return {
         id: gp.id,
@@ -5257,7 +5255,7 @@ function OverviewSection({
           <Card className="overflow-hidden rounded-[30px] border border-emerald-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(110,231,183,0.18),_transparent_28%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,251,247,0.98))] p-0 shadow-[0_24px_90px_-48px_rgba(16,185,129,0.5)] dark:border-emerald-900/40 dark:bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_25%),linear-gradient(180deg,_rgba(24,28,24,0.98),_rgba(18,23,20,0.98))]">
             <style dangerouslySetInnerHTML={{ __html: `.roadmap-scroll::-webkit-scrollbar { display: none; }` }} />
 
-            <div className="border-b border-emerald-100/70 px-5 py-5 dark:border-emerald-900/30 sm:px-6 lg:px-7">
+            <div className="border-b border-emerald-100/70 px-3 py-4 dark:border-emerald-900/30 sm:px-6 lg:px-7">
               <div className="space-y-4">
                 <div className={`rounded-[26px] border p-5 ${
                   isSelectedLessonLocked
@@ -5277,7 +5275,7 @@ function OverviewSection({
                     <span className="truncate">{selectedLessonCard.title}</span>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <h3 className="min-w-0 flex-1 text-3xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-4xl">
+                    <h3 className="min-w-0 flex-1 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-3xl lg:text-4xl">
                       {selectedLessonCard.title}
                     </h3>
                     <div className="flex items-center gap-2">
@@ -5389,7 +5387,7 @@ function OverviewSection({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 px-5 py-5 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:px-7">
+            <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:px-7">
               <div ref={beginnerRoadmapDetailsRef} className="space-y-4">
                 <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent">
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -5524,14 +5522,14 @@ function OverviewSection({
 
                 <div
                   ref={roadmapScrollRef}
-                  className="roadmap-scroll flex-1 overflow-y-auto overflow-x-visible rounded-[22px] border border-emerald-100/70 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(228,245,233,0.82))] px-2 py-4 dark:border-emerald-900/30 dark:bg-[radial-gradient(circle_at_top,_rgba(24,33,27,0.98),_rgba(14,20,17,0.98))]"
+                  className="roadmap-scroll flex-1 overflow-y-auto overflow-x-hidden rounded-[22px] border border-emerald-100/70 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.95),_rgba(228,245,233,0.82))] px-1 sm:px-2 py-4 dark:border-emerald-900/30 dark:bg-[radial-gradient(circle_at_top,_rgba(24,33,27,0.98),_rgba(14,20,17,0.98))]"
                   style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}
                 >
                   <div className="relative mx-auto w-full max-w-[520px]" style={{ height: svgHeight }}>
                     <svg
                       className="pointer-events-none absolute inset-0 h-full w-full"
                       viewBox={`0 0 ${svgWidth} ${svgHeight}`}
-                      preserveAspectRatio="xMidYMid meet"
+                      preserveAspectRatio="none"
                     >
                       <defs>
                         <linearGradient id="vineStroke" x1="0" x2="0" y1="0" y2="1">
@@ -5647,7 +5645,7 @@ function OverviewSection({
                               aria-expanded={isExpanded}
                               aria-controls={detailsId}
                               onClick={() => setExpandedBeginnerRoadmapStep(isExpanded ? null : step.key)}
-                              className={`relative flex h-16 w-16 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
+                              className={`relative flex h-12 w-12 sm:h-16 sm:w-16 shrink-0 items-center justify-center rounded-full border transition-all duration-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-300 ${
                                 isCompleted
                                   ? 'border-emerald-500 bg-emerald-500 text-white shadow-sm'
                                   : isCurrent
@@ -5689,7 +5687,7 @@ function OverviewSection({
                             {isExpanded && (
                               <div
                                 id={detailsId}
-                                className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[220px] -translate-x-1/2 rounded-full border px-3 py-1.5 text-center text-xs font-semibold shadow-sm ${
+                                className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[160px] sm:max-w-[220px] -translate-x-1/2 rounded-full border px-2 sm:px-3 py-1.5 text-center text-[10px] sm:text-xs font-semibold shadow-sm ${
                                   index > 0 ? '-top-9' : '-top-10'
                                 } ${
                                   isCurrent
