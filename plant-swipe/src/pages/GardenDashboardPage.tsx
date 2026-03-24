@@ -5253,30 +5253,28 @@ function OverviewSection({
                     )}
                     <span className="truncate">{selectedLessonCard.title}</span>
                   </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <h3 className="min-w-0 flex-1 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-3xl lg:text-4xl">
-                      {selectedLessonCard.title}
-                    </h3>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setExpandedBeginnerLessonKey(lessonCards[Math.max(0, selectedLessonIndex - 1)].key)}
-                        disabled={selectedLessonIndex === 0}
-                        className="rounded-full border border-stone-200 bg-white/90 p-2 text-stone-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-300"
-                        aria-label={t("gardenDashboard.beginnerRoadmap.prevLesson", { defaultValue: "Previous lesson" })}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedBeginnerLessonKey(lessonCards[Math.min(lessonCards.length - 1, selectedLessonIndex + 1)].key)}
-                        disabled={selectedLessonIndex === lessonCards.length - 1}
-                        className="rounded-full border border-stone-200 bg-white/90 p-2 text-stone-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-300"
-                        aria-label={t("gardenDashboard.beginnerRoadmap.nextLessonNav", { defaultValue: "Next lesson" })}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <h3 className="mt-4 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-3xl lg:text-4xl">
+                    {selectedLessonCard.title}
+                  </h3>
+                  <div className="mt-3 flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedBeginnerLessonKey(lessonCards[Math.max(0, selectedLessonIndex - 1)].key)}
+                      disabled={selectedLessonIndex === 0}
+                      className="rounded-full border border-stone-200 bg-white/90 p-2 text-stone-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-300"
+                      aria-label={t("gardenDashboard.beginnerRoadmap.prevLesson", { defaultValue: "Previous lesson" })}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setExpandedBeginnerLessonKey(lessonCards[Math.min(lessonCards.length - 1, selectedLessonIndex + 1)].key)}
+                      disabled={selectedLessonIndex === lessonCards.length - 1}
+                      className="rounded-full border border-stone-200 bg-white/90 p-2 text-stone-600 disabled:cursor-not-allowed disabled:opacity-40 dark:border-stone-700 dark:bg-stone-900/70 dark:text-stone-300"
+                      aria-label={t("gardenDashboard.beginnerRoadmap.nextLessonNav", { defaultValue: "Next lesson" })}
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </button>
                     <span className={`rounded-full px-3 py-1 text-xs font-semibold ${
                       isSelectedLessonLocked
                         ? 'bg-stone-500 text-white dark:bg-stone-700'
