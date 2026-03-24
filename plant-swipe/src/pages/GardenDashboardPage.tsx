@@ -5254,7 +5254,11 @@ function OverviewSection({
                       ? 'border-stone-300/90 bg-stone-100 text-stone-600 dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300'
                       : 'border-emerald-200/80 bg-white/90 text-emerald-700 dark:border-emerald-900/60 dark:bg-emerald-950/35 dark:text-emerald-300'
                   }`}>
-                    <Leaf className="h-3.5 w-3.5" />
+                    {isSelectedLessonLocked ? (
+                      <Lock className="h-3.5 w-3.5" />
+                    ) : (
+                      <Leaf className="h-3.5 w-3.5" />
+                    )}
                     <span className="truncate">{selectedLessonCard.title}</span>
                   </div>
                   <div className="mt-4 flex flex-wrap items-center gap-3">
