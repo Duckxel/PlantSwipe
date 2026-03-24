@@ -5134,8 +5134,7 @@ function OverviewSection({
           else break;
         }
         const allDone = completedCount === roadmapSteps.length;
-        const currentIdx = roadmapSteps.findIndex((step) => !step.done);
-        const activeIndex = currentIdx >= 0 ? currentIdx : roadmapSteps.length - 1;
+        const activeIndex = completedCount < roadmapSteps.length ? completedCount : roadmapSteps.length - 1;
         const progressPct = Math.round((completedCount / roadmapSteps.length) * 100);
         const expandedStepKey = roadmapSteps.some((step) => step.key === expandedBeginnerRoadmapStep)
           ? expandedBeginnerRoadmapStep
@@ -5185,7 +5184,7 @@ function OverviewSection({
         const vinePoints: Array<{ x: number; y: number }> = [stemBasePoint, ...nodePositions];
 
         const vinePath = buildSmoothPath(vinePoints);
-        const growthTargetIndex = allDone ? nodeCount : Math.max(1, activeIndex + 1);
+        const growthTargetIndex = allDone ? nodeCount : Math.max(1, completedCount + 1);
         const progressFraction = nodeCount > 0 ? Math.min(1, growthTargetIndex / nodeCount) : 1;
 
         const leafDecorations = nodePositions.slice(0, -1).flatMap((point, index) => {
@@ -5607,9 +5606,9 @@ function OverviewSection({
 
                     {roadmapSteps.map((step, index) => {
                       const point = nodePositions[index];
-                      const isCompleted = step.done;
-                      const isCurrent = !allDone && index === activeIndex;
-                      const isLocked = !isCompleted && index > 0 && !roadmapSteps[index - 1].done;
+                      const isCompleted = index < completedCount;
+                      const isCurrent = !allDone && index === completedCount;
+                      const isLocked = !isCompleted && !isCurrent;
                       const isExpanded = expandedStepKey === step.key;
                       const detailsId = `beginner-roadmap-step-${step.key}`;
 
