@@ -887,6 +887,8 @@ const supabaseServiceKey =
 const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+// Prefer service role key for server-side REST API calls; fall back to anon key
+const supabaseServerApiKey = supabaseServiceKey || supabaseAnonKey
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
@@ -2379,7 +2381,7 @@ async function isAdminFromRequest(req) {
     // Supabase REST fallback: allow any authenticated user whose profile row has is_admin = true
     if (!isAdmin && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin&limit=1`
@@ -2439,7 +2441,7 @@ async function isEditorFromRequest(req) {
     // Supabase REST fallback
     if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
@@ -2498,7 +2500,7 @@ async function isProOrEditorFromRequest(req) {
 
     if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
@@ -2585,7 +2587,7 @@ async function ensureProOrEditor(req, res) {
 async function insertAdminActivityViaRest(req, row) {
   try {
     if (!(supabaseUrlEnv && supabaseAnonKey)) return false
-    const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+    const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) headers['Authorization'] = `Bearer ${bearer}`
     const resp = await fetch(`${supabaseUrlEnv}/rest/v1/admin_activity_logs`, { method: 'POST', headers, body: JSON.stringify(row) })
@@ -4479,7 +4481,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
         res.status(500).json({ error: 'Database not configured' })
         return
       }
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
@@ -5634,7 +5636,7 @@ app.post('/api/admin/log-action', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -6428,7 +6430,7 @@ async function computeNextVisitNum(sessionId) {
 async function insertWebVisitViaSupabaseRest(payload, req) {
   try {
     if (!supabaseUrlEnv || !supabaseAnonKey) return false
-    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+    const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
     const token = getBearerTokenFromRequest(req)
     if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
     // First try full payload (new schema)
@@ -6570,7 +6572,7 @@ async function handleRestartServer(req, res) {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -6663,7 +6665,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -12621,7 +12623,7 @@ app.get('/api/admin/stats', async (req, res) => {
 
     // Fallback via Supabase REST RPC if DB connection not available
     if (!sql && supabaseUrlEnv && supabaseAnonKey) {
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       try {
         const pr = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
           method: 'POST',
@@ -12687,7 +12689,7 @@ app.get('/api/admin/member', async (req, res) => {
         res.status(500).json({ error: 'Database not configured' })
         return
       }
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) Object.assign(baseHeaders, { 'Authorization': `Bearer ${token}` })
       // Resolve user id via RPC (security definer) using email or display name
       let targetId = null
@@ -13355,7 +13357,7 @@ app.get('/api/admin/member', async (req, res) => {
       try {
         const bearer = getBearerTokenFromRequest(req)
         const rpcHeaders = {
-          apikey: supabaseAnonKey,
+          apikey: supabaseServerApiKey,
           Accept: 'application/json',
           'Content-Type': 'application/json',
         }
@@ -13437,7 +13439,7 @@ app.get('/api/admin/member', async (req, res) => {
         `
         adminNotes = Array.isArray(rows) ? rows.map(r => ({ id: String(r.id), admin_id: r.admin_id || null, admin_name: r.admin_name || null, message: String(r.message || ''), created_at: r.created_at })) : []
       } else if (supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const token = getBearerTokenFromRequest(req)
         if (token) headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(user.id)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers })
@@ -14087,7 +14089,7 @@ app.get('/api/admin/member-messages', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       // Get conversations
@@ -14351,7 +14353,7 @@ app.get('/api/admin/conversation-messages', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback - simplified version
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       // Get conversation
@@ -14498,7 +14500,7 @@ app.get('/api/admin/search-user-messages', async (req, res) => {
       // REST fallback - limited functionality (no ILIKE in REST)
       // Get conversations first
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       const convResp = await fetch(
@@ -14675,7 +14677,7 @@ app.get('/api/admin/user-images', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       if (sentOnly) {
@@ -14785,7 +14787,7 @@ app.post('/api/admin/member-note', async (req, res) => {
         const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUuid} limit 1`
         adminName = rows?.[0]?.name || null
       } else if (adminUuid && supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const token = getBearerTokenFromRequest(req)
         if (token) headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUuid)}&select=display_name&limit=1`, { headers })
@@ -14809,7 +14811,7 @@ app.post('/api/admin/member-note', async (req, res) => {
       `
       created = rows?.[0]?.created_at || null
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes`, {
@@ -14860,7 +14862,7 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
       return
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const r = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?id=eq.${encodeURIComponent(noteId)}`, { method: 'DELETE', headers })
@@ -14985,7 +14987,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+    const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
     // Fetch visits for IP to get distinct user_ids and last_seen
@@ -15114,7 +15116,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
 
     const resolveUserIdViaRest = async (email) => {
       if (!supabaseUrlEnv || !supabaseAnonKey) return null
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
       try {
@@ -15175,7 +15177,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
 
     // Supabase REST fallback - try RPC first, then direct query
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
 
@@ -15416,7 +15418,7 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_recent_members`, {
@@ -15501,7 +15503,7 @@ app.get('/api/admin/search-users', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -15688,7 +15690,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       } else {
         // Fallback via Supabase REST (security-definer RPC; token optional)
         if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
           // Email suggestions
@@ -17215,7 +17217,7 @@ async function handlePullCode(req, res) {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -17297,7 +17299,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -18799,7 +18801,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       // Supabase REST fallback using security-definer RPCs
       if (supabaseUrlEnv && supabaseAnonKey) {
         try {
-          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
           // Attempt to use caller token when present (not required for definer functions)
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
@@ -18919,7 +18921,7 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
 
     // Supabase REST fallback using security-definer RPC
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
       const r = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, {
@@ -18977,7 +18979,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       const daysParam = Number(req.query.days || 30)
@@ -19345,7 +19347,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
     // Supabase REST fallback: query distinct IPs in window
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       // Use RPC if available; otherwise use REST with select distinct
@@ -19454,7 +19456,7 @@ app.get('/api/admin/online-users', async (req, res) => {
 
     // No direct DB connection: attempt Supabase REST fallback using RPC for unique IPs
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, {
@@ -19525,7 +19527,7 @@ async function getActiveBroadcastRow() {
   // Supabase REST fallback for reads
   if (supabaseUrlEnv && supabaseAnonKey) {
     try {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,severity,created_at,expires_at,created_by&order=created_at.desc&limit=10`
       const r = await fetch(url, { headers })
       if (r.ok) {
@@ -19660,7 +19662,7 @@ app.get('/api/self/memberships/stream', async (req, res) => {
           const list = (rows || []).map((r) => String(r.garden_id))
           return list.join(',')
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -19726,7 +19728,7 @@ app.get('/api/users/:id/private', async (req, res) => {
 
     if (supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+        const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) headers['Authorization'] = `Bearer ${bearer}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
@@ -19784,7 +19786,7 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
           const list = (rows || []).map((r) => String(r.garden_id))
           return list
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id`
@@ -19828,7 +19830,7 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
             })
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -19879,7 +19881,7 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
       return Array.isArray(rows) && rows.length > 0
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&limit=1`
@@ -19911,7 +19913,7 @@ async function isGardenOwner(req, gardenId, userIdOverride = null) {
       }
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
@@ -21147,7 +21149,7 @@ app.get('/api/garden/:id/activity', async (req, res) => {
         order by occurred_at desc
       `
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
@@ -21226,7 +21228,7 @@ app.get('/api/garden/:id/tasks', async (req, res) => {
         order by day asc
       `
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const query = [
@@ -21313,7 +21315,7 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const payload = {
@@ -21533,7 +21535,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       console.log('[overview] Finished SQL queries for garden', gardenId)
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       console.log('[overview] Using Supabase REST API for garden', gardenId)
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
@@ -21678,7 +21680,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           // REST fallback
           try {
-            const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+            const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
             const bearer = getAuthTokenFromRequest(req)
             if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
             const idsStr = memberIds.join(',')
@@ -21829,7 +21831,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
             })
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getAuthTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -21899,7 +21901,7 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
         sseWrite(res, 'snapshot', { logs: list })
         if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
       } else if (supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+        const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
         const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=200`
         const r = await fetch(url, { headers })
         if (r.ok) {
@@ -21941,7 +21943,7 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
             sseWrite(res, 'append', payload)
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gt.${encodeURIComponent(lastSeen)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
           if (r.ok) {
