@@ -5236,7 +5236,7 @@ function OverviewSection({
 
             <div className="border-b border-emerald-100/70 px-3 py-4 dark:border-emerald-900/30 sm:px-6 lg:px-7">
               <div className="space-y-4">
-                <div className={`rounded-[26px] border p-5 ${
+                <div className={`rounded-[26px] border p-3 sm:p-5 ${
                   isSelectedLessonLocked
                     ? 'border-stone-300/90 bg-gradient-to-br from-stone-100/95 via-stone-50 to-stone-100/95 dark:border-stone-700 dark:bg-gradient-to-br dark:from-stone-900/85 dark:via-stone-900/70 dark:to-stone-800/85'
                     : 'border-emerald-200/80 bg-gradient-to-br from-emerald-50/90 via-white to-white dark:border-emerald-900/50 dark:bg-gradient-to-br dark:from-emerald-950/30 dark:via-transparent dark:to-transparent'
@@ -5253,7 +5253,7 @@ function OverviewSection({
                     )}
                     <span className="truncate">{selectedLessonCard.title}</span>
                   </div>
-                  <h3 className="mt-4 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-3xl lg:text-4xl">
+                  <h3 className="mt-4 text-xl font-semibold tracking-tight text-stone-900 dark:text-stone-100 sm:text-3xl lg:text-4xl" style={{ overflowWrap: 'anywhere' }}>
                     {selectedLessonCard.title}
                   </h3>
                   <div className="mt-3 flex items-center gap-2">
@@ -5364,9 +5364,9 @@ function OverviewSection({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:px-7">
-              <div ref={beginnerRoadmapDetailsRef} className="space-y-4">
-                <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent">
+            <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-6 xl:grid-cols-[minmax(320px,1fr)_minmax(0,1fr)] xl:px-7">
+              <div ref={beginnerRoadmapDetailsRef} className="min-w-0 space-y-4">
+                <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-3 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent sm:p-5">
                   <div className="flex flex-wrap items-center gap-2">
                     <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
                       {t("gardenDashboard.beginnerRoadmap.currentTask", { defaultValue: "Current task" })}
@@ -5381,7 +5381,7 @@ function OverviewSection({
                       </div>
                     )}
                   </div>
-                  <div className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-100">
+                  <div className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-100" style={{ overflowWrap: 'anywhere' }}>
                     {allDone
                       ? t("gardenDashboard.beginnerRoadmap.allDoneTitle", { defaultValue: "Lesson complete — beautiful work" })
                       : roadmapSteps[activeIndex]?.label}
