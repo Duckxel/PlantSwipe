@@ -5367,16 +5367,9 @@ function OverviewSection({
             <div className="grid grid-cols-1 gap-4 px-3 py-4 sm:gap-6 sm:px-6 lg:grid-cols-[minmax(300px,380px)_minmax(0,1fr)] lg:px-7">
               <div ref={beginnerRoadmapDetailsRef} className="space-y-4">
                 <div className="rounded-[26px] border border-emerald-200/80 bg-gradient-to-br from-white to-emerald-50/75 p-5 shadow-sm dark:border-emerald-900/40 dark:bg-gradient-to-br dark:from-emerald-950/25 dark:to-transparent">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div className="min-w-0 flex-1">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
-                        {t("gardenDashboard.beginnerRoadmap.currentTask", { defaultValue: "Current task" })}
-                      </div>
-                      <div className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-100">
-                        {allDone
-                          ? t("gardenDashboard.beginnerRoadmap.allDoneTitle", { defaultValue: "Lesson complete — beautiful work" })
-                          : roadmapSteps[activeIndex]?.label}
-                      </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-emerald-700 dark:text-emerald-300">
+                      {t("gardenDashboard.beginnerRoadmap.currentTask", { defaultValue: "Current task" })}
                     </div>
                     {!allDone && (
                       <div className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700 dark:border-amber-900/40 dark:bg-amber-950/20 dark:text-amber-300">
@@ -5387,6 +5380,11 @@ function OverviewSection({
                         })}
                       </div>
                     )}
+                  </div>
+                  <div className="mt-2 text-xl font-semibold text-stone-900 dark:text-stone-100">
+                    {allDone
+                      ? t("gardenDashboard.beginnerRoadmap.allDoneTitle", { defaultValue: "Lesson complete — beautiful work" })
+                      : roadmapSteps[activeIndex]?.label}
                   </div>
 
                   {!allDone ? (
