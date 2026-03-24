@@ -5238,6 +5238,21 @@ function OverviewSection({
           }));
         });
 
+        const vineBranchPaths = nodePositions.slice(0, Math.min(2, Math.max(0, nodeCount - 1))).map((point, index) => {
+          const next = nodePositions[index + 1];
+          if (!next) return '';
+          const dx = next.x - point.x;
+          const dy = next.y - point.y;
+          const branchStartX = point.x + dx * 0.32;
+          const branchStartY = point.y + dy * 0.32;
+          const side = index % 2 === 0 ? -1 : 1;
+          const tipX = branchStartX + side * (20 + index * 6);
+          const tipY = branchStartY - 18 - index * 4;
+          const controlX = branchStartX + side * 12;
+          const controlY = branchStartY - 6;
+          return `M ${branchStartX} ${branchStartY} Q ${controlX} ${controlY}, ${tipX} ${tipY}`;
+        }).filter(Boolean);
+
         return (
           <Card className="overflow-hidden rounded-[30px] border border-emerald-200/70 bg-[radial-gradient(circle_at_top_left,_rgba(110,231,183,0.18),_transparent_28%),linear-gradient(180deg,_rgba(255,255,255,0.98),_rgba(244,251,247,0.98))] p-0 shadow-[0_24px_90px_-48px_rgba(16,185,129,0.5)] dark:border-emerald-900/40 dark:bg-[radial-gradient(circle_at_top_left,_rgba(16,185,129,0.18),_transparent_25%),linear-gradient(180deg,_rgba(24,28,24,0.98),_rgba(18,23,20,0.98))]">
             <style dangerouslySetInnerHTML={{ __html: `.roadmap-scroll::-webkit-scrollbar { display: none; }` }} />
@@ -5570,11 +5585,23 @@ function OverviewSection({
                         strokeLinecap="round"
                         pathLength={1}
                         style={{
-                          strokeDasharray: '1',
-                          strokeDashoffset: `${1 - progressFraction}`,
-                          transition: 'stroke-dashoffset 0.9s ease-out',
+                          strokeDasharray: `${Math.max(0.02, progressFraction)} 1`,
+                          strokeDashoffset: '0',
+                          transition: 'stroke-dasharray 0.9s ease-out',
                         }}
                       />
+
+                      {vineBranchPaths.map((branchPath, index) => (
+                        <path
+                          key={`branch-${index}`}
+                          d={branchPath}
+                          fill="none"
+                          stroke="#22c55e"
+                          strokeWidth={3.2 - index * 0.5}
+                          strokeLinecap="round"
+                          opacity={0.45}
+                        />
+                      ))}
 
                       {leafDecorations.map((leaf) => (
                         <g
