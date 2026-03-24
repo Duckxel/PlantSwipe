@@ -5145,8 +5145,8 @@ function OverviewSection({
         const selectedLessonIndex = Math.max(0, lessonCards.findIndex((lessonCard) => lessonCard.key === activeLessonKey));
         const selectedLessonCard = lessonCards[selectedLessonIndex] || lessonCards[0];
         const isSelectedLessonLocked = !selectedLessonCard.isCurrent;
-        const nextStep = !allDone && currentIdx >= 0 && currentIdx < roadmapSteps.length - 1
-          ? roadmapSteps[currentIdx + 1]
+        const nextStep = !allDone && activeIndex >= 0 && activeIndex < roadmapSteps.length - 1
+          ? roadmapSteps[activeIndex + 1]
           : null;
 
         const nodeCount = roadmapSteps.length;
