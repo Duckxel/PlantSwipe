@@ -2,7 +2,6 @@ import React from "react";
 import { useTranslation } from "react-i18next";
 import type { SeedlingTrayCell, SeedlingStage } from "@/types/garden";
 import type { Plant } from "@/types/plant";
-import { SeedlingStageIcon } from "./SeedlingStageIcon";
 
 interface SeedlingTrayAnalyticsProps {
   cells: SeedlingTrayCell[];

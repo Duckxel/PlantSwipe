@@ -30,7 +30,7 @@ interface SeedlingTrayGridProps {
 
 export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
   cells,
-  rows,
+  rows: _rows,
   cols,
   trayName,
   plantMap,
