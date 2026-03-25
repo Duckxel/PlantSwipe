@@ -895,44 +895,28 @@ setup_run_as_node_user() {
 }
 
 ensure_capacitor_config() {
-  local cfg_ts="$NODE_DIR/capacitor.config.ts"
-  local cfg_js="$NODE_DIR/capacitor.config.json"
-  if [[ -f "$cfg_ts" ]]; then
-    log "Capacitor config present (capacitor.config.ts)."
-    return 0
-  fi
-  if [[ -f "$cfg_js" ]]; then
+  local cfg_json="$NODE_DIR/capacitor.config.json"
+  if [[ -f "$cfg_json" ]]; then
     log "Capacitor config present (capacitor.config.json)."
     return 0
   fi
-  log "Creating default capacitor.config.ts (webDir=dist)…"
+  log "Creating default capacitor.config.json (webDir=dist)…"
   local tmp
   tmp="$(mktemp)"
-  cat >"$tmp" <<'CAPCFG'
-import type { CapacitorConfig } from '@capacitor/cli'
-import { readFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const rootDir = dirname(fileURLToPath(import.meta.url))
-const pkg = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf8')) as { version?: string }
-
-const config: CapacitorConfig = {
-  appId: 'app.aphylia.mobile',
-  appName: 'Aphylia',
-  webDir: 'dist',
-  ...(pkg.version ? { version: pkg.version } : {}),
+  cat >"$tmp" <<'CAPJSON'
+{
+	"appId": "app.aphylia.mobile",
+	"appName": "Aphylia",
+	"webDir": "dist"
 }
-
-export default config
-CAPCFG
+CAPJSON
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    $SUDO install -m 0644 -o "$SERVICE_USER" -g "$SERVICE_USER" "$tmp" "$cfg_ts"
+    $SUDO install -m 0644 -o "$SERVICE_USER" -g "$SERVICE_USER" "$tmp" "$cfg_json"
   else
-    install -m 0644 "$tmp" "$cfg_ts"
+    install -m 0644 "$tmp" "$cfg_json"
   fi
   rm -f "$tmp"
-  log "Wrote $cfg_ts"
+  log "Wrote $cfg_json (run sync-native-version before cap sync for version field)"
 }
 
 install_capacitor_npm_packages_if_missing() {
@@ -1138,8 +1122,8 @@ setup_run_capacitor_mobile_pipeline() {
     fi
   fi
 
-  log "Running npx cap sync…"
-  if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "npx cap sync"; then
+  log "Running npx cap sync (store bundle guard + sync)…"
+  if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "node scripts/assert-capacitor-store-bundle.mjs && npx cap sync"; then
     CAP_REPORT_SYNC="failed (npx cap sync exited with error)"
     echo "[ERROR] Capacitor setup failed: npx cap sync failed." >&2
     exit 1
@@ -2560,7 +2544,7 @@ cat <<'NOTE'
 Next steps:
 0) Optional native app shell: on a machine with Android SDK (and macOS for iOS), run:
      sudo SETUP_CAPACITOR=1 ./setup.sh
-   Or after setup: cd plant-swipe && bun install && bun run build && npx cap add android && npx cap sync
+   Or after setup: cd plant-swipe && bun install && bun run build && npx cap add android && bun run sync:cap
 1) Add your environment files:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)

@@ -79,6 +79,40 @@ function patchPlistXml(xml) {
   return s
 }
 
+const capJsonPath = join(root, 'capacitor.config.json')
+
+/** Keep Capacitor config JSON aligned with package.json version (CLI loads JSON reliably with "type": "module"). */
+function syncCapacitorConfigJson() {
+  const base = {
+    appId: 'app.aphylia.mobile',
+    appName: 'Aphylia',
+    webDir: 'dist',
+  }
+  let cap = { ...base }
+  if (existsSync(capJsonPath)) {
+    try {
+      const existing = JSON.parse(readFileSync(capJsonPath, 'utf8'))
+      if (existing && typeof existing === 'object') {
+        cap = { ...existing, ...base }
+      }
+    } catch {
+      /* overwrite below */
+    }
+  }
+  cap.version = versionName
+  if (cap.server && typeof cap.server === 'object' && cap.server.url) {
+    delete cap.server.url
+    if (Object.keys(cap.server).length === 0) delete cap.server
+  }
+  const nextStr = `${JSON.stringify(cap, null, '\t')}\n`
+  const prevStr = existsSync(capJsonPath) ? readFileSync(capJsonPath, 'utf8') : ''
+  if (prevStr !== nextStr) {
+    writeFileSync(capJsonPath, nextStr, 'utf8')
+  }
+}
+
+syncCapacitorConfigJson()
+
 let androidOk = false
 let iosOk = false
 
@@ -105,7 +139,7 @@ for (const plistPath of plistCandidates) {
 
 // eslint-disable-next-line no-console -- CLI feedback
 console.log(
-  `[sync-native-version] versionName=${versionName} versionCode=${versionCode}` +
+  `[sync-native-version] versionName=${versionName} versionCode=${versionCode} capacitor.config.json=ok` +
     (androidOk ? ' android=patched' : ' android=skip') +
     (iosOk ? ' ios=patched' : ' ios=skip'),
 )
