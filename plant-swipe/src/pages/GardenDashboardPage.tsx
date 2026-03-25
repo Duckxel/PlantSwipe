@@ -91,7 +91,7 @@ import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdo
 import { AphyliaChat } from "@/components/aphylia";
 import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createDefaultWateringTask } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, upsertOneTimeTask } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -1780,7 +1780,7 @@ export const GardenDashboardPage: React.FC = () => {
         try {
           await Promise.all(
             plantsWithoutTasks.map((gp) =>
-              createDefaultWateringTask({ gardenId: id, gardenPlantId: gp.id, unit: "day" })
+              upsertOneTimeTask({ gardenId: id, gardenPlantId: gp.id, type: "water", kind: "repeat_duration", intervalAmount: 1, intervalUnit: "day", requiredCount: 1 })
             )
           );
           if (!cancelled) {
@@ -2467,7 +2467,7 @@ export const GardenDashboardPage: React.FC = () => {
       // Seedling gardens: auto-create daily watering task; normal gardens: open task editor
       if (garden?.gardenType === "seedling") {
         try {
-          await createDefaultWateringTask({ gardenId: id, gardenPlantId: gp.id, unit: "day" });
+          await upsertOneTimeTask({ gardenId: id, gardenPlantId: gp.id, type: "water", kind: "repeat_duration", intervalAmount: 1, intervalUnit: "day", requiredCount: 1 });
           // Refresh tasks so occurrences appear immediately
           await load({ silent: true, preserveHeavy: true });
           await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
