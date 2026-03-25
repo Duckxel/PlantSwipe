@@ -6,7 +6,7 @@ export type GardenPrivacy = 'public' | 'friends_only' | 'private'
 
 export type GardenType = 'default' | 'beginners' | 'seedling'
 
-export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse'
+export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse' | 'seedling'
 
 export type GardenClimate =
   | 'polar' | 'montane' | 'oceanic' | 'degraded_oceanic'

@@ -1795,7 +1795,7 @@ export const GardenListPage: React.FC = () => {
         ownerUserId: user.id,
         privacy: defaultPrivacy as any,
         gardenType,
-        livingSpace,
+        livingSpace: gardenType === "seedling" ? ["seedling" as const] : livingSpace,
         ...(gardenType === "seedling" ? { trayRows, trayCols } : {}),
       });
       setOpen(false);
@@ -2370,6 +2370,7 @@ export const GardenListPage: React.FC = () => {
                     </div>
                   )}
                 </div>
+                {gardenType !== "seedling" && (
                 <div className="grid gap-2">
                   <Label>{t("garden.livingSpace", { defaultValue: "Living Space" })}</Label>
                   <p className="text-xs text-muted-foreground -mt-1">
@@ -2401,6 +2402,7 @@ export const GardenListPage: React.FC = () => {
                     })}
                   </div>
                 </div>
+                )}
                 <div className="flex gap-2 justify-end pt-2">
                   <Button
                     variant="secondary"

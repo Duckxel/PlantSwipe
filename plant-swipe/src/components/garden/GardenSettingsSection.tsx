@@ -208,6 +208,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
               </Card>
             </div>
 
+            {garden.gardenType !== 'seedling' && (
             <div>
               <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
                 <Home className="w-5 h-5 text-emerald-600" />
@@ -224,6 +225,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
                 />
               </Card>
             </div>
+            )}
 
             {/* Seedling Tray Configuration (only for seedling gardens) */}
             {garden.gardenType === 'seedling' && (
