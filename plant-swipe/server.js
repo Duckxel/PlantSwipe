@@ -16055,13 +16055,11 @@ app.options('/api/admin/roles/remove', (_req, res) => {
 // Admin: get a user's roles
 app.get('/api/admin/roles/:userId', async (req, res) => {
   try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const userId = (req.params.userId || '').toString().trim()
