@@ -15,8 +15,10 @@ set -euo pipefail
 #   - /etc/admin-api/env (already created with placeholders)
 # Then use scripts/refresh-plant-swipe.sh to update + restart.
 #
-# Capacitor (optional): installs @capacitor/* if missing, ensures capacitor.config.ts,
-# and runs `bunx cap sync` when CAPACITOR_SYNC=1 (after web build, requires dist/index.html).
+# Capacitor mobile pipeline (optional): set SETUP_CAPACITOR=1 to install deps, verify toolchain,
+# add android/ios projects if missing, production-build web to dist/, and run npx cap sync.
+# On Linux, iOS steps are skipped (requires macOS). On macOS, Xcode is validated before iOS.
+# CAPACITOR_SYNC=1 is deprecated; use SETUP_CAPACITOR=1 instead (still honored as an alias).
 
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
@@ -67,9 +69,8 @@ else
 fi
 
 PWA_BASE_PATH="${PWA_BASE_PATH:-${VITE_APP_BASE_PATH:-/}}"
-# When set to 1/y/yes/on/true, runs `cap sync` after the web build (creates/updates android/ and ios/).
-# Default off so production server setup does not generate native projects unless intended.
-CAPACITOR_SYNC="${CAPACITOR_SYNC:-0}"
+# SETUP_CAPACITOR: 1/y/yes/true/on enables full Capacitor pipeline before the main web build.
+SETUP_CAPACITOR_RAW="${SETUP_CAPACITOR:-${CAPACITOR_SYNC:-0}}"
 
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
@@ -852,7 +853,19 @@ verify_sentry_sitemap_config() {
 verify_sentry_admin_api_config
 verify_sentry_sitemap_config
 
-# --- Capacitor (native shell) — dependencies + config; optional sync ---
+# --- Capacitor mobile pipeline (gated by SETUP_CAPACITOR=1) ---
+CAP_REPORT_WEB="not run"
+CAP_REPORT_ANDROID="not run"
+CAP_REPORT_IOS="not run"
+CAP_REPORT_SYNC="not run"
+SETUP_CAPACITOR_RAN=false
+
+setup_env_is_truthy() {
+  local v
+  v="$(printf '%s' "${1:-}" | tr '[:upper:]' '[:lower:]')"
+  [[ "$v" == "1" || "$v" == "y" || "$v" == "yes" || "$v" == "true" || "$v" == "on" ]]
+}
+
 resolve_bun_path_for_service_user() {
   local svc_home
   svc_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
@@ -867,46 +880,17 @@ resolve_bun_path_for_service_user() {
   fi
 }
 
-install_capacitor_dependencies() {
-  local bun_path
-  bun_path="$(resolve_bun_path_for_service_user)"
-  if [[ -z "$bun_path" || ! -x "$bun_path/bun" ]]; then
-    log "[WARN] Bun not found; skipping Capacitor dependency install."
-    return 1
-  fi
-
-  local need_any=false
-  if [[ ! -f "$NODE_DIR/package.json" ]]; then
-    log "[WARN] package.json missing at $NODE_DIR; skipping Capacitor dependency install."
-    return 1
-  fi
-  grep -q '"@capacitor/core"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-  grep -q '"@capacitor/cli"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-  grep -q '"@capacitor/android"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-  grep -q '"@capacitor/ios"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-
-  if [[ "$need_any" != "true" ]]; then
-    log "Capacitor packages already listed in package.json."
-    return 0
-  fi
-
-  log "Adding Capacitor packages (@capacitor/core, cli, android, ios)…"
-  local cap_deps=("@capacitor/core" "@capacitor/android" "@capacitor/ios")
-  local cap_dev=("@capacitor/cli")
+# Run a shell command string as SERVICE_USER with Bun on PATH (extra_env: more export statements).
+setup_run_as_node_user() {
+  local bun_path="$1"
+  shift
+  local extra_env="$1"
+  shift
+  local cmd="$*"
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}" 2>&1; then
-      log "Capacitor packages installed."
-    else
-      log "[WARN] Failed to install Capacitor packages. Run: cd $NODE_DIR && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}"
-      return 1
-    fi
+    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH'${extra_env:+ $extra_env} && cd '$NODE_DIR' && $cmd"
   else
-    if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}" 2>&1; then
-      log "Capacitor packages installed."
-    else
-      log "[WARN] Failed to install Capacitor packages."
-      return 1
-    fi
+    bash -lc "export PATH='$bun_path:\$PATH'${extra_env:+ $extra_env} && cd '$NODE_DIR' && $cmd"
   fi
 }
 
@@ -944,43 +928,222 @@ CAPCFG
   log "Wrote $cfg_ts"
 }
 
-run_capacitor_sync_if_requested() {
-  local flag
-  flag="$(printf '%s' "${CAPACITOR_SYNC:-}" | tr '[:upper:]' '[:lower:]')"
-  if [[ "$flag" != "1" && "$flag" != "y" && "$flag" != "yes" && "$flag" != "true" && "$flag" != "on" ]]; then
-    log "[INFO] Capacitor sync skipped (set CAPACITOR_SYNC=1 to run after build)."
+install_capacitor_npm_packages_if_missing() {
+  local bun_path="$1"
+  local need_any=false
+  grep -q '"@capacitor/core"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/cli"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/android"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/ios"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  if [[ "$need_any" != "true" ]]; then
+    log "Capacitor packages already declared in package.json."
     return 0
   fi
-  if [[ ! -f "$NODE_DIR/dist/index.html" ]]; then
-    log "[WARN] $NODE_DIR/dist/index.html missing; skipping cap sync. Build the web app first."
+  log "Adding Capacitor packages to package.json…"
+  setup_run_as_node_user "$bun_path" "" "bun add @capacitor/core @capacitor/android @capacitor/ios && bun add -d @capacitor/cli"
+}
+
+setup_resolve_android_sdk_root() {
+  local root="${ANDROID_HOME:-}"
+  [[ -z "$root" ]] && root="${ANDROID_SDK_ROOT:-}"
+  if [[ -n "$root" && -d "$root" ]]; then
+    printf '%s' "$root"
     return 0
   fi
-  local bun_path
-  bun_path="$(resolve_bun_path_for_service_user)"
-  if [[ -z "$bun_path" ]]; then
-    log "[WARN] Bun not found; skipping cap sync."
-    return 1
+  local guess="$HOME/Android/Sdk"
+  if [[ -d "$guess" ]]; then
+    printf '%s' "$guess"
+    return 0
   fi
-  log "Running Capacitor sync (CAPACITOR_SYNC enabled)…"
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bunx cap sync" 2>&1; then
-      log "cap sync completed."
-    else
-      log "[WARN] cap sync failed. Run locally: cd $NODE_DIR && bun run cap:sync"
-      return 1
+    local su_home
+    su_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
+    guess="${su_home:+$su_home/Android/Sdk}"
+    if [[ -n "$guess" && -d "$guess" ]]; then
+      printf '%s' "$guess"
+      return 0
     fi
-  else
-    bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bunx cap sync" 2>&1 || {
-      log "[WARN] cap sync failed."
-      return 1
-    }
+  fi
+  return 1
+}
+
+setup_assert_android_sdk() {
+  local sdk_root
+  if ! sdk_root="$(setup_resolve_android_sdk_root)"; then
+    echo "[ERROR] Capacitor setup failed: Android SDK not found." >&2
+    echo "        Install the Android SDK (Android Studio or cmdline-tools) and set ANDROID_HOME or ANDROID_SDK_ROOT" >&2
+    echo "        to the SDK root directory (for example: \$HOME/Android/Sdk)." >&2
+    echo "        The directory must exist and typically contains platform-tools/ or cmdline-tools/." >&2
+    exit 1
+  fi
+  if [[ ! -d "$sdk_root/platform-tools" && ! -d "$sdk_root/cmdline-tools" && ! -d "$sdk_root/build-tools" ]]; then
+    echo "[ERROR] Capacitor setup failed: ANDROID_HOME/ANDROID_SDK_ROOT is set but does not look like a valid Android SDK." >&2
+    echo "        Path: $sdk_root" >&2
+    echo "        Expected at least one of: platform-tools/, cmdline-tools/, or build-tools/." >&2
+    exit 1
+  fi
+  printf '%s' "$sdk_root"
+}
+
+setup_assert_xcode_for_ios() {
+  if ! command -v xcodebuild >/dev/null 2>&1; then
+    echo "[ERROR] Capacitor setup failed: Xcode command-line tools are not available (xcodebuild not in PATH)." >&2
+    echo "        Install Xcode from the App Store and run: xcode-select --install" >&2
+    echo "        Then open Xcode once to accept the license and install components." >&2
+    exit 1
+  fi
+  if ! xcodebuild -version >/dev/null 2>&1; then
+    echo "[ERROR] Capacitor setup failed: xcodebuild does not run successfully." >&2
+    echo "        Open Xcode, accept the license, and complete any pending component installs." >&2
+    exit 1
+  fi
+  local xp
+  if ! xp="$(xcode-select -p 2>/dev/null)" || [[ -z "$xp" ]]; then
+    echo "[ERROR] Capacitor setup failed: No active Xcode developer directory (xcode-select -p failed)." >&2
+    echo "        Run: sudo xcode-select -s /Applications/Xcode.app/Contents/Developer" >&2
+    exit 1
+  fi
+  log "Xcode OK ($(xcodebuild -version 2>/dev/null | head -n1 || echo unknown), DEVELOPER_DIR=$xp)"
+}
+
+setup_verify_web_build_toolchain() {
+  local bun_path="$1"
+  if [[ -z "$bun_path" || ! -x "$bun_path/bun" ]]; then
+    echo "[ERROR] Capacitor setup failed: Bun is not installed or not executable." >&2
+    echo "        Install Bun and ensure the service user can run: bun --version" >&2
+    exit 1
+  fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "[ERROR] Capacitor setup failed: Node.js is not in PATH (required for npx cap)." >&2
+    exit 1
+  fi
+  if ! command -v npx >/dev/null 2>&1; then
+    echo "[ERROR] Capacitor setup failed: npx is not in PATH (install Node.js/npm)." >&2
+    exit 1
+  fi
+  log "Web toolchain: bun $("$bun_path/bun" --version 2>/dev/null), node $(node -v 2>/dev/null), npx ok"
+}
+
+setup_assert_webdir_output() {
+  if [[ ! -f "$NODE_DIR/dist/index.html" ]]; then
+    echo "[ERROR] Capacitor setup failed: webDir build output is missing." >&2
+    echo "        Expected: $NODE_DIR/dist/index.html (Capacitor webDir must point at the Vite production output)." >&2
+    echo "        Run a successful production build first: cd $NODE_DIR && bun run build" >&2
+    exit 1
   fi
 }
 
-install_capacitor_dependencies || true
-ensure_capacitor_config
+# Optional first-pass production build for Capacitor only (before main setup build).
+setup_run_capacitor_production_build() {
+  local bun_path="$1"
+  log "Capacitor pipeline: running production web build (VITE_APP_BASE_PATH=$PWA_BASE_PATH)…"
+  NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
+  local skip_sitemap="${SKIP_SITEMAP_GENERATION:-}"
+  [[ -z "$skip_sitemap" ]] && skip_sitemap="1"
+  if ! setup_run_as_node_user "$bun_path" "export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' SKIP_SITEMAP_GENERATION='$skip_sitemap' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI='${CI:-true}'" "bun run build"; then
+    CAP_REPORT_WEB="failed (bun run build exited with error)"
+    echo "[ERROR] Capacitor setup failed: production web build failed." >&2
+    exit 1
+  fi
+  setup_assert_webdir_output
+  CAP_REPORT_WEB="ok (dist/index.html present)"
+}
 
-# Build frontend and API bundle using Bun
+setup_run_capacitor_mobile_pipeline() {
+  if ! setup_env_is_truthy "$SETUP_CAPACITOR_RAW"; then
+    CAP_REPORT_WEB="skipped (SETUP_CAPACITOR not enabled)"
+    CAP_REPORT_ANDROID="skipped (SETUP_CAPACITOR not enabled)"
+    CAP_REPORT_IOS="skipped (SETUP_CAPACITOR not enabled)"
+    CAP_REPORT_SYNC="skipped (SETUP_CAPACITOR not enabled)"
+    return 0
+  fi
+
+  SETUP_CAPACITOR_RAN=true
+  local os_kernel
+  os_kernel="$(uname -s)"
+  local bun_path
+  bun_path="$(resolve_bun_path_for_service_user)"
+  setup_verify_web_build_toolchain "$bun_path"
+
+  log "SETUP_CAPACITOR enabled — installing Node dependencies (bun install)…"
+  if ! setup_run_as_node_user "$bun_path" "" "bun install"; then
+    echo "[ERROR] Capacitor setup failed: bun install failed." >&2
+    exit 1
+  fi
+
+  install_capacitor_npm_packages_if_missing "$bun_path"
+  if ! setup_run_as_node_user "$bun_path" "" "bun install"; then
+    echo "[ERROR] Capacitor setup failed: bun install failed after Capacitor package changes." >&2
+    exit 1
+  fi
+
+  ensure_capacitor_config
+
+  local android_sdk_export=""
+  local sdk_root
+  sdk_root="$(setup_assert_android_sdk)"
+  android_sdk_export="export ANDROID_HOME='${sdk_root}' ANDROID_SDK_ROOT='${sdk_root}'"
+
+  if [[ "$os_kernel" == "Darwin" ]]; then
+    setup_assert_xcode_for_ios
+  else
+    log "Host OS is $os_kernel — iOS native project steps will be skipped (requires macOS / Xcode)."
+  fi
+
+  setup_run_capacitor_production_build "$bun_path"
+
+  if [[ ! -d "$NODE_DIR/android" ]]; then
+    log "Adding Android platform (npx cap add android)…"
+    if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "npx cap add android"; then
+      CAP_REPORT_ANDROID="failed (npx cap add android)"
+      echo "[ERROR] Capacitor setup failed: npx cap add android failed." >&2
+      exit 1
+    fi
+    CAP_REPORT_ANDROID="created (android/)"
+  else
+    CAP_REPORT_ANDROID="present (android/ already exists)"
+  fi
+
+  if [[ "$os_kernel" == "Darwin" ]]; then
+    if [[ ! -d "$NODE_DIR/ios" ]]; then
+      log "Adding iOS platform (npx cap add ios)…"
+      if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "npx cap add ios"; then
+        CAP_REPORT_IOS="failed (npx cap add ios)"
+        echo "[ERROR] Capacitor setup failed: npx cap add ios failed." >&2
+        exit 1
+      fi
+      CAP_REPORT_IOS="created (ios/)"
+    else
+      CAP_REPORT_IOS="present (ios/ already exists)"
+    fi
+  else
+    CAP_REPORT_IOS="skipped (Linux host — use a macOS runner for npx cap add ios)"
+  fi
+
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if [[ -d "$NODE_DIR/android" ]]; then
+      $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/android" || true
+    fi
+    if [[ -d "$NODE_DIR/ios" ]]; then
+      $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/ios" || true
+    fi
+  fi
+
+  log "Running npx cap sync…"
+  if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "npx cap sync"; then
+    CAP_REPORT_SYNC="failed (npx cap sync exited with error)"
+    echo "[ERROR] Capacitor setup failed: npx cap sync failed." >&2
+    exit 1
+  fi
+  CAP_REPORT_SYNC="ok"
+}
+
+setup_run_capacitor_mobile_pipeline
+
+# Build frontend and API bundle using Bun (skipped if SETUP_CAPACITOR already ran a production build)
+if $SETUP_CAPACITOR_RAN; then
+  log "Skipping duplicate web build (already built during Capacitor pipeline)."
+else
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
 if [[ -f "$REFRESH_SCRIPT" ]]; then
@@ -1048,6 +1211,7 @@ else
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
 fi
+fi
 
 # Link web root expected by nginx config to the repo copy, unless that would create
 # a self-referential link (e.g., when the repo itself lives at /var/www/PlantSwipe).
@@ -1089,8 +1253,6 @@ for gen_file in "$NODE_DIR/public/sitemap.xml" "$NODE_DIR/public/llms.txt"; do
   $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$gen_file" 2>/dev/null || true
   $SUDO chmod 0644 "$gen_file" 2>/dev/null || true
 done
-
-run_capacitor_sync_if_requested || true
 
 # Ensure generated email template (.mjs) and scripts are writable/executable by service user
 # The sync-email-template.sh script runs as www-data during refresh and writes to src/lib/
@@ -2350,9 +2512,46 @@ if [[ ! -f "$NODE_DIR/ga4_keyfile.json" ]]; then
   log "       Then set GA4_PROPERTY_ID in .env.server"
 fi
 
+# --- Post-setup: Capacitor / mobile pipeline report ---
+print_capacitor_setup_report() {
+  local web_disk android_disk ios_disk
+  if [[ -f "$NODE_DIR/dist/index.html" ]]; then
+    web_disk="yes ($NODE_DIR/dist/index.html)"
+  else
+    web_disk="no (dist/index.html missing)"
+  fi
+  if [[ -d "$NODE_DIR/android" ]]; then
+    android_disk="yes (android/ present)"
+  else
+    android_disk="no (android/ missing)"
+  fi
+  if [[ -d "$NODE_DIR/ios" ]]; then
+    ios_disk="yes (ios/ present)"
+  else
+    ios_disk="no (ios/ missing)"
+  fi
+  printf '\n'
+  printf '%s\n' "========== PlantSwipe setup — mobile / Capacitor report =========="
+  printf '%s\n' "Host OS:        $(uname -s) ($(uname -m))"
+  printf '%s\n' "SETUP_CAPACITOR: ${SETUP_CAPACITOR_RAW:-0}  (set SETUP_CAPACITOR=1 to run pipeline)"
+  printf '%s\n' "Web build:      $CAP_REPORT_WEB"
+  printf '%s\n' "  (on disk)     $web_disk"
+  printf '%s\n' "Android:        $CAP_REPORT_ANDROID"
+  printf '%s\n' "  (on disk)     $android_disk"
+  printf '%s\n' "iOS:            $CAP_REPORT_IOS"
+  printf '%s\n' "  (on disk)     $ios_disk"
+  printf '%s\n' "Cap sync:       $CAP_REPORT_SYNC"
+  printf '%s\n' "=================================================================="
+  printf '\n'
+}
+print_capacitor_setup_report
+
 cat <<'NOTE'
 
 Next steps:
+0) Optional native app shell: on a machine with Android SDK (and macOS for iOS), run:
+     sudo SETUP_CAPACITOR=1 ./setup.sh
+   Or after setup: cd plant-swipe && bun install && bun run build && npx cap add android && npx cap sync
 1) Add your environment files:
    - plant-swipe/.env and optionally plant-swipe/.env.server
    - Edit /etc/admin-api/env (replace change-me and set tokens as desired)
