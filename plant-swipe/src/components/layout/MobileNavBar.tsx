@@ -216,11 +216,11 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="rounded-2xl h-9 w-9"
+                  className="rounded-2xl h-11 w-11"
                   onClick={openNotificationsFromMenu}
                   aria-label="Notifications"
                 >
-                  <Bell className="h-4 w-4" />
+                  <Bell className="h-5 w-5" />
                 </Button>
                 {totalCount > 0 && (
                   <span
@@ -465,14 +465,14 @@ function NavItem({
         )}
         {badge !== undefined && badge > 0 && (
           <span
-            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
+            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
             aria-hidden="true"
           >
             {badge > 99 ? '99+' : badge}
           </span>
         )}
       </div>
-      <span className={`text-[10px] font-medium ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+      <span className={`text-[11px] font-medium ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
         {label}
       </span>
     </Link>
@@ -480,14 +480,14 @@ function NavItem({
 }
 
 /** NavItemButton - Button-based navigation item with label */
-function NavItemButton({ 
-  icon, 
-  label, 
-  isActive, 
+function NavItemButton({
+  icon,
+  label,
+  isActive,
   onClick,
   badge,
   highlight
-}: { 
+}: {
   icon: React.ReactNode
   label: string
   isActive: boolean
@@ -504,8 +504,8 @@ function NavItemButton({
         transition-colors duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500
         ${highlight
           ? 'text-emerald-600 dark:text-emerald-400'
-          : isActive 
-            ? 'text-emerald-600 dark:text-emerald-400' 
+          : isActive
+            ? 'text-emerald-600 dark:text-emerald-400'
             : 'text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200'
         }
       `}
@@ -514,14 +514,14 @@ function NavItemButton({
         {icon}
         {badge !== undefined && badge > 0 && (
           <span
-            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[9px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
+            className="absolute -top-1.5 -right-2.5 h-4 min-w-4 px-1 rounded-full bg-amber-500 text-white text-[11px] font-bold flex items-center justify-center ring-2 ring-white dark:ring-[#1a1a1c]"
             aria-hidden="true"
           >
             {badge > 99 ? '99+' : badge}
           </span>
         )}
       </div>
-      <span className={`text-[10px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
         {label}
       </span>
     </button>
@@ -556,14 +556,14 @@ function QuickActionButton({
         {icon}
         {badge !== undefined && badge > 0 && (
           <span
-            className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-blue-500 text-white text-[9px] font-bold flex items-center justify-center"
+            className="absolute -top-1 -right-1 h-4 min-w-4 px-1 rounded-full bg-blue-500 text-white text-[11px] font-bold flex items-center justify-center"
             aria-hidden="true"
           >
             {badge > 99 ? '99+' : badge}
           </span>
         )}
       </div>
-      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
+      <span className={`text-[11px] font-medium leading-tight ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
     </button>
   )
 }

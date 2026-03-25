@@ -1121,7 +1121,7 @@ export default function SettingsPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 p-1.5 rounded-2xl bg-stone-100/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50">
+      <div className="flex gap-1.5 p-1.5 rounded-2xl bg-stone-100/80 dark:bg-[#1c1c1f]/80 border border-stone-200/50 dark:border-[#3e3e42]/50 overflow-x-auto scrollbar-hide -mx-4 px-4 sm:mx-0 sm:px-1.5 sm:flex-wrap">
         {tabs.map((tab) => (
           <button
             key={tab.id}
@@ -1130,14 +1130,14 @@ export default function SettingsPage() {
               setError(null)
               setSuccess(null)
             }}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
+            className={`flex items-center gap-2 px-3 sm:px-4 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap shrink-0 min-h-[44px] ${
               activeTab === tab.id
                 ? 'bg-white dark:bg-[#252528] shadow-sm text-emerald-700 dark:text-emerald-300'
                 : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200 hover:bg-white/50 dark:hover:bg-[#252528]/50'
             }`}
           >
             {tab.icon}
-            <span className="hidden sm:inline">{tab.label}</span>
+            <span>{tab.label}</span>
           </button>
         ))}
       </div>
@@ -1203,13 +1203,13 @@ export default function SettingsPage() {
                   <button
                     type="button"
                     onClick={() => setShowEmail(!showEmail)}
-                    className="p-1.5 rounded-lg hover:bg-stone-200/50 dark:hover:bg-[#3e3e42]/50 transition-colors"
+                    className="p-2.5 -m-1 rounded-xl hover:bg-stone-200/50 dark:hover:bg-[#3e3e42]/50 transition-colors"
                     aria-label={showEmail ? t('settings.email.hideEmail', { defaultValue: 'Hide email' }) : t('settings.email.showEmail', { defaultValue: 'Show email' })}
                   >
                     {showEmail ? (
-                      <EyeOff className="w-4 h-4 text-stone-500 dark:text-stone-400" />
+                      <EyeOff className="w-5 h-5 text-stone-500 dark:text-stone-400" />
                     ) : (
-                      <Eye className="w-4 h-4 text-stone-500 dark:text-stone-400" />
+                      <Eye className="w-5 h-5 text-stone-500 dark:text-stone-400" />
                     )}
                   </button>
                 </div>
