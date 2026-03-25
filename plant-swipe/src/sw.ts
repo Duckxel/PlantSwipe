@@ -41,6 +41,9 @@ const buildMeta: BuildMeta = {
 
 const DAY_IN_SECONDS = 60 * 60 * 24
 const YEAR_IN_SECONDS = DAY_IN_SECONDS * 365
+/** Suffix Workbox cache names with app version so a new release does not read stale entries from an old SW. */
+const cacheSuffix = String(import.meta.env.VITE_APP_VERSION ?? 'dev').replace(/[^a-zA-Z0-9._-]+/g, '_')
+const v = (name: string) => `${name}-v${cacheSuffix}`
 
 const broadcastMessage = async (payload: { type: string; meta?: BuildMeta }) => {
   const clients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
@@ -100,6 +103,38 @@ self.addEventListener('activate', (event) => {
       /* ignore */
     }
   }
+  // Drop runtime caches from older releases (cleanupOutdatedCaches only clears precache revision names).
+  const versionedRuntimePrefixes = [
+    'pages-cache-v',
+    'i18n-cache-v',
+    'static-assets-v',
+    'image-cache-v',
+    'font-cache-v',
+  ]
+  const legacyRuntimeNames = new Set([
+    'pages-cache',
+    'i18n-cache',
+    'static-assets',
+    'image-cache',
+    'font-cache',
+    'workbox-offline-fallbacks',
+  ])
+  const currentVersionTag = `-v${cacheSuffix}`
+  tasks.push(
+    caches
+      .keys()
+      .then((keys) =>
+        Promise.all(
+          keys.map((key) => {
+            if (legacyRuntimeNames.has(key)) return caches.delete(key)
+            const isOurs = versionedRuntimePrefixes.some((p) => key.startsWith(p))
+            if (isOurs && !key.endsWith(currentVersionTag)) return caches.delete(key)
+            return Promise.resolve(false)
+          }),
+        ),
+      )
+      .catch(() => undefined),
+  )
   tasks.push(
     broadcastMessage({
       type: 'SW_ACTIVATED',
@@ -132,7 +167,7 @@ const criticalRoutes = [
 ]
 
 const pageStrategy = new NetworkFirst({
-  cacheName: 'pages-cache',
+  cacheName: v('pages-cache'),
   networkTimeoutSeconds: 5,
   plugins: [
     new CacheableResponsePlugin({ statuses: [0, 200] }),
@@ -155,7 +190,7 @@ registerRoute(
 registerRoute(
   ({ url }) => /\/locales\/.*\.json/i.test(url.pathname),
   new NetworkFirst({
-    cacheName: 'i18n-cache',
+    cacheName: v('i18n-cache'),
     networkTimeoutSeconds: 3,
     plugins: [
       new ExpirationPlugin({ maxEntries: 40, maxAgeSeconds: DAY_IN_SECONDS * 7 }),
@@ -173,7 +208,7 @@ registerRoute(
     return url.origin === self.location.origin && url.pathname.startsWith(assetsPrefix)
   },
   new CacheFirst({
-    cacheName: 'static-assets',
+    cacheName: v('static-assets'),
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
       new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: YEAR_IN_SECONDS }),
@@ -196,7 +231,7 @@ registerRoute(
     return allowedImageOrigins.some(origin => url.href.startsWith(origin))
   },
   new StaleWhileRevalidate({
-    cacheName: 'image-cache',
+    cacheName: v('image-cache'),
     plugins: [
       new ExpirationPlugin({ maxEntries: 80, maxAgeSeconds: DAY_IN_SECONDS * 60 }),
       new CacheableResponsePlugin({ statuses: [0, 200] }),
@@ -207,7 +242,7 @@ registerRoute(
 registerRoute(
   ({ request }) => request.destination === 'font',
   new CacheFirst({
-    cacheName: 'font-cache',
+    cacheName: v('font-cache'),
     plugins: [
       new CacheableResponsePlugin({ statuses: [0, 200] }),
       new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: YEAR_IN_SECONDS }),

@@ -18,6 +18,53 @@ const pkgPath = join(root, 'package.json')
 const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'))
 const versionName = String(pkg.version || '0.0.0').trim()
 
+function hostnameFromUrl(raw) {
+  if (!raw || typeof raw !== 'string') return null
+  try {
+    return new URL(raw.trim()).hostname.toLowerCase() || null
+  } catch {
+    return null
+  }
+}
+
+/** Hostnames WebView may navigate to (Supabase auth, universal-link domain) — not for production server.url. */
+function buildAllowNavigationHosts() {
+  const hosts = new Set()
+  const env = process.env
+  const fromEnv = (key) => hostnameFromUrl(env[key])
+  ;['VITE_SUPABASE_URL', 'VITE_APP_UNIVERSAL_LINK_ORIGIN'].forEach((k) => {
+    const h = fromEnv(k)
+    if (h) hosts.add(h)
+  })
+  const extra = env.CAP_ALLOW_NAVIGATION_HOSTS?.trim()
+  if (extra) {
+    for (const part of extra.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean)) {
+      if (part.includes('://')) {
+        const h = hostnameFromUrl(part)
+        if (h) hosts.add(h)
+      } else {
+        hosts.add(part.toLowerCase())
+      }
+    }
+  }
+  if (!hosts.size && existsSync(join(root, '.env'))) {
+    try {
+      const dot = readFileSync(join(root, '.env'), 'utf8')
+      for (const line of dot.split('\n')) {
+        const m = line.match(/^\s*VITE_SUPABASE_URL\s*=\s*(.+)$/)
+        if (m) {
+          const v = m[1].trim().replace(/^["']|["']$/g, '')
+          const h = hostnameFromUrl(v)
+          if (h) hosts.add(h)
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  return [...hosts].sort()
+}
+
 function semverToVersionCode(semver) {
   const m = semver.match(/^(\d+)\.(\d+)\.(\d+)/)
   if (!m) return 1
@@ -107,7 +154,12 @@ function syncCapacitorConfigJson() {
     contentInset: iosPrev.contentInset ?? 'always',
     allowsLinkPreview: iosPrev.allowsLinkPreview ?? false,
   }
-  if (cap.server && typeof cap.server === 'object' && cap.server.url) {
+  const allowNav = buildAllowNavigationHosts()
+  if (allowNav.length) {
+    cap.server = cap.server && typeof cap.server === 'object' ? { ...cap.server } : {}
+    delete cap.server.url
+    cap.server.allowNavigation = allowNav
+  } else if (cap.server && typeof cap.server === 'object') {
     delete cap.server.url
     if (Object.keys(cap.server).length === 0) delete cap.server
   }

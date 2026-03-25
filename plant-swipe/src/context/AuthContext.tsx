@@ -1,5 +1,5 @@
 import React from 'react'
-import { supabase, type ProfileRow } from '@/lib/supabaseClient'
+import { supabase, processSupabaseAuthUrl, type ProfileRow } from '@/lib/supabaseClient'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
 import { validateEmail } from '@/lib/emailValidation'
@@ -216,9 +216,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   React.useEffect(() => {
     ;(async () => {
-      // Before first paint: load session then profile (if any) and only then render
+      // PKCE / magic-link: exchange code from URL before reading session from storage
+      await supabase.auth.initialize().catch(() => {})
+      await processSupabaseAuthUrl()
       await loadSession()
-      // Profile in background to reduce chances of startup stalls
       refreshProfile().catch(() => {})
       setLoading(false)
     })()

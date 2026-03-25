@@ -1,5 +1,6 @@
 import React from 'react'
 import { Workbox } from 'workbox-window'
+import { isNativeCapacitor } from '@/platform/runtime'
 
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
@@ -10,6 +11,8 @@ const OFFLINE_VERIFY_DELAY_MS = 3000
 const OFFLINE_RECHECK_INTERVAL_MS = 10000
 const disablePwaFlag = String(import.meta.env.VITE_DISABLE_PWA ?? '').trim().toLowerCase()
 const PWA_DISABLED = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
+/** Built with `build:web:native` / `build:cap` — no service worker in dist; show recovery UI only when needed. */
+const NATIVE_STORE_BUILD = import.meta.env.VITE_APP_NATIVE_BUILD === '1'
 
 const resolveScope = () => {
   const scope = import.meta.env.BASE_URL || '/'
@@ -91,8 +94,16 @@ const persistVersion = (value: string | null) => {
   }
 }
 
+const isLikelyStaleChunkError = (err: unknown): boolean => {
+  const msg = err instanceof Error ? err.message : String(err)
+  return /Loading chunk [\w-]+ failed|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
+    msg,
+  )
+}
+
 export function ServiceWorkerToast() {
   const [visible, setVisible] = React.useState(false)
+  const [rescueVisible, setRescueVisible] = React.useState(false)
   const [mode, setMode] = React.useState<'ready' | 'update' | 'offline'>('ready')
   const [readyAcknowledged, setReadyAcknowledged] = React.useState(readReadyAck)
   const [refreshDismissed, setRefreshDismissed] = React.useState(false)
@@ -113,12 +124,64 @@ export function ServiceWorkerToast() {
   const updateShownRef = React.useRef(false)
 
   const requestRegistrationUpdate = React.useCallback(() => {
+    if (NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     navigator.serviceWorker
       .getRegistration()
       .then((registration) => registration?.update().catch(() => {}))
       .catch(() => {})
   }, [])
+
+  const unregisterCachesAndReload = React.useCallback(async () => {
+    try {
+      if (typeof navigator !== 'undefined' && navigator.serviceWorker?.getRegistrations) {
+        const regs = await navigator.serviceWorker.getRegistrations()
+        await Promise.all(regs.map((reg) => reg.unregister().catch(() => {})))
+      }
+    } catch {
+      /* ignore */
+    }
+    try {
+      if (typeof window !== 'undefined' && 'caches' in window && window.caches?.keys) {
+        const keys = await window.caches.keys()
+        await Promise.all(keys.map((key) => window.caches.delete(key).catch(() => false)))
+      }
+    } catch {
+      /* ignore */
+    }
+    window.location.reload()
+  }, [])
+
+  /** Dev builds can leave a service worker on device; store bundles omit sw.js — unregister so nothing stale intercepts. */
+  React.useEffect(() => {
+    if (!NATIVE_STORE_BUILD || !isNativeCapacitor()) return
+    if (typeof navigator === 'undefined' || !navigator.serviceWorker?.getRegistrations) return
+    navigator.serviceWorker
+      .getRegistrations()
+      .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => {}))))
+      .catch(() => {})
+  }, [])
+
+  React.useEffect(() => {
+    if (PWA_DISABLED) return
+    if (typeof window === 'undefined') return
+    const onFailure = (err: unknown) => {
+      if (!isLikelyStaleChunkError(err)) return
+      setRescueVisible(true)
+    }
+    const onError = (e: ErrorEvent) => {
+      onFailure(e.error ?? e.message)
+    }
+    const onRejection = (e: PromiseRejectionEvent) => {
+      onFailure(e.reason)
+    }
+    window.addEventListener('error', onError)
+    window.addEventListener('unhandledrejection', onRejection)
+    return () => {
+      window.removeEventListener('error', onError)
+      window.removeEventListener('unhandledrejection', onRejection)
+    }
+  }, [PWA_DISABLED])
 
   React.useEffect(() => {
     if (!PWA_DISABLED) return
@@ -174,7 +237,7 @@ export function ServiceWorkerToast() {
   )
 
   React.useEffect(() => {
-    if (PWA_DISABLED) return
+    if (PWA_DISABLED || NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
 
     const scope = resolveScope()
@@ -209,6 +272,7 @@ export function ServiceWorkerToast() {
   }, [surfaceWaitingUpdate])
 
   React.useEffect(() => {
+    if (NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     let mounted = true
     navigator.serviceWorker
@@ -357,7 +421,7 @@ export function ServiceWorkerToast() {
   }, [handleSwMessage])
 
   React.useEffect(() => {
-    if (PWA_DISABLED) return
+    if (PWA_DISABLED || NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     navigator.serviceWorker.ready
       .then((registration) => {
@@ -448,6 +512,42 @@ export function ServiceWorkerToast() {
 
     if (PWA_DISABLED) {
       return null
+    }
+
+    if (rescueVisible) {
+      return (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="aphylia-rescue-title"
+        >
+          <div className="w-full max-w-md rounded-2xl border border-white/20 bg-neutral-900 p-6 text-white shadow-2xl">
+            <p id="aphylia-rescue-title" className="text-xl font-semibold">
+              Something didn&apos;t load correctly
+            </p>
+            <p className="mt-3 text-sm text-white/80">
+              This usually happens after an app update when old cached files no longer match. Clearing on-device cache and reloading fixes it.
+            </p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => void unregisterCachesAndReload()}
+                className="flex-1 rounded-full bg-emerald-400 px-4 py-2 font-semibold text-emerald-950 transition hover:bg-emerald-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-200"
+              >
+                Clear cache &amp; reload
+              </button>
+              <button
+                type="button"
+                onClick={() => setRescueVisible(false)}
+                className="flex-1 rounded-full border border-white/30 px-4 py-2 font-medium text-white/80 transition hover:border-white hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/50"
+              >
+                Not now
+              </button>
+            </div>
+          </div>
+        </div>
+      )
     }
 
     if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null

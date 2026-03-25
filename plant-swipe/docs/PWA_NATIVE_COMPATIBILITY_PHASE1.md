@@ -117,7 +117,7 @@ Most **core product flows** (Supabase auth, REST/fetch to API, uploads, React Ro
 | **Camera** | `getUserMedia` in `CameraCapture.tsx` | Optional **Camera** plugin for permissions, gallery, and consistent UX; keep web path as fallback. |
 | **Share sheet** | `navigator.share` + clipboard fallback | **Share** plugin for files and text where Web Share is missing. |
 | **Storage** | `localStorage`, `sessionStorage`, Supabase | Usually OK; for quotas or persistence guarantees consider **Preferences** / **Filesystem** for critical flags only. |
-| **Offline / SW** | Workbox precache, runtime caches, `offline.html` | SW may be absent or limited (esp. iOS); plan **without** SW for critical offline, or scope SW to Android only. |
+| **Offline / SW** | Workbox precache, runtime caches, `offline.html` | **Store WebView:** SW disabled (`VITE_APP_NATIVE_BUILD`); browser PWA keeps SW with version-scoped caches. See `docs/SERVICE_WORKER_CAPACITOR.md`. |
 
 ---
 

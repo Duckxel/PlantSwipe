@@ -1037,7 +1037,7 @@ setup_run_capacitor_production_build() {
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   local skip_sitemap="${SKIP_SITEMAP_GENERATION:-}"
   [[ -z "$skip_sitemap" ]] && skip_sitemap="1"
-  if ! setup_run_as_node_user "$bun_path" "export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' SKIP_SITEMAP_GENERATION='$skip_sitemap' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI='${CI:-true}'" "bun run build"; then
+  if ! setup_run_as_node_user "$bun_path" "export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' SKIP_SITEMAP_GENERATION='$skip_sitemap' VITE_APP_BASE_PATH='${PWA_BASE_PATH}' VITE_APP_NATIVE_BUILD='1' CI='${CI:-true}'" "bun run build"; then
     CAP_REPORT_WEB="failed (bun run build exited with error)"
     echo "[ERROR] Capacitor setup failed: production web build failed." >&2
     exit 1
@@ -1127,7 +1127,7 @@ setup_run_capacitor_mobile_pipeline() {
   fi
 
   log "Running npx cap sync (store bundle guard + sync)…"
-  if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "node scripts/assert-capacitor-store-bundle.mjs && npx cap sync"; then
+  if ! setup_run_as_node_user "$bun_path" "$android_sdk_export" "node scripts/assert-capacitor-store-bundle.mjs && node scripts/sync-native-version.mjs && npx cap sync"; then
     CAP_REPORT_SYNC="failed (npx cap sync exited with error)"
     echo "[ERROR] Capacitor setup failed: npx cap sync failed." >&2
     exit 1
