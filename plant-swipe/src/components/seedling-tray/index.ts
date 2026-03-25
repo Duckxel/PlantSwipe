@@ -4,3 +4,4 @@ export { SeedlingCellModal } from "./SeedlingCellModal";
 export { SeedlingCareList } from "./SeedlingCareList";
 export { SeedlingTrayAnalytics } from "./SeedlingTrayAnalytics";
 export { SeedlingTrayDimensionEditor } from "./SeedlingTrayDimensionEditor";
+export { TransplantToGardenDialog } from "./TransplantToGardenDialog";

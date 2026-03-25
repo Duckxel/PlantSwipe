@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import type { SeedlingTrayCell, SeedlingStage } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import { SeedlingStageIcon } from "./SeedlingStageIcon";
-import { Search } from "lucide-react";
+import { Search, Sprout } from "lucide-react";
 
 const EDITABLE_STAGES: Array<{ id: SeedlingStage; label: string }> = [
   { id: "sown", label: "Sown" },
@@ -33,6 +33,7 @@ interface SeedlingCellModalProps {
   onClose: () => void;
   onSave: (data: Partial<Pick<SeedlingTrayCell, "plantId" | "stage" | "sowDate" | "lastWatered" | "notes">>) => void;
   onClear: () => void;
+  onTransplant?: (cell: SeedlingTrayCell) => void;
 }
 
 const today = () => new Date().toISOString().split("T")[0];
@@ -59,6 +60,7 @@ export const SeedlingCellModal: React.FC<SeedlingCellModalProps> = ({
   onClose,
   onSave,
   onClear,
+  onTransplant,
 }) => {
   const { t } = useTranslation("common");
   const [plantId, setPlantId] = useState<string | null>(cell.plantId);
@@ -329,6 +331,19 @@ export const SeedlingCellModal: React.FC<SeedlingCellModalProps> = ({
               {isMulti
                 ? t("seedlingTray.clearCells", { count, defaultValue: "Clear {{count}} cells" })
                 : t("seedlingTray.clearCell", "Clear cell")}
+            </Button>
+          )}
+          {plantId && !isMulti && stage === "ready" && onTransplant && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                onTransplant(cell);
+                onClose();
+              }}
+              className="flex-1 rounded-xl border-emerald-500 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/20"
+            >
+              <Sprout className="h-4 w-4 mr-1" />
+              {t("seedlingTray.transplantAction", "Transplant")}
             </Button>
           )}
           <Button

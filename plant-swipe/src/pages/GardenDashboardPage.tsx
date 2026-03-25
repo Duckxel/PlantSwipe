@@ -89,9 +89,9 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
-import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics } from "@/components/seedling-tray";
+import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -166,6 +166,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [seedlingSelectMode, setSeedlingSelectMode] = React.useState(false);
   const [seedlingSelected, setSeedlingSelected] = React.useState<Set<number>>(new Set());
   const [seedlingModal, setSeedlingModal] = React.useState<{ type: "single" | "multi"; index: number; indices?: Set<number> } | null>(null);
+  const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
   // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const seedlingPlantMap = React.useMemo(() => {
@@ -3477,6 +3478,7 @@ export const GardenDashboardPage: React.FC = () => {
                           loadSeedlingCells();
                         }}
                         onEdit={(index) => setSeedlingModal({ type: "single", index })}
+                        onTransplant={(cell) => setTransplantCell(cell)}
                       />
 
                       {/* Analytics */}
@@ -3509,6 +3511,25 @@ export const GardenDashboardPage: React.FC = () => {
                             } else {
                               await clearSeedlingTrayCell(seedlingCells[seedlingModal.index].id);
                             }
+                            loadSeedlingCells();
+                          }}
+                          onTransplant={(cell) => {
+                            setSeedlingModal(null);
+                            setTransplantCell(cell);
+                          }}
+                        />
+                      )}
+
+                      {/* Transplant Dialog */}
+                      {transplantCell && transplantCell.plantId && seedlingPlantMap[transplantCell.plantId] && (
+                        <TransplantToGardenDialog
+                          open={!!transplantCell}
+                          onClose={() => setTransplantCell(null)}
+                          cell={transplantCell}
+                          plant={seedlingPlantMap[transplantCell.plantId]}
+                          userId={currentUserId}
+                          onTransplanted={() => {
+                            setTransplantCell(null);
                             loadSeedlingCells();
                           }}
                         />

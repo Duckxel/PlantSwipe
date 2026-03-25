@@ -4,12 +4,14 @@ import { Button } from "@/components/ui/button";
 import type { SeedlingTrayCell } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import { SeedlingStageIcon } from "./SeedlingStageIcon";
+import { Sprout } from "lucide-react";
 
 interface SeedlingCareListProps {
   cells: SeedlingTrayCell[];
   plantMap: Record<string, Plant>;
   onWater: (cellId: string) => void;
   onEdit: (index: number) => void;
+  onTransplant?: (cell: SeedlingTrayCell) => void;
 }
 
 const daysDiff = (d: string | null) => {
@@ -22,6 +24,7 @@ export const SeedlingCareList: React.FC<SeedlingCareListProps> = ({
   plantMap,
   onWater,
   onEdit,
+  onTransplant,
 }) => {
   const { t } = useTranslation("common");
   const plantedCells = cells.filter((c) => c.plantId);
@@ -83,6 +86,17 @@ export const SeedlingCareList: React.FC<SeedlingCareListProps> = ({
                   >
                     {t("seedlingTray.care.water", "Water")}
                   </Button>
+                  {cell.stage === "ready" && onTransplant && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => onTransplant(cell)}
+                      className="h-7 px-2.5 text-xs rounded-lg border-emerald-500 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-300"
+                    >
+                      <Sprout className="h-3 w-3 mr-1" />
+                      {t("seedlingTray.transplantAction", "Transplant")}
+                    </Button>
+                  )}
                   <Button
                     size="sm"
                     variant="outline"

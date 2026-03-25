@@ -2661,6 +2661,16 @@
     "germDaysLabel": "Germination (days)",
     "germDaysPlaceholder": "e.g. 7",
     "transplantDaysLabel": "Transplant (days)",
-    "transplantDaysPlaceholder": "e.g. 42"
+    "transplantDaysPlaceholder": "e.g. 42",
+    "transplantToGarden": "Transplant to Garden",
+    "transplantConfirm": "Confirm Transplant",
+    "selectGarden": "Select a garden to transplant this seedling to",
+    "transplantingPlant": "Transplanting {{plant}}",
+    "transplantAction": "Transplant",
+    "transplanting": "Transplanting...",
+    "transplantError": "Failed to transplant",
+    "noGardensAvailable": "No gardens available. Create a Default or Beginner garden first.",
+    "nickname": "Nickname",
+    "plantsOnHand": "Plants on hand"
   }
 }

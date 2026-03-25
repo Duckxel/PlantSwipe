@@ -2661,6 +2661,16 @@
     "germDaysLabel": "Germination (jours)",
     "germDaysPlaceholder": "ex. 7",
     "transplantDaysLabel": "Transplantation (jours)",
-    "transplantDaysPlaceholder": "ex. 42"
+    "transplantDaysPlaceholder": "ex. 42",
+    "transplantToGarden": "Transplanter au jardin",
+    "transplantConfirm": "Confirmer le transplant",
+    "selectGarden": "Choisir un jardin pour transplanter ce semis",
+    "transplantingPlant": "Transplantation de {{plant}}",
+    "transplantAction": "Transplanter",
+    "transplanting": "Transplantation...",
+    "transplantError": "Échec de la transplantation",
+    "noGardensAvailable": "Aucun jardin disponible. Créez d'abord un jardin par défaut ou débutant.",
+    "nickname": "Surnom",
+    "plantsOnHand": "Plants en main"
   }
 }
