@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import type { SeedlingTrayCell } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import { SeedlingStageIcon } from "./SeedlingStageIcon";
+import { Plus } from "lucide-react";
 
 const STAGE_CELL_CLASSES: Record<string, string> = {
   empty: "bg-stone-100 dark:bg-stone-800 border-stone-300 dark:border-stone-600",
@@ -143,11 +144,22 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                     <div className="w-1.5 h-1.5 rounded-full bg-white dark:bg-stone-900" />
                   </div>
                 )}
-                <SeedlingStageIcon stage={cell.stage} size={16} />
-                {plant && (
-                  <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
-                    {plant.name || plant.id}
-                  </div>
+                {cell.stage === "empty" ? (
+                  <>
+                    <Plus className="h-3.5 w-3.5 text-stone-400 dark:text-stone-500" />
+                    <div className="text-[9px] text-stone-400 dark:text-stone-500 font-medium">
+                      {t("seedlingTray.addNew", "Add")}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <SeedlingStageIcon stage={cell.stage} size={16} />
+                    {plant && (
+                      <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
+                        {plant.name || plant.id}
+                      </div>
+                    )}
+                  </>
                 )}
                 {needsWater && !isSel && (
                   <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-blue-500" />
@@ -162,8 +174,14 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
       <div className="mt-3 flex flex-wrap gap-3">
         {stages.map((s) => (
           <div key={s.id} className="flex items-center gap-1.5">
-            <SeedlingStageIcon stage={s.id} size={10} />
-            <span className="text-xs text-muted-foreground">{s.label}</span>
+            {s.id === "empty" ? (
+              <Plus className="h-2.5 w-2.5 text-stone-400" />
+            ) : (
+              <SeedlingStageIcon stage={s.id} size={10} />
+            )}
+            <span className="text-xs text-muted-foreground">
+              {s.id === "empty" ? t("seedlingTray.addNew", "Add") : s.label}
+            </span>
           </div>
         ))}
         <div className="flex items-center gap-1.5">

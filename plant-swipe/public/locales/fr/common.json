@@ -2671,6 +2671,20 @@
     "transplantError": "Échec de la transplantation",
     "noGardensAvailable": "Aucun jardin disponible. Créez d'abord un jardin par défaut ou débutant.",
     "nickname": "Surnom",
-    "plantsOnHand": "Plants en main"
+    "plantsOnHand": "Plants en main",
+    "addNew": "Ajouter",
+    "tasks": {
+      "dailyWatering": "Arrosage quotidien",
+      "noPlants": "Aucun semis planté. Ajoutez des plantes aux cellules pour commencer le suivi.",
+      "allWatered": "Tous les semis arrosés aujourd'hui !",
+      "needsWaterCount": "{{count}} cellules à arroser",
+      "needsWaterCount_one": "{{count}} cellule à arroser",
+      "waterAll": "Tout arroser",
+      "needsWater": "À arroser",
+      "neverWatered": "Jamais arrosé",
+      "lastWateredDays": "Arrosé il y a {{days}}j",
+      "wateredToday": "Arrosé aujourd'hui",
+      "done": "Fait"
+    }
   }
 }

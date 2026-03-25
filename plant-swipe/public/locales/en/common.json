@@ -2671,6 +2671,20 @@
     "transplantError": "Failed to transplant",
     "noGardensAvailable": "No gardens available. Create a Default or Beginner garden first.",
     "nickname": "Nickname",
-    "plantsOnHand": "Plants on hand"
+    "plantsOnHand": "Plants on hand",
+    "addNew": "Add",
+    "tasks": {
+      "dailyWatering": "Daily Watering",
+      "noPlants": "No seedlings planted yet. Add plants to cells to start tracking.",
+      "allWatered": "All seedlings watered today!",
+      "needsWaterCount": "{{count}} cells need watering",
+      "needsWaterCount_one": "{{count}} cell needs watering",
+      "waterAll": "Water All",
+      "needsWater": "Needs Watering",
+      "neverWatered": "Never watered",
+      "lastWateredDays": "Last watered {{days}}d ago",
+      "wateredToday": "Watered Today",
+      "done": "Done"
+    }
   }
 }

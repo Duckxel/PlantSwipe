@@ -89,7 +89,7 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
-import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
+import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog, SeedlingTasksSection } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
 import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens } from "@/lib/gardens";
 
@@ -2420,9 +2420,11 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      // Open Tasks with default watering 2x (user can change unit)
-      setPendingGardenPlantId(gp.id);
-      setTaskOpen(true);
+      // Open Tasks with default watering 2x (user can change unit) — skip for seedling gardens
+      if (garden?.gardenType !== "seedling") {
+        setPendingGardenPlantId(gp.id);
+        setTaskOpen(true);
+      }
       emitGardenRealtime("plants");
     } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
@@ -3031,7 +3033,7 @@ export const GardenDashboardPage: React.FC = () => {
                         <Card
                           key={gp.id}
                           className={`rounded-[28px] border overflow-hidden relative shadow-sm transition-all ${dragIdx === idx ? "ring-2 ring-emerald-500" : ""} ${
-                            (taskCountsByPlant[gp.id] || 0) === 0
+                            garden?.gardenType !== "seedling" && (taskCountsByPlant[gp.id] || 0) === 0
                               ? "border-orange-300 dark:border-orange-700/60 bg-white/80 dark:bg-[#1f1f1f]/80 shadow-[0_0_15px_-3px_rgba(251,146,60,0.3)] dark:shadow-[0_0_15px_-3px_rgba(251,146,60,0.15)]"
                               : "border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80"
                           } backdrop-blur`}
@@ -3139,19 +3141,23 @@ export const GardenDashboardPage: React.FC = () => {
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                   {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
                                 </span>
-                                {(taskCountsByPlant[gp.id] || 0) > 0 ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                    {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
-                                    ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
-                                  </span>
-                                )}
-                                {(taskOccDueToday[gp.id] || 0) > 0 && (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
-                                    📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
-                                  </span>
+                                {garden?.gardenType !== "seedling" && (
+                                  <>
+                                    {(taskCountsByPlant[gp.id] || 0) > 0 ? (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                        {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
+                                        ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
+                                      </span>
+                                    )}
+                                    {(taskOccDueToday[gp.id] || 0) > 0 && (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                                        📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
+                                      </span>
+                                    )}
+                                  </>
                                 )}
                               </div>
                               {/* Plant Notes Preview */}
@@ -3161,46 +3167,50 @@ export const GardenDashboardPage: React.FC = () => {
                                 </div>
                               )}
                               <div className="mt-2 flex gap-2 flex-wrap">
-                                {/* Complete All button if tasks are due today */}
-                                {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
-                                  const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
-                                  const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
-                                  if (allDone) return null;
-                                  return (
+                                {/* Complete All button + Tasks button — hidden for seedling gardens */}
+                                {garden?.gardenType !== "seedling" && (
+                                  <>
+                                    {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
+                                      const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
+                                      const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
+                                      if (allDone) return null;
+                                      return (
+                                        <Button
+                                          variant="default"
+                                          className="rounded-2xl gap-1"
+                                          size="sm"
+                                          draggable={false}
+                                          onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                          onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+                                          disabled={completingPlantIds.has(gp.id)}
+                                          onClick={() => completeAllTodayForPlant(gp.id)}
+                                          aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
+                                        >
+                                          {completingPlantIds.has(gp.id) ? (
+                                            <span className="animate-pulse">...</span>
+                                          ) : (
+                                            <>✓ {t("garden.completeAll", "Complete All")}</>
+                                          )}
+                                        </Button>
+                                      );
+                                    })()}
                                     <Button
-                                      variant="default"
-                                      className="rounded-2xl gap-1"
-                                      size="sm"
+                                      variant="secondary"
+                                      className="rounded-2xl"
                                       draggable={false}
                                       onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                                       onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                      disabled={completingPlantIds.has(gp.id)}
-                                      onClick={() => completeAllTodayForPlant(gp.id)}
-                                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
+                                      onClick={() => {
+                                        setPendingGardenPlantId(gp.id);
+                                        setTaskOpen(true);
+                                      }}
                                     >
-                                      {completingPlantIds.has(gp.id) ? (
-                                        <span className="animate-pulse">...</span>
-                                      ) : (
-                                        <>✓ {t("garden.completeAll", "Complete All")}</>
+                                      {t(
+                                        "gardenDashboard.plantsSection.tasksButton",
                                       )}
                                     </Button>
-                                  );
-                                })()}
-                                <Button
-                                  variant="secondary"
-                                  className="rounded-2xl"
-                                  draggable={false}
-                                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                                  onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                  onClick={() => {
-                                    setPendingGardenPlantId(gp.id);
-                                    setTaskOpen(true);
-                                  }}
-                                >
-                                  {t(
-                                    "gardenDashboard.plantsSection.tasksButton",
-                                  )}
-                                </Button>
+                                  </>
+                                )}
                                 <EditPlantButton
                                   gp={gp}
                                   gardenId={id!}
@@ -3379,21 +3389,46 @@ export const GardenDashboardPage: React.FC = () => {
                 path="tasks"
                 element={
                   canViewFullGarden ? (
-                    <GardenTasksSection
-                      plants={plants}
-                      todayTaskOccurrences={todayTaskOccurrences}
-                      onProgressOccurrence={progressOccurrenceHandler}
-                      progressingOccIds={progressingOccIds}
-                      completingPlantIds={completingPlantIds}
-                      completeAllTodayForPlant={completeAllTodayForPlant}
-                      weekDays={weekDays}
-                      weekCounts={weekCounts}
-                      weekCountsByType={weekCountsByType}
-                      serverToday={serverToday}
-                      dueThisWeekByPlant={dueThisWeekByPlant}
-                      duePlantIds={dueToday}
-                      weekTaskOccurrences={weekTaskOccurrences}
-                    />
+                    garden?.gardenType === "seedling" ? (
+                      <SeedlingTasksSection
+                        cells={seedlingCells}
+                        plantMap={seedlingPlantMap}
+                        onWater={async (cellId) => {
+                          const today = new Date().toISOString().split('T')[0];
+                          await updateSeedlingTrayCell(cellId, { lastWatered: today });
+                          loadSeedlingCells();
+                        }}
+                        onWaterAll={async () => {
+                          const today = new Date().toISOString().split('T')[0];
+                          const needsWater = seedlingCells.filter(
+                            (c) => c.plantId && c.stage !== "empty" && (!c.lastWatered || Math.floor((Date.now() - new Date(c.lastWatered).getTime()) / 86400000) >= 1)
+                          );
+                          if (needsWater.length > 0) {
+                            await updateSeedlingTrayCells(
+                              needsWater.map((c) => c.id),
+                              { lastWatered: today }
+                            );
+                            loadSeedlingCells();
+                          }
+                        }}
+                      />
+                    ) : (
+                      <GardenTasksSection
+                        plants={plants}
+                        todayTaskOccurrences={todayTaskOccurrences}
+                        onProgressOccurrence={progressOccurrenceHandler}
+                        progressingOccIds={progressingOccIds}
+                        completingPlantIds={completingPlantIds}
+                        completeAllTodayForPlant={completeAllTodayForPlant}
+                        weekDays={weekDays}
+                        weekCounts={weekCounts}
+                        weekCountsByType={weekCountsByType}
+                        serverToday={serverToday}
+                        dueThisWeekByPlant={dueThisWeekByPlant}
+                        duePlantIds={dueToday}
+                        weekTaskOccurrences={weekTaskOccurrences}
+                      />
+                    )
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -3704,6 +3739,7 @@ export const GardenDashboardPage: React.FC = () => {
                     )}
                   />
                 </div>
+                {garden?.gardenType !== "seedling" && (
                 <div>
                   <label className="text-sm font-medium">
                     {t("gardenDashboard.plantsSection.numberOfFlowers")}
@@ -3717,6 +3753,7 @@ export const GardenDashboardPage: React.FC = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddCount(Number(e.target.value))}
                   />
                 </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
                     variant="secondary"
