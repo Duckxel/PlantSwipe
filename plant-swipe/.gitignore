@@ -34,6 +34,61 @@ public/llms.txt
 # Ephemeral chat uploads
 uploads/to_delete/
 
+# --- Capacitor / Android / iOS (never commit build outputs, caches, or signing keys) ---
+# Native project folders (android/, ios/) may be committed after `cap add`; these patterns
+# strip generated artifacts, Gradle/Xcode caches, and local machine config.
+
+# Android / Gradle
+android/.gradle/
+android/**/build/
+android/.cxx/
+android/captures/
+android/local.properties
+android/*.iml
+android/.idea/
+android/.kotlin/
+android/app/release/
+android/**/*.apk
+android/**/*.aab
+
+# iOS / Xcode (Capacitor default layout: ios/App/…)
+ios/**/build/
+ios/**/DerivedData/
+ios/**/*.ipa
+ios/**/*.xcarchive/
+ios/**/*.dSYM.zip
+ios/**/Pods/
+ios/**/.swiftpm/
+ios/**/*.xcuserstate
+ios/**/xcuserdata/
+ios/**/*.xcworkspace/xcuserdata/
+ios/**/*.xcodeproj/xcuserdata/
+ios/**/*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Fastlane local-only (never commit API keys or match secrets)
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/
+fastlane/test_output/
+fastlane/.env
+fastlane/.env.*
+
+# Signed / private artifacts (keep out of git; use CI secrets + secure artifact storage)
+*.jks
+*.keystore
+*.p12
+*.pem
+*.mobileprovision
+*.cer
+*.certSigningRequest
+*.provisionprofile
+
+# Optional local output dirs
+artifacts/
+release/
+captures/
+ios-derived-ci/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

@@ -51,6 +51,16 @@ TIME
 .vercel/
 .netlify/
 
+# Mobile signing / distribution (never commit; use CI secrets)
+*.jks
+*.keystore
+*.p12
+*.mobileprovision
+*.cer
+artifacts/
+release/
+captures/
+
 # Supabase CLI artifacts
 /supabase/
 plant-swipe/supabase/.temp/
