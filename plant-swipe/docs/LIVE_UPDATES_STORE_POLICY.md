@@ -11,7 +11,9 @@ This document defines how Aphylia treats **over-the-air (OTA) web updates**, **r
 
 ## Apple guideline 2.5.2 (interpretation for this project)
 
-Apple restricts apps from **downloading and executing code** that **changes features or functionality** in ways that circumvent review. Capacitor’s own deployment docs note that real-time web updates *can* be compatible with stores when done carefully; **we still treat OTA updates as a controlled, policy-bound tool**, not a way to ship arbitrary new product behavior without review.
+Apple restricts apps from **downloading and executing code** that **changes features or functionality** in ways that circumvent review. **2.5.2 is the binding constraint:** remote updates are **not** a substitute for review when you are effectively shipping **major new features** or **materially new user journeys** that were not in the reviewed binary. Capacitor’s deployment docs note that real-time web updates *can* be compatible with stores when scoped carefully; **we still treat OTA as a controlled, policy-bound tool**, not permission to bypass review.
+
+Team “do not” list (short form): `docs/MOBILE_ARCHITECTURE.md` → **Non-negotiables (do not)**.
 
 ## What is safe to hot-update (with controls)
 

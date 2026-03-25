@@ -2,6 +2,16 @@
 
 How Aphylia combines a **browser-first PWA** with an **optional native shell**, where code lives, and what rules govern native work and releases.
 
+## Non-negotiables (do not)
+
+These align with Capacitor’s own guidance and App Store policy; treat them as **hard constraints**, not style preferences.
+
+1. **Do not use `server.url` as production architecture.** Capacitor documents it for **live reload / dev**; it is **not** the shipping model here. Production loads **`webDir`** assets copied into the binary. `scripts/assert-capacitor-store-bundle.mjs` blocks accidental `server.url` in store flows.
+2. **Do not assume a Linux server can produce signed iOS builds.** **codesign, provisioning, and App Store distribution require macOS + Xcode** (or a macOS CI runner). Linux can sync web assets and build Android; iOS signing/archives are **mac-only**.
+3. **Do not treat remote web updates as permission to ship major new features without App Store review.** Apple **guideline 2.5.2** limits downloading or executing code that **changes features or functionality** in ways that bypass review. Server-driven **data**, **copy**, and **flags** inside **already-shipped** code paths are fine; **new product surface** shipped only over the wire is not a loophole. Details: `docs/LIVE_UPDATES_STORE_POLICY.md`.
+4. **Do not duplicate app features in separate web vs native implementations** unless there is **no** reasonable way to do it in shared web code (or a tiny native bridge). One React app, one set of routes and business logic.
+5. **Do not add many native plugins early “just in case.”** Add **`@capacitor/*`** plugins when a **concrete** need is proven; otherwise use **`src/platform/`** and web APIs first. Fewer plugins means less maintenance and less App Review surface.
+
 ## PWA-first philosophy
 
 1. **The product is the web app.** Routes, forms, validation, API calls, state, design tokens, and most UX live in **`plant-swipe/src/`** and ship as a Vite production bundle under **`dist/`**.
