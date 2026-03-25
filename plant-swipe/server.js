@@ -6554,11 +6554,8 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6647,15 +6644,11 @@ function scheduleRestartAllServices(trigger = 'manual') {
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
-      const adminId = caller?.id || null
       let adminName = null
       if (sql && adminId) {
         try {
@@ -7341,12 +7334,8 @@ async function handleSyncSchema(req, res) {
     return
   }
   try {
-    // Require admin (robust detection; currently permissive via isAdminFromRequest)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Read all SQL files from sync_parts folder and execute them in order
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
@@ -14883,11 +14872,8 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const raw = (req.query.ip || req.query.q || '').toString().trim()
     const ip = normalizeIp(raw)
     if (!ip) {
@@ -15737,13 +15723,10 @@ app.get('/api/admin/member-suggest', async (req, res) => {
 // Admin: promote a user to admin by email or user_id
 app.post('/api/admin/promote-admin', async (req, res) => {
   try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const { email: rawEmail, userId: rawUserId } = req.body || {}
@@ -15804,13 +15787,10 @@ app.options('/api/admin/promote-admin', (_req, res) => {
 // Admin: demote a user from admin by email or user_id
 app.post('/api/admin/demote-admin', async (req, res) => {
   try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const { email: rawEmail, userId: rawUserId } = req.body || {}
@@ -15871,13 +15851,10 @@ const ALL_USER_ROLES = [...ADMIN_ASSIGNABLE_ROLES, 'plus']
 // Admin: add a role to a user
 app.post('/api/admin/roles/add', async (req, res) => {
   try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
@@ -15968,13 +15945,10 @@ app.options('/api/admin/roles/add', (_req, res) => {
 // Admin: remove a role from a user
 app.post('/api/admin/roles/remove', async (req, res) => {
   try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
@@ -16347,14 +16321,10 @@ app.post('/api/recaptcha/verify', async (req, res) => {
 // Admin: ban a user by email, record IPs, and attempt account deletion
 app.post('/api/admin/ban', async (req, res) => {
   try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    // Require admin with robust detection
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const { email: rawEmail, reason: rawReason } = req.body || {}
@@ -17253,13 +17223,6 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
   try {
     const uid = await ensureAdmin(req, res)
     if (!uid) return
-
-    // Require admin (same policy as other admin endpoints)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
