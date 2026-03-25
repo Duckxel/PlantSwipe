@@ -100,6 +100,8 @@ function mapDbRowToPlant(
   const primaryImage = images.find((i) => i.use === 'primary')?.link
     || images.find((i) => i.use === 'discovery')?.link
     || images[0]?.link
+    || (typeof basePlant.image_url === 'string' ? basePlant.image_url : undefined)
+    || (typeof basePlant.image === 'string' ? basePlant.image : undefined)
 
   const plant: Plant = {
     id: String(basePlant.id),
