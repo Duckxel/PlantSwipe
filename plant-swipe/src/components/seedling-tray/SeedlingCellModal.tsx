@@ -165,45 +165,60 @@ export const SeedlingCellModal: React.FC<SeedlingCellModalProps> = ({
             <Label className="text-xs text-muted-foreground mb-1.5 block">
               {t("seedlingTray.plantSpecies", "Plant species")}
             </Label>
-            <SearchInput
-              variant="sm"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onClear={() => setSearchQuery("")}
-              placeholder={t("seedlingTray.searchPlant", "Search plants...")}
-              wrapperClassName="mb-2"
-            />
-            <div className="max-h-32 overflow-y-auto border border-border rounded-xl">
-              {filteredPlants.map((p, i) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => handleSelectPlant(p.id)}
-                  className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors cursor-pointer ${
-                    i > 0 ? "border-t border-border" : ""
-                  } ${plantId === p.id ? "bg-muted font-medium" : ""}`}
-                >
-                  {p.name || p.id}
-                </button>
-              ))}
-              {filteredPlants.length === 0 && (
-                <div className="px-3 py-2 text-sm text-muted-foreground text-center">
-                  {t("seedlingTray.noPlantsFound", "No plants found")}
-                </div>
-              )}
-            </div>
-            {onAddNewPlant && (
+            {plantId && selectedPlant ? (
+              /* Selected plant chip — click to change */
               <button
                 type="button"
-                onClick={() => {
-                  onClose();
-                  onAddNewPlant();
-                }}
-                className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-2 border-dashed border-stone-300 dark:border-stone-600 text-sm text-muted-foreground hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                onClick={() => handleSelectPlant(null)}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl border border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-sm text-emerald-700 dark:text-emerald-300 font-medium transition-colors cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/50"
               >
-                <Plus className="h-3.5 w-3.5" />
-                {t("seedlingTray.addNewPlant", "Add New Plant")}
+                <span>{selectedPlant.name || selectedPlant.id}</span>
+                <span className="text-xs text-muted-foreground">{t("seedlingTray.changePlant", "Change")}</span>
               </button>
+            ) : (
+              /* Search + plant list */
+              <>
+                <SearchInput
+                  variant="sm"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onClear={() => setSearchQuery("")}
+                  placeholder={t("seedlingTray.searchPlant", "Search plants...")}
+                  wrapperClassName="mb-2"
+                />
+                <div className="max-h-32 overflow-y-auto border border-border rounded-xl">
+                  {filteredPlants.map((p, i) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => handleSelectPlant(p.id)}
+                      className={`w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors cursor-pointer ${
+                        i > 0 ? "border-t border-border" : ""
+                      }`}
+                    >
+                      {p.name || p.id}
+                    </button>
+                  ))}
+                  {filteredPlants.length === 0 && (
+                    <div className="px-3 py-2 text-sm text-muted-foreground text-center">
+                      {t("seedlingTray.noPlantsFound", "No plants found")}
+                    </div>
+                  )}
+                </div>
+                {onAddNewPlant && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onAddNewPlant();
+                    }}
+                    className="mt-2 w-full flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl border-2 border-dashed border-stone-300 dark:border-stone-600 text-sm text-muted-foreground hover:border-emerald-400 hover:text-emerald-600 dark:hover:border-emerald-600 dark:hover:text-emerald-400 transition-colors cursor-pointer"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    {t("seedlingTray.addNewPlant", "Add New Plant")}
+                  </button>
+                )}
+              </>
             )}
           </div>
 

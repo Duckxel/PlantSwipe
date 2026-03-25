@@ -1495,6 +1495,26 @@ export async function createDefaultWateringTask(params: { gardenId: string; gard
   return String(data)
 }
 
+/** Create a daily watering task for seedling gardens (required_count=1, repeat every 1 day). */
+export async function createSeedlingWateringTask(params: { gardenId: string; gardenPlantId: string }): Promise<string> {
+  const { gardenId, gardenPlantId } = params
+  const { data, error } = await supabase
+    .from('garden_plant_tasks')
+    .insert({
+      garden_id: gardenId,
+      garden_plant_id: gardenPlantId,
+      type: 'water',
+      schedule_kind: 'repeat_duration',
+      interval_amount: 1,
+      interval_unit: 'day',
+      required_count: 1,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return data.id
+}
+
 export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantId: string; type: TaskType; customName?: string | null; kind: TaskScheduleKind; dueAt?: string | null; intervalAmount?: number | null; intervalUnit?: TaskUnit | null; requiredCount?: number | null }): Promise<string> {
   const { gardenId, gardenPlantId, type, customName = null, kind, dueAt = null, intervalAmount = null, intervalUnit = null, requiredCount = 1 } = params
   const { data, error } = await supabase.rpc('upsert_one_time_task', {

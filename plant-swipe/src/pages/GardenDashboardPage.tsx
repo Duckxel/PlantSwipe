@@ -91,7 +91,7 @@ import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdo
 import { AphyliaChat } from "@/components/aphylia";
 import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, upsertOneTimeTask } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createSeedlingWateringTask } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -166,6 +166,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [seedlingSelectMode, setSeedlingSelectMode] = React.useState(false);
   const [seedlingSelected, setSeedlingSelected] = React.useState<Set<number>>(new Set());
   const [seedlingModal, setSeedlingModal] = React.useState<{ type: "single" | "multi"; index: number; indices?: Set<number> } | null>(null);
+  const pendingSeedlingModalRef = React.useRef<typeof seedlingModal>(null);
   const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
   // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -1780,7 +1781,7 @@ export const GardenDashboardPage: React.FC = () => {
         try {
           await Promise.all(
             plantsWithoutTasks.map((gp) =>
-              upsertOneTimeTask({ gardenId: id, gardenPlantId: gp.id, type: "water", kind: "repeat_duration", intervalAmount: 1, intervalUnit: "day", requiredCount: 1 })
+              createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id })
             )
           );
           if (!cancelled) {
@@ -2467,13 +2468,20 @@ export const GardenDashboardPage: React.FC = () => {
       // Seedling gardens: auto-create daily watering task; normal gardens: open task editor
       if (garden?.gardenType === "seedling") {
         try {
-          await upsertOneTimeTask({ gardenId: id, gardenPlantId: gp.id, type: "water", kind: "repeat_duration", intervalAmount: 1, intervalUnit: "day", requiredCount: 1 });
+          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
           // Refresh tasks so occurrences appear immediately
           await load({ silent: true, preserveHeavy: true });
           await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
           try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
         } catch (taskErr: unknown) {
           console.warn("Failed to auto-create seedling watering task:", taskErr);
+        }
+        // Reopen cell modal if "Add New Plant" was used from within a cell
+        if (pendingSeedlingModalRef.current) {
+          const saved = pendingSeedlingModalRef.current;
+          pendingSeedlingModalRef.current = null;
+          // Delay slightly so cells/plants reload first
+          setTimeout(() => setSeedlingModal(saved), 300);
         }
       } else {
         setPendingGardenPlantId(gp.id);
@@ -3578,6 +3586,7 @@ export const GardenDashboardPage: React.FC = () => {
                             setTransplantCell(cell);
                           }}
                           onAddNewPlant={() => {
+                            pendingSeedlingModalRef.current = seedlingModal;
                             setSeedlingModal(null);
                             setAddOpen(true);
                           }}
