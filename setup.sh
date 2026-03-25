@@ -905,7 +905,7 @@ ensure_capacitor_config() {
   tmp="$(mktemp)"
   cat >"$tmp" <<'CAPJSON'
 {
-	"appId": "app.aphylia.mobile",
+	"appId": "app.aphylia",
 	"appName": "Aphylia",
 	"webDir": "dist",
 	"ios": {

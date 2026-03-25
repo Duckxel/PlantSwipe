@@ -3,7 +3,7 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAMID.app.aphylia.mobile",
+        "appID": "TEAMID.app.aphylia",
         "paths": [
           "/",
           "/password-change",
@@ -18,7 +18,7 @@
   },
   "webcredentials": {
     "apps": [
-      "TEAMID.app.aphylia.mobile"
+      "TEAMID.app.aphylia"
     ]
   }
 }

@@ -6,7 +6,7 @@
     ],
     "target": {
       "namespace": "android_app",
-      "package_name": "app.aphylia.mobile",
+      "package_name": "app.aphylia",
       "sha256_cert_fingerprints": [
         "YOUR_RELEASE_SHA256"
       ]

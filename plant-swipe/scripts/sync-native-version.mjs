@@ -47,21 +47,8 @@ function buildAllowNavigationHosts() {
       }
     }
   }
-  if (!hosts.size && existsSync(join(root, '.env'))) {
-    try {
-      const dot = readFileSync(join(root, '.env'), 'utf8')
-      for (const line of dot.split('\n')) {
-        const m = line.match(/^\s*VITE_SUPABASE_URL\s*=\s*(.+)$/)
-        if (m) {
-          const v = m[1].trim().replace(/^["']|["']$/g, '')
-          const h = hostnameFromUrl(v)
-          if (h) hosts.add(h)
-        }
-      }
-    } catch {
-      /* ignore */
-    }
-  }
+  // Intentionally do not read .env here — keeps committed capacitor.config.json free of
+  // developer-specific hosts; set VITE_SUPABASE_URL / VITE_APP_UNIVERSAL_LINK_ORIGIN in the shell for cap sync.
   return [...hosts].sort()
 }
 
@@ -131,7 +118,7 @@ const capJsonPath = join(root, 'capacitor.config.json')
 /** Keep Capacitor config JSON aligned with package.json version (CLI loads JSON reliably with "type": "module"). */
 function syncCapacitorConfigJson() {
   const base = {
-    appId: 'app.aphylia.mobile',
+    appId: 'app.aphylia',
     appName: 'Aphylia',
     webDir: 'dist',
   }

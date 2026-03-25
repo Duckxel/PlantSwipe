@@ -22,6 +22,7 @@
     "sync:cap": "npm run cap:assert-store-bundle && npm run version:sync-native && npx cap sync",
     "build:cap": "npm run build:web:native && npm run sync:cap",
     "cap:ci:sync": "node scripts/cap-ci-sync.mjs",
+    "cap:assets": "npx @capacitor/assets generate --android --ios --iconBackgroundColor '#052e16' --iconBackgroundColorDark '#252526' --splashBackgroundColor '#052e16' --splashBackgroundColorDark '#252526'",
     "open:android": "npx cap open android",
     "open:ios": "npx cap open ios",
     "build:android:debug": "npm run build:cap && cd android && ./gradlew assembleDebug",
@@ -35,9 +36,8 @@
     "@capacitor/android": "^8.2.0",
     "@capacitor/app": "^8.0.1",
     "@capacitor/core": "^8.2.0",
-    "@capacitor/haptics": "^8.0.1",
     "@capacitor/ios": "^8.2.0",
-    "@capacitor/share": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.1",
     "@floating-ui/react": "^0.27.16",
     "@google-analytics/data": "^5.2.1",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -104,6 +104,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.2.0",
     "@eslint/js": "^9.33.0",
     "@types/canvas-confetti": "^1.9.0",

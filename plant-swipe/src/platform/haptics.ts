@@ -1,43 +1,16 @@
-import { Haptics, ImpactStyle } from '@capacitor/haptics'
-import { isNativeCapacitor } from '@/platform/runtime'
-
-type TapStyle = 'light' | 'medium' | 'heavy'
-
-const impactMap: Record<TapStyle, ImpactStyle> = {
-  light: ImpactStyle.Light,
-  medium: ImpactStyle.Medium,
-  heavy: ImpactStyle.Heavy,
-}
-
 /**
- * Haptics: Web Vibration API first; Capacitor Haptics on native when vibration is unavailable.
- * Never throws — safe to call from UI handlers.
+ * Haptics: Web Vibration API only. (Capacitor Haptics plugin removed to keep native surface minimal.)
  */
 export function isHapticsAvailable(): boolean {
-  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') return true
-  return isNativeCapacitor()
+  return typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function'
 }
 
-async function tryCapacitorImpact(style: TapStyle): Promise<boolean> {
-  if (!isNativeCapacitor()) return false
-  try {
-    await Haptics.impact({ style: impactMap[style] })
-    return true
-  } catch {
-    return false
-  }
-}
-
-/** Short vibration / haptic tap. Duration in ms for web `vibrate`. */
+/** Short vibration on supported engines; no-op where vibrate is missing. */
 export async function platformHapticTap(durationMs = 50): Promise<void> {
-  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
-    try {
-      navigator.vibrate(durationMs)
-      return
-    } catch {
-      /* fall through */
-    }
+  if (typeof navigator === 'undefined' || typeof navigator.vibrate !== 'function') return
+  try {
+    navigator.vibrate(durationMs)
+  } catch {
+    /* ignore */
   }
-  const style: TapStyle = durationMs <= 15 ? 'light' : durationMs <= 40 ? 'medium' : 'heavy'
-  await tryCapacitorImpact(style)
 }

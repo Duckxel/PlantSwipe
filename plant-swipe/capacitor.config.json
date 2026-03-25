@@ -1,10 +1,23 @@
 {
-	"appId": "app.aphylia.mobile",
+	"appId": "app.aphylia",
 	"appName": "Aphylia",
 	"webDir": "dist",
 	"version": "4.13.2",
+	"backgroundColor": "#052e16",
+	"android": {
+		"allowMixedContent": false,
+		"backgroundColor": "#052e16"
+	},
 	"ios": {
 		"contentInset": "always",
-		"allowsLinkPreview": false
+		"allowsLinkPreview": false,
+		"backgroundColor": "#052e16",
+		"preferredContentMode": "mobile"
+	},
+	"plugins": {
+		"StatusBar": {
+			"style": "DEFAULT",
+			"backgroundColor": "#052e16"
+		}
 	}
 }

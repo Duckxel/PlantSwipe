@@ -1,7 +1,3 @@
-import { Capacitor } from '@capacitor/core'
-import { Share } from '@capacitor/share'
-import { isNativeCapacitor } from '@/platform/runtime'
-
 export type PlatformSharePayload = {
   title?: string
   text?: string
@@ -26,7 +22,7 @@ function canShareFiles(files: File[]): boolean {
 }
 
 /**
- * Share sheet: Web Share API first; Capacitor Share on native when web fails or is absent; clipboard last.
+ * Share sheet: Web Share API when available; clipboard fallback. (No Capacitor Share plugin.)
  */
 export async function platformShare(payload: PlatformSharePayload): Promise<PlatformShareResult> {
   const { title, text, url, files } = payload
@@ -51,22 +47,8 @@ export async function platformShare(payload: PlatformSharePayload): Promise<Plat
     }
   }
 
-  if (isNativeCapacitor() && (url || title || text)) {
-    try {
-      await Share.share({
-        title,
-        text: text ?? undefined,
-        url,
-        dialogTitle: title,
-      })
-      return 'shared'
-    } catch {
-      /* clipboard below */
-    }
-  }
-
   const clip = url ?? text
-  if (clip && typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+  if (clip && typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
     try {
       await navigator.clipboard.writeText(clip)
       return 'copied'
@@ -83,5 +65,5 @@ export function isPlatformShareSupported(): boolean {
   if (hasWebShare()) return true
   if (typeof navigator !== 'undefined' && navigator.clipboard && typeof navigator.clipboard.writeText === 'function')
     return true
-  return Capacitor.isNativePlatform()
+  return false
 }
