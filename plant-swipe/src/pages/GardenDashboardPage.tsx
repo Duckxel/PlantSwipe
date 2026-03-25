@@ -1765,6 +1765,39 @@ export const GardenDashboardPage: React.FC = () => {
       loadSeedlingCells();
     }, [loadSeedlingCells]);
 
+    // Seedling gardens: auto-create daily watering tasks for plants that don't have any
+    const seedlingTaskSyncRef = React.useRef<Set<string>>(new Set());
+    React.useEffect(() => {
+      if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      let cancelled = false;
+      (async () => {
+        const plantsWithoutTasks = plants.filter(
+          (gp) => (taskCountsByPlant[gp.id] || 0) === 0 && !seedlingTaskSyncRef.current.has(gp.id)
+        );
+        if (plantsWithoutTasks.length === 0) return;
+        // Mark as syncing to prevent duplicate calls
+        for (const gp of plantsWithoutTasks) seedlingTaskSyncRef.current.add(gp.id);
+        try {
+          await Promise.all(
+            plantsWithoutTasks.map((gp) =>
+              createDefaultWateringTask({ gardenId: id, gardenPlantId: gp.id, unit: "day" })
+            )
+          );
+          if (!cancelled) {
+            // Refresh tasks so occurrences appear
+            await load({ silent: true, preserveHeavy: true });
+            await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+            try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+          }
+        } catch (err) {
+          console.warn("Failed to auto-create seedling watering tasks:", err);
+          // Remove from sync set so it can retry
+          for (const gp of plantsWithoutTasks) seedlingTaskSyncRef.current.delete(gp.id);
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [id, garden?.gardenType, plants, taskCountsByPlant, load, loadHeavyForCurrentTab, serverToday]);
+
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
       if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
