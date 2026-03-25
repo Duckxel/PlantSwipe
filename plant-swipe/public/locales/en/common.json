@@ -2674,6 +2674,8 @@
     "plantsOnHand": "Plants on hand",
     "addNew": "Add",
     "inCells": "in cells",
+    "addNewPlant": "Add New Plant",
+    "noPlantsFound": "No plants found",
     "tasks": {
       "dailyWatering": "Daily Watering",
       "noPlants": "No seedlings planted yet. Add plants to cells to start tracking.",

@@ -3567,6 +3567,10 @@ export const GardenDashboardPage: React.FC = () => {
                             setSeedlingModal(null);
                             setTransplantCell(cell);
                           }}
+                          onAddNewPlant={() => {
+                            setSeedlingModal(null);
+                            setAddOpen(true);
+                          }}
                         />
                       )}
 
