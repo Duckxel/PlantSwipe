@@ -10,6 +10,11 @@ BEGIN
 EXCEPTION WHEN others THEN NULL;
 END $$;
 
+-- 1b. Update living_space CHECK constraint to include 'seedling'
+ALTER TABLE public.gardens DROP CONSTRAINT IF EXISTS gardens_living_space_values;
+ALTER TABLE public.gardens ADD CONSTRAINT gardens_living_space_values
+  CHECK (living_space <@ ARRAY['indoor','outdoor','terrarium','greenhouse','seedling']::text[]);
+
 -- 2. Add tray dimension columns to gardens (only used when garden_type = 'seedling')
 ALTER TABLE IF EXISTS public.gardens
   ADD COLUMN IF NOT EXISTS tray_rows INTEGER,

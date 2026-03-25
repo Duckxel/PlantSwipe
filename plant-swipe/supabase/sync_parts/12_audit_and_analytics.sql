@@ -785,7 +785,7 @@ begin
   ) then
     alter table public.gardens
       add constraint gardens_living_space_values
-      check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']::text[]);
+      check (living_space <@ array['indoor','outdoor','terrarium','greenhouse','seedling']::text[]);
   end if;
 end $$;
 
