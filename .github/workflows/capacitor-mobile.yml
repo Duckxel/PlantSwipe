@@ -62,6 +62,8 @@ jobs:
           SKIP_SITEMAP_GENERATION: '1'
 
       - name: Capacitor sync (no IDE)
+        env:
+          NATIVE_BUILD_NUMBER: ${{ github.run_number }}
         run: bun run cap:ci:sync
 
   android-debug:
@@ -122,6 +124,7 @@ jobs:
         run: bun run build:cap
         env:
           SKIP_SITEMAP_GENERATION: '1'
+          NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 
       - uses: android-actions/setup-android@v3
 
@@ -186,6 +189,7 @@ jobs:
         run: bun run build:cap
         env:
           SKIP_SITEMAP_GENERATION: '1'
+          NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 
       - name: Install CocoaPods
         run: gem install cocoapods --no-document
