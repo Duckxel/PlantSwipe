@@ -32,7 +32,9 @@
   "dependencies": {
     "@capacitor/android": "^8.2.0",
     "@capacitor/core": "^8.2.0",
+    "@capacitor/haptics": "^8.0.1",
     "@capacitor/ios": "^8.2.0",
+    "@capacitor/share": "^8.0.1",
     "@floating-ui/react": "^0.27.16",
     "@google-analytics/data": "^5.2.1",
     "@radix-ui/react-dialog": "^1.1.15",

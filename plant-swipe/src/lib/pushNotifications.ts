@@ -1,4 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
+import { isPlatformWebPushSupported } from '@/platform/push'
 
 function getVapidPublicKey(): string | null {
   if (typeof window !== 'undefined') {
@@ -65,7 +66,7 @@ async function syncSubscriptionWithServer(subscription: PushSubscription): Promi
 }
 
 export async function registerPushSubscription(force = false): Promise<PushSubscription> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+  if (typeof window === 'undefined' || !isPlatformWebPushSupported()) {
     throw new Error('Push notifications are not supported in this browser')
   }
   const permissionGranted =
@@ -97,7 +98,7 @@ export async function registerPushSubscription(force = false): Promise<PushSubsc
 }
 
 export async function removePushSubscription(): Promise<void> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
+  if (typeof window === 'undefined' || !isPlatformWebPushSupported()) return
   const registration = await navigator.serviceWorker.ready
   const subscription = await registration.pushManager.getSubscription()
   const endpoint = subscription?.endpoint
@@ -119,7 +120,7 @@ export async function removePushSubscription(): Promise<void> {
 }
 
 export async function getExistingSubscription(): Promise<PushSubscription | null> {
-  if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return null
+  if (typeof window === 'undefined' || !isPlatformWebPushSupported()) return null
   try {
     const registration = await navigator.serviceWorker.ready
     return registration.pushManager.getSubscription()
@@ -160,7 +161,7 @@ export async function getPushDebugInfo(): Promise<PushDebugInfo> {
     browserSupport: {
       notifications: typeof Notification !== 'undefined',
       serviceWorker: typeof navigator !== 'undefined' && 'serviceWorker' in navigator,
-      pushManager: typeof window !== 'undefined' && 'PushManager' in window
+      pushManager: isPlatformWebPushSupported(),
     },
     permission: typeof Notification !== 'undefined' ? Notification.permission : 'unsupported',
     hasSubscription: false,
