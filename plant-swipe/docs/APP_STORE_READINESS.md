@@ -10,7 +10,7 @@ Internal checklist for a **fully functional v1 without live updates**. Not legal
 ## 2. Not a “thin website wrapper”
 
 - **Mobile-first UI:** tab bar (`MobileNavBar`), touch targets, responsive layouts, lazy routes.
-- **Native feel:** `@capacitor/haptics` + Web Share via `src/platform/`; **`ios.contentInset: "always"`** in `capacitor.config.json` for safe-area-aware scrolling; **`allowsLinkPreview: false`** to reduce “browser” affordances.
+- **Native feel:** `src/platform/` (web Share / vibrate where available); **`@capacitor/status-bar`** for shell chrome; **`ios.contentInset: "always"`** in `capacitor.config.json` for safe-area-aware scrolling; **`allowsLinkPreview: false`** to reduce “browser” affordances.
 - **Safe areas:** `viewport-fit=cover` in `index.html`; global **`safe-area-top` / `safe-area-bottom`** utilities in `index.scss`; **`body.mobile-nav-mounted`** bottom padding on small screens so content clears the fixed nav + home indicator.
 - **Continue to improve:** audit any screen that still feels desktop-first; prefer bottom sheets and full-width mobile patterns.
 
@@ -41,7 +41,7 @@ Document in App Store Connect (and your privacy policy) data linked to the user,
 | **Sentry** | Diagnostics, possibly device/usage (configure scrubbing; disclose) |
 | **Google Analytics** (if enabled after consent) | Usage, identifiers (disclose; ATT if applicable) |
 | **Google reCAPTCHA** | Fraud prevention, device signals |
-| **@capacitor/haptics, @capacitor/share** | No personal data by themselves |
+| **@capacitor/app, @capacitor/status-bar** | No personal data by themselves |
 
 Re-run this table whenever you add an SDK.
 
@@ -70,9 +70,11 @@ Re-run this table whenever you add an SDK.
 ```bash
 cd plant-swipe
 bun run build:web
-bun run sync:cap
+bun run build:cap
 # Open Xcode / Android Studio, set signing, verify Info.plist strings, run on device
 ```
+
+For a concise review matrix, see **`docs/APP_STORE_REVIEW_CHECKLIST.md`**. Platform build steps: **`docs/BUILD_ANDROID.md`**, **`docs/BUILD_IOS.md`**.
 
 ---
 

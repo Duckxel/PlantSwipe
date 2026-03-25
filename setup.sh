@@ -930,14 +930,14 @@ install_capacitor_npm_packages_if_missing() {
   grep -q '"@capacitor/cli"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
   grep -q '"@capacitor/android"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
   grep -q '"@capacitor/ios"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-  grep -q '"@capacitor/haptics"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
-  grep -q '"@capacitor/share"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/app"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/status-bar"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
   if [[ "$need_any" != "true" ]]; then
     log "Capacitor packages already declared in package.json."
     return 0
   fi
   log "Adding Capacitor packages to package.json…"
-  setup_run_as_node_user "$bun_path" "" "bun add @capacitor/core @capacitor/android @capacitor/ios @capacitor/haptics @capacitor/share && bun add -d @capacitor/cli"
+  setup_run_as_node_user "$bun_path" "" "bun add @capacitor/core @capacitor/android @capacitor/ios @capacitor/app @capacitor/status-bar && bun add -d @capacitor/cli"
 }
 
 setup_resolve_android_sdk_root() {
