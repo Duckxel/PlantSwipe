@@ -2,5 +2,9 @@
 	"appId": "app.aphylia.mobile",
 	"appName": "Aphylia",
 	"webDir": "dist",
-	"version": "4.13.2"
+	"version": "4.13.2",
+	"ios": {
+		"contentInset": "always",
+		"allowsLinkPreview": false
+	}
 }

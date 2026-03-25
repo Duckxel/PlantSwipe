@@ -907,7 +907,11 @@ ensure_capacitor_config() {
 {
 	"appId": "app.aphylia.mobile",
 	"appName": "Aphylia",
-	"webDir": "dist"
+	"webDir": "dist",
+	"ios": {
+		"contentInset": "always",
+		"allowsLinkPreview": false
+	}
 }
 CAPJSON
   if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then

@@ -100,6 +100,13 @@ function syncCapacitorConfigJson() {
     }
   }
   cap.version = versionName
+  // iOS: respect safe-area in WKWebView scroll view (notch / home indicator) for first-class native feel
+  const iosPrev = cap.ios && typeof cap.ios === 'object' ? cap.ios : {}
+  cap.ios = {
+    ...iosPrev,
+    contentInset: iosPrev.contentInset ?? 'always',
+    allowsLinkPreview: iosPrev.allowsLinkPreview ?? false,
+  }
   if (cap.server && typeof cap.server === 'object' && cap.server.url) {
     delete cap.server.url
     if (Object.keys(cap.server).length === 0) delete cap.server
