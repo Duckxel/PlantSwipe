@@ -2673,6 +2673,7 @@
     "nickname": "Nickname",
     "plantsOnHand": "Plants on hand",
     "addNew": "Add",
+    "inCells": "in cells",
     "tasks": {
       "dailyWatering": "Daily Watering",
       "noPlants": "No seedlings planted yet. Add plants to cells to start tracking.",

@@ -177,6 +177,17 @@ export const GardenDashboardPage: React.FC = () => {
     }
     return m;
   }, [plants]);
+  // Compute cell count per plantId for seedling gardens (used in Plants tab)
+  const seedlingCellCountByPlant = React.useMemo(() => {
+    if (!garden || garden.gardenType !== 'seedling') return {};
+    const counts: Record<string, number> = {};
+    for (const cell of seedlingCells) {
+      if (cell.plantId) {
+        counts[cell.plantId] = (counts[cell.plantId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [seedlingCells, garden]);
   // Beginner roadmap flags
   const [hasWaterTask, setHasWaterTask] = React.useState(false);
   const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
@@ -3139,7 +3150,10 @@ export const GardenDashboardPage: React.FC = () => {
                               )}
                               <div className="flex flex-wrap gap-1.5 mt-1.5">
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                  {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
+                                  {garden?.gardenType === "seedling"
+                                    ? `${seedlingCellCountByPlant[gp.plantId] || 0} ${t("seedlingTray.inCells", "in cells")}`
+                                    : `${Number(gp.plantsOnHand ?? 0)} ${t("gardenDashboard.plantsSection.onHand")}`
+                                  }
                                 </span>
                                 {garden?.gardenType !== "seedling" && (
                                   <>
@@ -3217,6 +3231,7 @@ export const GardenDashboardPage: React.FC = () => {
                                   onChanged={load}
                                   serverToday={serverToday}
                                   actorColorCss={getActorColorCss()}
+                                  gardenType={garden?.gardenType}
                                 />
                                 <Button
                                   variant="secondary"
@@ -6306,6 +6321,7 @@ function EditPlantButton({
   onChanged,
   serverToday,
   actorColorCss,
+  gardenType,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant with plant relation
   gp: any;
@@ -6313,6 +6329,7 @@ function EditPlantButton({
   onChanged: () => Promise<void>;
   serverToday: string | null;
   actorColorCss?: string | null;
+  gardenType?: string;
 }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
@@ -6456,6 +6473,7 @@ function EditPlantButton({
                 )}
               />
             </div>
+            {gardenType !== "seedling" && (
             <div>
               <label className="text-sm font-medium">
                 {t("gardenDashboard.plantsSection.numberOfPlants")}
@@ -6467,7 +6485,8 @@ function EditPlantButton({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(Number(e.target.value))}
               />
             </div>
-            
+            )}
+
             {/* Health Status Selector */}
             <div>
               <div className="flex items-center justify-between gap-3 mb-2">

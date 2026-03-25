@@ -2673,6 +2673,7 @@
     "nickname": "Surnom",
     "plantsOnHand": "Plants en main",
     "addNew": "Ajouter",
+    "inCells": "dans les cellules",
     "tasks": {
       "dailyWatering": "Arrosage quotidien",
       "noPlants": "Aucun semis planté. Ajoutez des plantes aux cellules pour commencer le suivi.",
