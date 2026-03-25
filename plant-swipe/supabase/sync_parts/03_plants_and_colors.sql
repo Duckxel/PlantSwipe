@@ -1430,6 +1430,7 @@ do $$ declare
     'climate',
     'season',
     'utility',
+    'vegetable',
     'edible_part',
     'thorny',
     'toxicity_human',
