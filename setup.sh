@@ -14,6 +14,9 @@ set -euo pipefail
 #   - plant-swipe/.env and optionally plant-swipe/.env.server
 #   - /etc/admin-api/env (already created with placeholders)
 # Then use scripts/refresh-plant-swipe.sh to update + restart.
+#
+# Capacitor (optional): installs @capacitor/* if missing, ensures capacitor.config.ts,
+# and runs `bunx cap sync` when CAPACITOR_SYNC=1 (after web build, requires dist/index.html).
 
 trap 'echo "[ERROR] Command failed at line $LINENO" >&2' ERR
 
@@ -64,6 +67,9 @@ else
 fi
 
 PWA_BASE_PATH="${PWA_BASE_PATH:-${VITE_APP_BASE_PATH:-/}}"
+# When set to 1/y/yes/on/true, runs `cap sync` after the web build (creates/updates android/ and ios/).
+# Default off so production server setup does not generate native projects unless intended.
+CAPACITOR_SYNC="${CAPACITOR_SYNC:-0}"
 
 SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
@@ -846,6 +852,134 @@ verify_sentry_sitemap_config() {
 verify_sentry_admin_api_config
 verify_sentry_sitemap_config
 
+# --- Capacitor (native shell) — dependencies + config; optional sync ---
+resolve_bun_path_for_service_user() {
+  local svc_home
+  svc_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+  if [[ -x "$svc_home/.bun/bin/bun" ]]; then
+    echo "$svc_home/.bun/bin"
+  elif [[ -x "/usr/local/bin/bun" ]]; then
+    echo "/usr/local/bin"
+  elif [[ -x "$HOME/.bun/bin/bun" ]]; then
+    echo "$HOME/.bun/bin"
+  else
+    echo ""
+  fi
+}
+
+install_capacitor_dependencies() {
+  local bun_path
+  bun_path="$(resolve_bun_path_for_service_user)"
+  if [[ -z "$bun_path" || ! -x "$bun_path/bun" ]]; then
+    log "[WARN] Bun not found; skipping Capacitor dependency install."
+    return 1
+  fi
+
+  local need_any=false
+  if [[ ! -f "$NODE_DIR/package.json" ]]; then
+    log "[WARN] package.json missing at $NODE_DIR; skipping Capacitor dependency install."
+    return 1
+  fi
+  grep -q '"@capacitor/core"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/cli"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/android"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+  grep -q '"@capacitor/ios"' "$NODE_DIR/package.json" 2>/dev/null || need_any=true
+
+  if [[ "$need_any" != "true" ]]; then
+    log "Capacitor packages already listed in package.json."
+    return 0
+  fi
+
+  log "Adding Capacitor packages (@capacitor/core, cli, android, ios)…"
+  local cap_deps=("@capacitor/core" "@capacitor/android" "@capacitor/ios")
+  local cap_dev=("@capacitor/cli")
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}" 2>&1; then
+      log "Capacitor packages installed."
+    else
+      log "[WARN] Failed to install Capacitor packages. Run: cd $NODE_DIR && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}"
+      return 1
+    fi
+  else
+    if bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bun add ${cap_deps[*]} && bun add -d ${cap_dev[*]}" 2>&1; then
+      log "Capacitor packages installed."
+    else
+      log "[WARN] Failed to install Capacitor packages."
+      return 1
+    fi
+  fi
+}
+
+ensure_capacitor_config() {
+  local cfg_ts="$NODE_DIR/capacitor.config.ts"
+  local cfg_js="$NODE_DIR/capacitor.config.json"
+  if [[ -f "$cfg_ts" ]]; then
+    log "Capacitor config present (capacitor.config.ts)."
+    return 0
+  fi
+  if [[ -f "$cfg_js" ]]; then
+    log "Capacitor config present (capacitor.config.json)."
+    return 0
+  fi
+  log "Creating default capacitor.config.ts (webDir=dist)…"
+  local tmp
+  tmp="$(mktemp)"
+  cat >"$tmp" <<'CAPCFG'
+import type { CapacitorConfig } from '@capacitor/cli'
+
+const config: CapacitorConfig = {
+  appId: 'app.aphylia.mobile',
+  appName: 'Aphylia',
+  webDir: 'dist',
+}
+
+export default config
+CAPCFG
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    $SUDO install -m 0644 -o "$SERVICE_USER" -g "$SERVICE_USER" "$tmp" "$cfg_ts"
+  else
+    install -m 0644 "$tmp" "$cfg_ts"
+  fi
+  rm -f "$tmp"
+  log "Wrote $cfg_ts"
+}
+
+run_capacitor_sync_if_requested() {
+  local flag
+  flag="$(printf '%s' "${CAPACITOR_SYNC:-}" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$flag" != "1" && "$flag" != "y" && "$flag" != "yes" && "$flag" != "true" && "$flag" != "on" ]]; then
+    log "[INFO] Capacitor sync skipped (set CAPACITOR_SYNC=1 to run after build)."
+    return 0
+  fi
+  if [[ ! -f "$NODE_DIR/dist/index.html" ]]; then
+    log "[WARN] $NODE_DIR/dist/index.html missing; skipping cap sync. Build the web app first."
+    return 0
+  fi
+  local bun_path
+  bun_path="$(resolve_bun_path_for_service_user)"
+  if [[ -z "$bun_path" ]]; then
+    log "[WARN] Bun not found; skipping cap sync."
+    return 1
+  fi
+  log "Running Capacitor sync (CAPACITOR_SYNC enabled)…"
+  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+    if sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bunx cap sync" 2>&1; then
+      log "cap sync completed."
+    else
+      log "[WARN] cap sync failed. Run locally: cd $NODE_DIR && bun run cap:sync"
+      return 1
+    fi
+  else
+    bash -lc "export PATH='$bun_path:\$PATH' && cd '$NODE_DIR' && bunx cap sync" 2>&1 || {
+      log "[WARN] cap sync failed."
+      return 1
+    }
+  fi
+}
+
+install_capacitor_dependencies || true
+ensure_capacitor_config
+
 # Build frontend and API bundle using Bun
 # Delegate to refresh script if available (avoids code duplication and uses optimized build)
 REFRESH_SCRIPT="$REPO_DIR/scripts/refresh-plant-swipe.sh"
@@ -955,6 +1089,8 @@ for gen_file in "$NODE_DIR/public/sitemap.xml" "$NODE_DIR/public/llms.txt"; do
   $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$gen_file" 2>/dev/null || true
   $SUDO chmod 0644 "$gen_file" 2>/dev/null || true
 done
+
+run_capacitor_sync_if_requested || true
 
 # Ensure generated email template (.mjs) and scripts are writable/executable by service user
 # The sync-email-template.sh script runs as www-data during refresh and writes to src/lib/
