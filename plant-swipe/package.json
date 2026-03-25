@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:web": "tsc -b && vite build",
     "build:low-mem": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
@@ -14,7 +15,18 @@
     "generate:sitemap": "bun scripts/generate-sitemap.js",
     "sync-email-template": "bash scripts/sync-email-template.sh",
     "cap": "cap",
-    "cap:sync": "cap sync"
+    "cap:sync": "cap sync",
+    "sync:cap": "npx cap sync",
+    "build:cap": "npm run build:web && npx cap sync",
+    "cap:ci:sync": "node scripts/cap-ci-sync.mjs",
+    "open:android": "npx cap open android",
+    "open:ios": "npx cap open ios",
+    "build:android:debug": "npm run build:cap && cd android && ./gradlew assembleDebug",
+    "build:android:release": "npm run build:cap && cd android && ./gradlew assembleRelease",
+    "build:android": "npm run build:android:release",
+    "build:ios:debug": "npm run build:cap && bash scripts/run-on-macos.sh npx cap build ios --configuration Debug --xcode-export-method debugging",
+    "build:ios:release": "npm run build:cap && bash scripts/run-on-macos.sh npx cap build ios",
+    "build:ios": "npm run build:ios:release"
   },
   "dependencies": {
     "@capacitor/android": "^8.2.0",
