@@ -772,7 +772,7 @@ alter table if exists public.gardens add column if not exists preferred_language
 alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
 
 -- Migration: Add garden_type column to gardens (default 'default')
-alter table if exists public.gardens add column if not exists garden_type text not null default 'default' check (garden_type in ('default', 'beginners'));
+alter table if exists public.gardens add column if not exists garden_type text not null default 'default' check (garden_type in ('default', 'beginners', 'seedling'));
 
 -- Migration: Add living_space to gardens (mirrors plant LivingSpace values)
 alter table if exists public.gardens
@@ -963,6 +963,61 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.top_viewed_plants(integer) TO anon, authenticated;
+
+-- ========== Seedling Tray ==========
+
+-- Tray dimension columns on gardens (only used when garden_type = 'seedling')
+alter table if exists public.gardens add column if not exists tray_rows integer;
+alter table if exists public.gardens add column if not exists tray_cols integer;
+
+-- Seedling tray cells table
+create table if not exists public.seedling_tray_cells (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  position integer not null,
+  plant_id text references public.plants(id) on delete set null,
+  stage text not null default 'empty'
+    check (stage in ('empty', 'sown', 'germinating', 'sprouted', 'ready')),
+  sow_date date,
+  last_watered date,
+  notes text default '',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(garden_id, position)
+);
+
+create index if not exists idx_seedling_tray_cells_garden
+  on public.seedling_tray_cells(garden_id);
+
+alter table public.seedling_tray_cells enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_select') then
+    create policy seedling_cells_select on public.seedling_tray_cells
+      for select using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_insert') then
+    create policy seedling_cells_insert on public.seedling_tray_cells
+      for insert with check (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_update') then
+    create policy seedling_cells_update on public.seedling_tray_cells
+      for update using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_delete') then
+    create policy seedling_cells_delete on public.seedling_tray_cells
+      for delete using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+end $$;
 
 -- ========== Messaging System ==========
 -- This adds a complete messaging system with:

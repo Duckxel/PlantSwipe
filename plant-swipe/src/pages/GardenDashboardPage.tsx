@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed, Grid3X3 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
@@ -89,8 +89,11 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
+import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics } from "@/components/seedling-tray";
+import type { SeedlingTrayCell } from "@/types/garden";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells } from "@/lib/gardens";
 
-type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
+type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
 const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
   overview: LayoutDashboard,
@@ -99,6 +102,7 @@ const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
   journal: BookOpen,
   analytics: BarChart3,
   settings: Settings,
+  tray: Grid3X3,
 };
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
@@ -156,6 +160,22 @@ export const GardenDashboardPage: React.FC = () => {
   const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<
     Record<string, number>
   >({});
+  // Seedling tray state
+  const [seedlingCells, setSeedlingCells] = React.useState<SeedlingTrayCell[]>([]);
+  const [seedlingLoading, setSeedlingLoading] = React.useState(false);
+  const [seedlingSelectMode, setSeedlingSelectMode] = React.useState(false);
+  const [seedlingSelected, setSeedlingSelected] = React.useState<Set<number>>(new Set());
+  const [seedlingModal, setSeedlingModal] = React.useState<{ type: "single" | "multi"; index: number; indices?: Set<number> } | null>(null);
+  // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seedlingPlantMap = React.useMemo(() => {
+    const m: Record<string, any> = {};
+    for (const p of plants) {
+      const pid = p.plant?.id || p.plantId;
+      if (pid && p.plant) m[pid] = p.plant;
+    }
+    return m;
+  }, [plants]);
   // Beginner roadmap flags
   const [hasWaterTask, setHasWaterTask] = React.useState(false);
   const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
@@ -461,6 +481,8 @@ export const GardenDashboardPage: React.FC = () => {
                   livingSpace: (Array.isArray(data.garden.livingSpace ?? data.garden.living_space) ? (data.garden.livingSpace ?? data.garden.living_space) : []) as GardenLivingSpace[],
                   climate: (Array.isArray(data.garden.climate) ? data.garden.climate : []) as GardenClimate[],
                   usage: (Array.isArray(data.garden.usage) ? data.garden.usage : []) as GardenUsage[],
+                  trayRows: data.garden.trayRows ?? data.garden.tray_rows ?? null,
+                  trayCols: data.garden.trayCols ?? data.garden.tray_cols ?? null,
                 });
                 hydratedGarden = true;
               }
@@ -1713,6 +1735,24 @@ export const GardenDashboardPage: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [garden?.gardenType, garden?.livingSpace?.join(','), currentLang, isMember]);
 
+    // Seedling tray: load cells when garden is seedling type
+    const loadSeedlingCells = React.useCallback(async () => {
+      if (!id || garden?.gardenType !== 'seedling') return;
+      setSeedlingLoading(true);
+      try {
+        const cells = await getSeedlingTrayCells(id);
+        setSeedlingCells(cells);
+      } catch (e) {
+        console.error('Failed to load seedling cells:', e);
+      } finally {
+        setSeedlingLoading(false);
+      }
+    }, [id, garden?.gardenType]);
+
+    React.useEffect(() => {
+      loadSeedlingCells();
+    }, [loadSeedlingCells]);
+
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
       if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
@@ -2881,6 +2921,7 @@ export const GardenDashboardPage: React.FC = () => {
                 canViewFullGarden
                   ? [
                       ["overview", t("gardenDashboard.overview")] as const,
+                      ...(garden?.gardenType === 'seedling' ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
                       ["plants", t("gardenDashboard.plants")] as const,
                       ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
                       ["journal", t("gardenDashboard.journal", "Journal")] as const,
@@ -3385,6 +3426,94 @@ export const GardenDashboardPage: React.FC = () => {
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
                       hideAiFeatures={garden?.hideAiChat ?? false}
                     />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              {/* Seedling Tray Tab */}
+              <Route
+                path="tray"
+                element={
+                  canViewFullGarden && garden?.gardenType === 'seedling' ? (
+                    <div className="space-y-6">
+                      {/* Tray Grid */}
+                      <SeedlingTrayGrid
+                        cells={seedlingCells}
+                        rows={garden.trayRows ?? 4}
+                        cols={garden.trayCols ?? 6}
+                        trayName={garden.name}
+                        plantMap={seedlingPlantMap}
+                        onCellClick={(i) => {
+                          if (seedlingSelectMode) {
+                            setSeedlingSelected(prev => {
+                              const next = new Set(prev);
+                              next.has(i) ? next.delete(i) : next.add(i);
+                              return next;
+                            });
+                          } else {
+                            setSeedlingModal({ type: "single", index: i });
+                          }
+                        }}
+                        selectMode={seedlingSelectMode}
+                        selected={seedlingSelected}
+                        onToggleSelectMode={() => setSeedlingSelectMode(true)}
+                        onSelectAll={() => setSeedlingSelected(new Set(seedlingCells.map((_, i) => i)))}
+                        onSelectNone={() => setSeedlingSelected(new Set())}
+                        onOpenMultiEdit={() => {
+                          if (seedlingSelected.size === 0) return;
+                          setSeedlingModal({ type: "multi", index: [...seedlingSelected][0], indices: new Set(seedlingSelected) });
+                        }}
+                        onExitSelectMode={() => { setSeedlingSelectMode(false); setSeedlingSelected(new Set()); }}
+                      />
+
+                      {/* Care List */}
+                      <SeedlingCareList
+                        cells={seedlingCells}
+                        plantMap={seedlingPlantMap}
+                        onWater={async (cellId) => {
+                          const today = new Date().toISOString().split('T')[0];
+                          await updateSeedlingTrayCell(cellId, { lastWatered: today });
+                          loadSeedlingCells();
+                        }}
+                        onEdit={(index) => setSeedlingModal({ type: "single", index })}
+                      />
+
+                      {/* Analytics */}
+                      <SeedlingTrayAnalytics cells={seedlingCells} plantMap={seedlingPlantMap} />
+
+                      {/* Cell Modal */}
+                      {seedlingModal && seedlingCells[seedlingModal.index] && (
+                        <SeedlingCellModal
+                          open={!!seedlingModal}
+                          cell={seedlingCells[seedlingModal.index]}
+                          index={seedlingModal.index}
+                          isMulti={seedlingModal.type === "multi"}
+                          count={seedlingModal.type === "multi" ? (seedlingModal.indices?.size ?? 0) : 1}
+                          plants={plants.map((p: any) => p.plant).filter(Boolean)}
+                          plantMap={seedlingPlantMap}
+                          onClose={() => setSeedlingModal(null)}
+                          onSave={async (data) => {
+                            if (seedlingModal.type === "multi" && seedlingModal.indices) {
+                              const ids = [...seedlingModal.indices].map(i => seedlingCells[i]?.id).filter(Boolean);
+                              if (ids.length > 0) await updateSeedlingTrayCells(ids, data);
+                            } else {
+                              await updateSeedlingTrayCell(seedlingCells[seedlingModal.index].id, data);
+                            }
+                            loadSeedlingCells();
+                          }}
+                          onClear={async () => {
+                            if (seedlingModal.type === "multi" && seedlingModal.indices) {
+                              const ids = [...seedlingModal.indices].map(i => seedlingCells[i]?.id).filter(Boolean);
+                              if (ids.length > 0) await clearSeedlingTrayCells(ids);
+                            } else {
+                              await clearSeedlingTrayCell(seedlingCells[seedlingModal.index].id);
+                            }
+                            loadSeedlingCells();
+                          }}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -4827,6 +4956,14 @@ function OverviewSection({
                         {t("garden.beginnerTag", { defaultValue: "Beginner" })}
                       </div>
                     )}
+                    {garden?.gardenType === 'seedling' && (
+                      <div className="flex items-center gap-1.5 bg-emerald-500/30 backdrop-blur-sm text-white rounded-full px-3 py-1.5 text-sm font-medium">
+                        {t("garden.seedlingTag", { defaultValue: "Seedling" })}
+                        {garden.trayRows && garden.trayCols && (
+                          <span className="text-xs opacity-70">{garden.trayRows}×{garden.trayCols}</span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🌱</span>
                       <span className="font-medium">{totalOnHand}</span>
@@ -4922,6 +5059,14 @@ function OverviewSection({
                   {garden?.gardenType === 'beginners' && (
                     <div className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-3 py-1.5 border border-sky-200/50 dark:border-sky-500/20 text-sm font-medium">
                       {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                    </div>
+                  )}
+                  {garden?.gardenType === 'seedling' && (
+                    <div className="flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20 text-sm font-medium">
+                      {t("garden.seedlingTag", { defaultValue: "Seedling" })}
+                      {garden.trayRows && garden.trayCols && (
+                        <span className="text-xs opacity-70 ml-1">{garden.trayRows}×{garden.trayCols}</span>
+                      )}
                     </div>
                   )}
                   <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
