@@ -89,9 +89,9 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
-import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog, SeedlingTasksSection } from "@/components/seedling-tray";
+import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createDefaultWateringTask } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -2431,8 +2431,18 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      // Open Tasks with default watering 2x (user can change unit) — skip for seedling gardens
-      if (garden?.gardenType !== "seedling") {
+      // Seedling gardens: auto-create daily watering task; normal gardens: open task editor
+      if (garden?.gardenType === "seedling") {
+        try {
+          await createDefaultWateringTask({ gardenId: id, gardenPlantId: gp.id, unit: "day" });
+          // Refresh tasks so occurrences appear immediately
+          await load({ silent: true, preserveHeavy: true });
+          await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+          try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+        } catch (taskErr: unknown) {
+          console.warn("Failed to auto-create seedling watering task:", taskErr);
+        }
+      } else {
         setPendingGardenPlantId(gp.id);
         setTaskOpen(true);
       }
@@ -3044,7 +3054,7 @@ export const GardenDashboardPage: React.FC = () => {
                         <Card
                           key={gp.id}
                           className={`rounded-[28px] border overflow-hidden relative shadow-sm transition-all ${dragIdx === idx ? "ring-2 ring-emerald-500" : ""} ${
-                            garden?.gardenType !== "seedling" && (taskCountsByPlant[gp.id] || 0) === 0
+                            (taskCountsByPlant[gp.id] || 0) === 0
                               ? "border-orange-300 dark:border-orange-700/60 bg-white/80 dark:bg-[#1f1f1f]/80 shadow-[0_0_15px_-3px_rgba(251,146,60,0.3)] dark:shadow-[0_0_15px_-3px_rgba(251,146,60,0.15)]"
                               : "border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80"
                           } backdrop-blur`}
@@ -3155,8 +3165,6 @@ export const GardenDashboardPage: React.FC = () => {
                                     : `${Number(gp.plantsOnHand ?? 0)} ${t("gardenDashboard.plantsSection.onHand")}`
                                   }
                                 </span>
-                                {garden?.gardenType !== "seedling" && (
-                                  <>
                                     {(taskCountsByPlant[gp.id] || 0) > 0 ? (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                         {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
@@ -3171,8 +3179,6 @@ export const GardenDashboardPage: React.FC = () => {
                                         📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
                                       </span>
                                     )}
-                                  </>
-                                )}
                               </div>
                               {/* Plant Notes Preview */}
                               {gp.notes && (
@@ -3181,9 +3187,7 @@ export const GardenDashboardPage: React.FC = () => {
                                 </div>
                               )}
                               <div className="mt-2 flex gap-2 flex-wrap">
-                                {/* Complete All button + Tasks button — hidden for seedling gardens */}
-                                {garden?.gardenType !== "seedling" && (
-                                  <>
+                                {/* Complete All button + Tasks button */}
                                     {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
                                       const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
                                       const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
@@ -3223,8 +3227,6 @@ export const GardenDashboardPage: React.FC = () => {
                                         "gardenDashboard.plantsSection.tasksButton",
                                       )}
                                     </Button>
-                                  </>
-                                )}
                                 <EditPlantButton
                                   gp={gp}
                                   gardenId={id!}
@@ -3404,30 +3406,6 @@ export const GardenDashboardPage: React.FC = () => {
                 path="tasks"
                 element={
                   canViewFullGarden ? (
-                    garden?.gardenType === "seedling" ? (
-                      <SeedlingTasksSection
-                        cells={seedlingCells}
-                        plantMap={seedlingPlantMap}
-                        onWater={async (cellId) => {
-                          const today = new Date().toISOString().split('T')[0];
-                          await updateSeedlingTrayCell(cellId, { lastWatered: today });
-                          loadSeedlingCells();
-                        }}
-                        onWaterAll={async () => {
-                          const today = new Date().toISOString().split('T')[0];
-                          const needsWater = seedlingCells.filter(
-                            (c) => c.plantId && c.stage !== "empty" && (!c.lastWatered || Math.floor((Date.now() - new Date(c.lastWatered).getTime()) / 86400000) >= 1)
-                          );
-                          if (needsWater.length > 0) {
-                            await updateSeedlingTrayCells(
-                              needsWater.map((c) => c.id),
-                              { lastWatered: today }
-                            );
-                            loadSeedlingCells();
-                          }
-                        }}
-                      />
-                    ) : (
                       <GardenTasksSection
                         plants={plants}
                         todayTaskOccurrences={todayTaskOccurrences}
@@ -3443,7 +3421,6 @@ export const GardenDashboardPage: React.FC = () => {
                         duePlantIds={dueToday}
                         weekTaskOccurrences={weekTaskOccurrences}
                       />
-                    )
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
