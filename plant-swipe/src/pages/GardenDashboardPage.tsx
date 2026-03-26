@@ -4178,7 +4178,7 @@ function RoutineSection({
                 >
                   {labels[idx]}
                 </div>
-                <div className="text-[10px] opacity-60">{count}</div>
+                <div className="text-xs opacity-60">{count}</div>
               </div>
             );
           })}
@@ -4282,7 +4282,7 @@ function RoutineSection({
                             {icon}
                           </span>
                           <span
-                            className={`text-[10px] px-2 py-0.5 rounded-full ${badgeClass}`}
+                            className={`text-xs px-2 py-0.5 rounded-full ${badgeClass}`}
                           >
                             {t(`garden.taskTypes.${tt}`)}
                           </span>
@@ -5640,7 +5640,7 @@ function OverviewSection({
                               }`} />
                               <span className="relative z-10">{isCompleted ? <CheckCircle2 className="h-6 w-6" /> : isLocked ? <Lock className="h-5 w-5" /> : step.icon}</span>
                               {isCurrent && (
-                                <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.16em] text-amber-950 shadow-sm">
+                                <span className="absolute -top-2 left-1/2 -translate-x-1/2 rounded-full bg-amber-400 px-2 py-0.5 text-xs font-bold uppercase tracking-[0.16em] text-amber-950 shadow-sm">
                                   {t("gardenDashboard.beginnerRoadmap.nowLabel", { defaultValue: "Now" })}
                                 </span>
                               )}
@@ -5667,7 +5667,7 @@ function OverviewSection({
                             {isExpanded && (
                               <div
                                 id={detailsId}
-                                className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[160px] sm:max-w-[220px] -translate-x-1/2 rounded-full border px-2 sm:px-3 py-1.5 text-center text-[10px] sm:text-xs font-semibold shadow-sm ${
+                                className={`pointer-events-none absolute left-1/2 z-30 w-max max-w-[160px] sm:max-w-[220px] -translate-x-1/2 rounded-full border px-2 sm:px-3 py-1.5 text-center text-xs font-semibold shadow-sm ${
                                   index > 0 ? '-top-9' : '-top-10'
                                 } ${
                                   isCurrent
@@ -5755,7 +5755,7 @@ function OverviewSection({
                     )}
                     {isOwnerRole && (
                       <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 bg-stone-50 dark:bg-[#242222] rounded-full flex items-center justify-center ring-[1.5px] ring-stone-50 dark:ring-[#242222]">
-                        <span className="text-[9px]">👑</span>
+                        <span className="text-[11px]">👑</span>
                       </div>
                     )}
                   </div>
@@ -5932,7 +5932,7 @@ function OverviewSection({
                 {d.dayNum}
               </span>
               {d.completed > 0 && d.success && (
-                <span className="text-[10px] text-white/80">
+                <span className="text-xs text-white/80">
                   {d.completed}
                 </span>
               )}

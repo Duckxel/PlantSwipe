@@ -104,7 +104,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
             aria-invalid={status === "error" ? true : undefined}
             aria-describedby={describedBy || undefined}
             className={cn(
-              "flex h-10 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
+              "flex h-11 w-full rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 py-2 text-base shadow-sm transition-all duration-200 placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 md:h-9 md:rounded-md md:px-3 md:py-1 md:text-sm",
               ringClass,
               rightPadding,
               className,
@@ -155,7 +155,7 @@ const ValidatedInput = React.forwardRef<HTMLInputElement, ValidatedInputProps>(
         {status === "error" && error && (
           <p
             id={errorId}
-            className="mt-1 text-xs text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150"
+            className="mt-1 text-sm text-red-500 dark:text-red-400 animate-in fade-in slide-in-from-top-1 duration-150"
           >
             {error}
           </p>

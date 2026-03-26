@@ -834,7 +834,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Leaf className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantDetails.stats.type', { defaultValue: 'Type' })}
                       </span>
                     </div>
@@ -848,7 +848,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Sprout className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantInfo:labels.family', { defaultValue: 'Family' })}
                       </span>
                     </div>
@@ -862,7 +862,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <RefreshCw className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantInfo:labels.lifeCycle', { defaultValue: 'Life Cycle' })}
                       </span>
                     </div>
@@ -876,7 +876,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Sun className="h-4 w-4 text-amber-500 dark:text-amber-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantDetails.stats.sunLevel', { defaultValue: 'Sun' })}
                       </span>
                     </div>
@@ -890,7 +890,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <Wrench className="h-4 w-4 text-stone-600 dark:text-stone-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantDetails.stats.maintenance', { defaultValue: 'Maintenance' })}
                       </span>
                     </div>
@@ -904,7 +904,7 @@ const PlantInfoPage: React.FC = () => {
                   <div className="p-3 sm:p-4 rounded-2xl bg-white/60 dark:bg-[#1f1f1f]/60 border border-stone-200/50 dark:border-stone-700/50">
                     <div className="flex items-center gap-2 mb-1">
                       <MapPin className="h-4 w-4 text-rose-500 dark:text-rose-400" />
-                      <span className="text-[10px] sm:text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
+                      <span className="text-xs uppercase tracking-wide text-stone-500 dark:text-stone-400">
                         {t('plantInfo:labels.livingSpace', { defaultValue: 'Living Space' })}
                       </span>
                     </div>
@@ -994,7 +994,7 @@ const PlantInfoPage: React.FC = () => {
               <Share2 className="h-5 w-5" />
             </Button>
             {shareStatus !== 'idle' && (
-              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-xs font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
                 {shareStatus === 'copied' ? 'Copied!' : shareStatus === 'shared' ? 'Shared!' : 'Error'}
               </span>
             )}
@@ -1581,7 +1581,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           <div className="relative space-y-3 sm:space-y-4">
             <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
               <CalendarDays className="h-4 w-4 sm:h-5 sm:w-5" />
-              <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:timeline.title')}</span>
+              <span className="text-xs uppercase tracking-widest">{t('plantInfo:timeline.title')}</span>
             </div>
             <GanttTimeline timelineData={timelineData} monthLabels={monthLabels} t={t} />
           </div>
@@ -1594,7 +1594,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/70 via-white/60 to-white/10 p-3 sm:p-5 dark:border-emerald-500/30 dark:from-emerald-500/10 dark:via-transparent dark:to-transparent"
             >
               <div className="mb-3">
-                <p className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
+                <p className="text-[11px] sm:text-xs uppercase tracking-[0.2em] text-emerald-700/70 dark:text-emerald-300/70">
                   {t('plantInfo:cube.eyebrow')}
                 </p>
                 <p className="text-base sm:text-lg font-semibold text-stone-900 dark:text-white">{t('plantInfo:cube.title')}</p>
@@ -1644,7 +1644,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   <div className="relative space-y-1.5 sm:space-y-2">
                     <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
                       <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                      <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:palette.title')}</span>
+                      <span className="text-[11px] sm:text-xs uppercase tracking-widest">{t('plantInfo:palette.title')}</span>
                     </div>
                     <div className="flex flex-wrap gap-2 sm:gap-2.5">
                       {palette.map((color, idx) => {
@@ -1676,7 +1676,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
             <div className="space-y-3 sm:space-y-4">
               <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                 <MapPin className="h-4 w-4 sm:h-5 sm:w-5" />
-                <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title', { defaultValue: 'Habitat Map' })}</span>
+                <span className="text-xs uppercase tracking-widest">{t('plantInfo:habitatMap.title', { defaultValue: 'Habitat Map' })}</span>
               </div>
               <div className="relative mb-3 sm:mb-4 h-48 sm:h-64 overflow-hidden rounded-2xl sm:rounded-3xl border border-white/60 bg-gradient-to-br from-emerald-200/60 via-sky-100/60 to-emerald-100/60 shadow-inner dark:border-emerald-800/40 dark:bg-gradient-to-br dark:from-[#052c2b]/80 dark:via-[#072c40]/78 dark:to-[#111b2d]/82">
                 <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 dark:hidden" />
@@ -1686,7 +1686,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                 {activePins.map((pin) => (
                   <div
                     key={`${pin.label}-${pin.left}-${pin.top}`}
-                    className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
+                    className="absolute flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 sm:gap-2 rounded-xl sm:rounded-2xl bg-white/90 px-2 sm:px-3 py-1.5 sm:py-2 text-xs font-medium text-stone-800 shadow-md backdrop-blur-md dark:bg-[#2d2d30]/90 dark:text-stone-100"
                     style={{ top: pin.top, left: pin.left }}
                   >
                     <MapPin className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-emerald-500 flex-shrink-0" />
@@ -1698,7 +1698,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               <button
                 type="button"
                 onClick={() => setHabitatDetailsOpen(prev => !prev)}
-                className="flex w-full items-center gap-1.5 text-[10px] sm:text-xs font-medium text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100 transition-colors"
+                className="flex w-full items-center gap-1.5 text-xs font-medium text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 dark:hover:text-emerald-100 transition-colors"
               >
                 <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${habitatDetailsOpen ? 'rotate-180' : ''}`} />
                 {t('plantInfo:habitatMap.details', { defaultValue: 'Details' })}
@@ -1708,7 +1708,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   {habitats.map((h) => (
                     <div key={h} className="rounded-xl bg-white/60 dark:bg-[#2d2d30]/60 px-3 py-2 backdrop-blur-sm">
                       <p className="text-[11px] sm:text-xs font-semibold text-stone-800 dark:text-stone-100">{translateEnum(h)}</p>
-                      <p className="mt-0.5 text-[10px] sm:text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
+                      <p className="mt-0.5 text-xs sm:text-[11px] leading-relaxed text-stone-600 dark:text-stone-300">
                         {t(`plantInfo:habitatMap.descriptions.${h}`, { defaultValue: h })}
                       </p>
                     </div>
@@ -1800,7 +1800,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   {section.items.map((item, idx) => (
                     <React.Fragment key={`${section.title}-${item.label}`}>
                       {section.disclaimer && idx === (section.disclaimerAfter ?? section.items.length) && (
-                        <p className="py-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-400 dark:text-stone-500 italic">
+                        <p className="py-2 text-[11px] sm:text-xs leading-relaxed text-stone-400 dark:text-stone-500 italic">
                           {section.disclaimer}
                         </p>
                       )}
@@ -1825,7 +1825,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-300">
                   <ImageIcon className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:gallery.title')}</span>
+                  <span className="text-xs uppercase tracking-widest">{t('plantInfo:gallery.title')}</span>
                 </div>
                 <div className="max-h-[400px]">
                   <ImageGalleryCarousel images={plant.images} plantName={plant.name} />
@@ -1842,7 +1842,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               <div className="space-y-3 sm:space-y-4">
                 <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300">
                   <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />
-                  <span className="text-[10px] sm:text-xs uppercase tracking-widest">{t('plantInfo:companions.title', 'Companion & Related Plants')}</span>
+                  <span className="text-xs uppercase tracking-widest">{t('plantInfo:companions.title', 'Companion & Related Plants')}</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400">
                   {t('plantInfo:companions.subtitle', 'Plants that grow well together or are related varieties. Click to explore.')}
@@ -1859,7 +1859,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           {sourcesValue && <hr className="border-stone-200/70 dark:border-[#3e3e42]/70" />}
 
           {sourcesValue && (
-            <div className="flex flex-wrap items-center gap-2 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 px-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-stone-400 dark:text-stone-500 px-1">
               <FileText className="h-3 w-3 shrink-0" />
               <span className="uppercase tracking-wide font-medium">{t('plantInfo:meta.sources')}:</span>
               {sourcesValue}
@@ -1875,7 +1875,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                 <p>{t('plantInfo:contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
                 <div className="flex flex-wrap gap-2">
                   {contributorsList.map((name) => (
-                    <Badge key={name} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                    <Badge key={name} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                       {name}
                     </Badge>
                   ))}
@@ -1885,7 +1885,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           )}
 
           {(createdTimestamp || updatedTimestamp) && (
-            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-[10px] sm:text-xs text-stone-400 dark:text-stone-500 py-3">
+            <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-stone-400 dark:text-stone-500 py-3">
               {(createdTimestamp || createdByLabel) && (
                 <span className="flex items-center gap-1.5">
                   <CalendarDays className="h-3 w-3" />
@@ -2006,7 +2006,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
         <div className="grid grid-cols-12 gap-0.5">
           {monthLabels.map((label, idx) => (
             <div key={idx} className="flex items-center justify-center">
-              <span className="text-[8px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+              <span className="text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
                 {label.slice(0, 3)}
               </span>
             </div>
@@ -2021,7 +2021,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
               {/* Row label above the bar */}
               <div className="flex items-center gap-1.5">
                 {row.icon}
-                <span className="text-[10px] font-semibold text-stone-600 dark:text-stone-300">
+                <span className="text-xs font-semibold text-stone-600 dark:text-stone-300">
                   {row.label}
                 </span>
               </div>
@@ -2071,7 +2071,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
       <div />
       {monthLabels.map((label, idx) => (
         <div key={idx} className="flex items-center justify-center">
-          <span className="text-[8px] sm:text-[9px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
+          <span className="text-[11px] font-medium uppercase tracking-wide text-stone-400 dark:text-stone-500">
             {label.slice(0, 3)}
           </span>
         </div>
@@ -2085,7 +2085,7 @@ const GanttTimeline: React.FC<GanttTimelineProps> = ({ timelineData, monthLabels
             {/* Row label */}
             <div className="flex items-center gap-1.5 sm:gap-2 pr-2 min-w-0">
               {row.icon}
-              <span className="text-[10px] sm:text-xs font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap">
+              <span className="text-xs font-semibold text-stone-600 dark:text-stone-300 whitespace-nowrap">
                 {row.label}
               </span>
             </div>
@@ -2143,7 +2143,7 @@ const LivingSpacePanel: React.FC<{
       : 'border-stone-200/50 bg-stone-50/40 dark:border-stone-700/40 dark:bg-stone-800/30 opacity-30'
   }`}>
     {icon}
-    <span className={`text-[8px] sm:text-[10px] font-semibold uppercase tracking-wider text-center leading-tight ${
+    <span className={`text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-center leading-tight ${
       active
         ? 'text-emerald-700 dark:text-emerald-300'
         : 'text-stone-400 dark:text-stone-600'
@@ -2171,7 +2171,7 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
       <div className="relative space-y-1.5 sm:space-y-2">
         <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
           <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
+          <span className="text-[11px] sm:text-xs uppercase tracking-widest">{t('plantInfo:livingSpaceVisualizer.title', { defaultValue: 'Living Space' })}</span>
         </div>
 
         <div className="grid grid-cols-3 gap-1.5 sm:gap-2">
@@ -2217,10 +2217,10 @@ const DimensionLegendCard: React.FC<{ label: string; value: string; subLabel: st
       className || ''
     }`}
   >
-    <div className="text-[9px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
+    <div className="text-[11px] sm:text-xs font-semibold uppercase tracking-widest text-emerald-700 dark:text-emerald-200">
       {label}
     </div>
-    <div className="text-[10px] sm:text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-0.5 sm:mb-1 line-clamp-1">{subLabel}</div>
+    <div className="text-xs text-emerald-600/80 dark:text-emerald-200/80 mb-0.5 sm:mb-1 line-clamp-1">{subLabel}</div>
     <div className="text-lg sm:text-2xl font-bold text-stone-900 dark:text-white">{value}</div>
   </div>
 )
@@ -2237,7 +2237,7 @@ const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
             <div className="h-3.5 w-3.5 sm:h-4 sm:w-4">{icon}</div>
-            <span className="text-[10px] sm:text-xs uppercase tracking-wide">{title}</span>
+            <span className="text-xs uppercase tracking-wide">{title}</span>
           </div>
           <ChevronDown 
             className={`h-4 w-4 sm:h-5 sm:w-5 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}
@@ -2275,7 +2275,7 @@ const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ 
   return (
     <div className="py-1 sm:py-1.5">
       <div className="rounded-2xl border border-sky-200/70 bg-sky-50/90 px-3 py-2.5 text-sky-900 shadow-sm dark:border-sky-500/40 dark:bg-[#0f1f28]/70 dark:text-sky-100">
-        <div className="flex items-center gap-2 text-[10px] sm:text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
+        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.3em] text-sky-800 dark:text-sky-200">
           <Info className="h-3.5 w-3.5" />
           <span className="tracking-[0.25em]">{label}</span>
         </div>
@@ -2290,7 +2290,7 @@ const CollapsibleNote: React.FC<{ label: string; value: React.ReactNode }> = ({ 
           <button
             type="button"
             onClick={() => setExpanded(!expanded)}
-            className="mt-1.5 flex items-center gap-1 text-[10px] sm:text-xs font-medium text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100 transition-colors"
+            className="mt-1.5 flex items-center gap-1 text-xs font-medium text-sky-600 hover:text-sky-800 dark:text-sky-300 dark:hover:text-sky-100 transition-colors"
           >
             <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
             {expanded ? t('plantInfo:note.showLess', 'Show less') : t('plantInfo:note.showMore', 'Show more')}
@@ -2318,7 +2318,7 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
         {icon || <Thermometer className="h-3 w-3 sm:h-3.5 sm:w-3.5 opacity-70" />}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-[10px] sm:text-xs font-medium text-stone-600 dark:text-stone-400 mb-0.5">{label}</div>
+        <div className="text-xs font-medium text-stone-600 dark:text-stone-400 mb-0.5">{label}</div>
         <div className="text-xs sm:text-sm text-stone-900 dark:text-stone-100 break-words leading-relaxed">{value}</div>
       </div>
     </div>
@@ -2334,7 +2334,7 @@ const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
         className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10 cursor-pointer transition-transform group-hover:scale-110"
         style={{ backgroundColor: tone }}
       />
-      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap rounded-md bg-stone-900/90 dark:bg-stone-100/90 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-white dark:text-stone-900 shadow-lg">
+      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap rounded-md bg-stone-900/90 dark:bg-stone-100/90 px-2 py-0.5 text-[11px] sm:text-xs font-medium text-white dark:text-stone-900 shadow-lg">
         {label}
       </div>
     </div>
@@ -2547,7 +2547,7 @@ const ToxicityWarningBanner: React.FC<{
               )}
             </div>
             <div>
-              <p className="text-[10px] sm:text-xs uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">{label}</p>
+              <p className="text-xs uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">{label}</p>
               <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-500">{t('plantInfo:toxicityBanner.unknownToxicity')}</p>
             </div>
           </div>
@@ -2580,7 +2580,7 @@ const ToxicityWarningBanner: React.FC<{
             )}
           </div>
           <div className="flex-1 min-w-0">
-            <p className={`text-[10px] sm:text-xs uppercase tracking-wider ${isMild ? 'font-medium' : 'font-semibold'} ${config.labelColor}`}>{label}</p>
+            <p className={`text-xs uppercase tracking-wider ${isMild ? 'font-medium' : 'font-semibold'} ${config.labelColor}`}>{label}</p>
             <div className="flex items-center gap-1.5 mt-0.5">
               <IconComponent className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${config.textColor} flex-shrink-0`} />
               <p className={`${textSize} ${config.textColor}`}>
@@ -2588,7 +2588,7 @@ const ToxicityWarningBanner: React.FC<{
               </p>
             </div>
             {(isHigh || isLethal) && (
-              <p className={`text-[10px] sm:text-xs ${config.labelColor} mt-0.5`}>
+              <p className={`text-xs ${config.labelColor} mt-0.5`}>
                 {t(`plantInfo:toxicityBanner.descriptions.${config.key}`)}
               </p>
             )}
@@ -2861,7 +2861,7 @@ const CompanionPlantCard: React.FC<CompanionPlantCardProps> = ({ name, imageUrl,
         <h4 className="text-sm font-semibold text-stone-900 dark:text-stone-100 line-clamp-2 leading-tight">
           {name}
         </h4>
-        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
+        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1 uppercase tracking-wide">
           {t('plantInfo.viewPlant')}
         </p>
       </div>

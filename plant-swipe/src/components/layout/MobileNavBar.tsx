@@ -472,7 +472,7 @@ function NavItem({
           </span>
         )}
       </div>
-      <span className={`text-[10px] font-medium ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+      <span className={`text-[11px] font-medium ${isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
         {label}
       </span>
     </Link>
@@ -521,7 +521,7 @@ function NavItemButton({
           </span>
         )}
       </div>
-      <span className={`text-[10px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
+      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : isActive ? 'text-emerald-600 dark:text-emerald-400' : ''}`}>
         {label}
       </span>
     </button>
@@ -563,7 +563,7 @@ function QuickActionButton({
           </span>
         )}
       </div>
-      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
+      <span className={`text-xs font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
     </button>
   )
 }

@@ -359,7 +359,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
             aria-label={t("plant.next")}
             title={t("plant.next")}
           >
-            <ChevronUp className="h-7 w-7" />
+            <ChevronUp className="h-8 w-8" />
           </button>
         </div>
         {/* Like button - desktop */}
@@ -535,7 +535,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                       aria-label={t("plant.next")}
                       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <ChevronUp className="h-7 w-7" />
+                      <ChevronUp className="h-8 w-8" />
                     </button>
                   </div>
 

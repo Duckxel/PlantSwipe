@@ -113,10 +113,10 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   }, [ensureLoggedIn]);
 
   const cardSurface =
-    "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
+    "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)] active:scale-[0.98]";
 
   const actionBtnBase =
-    "p-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
+    "p-2.5 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 min-h-[44px] min-w-[44px] flex items-center justify-center";
 
   const visiblePlants = plants.slice(0, visibleCount);
   const hasMore = visibleCount < plants.length;
@@ -189,7 +189,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                       {highlightBadges.slice(0, 1).map((badge) => (
-                        <Badge key={badge.key} className={`rounded-xl px-2 py-0.5 text-[9px] font-semibold flex items-center ${badge.className}`}>
+                        <Badge key={badge.key} className={`rounded-xl px-2 py-0.5 text-[11px] font-semibold flex items-center ${badge.className}`}>
                           {badge.icon}
                         </Badge>
                       ))}
@@ -218,8 +218,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                         &lsquo;{p.variety}&rsquo;
                       </ScrollingTitle>
                     )}
-                    <ScrollingTitle className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
-                    {p.family && <ScrollingTitle className="text-[10px] opacity-50">{p.family}</ScrollingTitle>}
+                    <ScrollingTitle className="text-xs italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
+                    {p.family && <ScrollingTitle className="text-xs opacity-50">{p.family}</ScrollingTitle>}
                   </div>
                   <div className="flex items-center justify-end gap-1 mt-2">
                     <button
@@ -262,7 +262,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-3 left-3 z-10 flex flex-col gap-2">
                       {highlightBadges.map((badge) => (
-                        <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-[10px] font-semibold flex items-center ${badge.className}`}>
+                        <Badge key={badge.key} className={`rounded-2xl px-3 py-1 text-xs font-semibold flex items-center ${badge.className}`}>
                           {badge.icon}
                           {badge.label}
                         </Badge>

@@ -97,8 +97,8 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
             isLarge
               ? "h-12 rounded-2xl pr-4 text-base"
               : isSmall
-                ? "h-8 rounded-lg pr-3 text-xs"
-                : "h-10 rounded-xl pr-4 text-sm md:h-9",
+                ? "h-9 rounded-lg pr-3 text-xs"
+                : "h-11 rounded-xl pr-4 text-sm md:h-9",
             // Dynamic left padding based on icon
             getLeftPadding(),
             // Loading/Clear/Shortcut state - add right padding for spinner, clear button, or shortcut
@@ -128,7 +128,7 @@ const SearchInput = React.forwardRef<HTMLInputElement, SearchInputProps>(
           <kbd
             className={cn(
               "pointer-events-none absolute top-1/2 -translate-y-1/2 select-none opacity-50 font-mono font-medium text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded px-1.5 flex items-center justify-center",
-              isLarge ? "right-4 text-xs h-6" : isSmall ? "right-2.5 text-[10px] h-4" : "right-3 text-[10px] h-5"
+              isLarge ? "right-4 text-xs h-6" : isSmall ? "right-2.5 text-xs h-4" : "right-3 text-xs h-5"
             )}
           >
             {shortcut}

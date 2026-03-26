@@ -51,7 +51,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
     longPressTimer.current = setTimeout(() => {
       e.preventDefault()
       show()
-    }, 500)
+    }, 300)
   }, [show])
 
   const handleTouchEnd = React.useCallback(() => {
@@ -85,7 +85,7 @@ export const Tooltip: React.FC<TooltipProps> = ({
         <div
           role="tooltip"
           className={cn(
-            'absolute left-1/2 -translate-x-1/2 z-50 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-lg pointer-events-none',
+            'absolute left-1/2 -translate-x-1/2 z-50 whitespace-nowrap rounded-lg px-2.5 py-1.5 text-xs font-medium shadow-lg pointer-events-none',
             'bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900',
             'animate-in fade-in-0 zoom-in-95',
             side === 'top' && 'bottom-full mb-2',

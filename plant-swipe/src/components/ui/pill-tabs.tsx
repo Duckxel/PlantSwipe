@@ -29,7 +29,7 @@ export function PillTabs<K extends string = string>({
 }: PillTabsProps<K>) {
   return (
     <div className={cn("flex justify-center", className)}>
-      <div className="inline-flex items-center gap-1 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
+      <div className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#1a1a1d]/80 px-1 py-1 backdrop-blur">
         {tabs.map((tab) => {
           const isActive = activeKey === tab.key;
           return (
@@ -38,7 +38,7 @@ export function PillTabs<K extends string = string>({
               type="button"
               onClick={() => onTabChange(tab.key)}
               className={cn(
-                "px-4 py-1.5 text-sm font-semibold rounded-full transition-colors",
+                "px-4 py-2.5 text-sm font-semibold rounded-full transition-colors",
                 isActive
                   ? "bg-emerald-600 text-white shadow"
                   : "text-stone-600 dark:text-stone-300 hover:text-black dark:hover:text-white",

@@ -130,7 +130,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
           <div className="h-1.5 md:h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
             <div className="h-full bg-emerald-600 dark:bg-emerald-500 transition-all duration-300" style={{ width: `${totalTasks === 0 ? 100 : Math.min(100, Math.round((totalDone / totalTasks) * 100))}%` }} />
           </div>
-          <div className="text-[10px] md:text-xs opacity-70 mt-1">{t('garden.today', 'Today')}: {totalDone} / {totalTasks}</div>
+          <div className="text-xs opacity-70 mt-1">{t('garden.today', 'Today')}: {totalDone} / {totalTasks}</div>
         </Card>
         <div className="space-y-2 md:space-y-3">
           {plantsWithTasks.length === 0 && (
@@ -146,18 +146,18 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
             const isCompleting = completingPlantIds.has(gp.id)
             
             return (
-              <Card key={gp.id} className="rounded-2xl p-2 md:p-3">
+              <Card key={gp.id} className="rounded-2xl p-3">
                 {/* Plant Header */}
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-medium text-xs md:text-sm truncate">{gp.nickname || gp.plant?.name}</div>
-                    <div className="text-[10px] md:text-xs opacity-60">{done} / {req} {t('garden.done', 'done')}</div>
+                    <div className="font-medium text-sm truncate">{gp.nickname || gp.plant?.name}</div>
+                    <div className="text-xs opacity-60">{done} / {req} {t('garden.done', 'done')}</div>
                   </div>
                   {!allDone && (
                     <Button 
                       size="sm"
                       variant="outline"
-                      className="rounded-lg h-6 md:h-7 px-2 text-[10px] md:text-xs flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all" 
+                      className="rounded-lg h-8 px-2.5 text-xs flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all" 
                       onClick={() => handleCompleteAll(gp.id)}
                       disabled={isCompleting}
                       aria-label={t('garden.completeAllFor', { defaultValue: 'Complete all tasks for {{name}}', name: gp.nickname || gp.plant?.name || 'Plant' })}
@@ -186,7 +186,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                     return (
                       <div 
                         key={o.id} 
-                        className={`flex items-center gap-2 p-2 md:p-2.5 rounded-xl transition-all ${
+                        className={`flex items-center gap-2 p-2.5 md:p-3 rounded-xl transition-all ${
                           isDone 
                             ? 'bg-stone-50/80 dark:bg-stone-800/30 opacity-60' 
                             : `${config.bg} ${config.border} border shadow-sm`
@@ -203,11 +203,11 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                         
                         {/* Task Info */}
                         <div className="flex-1 min-w-0">
-                          <span className={`text-xs md:text-sm font-medium ${isDone ? 'line-through text-muted-foreground' : config.color}`}>
+                          <span className={`text-sm font-medium ${isDone ? 'line-through text-muted-foreground' : config.color}`}>
                             {t(`garden.taskTypes.${tt}`, tt)}
                           </span>
                           {o.requiredCount > 1 && !isDone && (
-                            <span className="text-[9px] md:text-[10px] opacity-60 ml-1">
+                            <span className="text-xs opacity-60 ml-1">
                               {o.completedCount || 0}/{o.requiredCount}
                             </span>
                           )}
@@ -216,7 +216,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                         {/* Complete Button - Secondary/Outline style */}
                         {!isDone ? (
                           <Button 
-                            className={`rounded-lg h-6 md:h-7 px-2 md:px-2.5 text-[10px] md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
+                            className={`rounded-lg h-8 px-2.5 text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                             size="sm"
                             variant="outline"
                             onClick={() => handleProgress(o.id, remaining)} 
