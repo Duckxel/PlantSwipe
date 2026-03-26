@@ -18,6 +18,10 @@ MJS_FILE="$PROJECT_ROOT/src/lib/emailTemplateShared.mjs"
 
 # ── 1. Copy .ts → Supabase edge functions ────────────────────────────────────
 mkdir -p "$DEST_DIR"
+# Ensure dest file is writable (may be owned by root after git pull)
+if [[ -f "$DEST_FILE" && ! -w "$DEST_FILE" ]]; then
+  chmod u+w "$DEST_FILE" 2>/dev/null || true
+fi
 cp "$SOURCE_FILE" "$DEST_FILE"
 
 echo "✅ Synced email template to Supabase functions"
