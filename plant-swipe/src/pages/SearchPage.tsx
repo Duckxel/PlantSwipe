@@ -116,7 +116,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
     "group relative rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-[0_35px_95px_-45px_rgba(16,185,129,0.65)]";
 
   const actionBtnBase =
-    "p-2 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
+    "p-3 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500";
 
   const visiblePlants = plants.slice(0, visibleCount);
   const hasMore = visibleCount < plants.length;
@@ -189,7 +189,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                       {highlightBadges.slice(0, 1).map((badge) => (
-                        <Badge key={badge.key} className={`rounded-xl px-2 py-0.5 text-[9px] font-semibold flex items-center ${badge.className}`}>
+                        <Badge key={badge.key} className={`rounded-xl px-2 py-0.5 text-[11px] font-semibold flex items-center ${badge.className}`}>
                           {badge.icon}
                         </Badge>
                       ))}

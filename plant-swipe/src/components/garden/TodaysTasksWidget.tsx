@@ -244,7 +244,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                           {t(`garden.taskTypes.${taskType}`, taskType)}
                         </span>
                         {occ.requiredCount > 1 && !isDone && (
-                          <span className="text-[9px] md:text-[10px] opacity-70 ml-1">
+                          <span className="text-[11px] md:text-[10px] opacity-70 ml-1">
                             {occ.completedCount || 0}/{occ.requiredCount}
                           </span>
                         )}

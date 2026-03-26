@@ -207,7 +207,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                             {t(`garden.taskTypes.${tt}`, tt)}
                           </span>
                           {o.requiredCount > 1 && !isDone && (
-                            <span className="text-[9px] md:text-[10px] opacity-60 ml-1">
+                            <span className="text-[11px] md:text-[10px] opacity-60 ml-1">
                               {o.completedCount || 0}/{o.requiredCount}
                             </span>
                           )}
