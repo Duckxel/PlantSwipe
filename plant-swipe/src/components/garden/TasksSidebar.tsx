@@ -160,6 +160,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                       className="rounded-lg h-6 md:h-7 px-2 text-[10px] md:text-xs flex-shrink-0 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all" 
                       onClick={() => handleCompleteAll(gp.id)}
                       disabled={isCompleting}
+                      aria-label={t('garden.completeAllFor', { defaultValue: 'Complete all tasks for {{name}}', name: gp.nickname || gp.plant?.name || 'Plant' })}
                     >
                       {isCompleting ? (
                         <Loader2 className="w-3 h-3 animate-spin" />
@@ -220,6 +221,7 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
                             variant="outline"
                             onClick={() => handleProgress(o.id, remaining)} 
                             disabled={isProgressing}
+                            aria-label={`${t('garden.complete', 'Complete')} ${t(`garden.taskTypes.${tt}`)} ${t('garden.activity.plant')} ${gp.nickname || gp.plant?.name || 'Plant'}`}
                           >
                             {isProgressing ? (
                               <Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" />

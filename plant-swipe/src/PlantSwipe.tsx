@@ -1456,13 +1456,24 @@ export default function PlantSwipe() {
   const swipeList = useMemo(() => {
     if (shuffledPlantIds.length === 0) return []
     
-    // Create a map for O(1) lookups
-    const plantMap = new Map(swipeablePlants.map(p => [p.id, p]))
+    // ⚡ Bolt: Build map using single-pass for loop to avoid intermediate [id, p] array allocations
+    // from .map() that create massive garbage collection pressure on large catalogs
+    const plantMap = new Map<string, PreparedPlant>()
+    for (let i = 0; i < swipeablePlants.length; i++) {
+      const p = swipeablePlants[i]
+      if (p) plantMap.set(p.id, p)
+    }
     
-    // Return plants in shuffled order, filtering out any that no longer exist
-    return shuffledPlantIds
-      .map(id => plantMap.get(id))
-      .filter((p): p is PreparedPlant => p !== undefined)
+    // ⚡ Bolt: Return plants in shuffled order using single-pass loop instead of .map().filter()
+    // to avoid intermediate array allocations
+    const result: PreparedPlant[] = []
+    for (let i = 0; i < shuffledPlantIds.length; i++) {
+      const p = plantMap.get(shuffledPlantIds[i])
+      if (p !== undefined) {
+        result.push(p)
+      }
+    }
+    return result
   }, [shuffledPlantIds, swipeablePlants])
 
   const sortedSearchResults = useMemo(() => {

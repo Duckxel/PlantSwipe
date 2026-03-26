@@ -616,6 +616,16 @@ if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
 fi
 fi
 
+# Normalize working-tree ownership after git pull.
+# When the script runs as root, git pull creates files owned by root.
+# Subsequent steps (email sync, bun install) run as REPO_OWNER and need write access.
+if [[ -n "$REPO_OWNER" && "$CURRENT_USER" != "$REPO_OWNER" ]]; then
+  log "Fixing working-tree ownership to $REPO_OWNER…"
+  $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$WORK_DIR" || {
+    log "[WARN] Could not chown working tree to $REPO_OWNER; continuing anyway"
+  }
+fi
+
 # Sync email template (generates .mjs for Node.js + copies to Supabase _shared)
 # Run as repo owner to avoid permission denied when www-data executes the script
 SYNC_EMAIL_SCRIPT="$NODE_DIR/scripts/sync-email-template.sh"
@@ -719,11 +729,13 @@ fi
 
 log "Using Bun at: $BUN_BIN (version: $("$BUN_BIN" --version 2>/dev/null || echo 'unknown'))"
 
-# Check if we can skip bun install by comparing bun.lockb hash
+# Check if we can skip bun install by comparing lock file hash
 LOCK_HASH_FILE="$NODE_DIR/.bun-lock-hash"
 CURRENT_LOCK_HASH=""
-# Try bun.lockb first, fall back to package-lock.json for migration
-if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+# Try bun.lock (text, v1.2+), then bun.lockb (binary), then package-lock.json
+if [[ -f "$NODE_DIR/bun.lock" ]]; then
+  CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || true)"
+elif [[ -f "$NODE_DIR/bun.lockb" ]]; then
   CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
 elif [[ -f "$NODE_DIR/package-lock.json" ]]; then
   CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || true)"
@@ -740,6 +752,22 @@ if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && 
 fi
 
 if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
+  # Remove stale nested node_modules that cause duplicate-type TS errors
+  # (e.g. @tiptap/starter-kit bundling its own @tiptap/core).
+  # Bun won't clean these up on its own if they already exist on disk.
+  if [[ -d "$NODE_DIR/node_modules" ]]; then
+    log "Cleaning nested node_modules to prevent duplicate packages…"
+    find "$NODE_DIR/node_modules" -mindepth 3 -maxdepth 4 -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
+  fi
+
+  # Update all @tiptap/* packages to their latest compatible versions so they
+  # all share the same @tiptap/core (prevents duplicate-type TS build errors).
+  TIPTAP_PKGS="$(cd "$NODE_DIR" && grep -oP '"@tiptap/[^"]+":' package.json | tr -d '":' | sort -u | tr '\n' ' ')"
+  if [[ -n "$TIPTAP_PKGS" ]]; then
+    log "Updating @tiptap packages to latest compatible versions…"
+    (cd "$NODE_DIR" && "$BUN_BIN" update $TIPTAP_PKGS 2>&1) || log "[WARN] bun update @tiptap/* returned non-zero (continuing anyway)"
+  fi
+
   log "Running bun install…"
   # Always run bun as the repo owner to keep ownership consistent
   if [[ "$REPO_OWNER" != "" ]]; then
@@ -762,7 +790,9 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
   # Trust all packages to run postinstall scripts
   bun pm trust --all 2>/dev/null || true
   # Save the lock hash for next time
-  if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+  if [[ -f "$NODE_DIR/bun.lock" ]]; then
+    CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || true)"
+  elif [[ -f "$NODE_DIR/bun.lockb" ]]; then
     CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
   fi
   if [[ -n "$CURRENT_LOCK_HASH" ]]; then
