@@ -25,6 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { platformEnumerateVideoDevices, platformGetCameraStream } from '@/platform/camera'
 
 interface CameraCaptureProps {
   open: boolean
@@ -53,8 +54,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
   React.useEffect(() => {
     const checkCameras = async () => {
       try {
-        const devices = await navigator.mediaDevices.enumerateDevices()
-        const videoDevices = devices.filter(d => d.kind === 'videoinput')
+        const videoDevices = await platformEnumerateVideoDevices()
         setHasMultipleCameras(videoDevices.length > 1)
       } catch {
         // Ignore errors, just assume single camera
@@ -81,11 +81,6 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
     stopCamera()
     
     try {
-      // Check if mediaDevices is available
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error('camera_not_supported')
-      }
-      
       const constraints: MediaStreamConstraints = {
         video: {
           facingMode: facingMode,
@@ -95,7 +90,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
         audio: false
       }
       
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      const stream = await platformGetCameraStream(constraints)
       streamRef.current = stream
       
       if (videoRef.current) {

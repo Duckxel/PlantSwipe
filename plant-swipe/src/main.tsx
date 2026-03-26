@@ -73,6 +73,8 @@ try {
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Capacitor store builds omit the SW; probing registration is pointless and can touch stale state.
+    if (import.meta.env.VITE_APP_NATIVE_BUILD === '1') return
     navigator.serviceWorker
       .getRegistration()
       .then((registration) => registration?.update().catch(() => {}))
