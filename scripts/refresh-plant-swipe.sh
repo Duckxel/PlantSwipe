@@ -616,6 +616,16 @@ if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
 fi
 fi
 
+# Normalize working-tree ownership after git pull.
+# When the script runs as root, git pull creates files owned by root.
+# Subsequent steps (email sync, bun install) run as REPO_OWNER and need write access.
+if [[ -n "$REPO_OWNER" && "$CURRENT_USER" != "$REPO_OWNER" ]]; then
+  log "Fixing working-tree ownership to $REPO_OWNER…"
+  $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$WORK_DIR" || {
+    log "[WARN] Could not chown working tree to $REPO_OWNER; continuing anyway"
+  }
+fi
+
 # Sync email template (generates .mjs for Node.js + copies to Supabase _shared)
 # Run as repo owner to avoid permission denied when www-data executes the script
 SYNC_EMAIL_SCRIPT="$NODE_DIR/scripts/sync-email-template.sh"
