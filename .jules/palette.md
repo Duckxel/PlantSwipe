@@ -13,3 +13,7 @@
 ## 2024-03-22 - Add ARIA labels to AphyliaChatPanel remove buttons
 **Learning:** Icon-only remove buttons within nested UI components (like Context Chips and Image Attachments in `AphyliaChatPanel.tsx`) are often overlooked for accessibility. The `aria-label` attribute combined with a tooltip (`title`) is essential to prevent screen reader users from getting trapped or not understanding the button's purpose.
 **Action:** When creating new interactive elements like badges, chips, or preview cards, systematically verify that their remove/dismiss buttons have valid ARIA labels and tooltip text, using the `t()` translation function.
+
+## 2026-03-26 - Accessible Color Picker Swatches
+**Learning:** Color picker swatches often rely entirely on a background color for their visual appearance, lacking any text. For screen reader users, without an `aria-label` (even if `title` is provided for visual tooltips), these interactive buttons are 'empty' and inaccessible.
+**Action:** Always provide an explicit `aria-label` alongside the `title` tooltip on interactive color swatches to ensure they are fully navigable and understandable via assistive technologies.
