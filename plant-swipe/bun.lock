@@ -16,6 +16,7 @@
         "@sentry/node": "^9.0.0",
         "@sentry/react": "^9.0.0",
         "@supabase/supabase-js": "^2.57.2",
+        "@tiptap/core": "^3.11.0",
         "@tiptap/extension-character-count": "^3.11.0",
         "@tiptap/extension-color": "^3.11.1",
         "@tiptap/extension-gapcursor": "^3.11.0",
