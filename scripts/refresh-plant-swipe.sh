@@ -760,6 +760,14 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
     find "$NODE_DIR/node_modules" -mindepth 3 -maxdepth 4 -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
   fi
 
+  # Update all @tiptap/* packages to their latest compatible versions so they
+  # all share the same @tiptap/core (prevents duplicate-type TS build errors).
+  TIPTAP_PKGS="$(cd "$NODE_DIR" && grep -oP '"@tiptap/[^"]+":' package.json | tr -d '":' | sort -u | tr '\n' ' ')"
+  if [[ -n "$TIPTAP_PKGS" ]]; then
+    log "Updating @tiptap packages to latest compatible versions…"
+    (cd "$NODE_DIR" && "$BUN_BIN" update $TIPTAP_PKGS 2>&1) || log "[WARN] bun update @tiptap/* returned non-zero (continuing anyway)"
+  fi
+
   log "Running bun install…"
   # Always run bun as the repo owner to keep ownership consistent
   if [[ "$REPO_OWNER" != "" ]]; then
