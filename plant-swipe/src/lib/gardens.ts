@@ -1495,15 +1495,16 @@ export async function createDefaultWateringTask(params: { gardenId: string; gard
   return String(data)
 }
 
-/** Create a daily watering task for seedling gardens (required_count=1, repeat every 1 day). */
-export async function createSeedlingWateringTask(params: { gardenId: string; gardenPlantId: string }): Promise<string> {
-  const { gardenId, gardenPlantId } = params
+/** Create a single daily watering task for the entire seedling garden (required_count=1). */
+export async function createSeedlingWateringTask(params: { gardenId: string; gardenPlantId: string; customName?: string }): Promise<string> {
+  const { gardenId, gardenPlantId, customName } = params
   const { data, error } = await supabase
     .from('garden_plant_tasks')
     .insert({
       garden_id: gardenId,
       garden_plant_id: gardenPlantId,
       type: 'water',
+      custom_name: customName || 'Water seedling tray',
       schedule_kind: 'repeat_duration',
       interval_amount: 1,
       interval_unit: 'day',
@@ -1513,6 +1514,19 @@ export async function createSeedlingWateringTask(params: { gardenId: string; gar
     .single()
   if (error) throw new Error(error.message)
   return data.id
+}
+
+/** Check if a seedling garden already has its single watering task. */
+export async function getSeedlingWateringTaskId(gardenId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('garden_plant_tasks')
+    .select('id')
+    .eq('garden_id', gardenId)
+    .eq('type', 'water')
+    .eq('schedule_kind', 'repeat_duration')
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
 }
 
 export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantId: string; type: TaskType; customName?: string | null; kind: TaskScheduleKind; dueAt?: string | null; intervalAmount?: number | null; intervalUnit?: TaskUnit | null; requiredCount?: number | null }): Promise<string> {

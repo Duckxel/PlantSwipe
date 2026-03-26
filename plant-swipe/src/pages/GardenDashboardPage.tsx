@@ -91,7 +91,7 @@ import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdo
 import { AphyliaChat } from "@/components/aphylia";
 import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createSeedlingWateringTask } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -1766,38 +1766,30 @@ export const GardenDashboardPage: React.FC = () => {
       loadSeedlingCells();
     }, [loadSeedlingCells]);
 
-    // Seedling gardens: auto-create daily watering tasks for plants that don't have any
-    const seedlingTaskSyncRef = React.useRef<Set<string>>(new Set());
+    // Seedling gardens: ensure ONE watering task exists for the whole garden
+    const seedlingTaskSyncedRef = React.useRef(false);
     React.useEffect(() => {
       if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      if (seedlingTaskSyncedRef.current) return;
       let cancelled = false;
       (async () => {
-        const plantsWithoutTasks = plants.filter(
-          (gp) => (taskCountsByPlant[gp.id] || 0) === 0 && !seedlingTaskSyncRef.current.has(gp.id)
-        );
-        if (plantsWithoutTasks.length === 0) return;
-        // Mark as syncing to prevent duplicate calls
-        for (const gp of plantsWithoutTasks) seedlingTaskSyncRef.current.add(gp.id);
         try {
-          await Promise.all(
-            plantsWithoutTasks.map((gp) =>
-              createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id })
-            )
-          );
+          const existingTaskId = await getSeedlingWateringTaskId(id);
+          if (existingTaskId || cancelled) return; // Already has a garden-level task
+          seedlingTaskSyncedRef.current = true;
+          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id });
           if (!cancelled) {
-            // Refresh tasks so occurrences appear
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
             try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
           }
         } catch (err) {
-          console.warn("Failed to auto-create seedling watering tasks:", err);
-          // Remove from sync set so it can retry
-          for (const gp of plantsWithoutTasks) seedlingTaskSyncRef.current.delete(gp.id);
+          console.warn("Failed to auto-create seedling watering task:", err);
+          seedlingTaskSyncedRef.current = false;
         }
       })();
       return () => { cancelled = true; };
-    }, [id, garden?.gardenType, plants, taskCountsByPlant, load, loadHeavyForCurrentTab, serverToday]);
+    }, [id, garden?.gardenType, plants, load, loadHeavyForCurrentTab, serverToday]);
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
@@ -2465,22 +2457,23 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      // Seedling gardens: auto-create daily watering task; normal gardens: open task editor
+      // Seedling gardens: ensure the single garden-level watering task exists; normal gardens: open task editor
       if (garden?.gardenType === "seedling") {
         try {
-          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
-          // Refresh tasks so occurrences appear immediately
-          await load({ silent: true, preserveHeavy: true });
-          await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
-          try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+          const existing = await getSeedlingWateringTaskId(id);
+          if (!existing) {
+            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
+            await load({ silent: true, preserveHeavy: true });
+            await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+            try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+          }
         } catch (taskErr: unknown) {
-          console.warn("Failed to auto-create seedling watering task:", taskErr);
+          console.warn("Failed to ensure seedling watering task:", taskErr);
         }
         // Reopen cell modal if "Add New Plant" was used from within a cell
         if (pendingSeedlingModalRef.current) {
           const saved = pendingSeedlingModalRef.current;
           pendingSeedlingModalRef.current = null;
-          // Delay slightly so cells/plants reload first
           setTimeout(() => setSeedlingModal(saved), 300);
         }
       } else {
@@ -2754,6 +2747,17 @@ export const GardenDashboardPage: React.FC = () => {
           await progressTaskOccurrence(o.id, 1);
         }
       }
+      // Seedling gardens: completing all tasks marks all cells as watered
+      if (garden?.gardenType === "seedling") {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const needsWater = seedlingCells.filter(
+          (c) => c.plantId && c.stage !== "empty" && c.lastWatered !== todayStr
+        );
+        if (needsWater.length > 0) {
+          await updateSeedlingTrayCells(needsWater.map((c) => c.id), { lastWatered: todayStr });
+          loadSeedlingCells();
+        }
+      }
       // Log summary activity for this plant
       try {
         if (id) {
@@ -2824,6 +2828,29 @@ export const GardenDashboardPage: React.FC = () => {
 
       try {
         await progressTaskOccurrence(occId, inc);
+
+        // Seedling gardens: completing the task marks all non-empty cells as watered today
+        if (garden?.gardenType === "seedling") {
+          const o = todayTaskOccurrences.find((x: { id: string }) => x.id === occId);
+          if (o) {
+            const newCount = Number(o.completedCount || 0) + inc;
+            const required = Number(o.requiredCount || 1);
+            if (newCount >= required) {
+              const todayStr = new Date().toISOString().split("T")[0];
+              const needsWater = seedlingCells.filter(
+                (c) => c.plantId && c.stage !== "empty" && c.lastWatered !== todayStr
+              );
+              if (needsWater.length > 0) {
+                await updateSeedlingTrayCells(
+                  needsWater.map((c) => c.id),
+                  { lastWatered: todayStr }
+                );
+                loadSeedlingCells();
+              }
+            }
+          }
+        }
+
         const o = todayTaskOccurrences.find((x: { id: string }) => x.id === occId);
         if (o && id) {
           const gp = plants.find(
@@ -3541,9 +3568,29 @@ export const GardenDashboardPage: React.FC = () => {
                         cells={seedlingCells}
                         plantMap={seedlingPlantMap}
                         onWater={async (cellId) => {
-                          const today = new Date().toISOString().split('T')[0];
-                          await updateSeedlingTrayCell(cellId, { lastWatered: today });
-                          loadSeedlingCells();
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          await updateSeedlingTrayCell(cellId, { lastWatered: todayStr });
+                          await loadSeedlingCells();
+                          // Check if ALL non-empty cells are now watered today → auto-complete the task
+                          const updatedCells = await getSeedlingTrayCells(id);
+                          const nonEmpty = updatedCells.filter((c) => c.plantId && c.stage !== "empty");
+                          const allWatered = nonEmpty.length > 0 && nonEmpty.every((c) => c.lastWatered === todayStr);
+                          if (allWatered) {
+                            const incompleteOcc = todayTaskOccurrences.find(
+                              (o) => (o as any).taskType === "water" && (Number(o.completedCount || 0) < Number(o.requiredCount || 1))
+                            );
+                            if (incompleteOcc) {
+                              const remaining = Math.max(0, Number(incompleteOcc.requiredCount || 1) - Number(incompleteOcc.completedCount || 0));
+                              for (let i = 0; i < remaining; i++) {
+                                await progressTaskOccurrence(incompleteOcc.id, 1);
+                              }
+                              skipTodayCacheRef.current = true;
+                              await updateTodayProgressState();
+                              await load({ silent: true, preserveHeavy: true });
+                              await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+                              emitGardenRealtime("tasks");
+                            }
+                          }
                         }}
                         onEdit={(index) => setSeedlingModal({ type: "single", index })}
                         onTransplant={(cell) => setTransplantCell(cell)}
@@ -3570,7 +3617,30 @@ export const GardenDashboardPage: React.FC = () => {
                             } else {
                               await updateSeedlingTrayCell(seedlingCells[seedlingModal.index].id, data);
                             }
-                            loadSeedlingCells();
+                            await loadSeedlingCells();
+                            // Auto-complete task if all non-empty cells are watered
+                            if (data.lastWatered) {
+                              const todayStr = new Date().toISOString().split('T')[0];
+                              const updatedCells = await getSeedlingTrayCells(id);
+                              const nonEmpty = updatedCells.filter((c) => c.plantId && c.stage !== "empty");
+                              const allWatered = nonEmpty.length > 0 && nonEmpty.every((c) => c.lastWatered === todayStr);
+                              if (allWatered) {
+                                const incompleteOcc = todayTaskOccurrences.find(
+                                  (o) => (o as any).taskType === "water" && (Number(o.completedCount || 0) < Number(o.requiredCount || 1))
+                                );
+                                if (incompleteOcc) {
+                                  const remaining = Math.max(0, Number(incompleteOcc.requiredCount || 1) - Number(incompleteOcc.completedCount || 0));
+                                  for (let i = 0; i < remaining; i++) {
+                                    await progressTaskOccurrence(incompleteOcc.id, 1);
+                                  }
+                                  skipTodayCacheRef.current = true;
+                                  await updateTodayProgressState();
+                                  await load({ silent: true, preserveHeavy: true });
+                                  await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+                                  emitGardenRealtime("tasks");
+                                }
+                              }
+                            }
                           }}
                           onClear={async () => {
                             if (seedlingModal.type === "multi" && seedlingModal.indices) {
