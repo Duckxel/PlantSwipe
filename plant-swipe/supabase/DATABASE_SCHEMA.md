@@ -1581,6 +1581,14 @@ allowed_tables constant text[] := array[
 ];
 ```
 
+#### 5b. Add Plant Columns Without Updating the Phase 4 Whitelist
+```sql
+-- In 03_plants_and_colors.sql, the plants sync ends with a Phase 4
+-- allowed_columns whitelist that drops every column not explicitly listed.
+-- If you add a new plants column in CREATE TABLE / Phase 1 but forget to add
+-- it to allowed_columns, the next admin schema sync will delete it again.
+```
+
 #### 6. Many Consecutive ALTER TABLE Statements
 ```sql
 -- Don't do this - causes "1600 columns" parsing error:
