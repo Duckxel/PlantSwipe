@@ -7312,25 +7312,32 @@ async function verifySchemaAfterSync() {
     'pgcrypto',
     'pg_cron',
   ]
+  const requiredPlantColumns = [
+    'vegetable',
+  ]
 
-  const [tableRows, funcRows, extRows] = await Promise.all([
+  const [tableRows, funcRows, extRows, plantColumnRows] = await Promise.all([
     sql`select table_name from information_schema.tables where table_schema='public' and table_name = any(${sql.array(requiredTables)})`,
     sql`select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any(${sql.array(requiredFunctions)})`,
     sql`select extname from pg_extension where extname = any(${sql.array(requiredExtensions)})`,
+    sql`select column_name from information_schema.columns where table_schema='public' and table_name='plants' and column_name = any(${sql.array(requiredPlantColumns)})`,
   ])
 
   const presentTables = new Set((tableRows || []).map(r => r.table_name))
   const presentFunctions = new Set((funcRows || []).map(r => r.name))
   const presentExtensions = new Set((extRows || []).map(r => r.extname))
+  const presentPlantColumns = new Set((plantColumnRows || []).map(r => r.column_name))
 
   const missingTables = requiredTables.filter(n => !presentTables.has(n))
   const missingFunctions = requiredFunctions.filter(n => !presentFunctions.has(n))
   const missingExtensions = requiredExtensions.filter(n => !presentExtensions.has(n))
+  const missingPlantColumns = requiredPlantColumns.filter(n => !presentPlantColumns.has(n))
 
   return {
     tables: { required: requiredTables, present: Array.from(presentTables), missing: missingTables },
     functions: { required: requiredFunctions, present: Array.from(presentFunctions), missing: missingFunctions },
     extensions: { required: requiredExtensions, present: Array.from(presentExtensions), missing: missingExtensions },
+    plants: { requiredColumns: requiredPlantColumns, presentColumns: Array.from(presentPlantColumns), missingColumns: missingPlantColumns },
   }
 }
 
@@ -7444,6 +7451,19 @@ async function handleSyncSchema(req, res) {
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch { }
+    const schemaVerificationFailed = Boolean(
+      summary && (
+        summary.tables?.missing?.length ||
+        summary.functions?.missing?.length ||
+        summary.extensions?.missing?.length ||
+        summary.plants?.missingColumns?.length
+      )
+    )
+    if (schemaVerificationFailed) {
+      hasError = true
+      failedFile = failedFile || 'schema verification'
+      failedError = failedError || 'Critical schema objects or plant columns are missing after sync'
+    }
 
     // Log admin action
     try {
