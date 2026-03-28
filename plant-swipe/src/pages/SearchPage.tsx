@@ -221,22 +221,22 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     <ScrollingTitle className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
                     {p.family && <ScrollingTitle className="text-[10px] opacity-50">{p.family}</ScrollingTitle>}
                   </div>
-                  <div className="flex items-center justify-end gap-1 mt-2">
+                  <div className="flex items-center justify-end gap-2 mt-2">
                     <button
                       type="button"
                       onClick={(e) => handleLike(e, p.id)}
-                      className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
+                      className={`${actionBtnBase} h-11 w-11 flex items-center justify-center ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
                       aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
                     >
-                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                      <Heart className={`h-5 w-5 ${isLiked ? "fill-current" : ""}`} />
                     </button>
                     <button
                       type="button"
                       onClick={(e) => handleBookmark(e, p.id)}
-                      className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
+                      className={`${actionBtnBase} h-11 w-11 flex items-center justify-center text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
                       aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
                     >
-                      <Bookmark className="h-4 w-4" />
+                      <Bookmark className="h-5 w-5" />
                     </button>
                   </div>
                 </div>
