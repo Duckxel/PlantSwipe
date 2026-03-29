@@ -2109,6 +2109,7 @@ export const GardenListPage: React.FC = () => {
             </h1>
             {user && (
               <Button
+                data-tutorial="create-garden"
                 className="rounded-2xl relative z-10 shadow-lg shadow-emerald-500/20"
                 onClick={() => setOpen(true)}
               >

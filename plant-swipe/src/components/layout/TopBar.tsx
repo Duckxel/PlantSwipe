@@ -107,7 +107,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
           // Logged-in navigation: Discovery, Gardens, Encyclopedia (always normal)
           <>
             <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
-            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished || gardenInvites.length > 0} />
+            <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished || gardenInvites.length > 0} dataTutorial="nav-gardens" />
             <NavPill to="/search/categories" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
           </>
         ) : (
@@ -237,9 +237,9 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
 // Props (callbacks) are memoized in parent, so this component only re-renders on route/auth changes.
 export const TopBar = React.memo(TopBarComponent)
 
-function NavPill({ to, isActive, icon, label, showDot }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean }) {
+function NavPill({ to, isActive, icon, label, showDot, dataTutorial }: { to: string; isActive: boolean; icon: React.ReactNode; label: string; showDot?: boolean; dataTutorial?: string }) {
   return (
-    <div className="relative inline-block align-middle overflow-visible">
+    <div className="relative inline-block align-middle overflow-visible" data-tutorial={dataTutorial}>
       <Button
         asChild
         variant={'secondary'}

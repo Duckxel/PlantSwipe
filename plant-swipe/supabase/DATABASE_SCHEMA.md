@@ -288,6 +288,7 @@ terms_version_accepted      TEXT DEFAULT '1.0.0'
 privacy_version_accepted    TEXT DEFAULT '1.0.0'
 -- Setup fields
 setup_completed             BOOLEAN DEFAULT false
+tutorial_completed          BOOLEAN DEFAULT false
 garden_type                 TEXT ('inside'|'outside'|'both')
 experience_level            TEXT ('novice'|'intermediate'|'expert')
 looking_for                 TEXT ('eat'|'ornamental'|'various')

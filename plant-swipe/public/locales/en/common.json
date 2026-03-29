@@ -2689,5 +2689,54 @@
       "wateredToday": "Watered Today",
       "done": "Done"
     }
+  },
+  "tutorial": {
+    "skip": "Skip tutorial",
+    "skipAll": "Skip tutorial",
+    "next": "Next",
+    "start": "Let's go!",
+    "finish": "Get started!",
+    "steps": {
+      "welcome": {
+        "title": "Welcome to Aphylia! 🌱",
+        "description": "Let us show you around! This quick tour will help you discover the main features of the app. You can skip at any time."
+      },
+      "discovery_swipe": {
+        "title": "Discover Plants",
+        "description": "Swipe through plant cards to explore our collection. Swipe right to like, left to skip — just like a dating app, but for plants!"
+      },
+      "discovery_like": {
+        "title": "Like Your Favorites",
+        "description": "Tap the heart button to save plants you love. They'll be added to your bookmarks for easy access later."
+      },
+      "discovery_info": {
+        "title": "Learn More",
+        "description": "Tap any plant card to see detailed information — care instructions, watering schedule, sunlight needs, and more."
+      },
+      "nav_gardens": {
+        "title": "Your Gardens",
+        "description": "Head to the Gardens section to manage your real-life plant collections. Let's check it out!"
+      },
+      "gardens_create": {
+        "title": "Create a Garden",
+        "description": "Start by creating your first garden. Give it a name and set its location — indoor, outdoor, or both!"
+      },
+      "gardens_overview": {
+        "title": "Garden Dashboard",
+        "description": "Each garden has tabs to help you manage everything: overview, plants, tasks, journal, and more."
+      },
+      "gardens_plants": {
+        "title": "Add Plants to Your Garden",
+        "description": "The Plants tab lets you add and track the plants in your garden. Log watering, pruning, and other care events."
+      },
+      "gardens_analytics": {
+        "title": "Garden Analytics",
+        "description": "Track your garden's progress with analytics — see watering patterns, growth stats, and care history at a glance."
+      },
+      "tutorial_complete": {
+        "title": "You're All Set! 🎉",
+        "description": "You now know the basics of Aphylia. Start exploring, create your first garden, and let your green thumb shine!"
+      }
+    }
   }
 }

@@ -139,6 +139,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   label={t('common.garden', { defaultValue: 'Garden' })}
                   isActive={currentView === 'gardens'}
                   showDot={hasUnfinished || gardenInvites.length > 0}
+                  dataTutorial="nav-gardens"
                 />
                 <NavItem
                   to="/search/categories"
@@ -433,7 +434,8 @@ function NavItem({
   label, 
   isActive, 
   showDot,
-  badge
+  badge,
+  dataTutorial,
 }: { 
   to: string
   icon: React.ReactNode
@@ -441,10 +443,12 @@ function NavItem({
   isActive: boolean
   showDot?: boolean
   badge?: number
+  dataTutorial?: string
 }) {
   return (
     <Link
       to={to}
+      data-tutorial={dataTutorial}
       className={`
         flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl no-underline
         transition-colors duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500

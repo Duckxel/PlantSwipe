@@ -2,6 +2,7 @@ import React from 'react'
 const PlantSwipe = React.lazy(() => import("@/PlantSwipe"))
 import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 import { AuthProvider } from '@/context/AuthContext'
+import { TutorialProvider } from '@/context/TutorialContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
@@ -143,9 +144,11 @@ export default function App() {
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter basename={routerBase}>
-            <LanguageRoutes />
-          </BrowserRouter>
+          <TutorialProvider>
+            <BrowserRouter basename={routerBase}>
+              <LanguageRoutes />
+            </BrowserRouter>
+          </TutorialProvider>
           <ServiceWorkerToast />
         </AuthProvider>
       </ThemeProvider>

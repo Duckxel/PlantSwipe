@@ -3008,7 +3008,7 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+            <nav data-tutorial="garden-tabs" className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
               {(
                 canViewFullGarden
                   ? [
@@ -3024,11 +3024,13 @@ export const GardenDashboardPage: React.FC = () => {
               ).map(([k, label]) => {
                 const Icon = GARDEN_TAB_ICONS[k as TabKey];
                 const isActive = tab === k;
+                const tutorialId = k === 'plants' ? 'garden-plants-tab' : k === 'analytics' ? 'garden-analytics-tab' : undefined;
                 return (
                   <NavLink
                     key={k}
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
+                    data-tutorial={tutorialId}
                     className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"

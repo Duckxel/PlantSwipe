@@ -23,6 +23,7 @@ import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
+import { TutorialOverlay } from "@/components/tutorial/TutorialOverlay";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -3072,6 +3073,9 @@ export default function PlantSwipe() {
           }}
         />
       )}
+
+      {/* Onboarding Tutorial Overlay */}
+      <TutorialOverlay />
     </div>
     </AuthActionsProvider>
   )
