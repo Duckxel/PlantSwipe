@@ -14903,11 +14903,8 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const raw = (req.query.ip || req.query.q || '').toString().trim()
     const ip = normalizeIp(raw)
     if (!ip) {
