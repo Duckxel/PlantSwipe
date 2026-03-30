@@ -175,7 +175,11 @@ export function scoreDiscoveryPlants(
 
   const breakdowns = new Map<string, ScoreBreakdown>()
 
-  const scored = plants.map(plant => {
+  // ⚡ Bolt: Use a single-pass for loop with pre-allocation instead of chained .map()
+  // to prevent intermediate array allocations in this hot path
+  const scored = new Array(plants.length)
+  for (let i = 0; i < plants.length; i++) {
+    const plant = plants[i]
     let score = 0
 
     const featuredMonth = isPlantOfTheMonth(plant, now) ? W_FEATURED_MONTH : 0
@@ -211,11 +215,19 @@ export function scoreDiscoveryPlants(
       })
     }
 
-    return { plant, score }
-  })
+    scored[i] = { plant, score }
+  }
 
   scored.sort((a, b) => b.score - a.score)
-  return { sorted: scored.map(s => s.plant), breakdowns }
+
+  // ⚡ Bolt: Return plants using single-pass loop instead of .map()
+  // to avoid intermediate array allocations
+  const sorted = new Array(scored.length)
+  for (let i = 0; i < scored.length; i++) {
+    sorted[i] = scored[i].plant
+  }
+
+  return { sorted, breakdowns }
 }
 
 // ---------------------------------------------------------------------------
