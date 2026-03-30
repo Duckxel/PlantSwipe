@@ -832,7 +832,7 @@ export const AdminBadgesPanel: React.FC = () => {
       <div className="flex items-center gap-3">
         <SearchInput
           value={search}
-          onChange={setSearch}
+          onChange={(e) => setSearch(e.target.value)}
           placeholder="Search badges..."
           className="flex-1"
         />

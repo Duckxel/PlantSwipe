@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { BadgeRow, UserBadgeRow, UserBadgeWithDetails } from '@/types/badge'
+import type { BadgeRow, UserBadgeWithDetails } from '@/types/badge'
 
 /** Fetch all available badges. */
 export async function getAllBadges(): Promise<BadgeRow[]> {
