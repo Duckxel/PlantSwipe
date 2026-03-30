@@ -3,8 +3,9 @@
 -- ============================================================
 --
 -- TABLES:
---   • badges       — badge catalog (name, description, icon, category)
---   • user_badges  — which user earned which badge and when
+--   • badges              — badge catalog (slug, icon, category)
+--   • badge_translations  — multilingual name & description per badge
+--   • user_badges         — which user earned which badge and when
 --
 -- Badges can be awarded:
 --   • Automatically on event completion (events.badge_id FK)
@@ -18,8 +19,8 @@
 CREATE TABLE IF NOT EXISTS badges (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   slug          text NOT NULL UNIQUE,        -- machine-readable key, e.g. 'easter-2026'
-  name          text NOT NULL,               -- display name, e.g. 'Easter Egg Hunter 2026'
-  description   text,                        -- e.g. 'Found all Easter eggs during the 2026 hunt'
+  name          text NOT NULL,               -- default display name (English)
+  description   text,                        -- default description (English)
   icon_url      text,                        -- URL to badge image (PNG/SVG), null = use default
   category      text NOT NULL DEFAULT 'event', -- 'event', 'achievement', 'milestone', 'special'
   is_active     boolean NOT NULL DEFAULT true,
@@ -32,7 +33,26 @@ ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "badges_select_all" ON badges
   FOR SELECT USING (true);
 
--- ── 2. user_badges ───────────────────────────────────────────
+-- ── 2. badge_translations ────────────────────────────────────
+-- Multilingual name & description for each badge.
+CREATE TABLE IF NOT EXISTS badge_translations (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  badge_id      uuid NOT NULL REFERENCES badges(id) ON DELETE CASCADE,
+  language      text NOT NULL,              -- e.g. 'fr', 'en'
+  name          text NOT NULL DEFAULT '',
+  description   text NOT NULL DEFAULT '',
+  UNIQUE(badge_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_badge_translations_badge ON badge_translations(badge_id);
+
+ALTER TABLE badge_translations ENABLE ROW LEVEL SECURITY;
+
+-- Everyone can read badge translations
+CREATE POLICY "badge_translations_select_all" ON badge_translations
+  FOR SELECT USING (true);
+
+-- ── 3. user_badges ───────────────────────────────────────────
 -- Records which user earned which badge and when.
 CREATE TABLE IF NOT EXISTS user_badges (
   id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -59,7 +79,7 @@ CREATE POLICY "user_badges_select_public" ON user_badges
 CREATE POLICY "user_badges_insert_own" ON user_badges
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
--- ── 3. award_badge RPC ──────────────────────────────────────
+-- ── 4. award_badge RPC ──────────────────────────────────────
 -- Awards a badge to a user. Idempotent (ignores duplicates).
 -- Usage: SELECT award_badge('<user-uuid>', '<badge-slug>');
 CREATE OR REPLACE FUNCTION award_badge(target_user_id uuid, badge_slug text)

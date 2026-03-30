@@ -1,3 +1,5 @@
+import type { SupportedLanguage } from '@/lib/i18n'
+
 /** Row from the `badges` table — badge catalog. */
 export type BadgeRow = {
   id: string
@@ -8,6 +10,18 @@ export type BadgeRow = {
   category: string
   is_active: boolean
   created_at: string
+}
+
+/** Row from the `badge_translations` table. */
+export type BadgeTranslation = {
+  language: SupportedLanguage
+  name: string
+  description: string
+}
+
+/** Badge with translations loaded. */
+export type BadgeWithTranslations = BadgeRow & {
+  translations: BadgeTranslation[]
 }
 
 /** Row from the `user_badges` table — earned badges per user. */
