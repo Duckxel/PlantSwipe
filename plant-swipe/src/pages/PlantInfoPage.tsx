@@ -486,23 +486,16 @@ const PlantInfoPage: React.FC = () => {
   const handleShare = React.useCallback(async () => {
     if (typeof window === 'undefined' || !plant) return
     const shareUrl = window.location.href
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: plant.name,
-          text: plant.presentation || plant.overview || undefined,
-          url: shareUrl,
-        })
-        setShareStatus('shared')
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-        setShareStatus('copied')
-      } else {
-        setShareStatus('error')
-      }
-    } catch {
-      setShareStatus('error')
-    }
+    const { platformShare } = await import('@/platform/share')
+    const result = await platformShare({
+      title: plant.name,
+      text: plant.presentation || plant.overview || undefined,
+      url: shareUrl,
+    })
+    if (result === 'shared') setShareStatus('shared')
+    else if (result === 'copied') setShareStatus('copied')
+    else if (result === 'cancelled') setShareStatus('idle')
+    else setShareStatus('error')
     if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
     shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
   }, [plant])

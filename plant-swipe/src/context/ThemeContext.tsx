@@ -1,4 +1,5 @@
 import React from 'react'
+import { applyNativeChromeForTheme } from '@/lib/nativeStatusBarTheme'
 
 export type Theme = 'system' | 'light' | 'dark'
 
@@ -57,6 +58,12 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
     
     setEffectiveTheme(effective)
+    void applyNativeChromeForTheme(effective)
+
+    const meta = document.getElementById('aphylia-theme-color-meta') as HTMLMetaElement | null
+    if (meta) {
+      meta.content = effective === 'dark' ? '#252526' : '#052e16'
+    }
   }, [theme])
 
   // Listen for system theme changes when theme is 'system'
@@ -75,6 +82,11 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       }
       
       setEffectiveTheme(effective)
+      void applyNativeChromeForTheme(effective)
+      const meta = document.getElementById('aphylia-theme-color-meta') as HTMLMetaElement | null
+      if (meta) {
+        meta.content = effective === 'dark' ? '#252526' : '#052e16'
+      }
     }
 
     // Modern browsers
