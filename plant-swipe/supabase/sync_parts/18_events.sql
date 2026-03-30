@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS events (
   name          text NOT NULL,
   description   text,
   event_type    text NOT NULL DEFAULT 'egg_hunt',  -- 'egg_hunt', 'scavenger_hunt', etc.
+  badge_id      uuid REFERENCES badges(id) ON DELETE SET NULL, -- badge awarded on completion (null = no badge)
   starts_at     timestamptz,
   ends_at       timestamptz,
   is_active     boolean NOT NULL DEFAULT false,

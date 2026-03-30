@@ -6,6 +6,7 @@ export type EventRow = {
   name: string
   description: string | null
   event_type: string
+  badge_id: string | null
   starts_at: string | null
   ends_at: string | null
   is_active: boolean

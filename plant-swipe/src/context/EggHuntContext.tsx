@@ -2,6 +2,7 @@ import React, { createContext, useContext, useCallback, useEffect, useState } fr
 import { useAuth } from '@/context/AuthContext'
 import type { EventRow, EventItemRow } from '@/types/event'
 import { getActiveEvent, getEventItems, getUserProgress, markItemFound, markEventCompleted } from '@/lib/events'
+import { awardBadgeById } from '@/lib/badges'
 
 type EggHuntContextValue = {
   /** The active event, or null if none. */
@@ -121,6 +122,10 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
         setCompleted(true)
         if (user) {
           await markEventCompleted(event.id, user.id)
+          // Award the event's badge if one is configured
+          if (event.badge_id) {
+            await awardBadgeById(user.id, event.badge_id)
+          }
         }
       }
 
