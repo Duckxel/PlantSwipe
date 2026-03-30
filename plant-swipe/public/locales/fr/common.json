@@ -2710,8 +2710,20 @@
         "description": "Appuyez sur le cœur pour sauvegarder les plantes que vous aimez. Elles seront ajoutées à vos favoris pour un accès rapide."
       },
       "discovery_info": {
-        "title": "En savoir plus",
+        "title": "Détails de la plante",
         "description": "Appuyez sur une carte de plante pour voir les informations détaillées — instructions d'entretien, calendrier d'arrosage, besoins en lumière, et plus."
+      },
+      "encyclopedia_nav": {
+        "title": "Encyclopédie 📚",
+        "description": "L'Encyclopédie vous permet de rechercher et filtrer toute notre collection de plantes. Trouvez exactement ce que vous cherchez par nom, type ou besoins d'entretien."
+      },
+      "encyclopedia_categories": {
+        "title": "Parcourir par catégorie",
+        "description": "Explorez les plantes organisées par catégories — succulentes, plantes fleuries, légumes, options sans danger pour les animaux, et bien plus. Appuyez sur une catégorie pour explorer !"
+      },
+      "scan_identify": {
+        "title": "Scanner de plantes 📷",
+        "description": "Vous ne connaissez pas une plante ? Prenez une photo ou importez une image et notre IA l'identifiera instantanément. Votre historique de scans est sauvegardé."
       },
       "nav_gardens": {
         "title": "Vos Jardins",
@@ -2723,15 +2735,23 @@
       },
       "gardens_overview": {
         "title": "Tableau de bord du jardin",
-        "description": "Chaque jardin a des onglets pour tout gérer : aperçu, plantes, tâches, journal, et plus encore."
+        "description": "Chaque jardin a des onglets pour tout gérer : aperçu, plantes, tâches, journal, analyses et paramètres."
       },
       "gardens_plants": {
         "title": "Ajouter des plantes",
         "description": "L'onglet Plantes vous permet d'ajouter et suivre les plantes de votre jardin. Enregistrez l'arrosage, la taille et les autres soins."
       },
       "gardens_analytics": {
-        "title": "Analyses du jardin",
+        "title": "Analyses du jardin 📊",
         "description": "Suivez les progrès de votre jardin avec les analyses — consultez les habitudes d'arrosage, les statistiques de croissance et l'historique des soins."
+      },
+      "gardens_seedling": {
+        "title": "Plateau de semis 🌱",
+        "description": "Démarrez vos graines dans un plateau de semis virtuel ! Suivez la germination, l'arrosage et les stades de croissance pour chaque cellule. Transplantez dans votre jardin quand elles sont prêtes."
+      },
+      "gardens_tasks": {
+        "title": "Tâches & Journal 📝",
+        "description": "L'onglet Tâches affiche vos tâches du jour — arrosage, engrais, taille. Le Journal vous permet de noter et suivre l'histoire de votre jardin."
       },
       "tutorial_complete": {
         "title": "Vous êtes prêt ! 🎉",

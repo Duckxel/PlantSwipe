@@ -2710,8 +2710,20 @@
         "description": "Tap the heart button to save plants you love. They'll be added to your bookmarks for easy access later."
       },
       "discovery_info": {
-        "title": "Learn More",
+        "title": "Plant Details",
         "description": "Tap any plant card to see detailed information — care instructions, watering schedule, sunlight needs, and more."
+      },
+      "encyclopedia_nav": {
+        "title": "Encyclopedia 📚",
+        "description": "The Encyclopedia lets you search and filter our entire plant collection. Find exactly what you're looking for by name, type, or care needs."
+      },
+      "encyclopedia_categories": {
+        "title": "Browse by Category",
+        "description": "Explore plants organized into categories — succulents, flowering plants, vegetables, pet-safe options, and many more. Tap a category to dive in!"
+      },
+      "scan_identify": {
+        "title": "Plant Scanner 📷",
+        "description": "Don't know what a plant is? Take a photo or upload an image and our AI will identify it instantly. Your scan history is saved for reference."
       },
       "nav_gardens": {
         "title": "Your Gardens",
@@ -2723,15 +2735,23 @@
       },
       "gardens_overview": {
         "title": "Garden Dashboard",
-        "description": "Each garden has tabs to help you manage everything: overview, plants, tasks, journal, and more."
+        "description": "Each garden has tabs to help you manage everything: overview, plants, tasks, journal, analytics, and settings."
       },
       "gardens_plants": {
         "title": "Add Plants to Your Garden",
         "description": "The Plants tab lets you add and track the plants in your garden. Log watering, pruning, and other care events."
       },
       "gardens_analytics": {
-        "title": "Garden Analytics",
+        "title": "Garden Analytics 📊",
         "description": "Track your garden's progress with analytics — see watering patterns, growth stats, and care history at a glance."
+      },
+      "gardens_seedling": {
+        "title": "Seedling Tray 🌱",
+        "description": "Start seeds in a virtual seedling tray! Track germination, watering, and growth stages for each cell. Transplant to your garden when they're ready."
+      },
+      "gardens_tasks": {
+        "title": "Tasks & Journal 📝",
+        "description": "The Tasks tab shows your daily to-dos — watering, fertilizing, pruning. The Journal lets you log notes and track your garden's story over time."
       },
       "tutorial_complete": {
         "title": "You're All Set! 🎉",

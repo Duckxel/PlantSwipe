@@ -146,6 +146,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                   icon={<Search className="h-5 w-5" />}
                   label={t('common.search', { defaultValue: 'Search' })}
                   isActive={currentView === 'search'}
+                  dataTutorial="nav-search"
                 />
                 <NavItemButton
                   icon={<User className="h-5 w-5" />}

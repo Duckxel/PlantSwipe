@@ -1,7 +1,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, X, Sparkles, Sprout, Heart, Info, BarChart3, Plus, ArrowDown, PartyPopper } from 'lucide-react'
+import { ChevronRight, X, Sparkles, Sprout, Heart, Info, BarChart3, Plus, ArrowDown, PartyPopper, Search, ScanLine, ListChecks, Grid3X3 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
@@ -15,11 +15,16 @@ const STEP_ICONS: Partial<Record<TutorialStepId, React.ReactNode>> = {
   discovery_swipe: <ArrowDown className="h-5 w-5 text-emerald-500" />,
   discovery_like: <Heart className="h-5 w-5 text-rose-500" />,
   discovery_info: <Info className="h-5 w-5 text-blue-500" />,
+  encyclopedia_nav: <Search className="h-5 w-5 text-amber-500" />,
+  encyclopedia_categories: <Grid3X3 className="h-5 w-5 text-amber-500" />,
+  scan_identify: <ScanLine className="h-5 w-5 text-cyan-500" />,
   nav_gardens: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_create: <Plus className="h-5 w-5 text-emerald-500" />,
   gardens_overview: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_plants: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_analytics: <BarChart3 className="h-5 w-5 text-purple-500" />,
+  gardens_seedling: <Grid3X3 className="h-5 w-5 text-emerald-500" />,
+  gardens_tasks: <ListChecks className="h-5 w-5 text-orange-500" />,
   tutorial_complete: <PartyPopper className="h-7 w-7 text-emerald-500" />,
 }
 

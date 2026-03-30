@@ -108,7 +108,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
           <>
             <NavPill to="/discovery" isActive={pathWithoutLang === '/discovery' || pathWithoutLang.startsWith('/discovery/')} icon={<Sparkles className="h-4 w-4" />} label={t('common.discovery')} />
             <NavPill to="/gardens" isActive={pathWithoutLang.startsWith('/gardens') || pathWithoutLang.startsWith('/garden/')} icon={<Sprout className="h-4 w-4" />} label={t('common.garden')} showDot={hasUnfinished || gardenInvites.length > 0} dataTutorial="nav-gardens" />
-            <NavPill to="/search/categories" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} />
+            <NavPill to="/search/categories" isActive={pathWithoutLang.startsWith('/search')} icon={<Search className="h-4 w-4" />} label={t('common.encyclopedia')} dataTutorial="nav-search" />
           </>
         ) : (
           // Logged-out navigation: Features, How it works, FAQ, Encyclopedia, Pricing (same on all pages)

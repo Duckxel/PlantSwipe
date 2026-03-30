@@ -7,11 +7,16 @@ export type TutorialStepId =
   | 'discovery_swipe'
   | 'discovery_like'
   | 'discovery_info'
+  | 'encyclopedia_nav'
+  | 'encyclopedia_categories'
+  | 'scan_identify'
   | 'nav_gardens'
   | 'gardens_create'
   | 'gardens_overview'
   | 'gardens_plants'
   | 'gardens_analytics'
+  | 'gardens_seedling'
+  | 'gardens_tasks'
   | 'tutorial_complete'
 
 export type TutorialStep = {
@@ -20,22 +25,36 @@ export type TutorialStep = {
   placement: 'center' | 'top' | 'bottom' | 'left' | 'right'
   route?: string
   highlightPadding?: number
-  /** When true, the step is purely informational (no element highlight) */
   isModal?: boolean
-  /** When true, falls back to modal if target element is not found in the DOM */
   fallbackToModal?: boolean
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
+  // --- Welcome ---
   { id: 'welcome', placement: 'center', isModal: true },
+
+  // --- Discovery ---
   { id: 'discovery_swipe', targetSelector: '[data-tutorial="swipe-card"]', placement: 'bottom', route: '/discovery', fallbackToModal: true, highlightPadding: 12 },
   { id: 'discovery_like', targetSelector: '[data-tutorial="like-button"]', placement: 'top', route: '/discovery', fallbackToModal: true },
   { id: 'discovery_info', targetSelector: '[data-tutorial="info-button"]', placement: 'top', route: '/discovery', fallbackToModal: true },
-  { id: 'nav_gardens', targetSelector: '[data-tutorial="nav-gardens"]', placement: 'top', route: '/discovery', fallbackToModal: true },
+
+  // --- Encyclopedia ---
+  { id: 'encyclopedia_nav', targetSelector: '[data-tutorial="nav-search"]', placement: 'top', route: '/discovery', fallbackToModal: true },
+  { id: 'encyclopedia_categories', targetSelector: '[data-tutorial="category-grid"]', placement: 'bottom', route: '/search/categories', fallbackToModal: true },
+
+  // --- Scan ---
+  { id: 'scan_identify', targetSelector: '[data-tutorial="scan-card"]', placement: 'bottom', route: '/scan', fallbackToModal: true },
+
+  // --- Gardens ---
+  { id: 'nav_gardens', targetSelector: '[data-tutorial="nav-gardens"]', placement: 'top', route: '/scan', fallbackToModal: true },
   { id: 'gardens_create', targetSelector: '[data-tutorial="create-garden"]', placement: 'bottom', route: '/gardens', fallbackToModal: true },
   { id: 'gardens_overview', placement: 'center', isModal: true, route: '/gardens' },
   { id: 'gardens_plants', placement: 'center', isModal: true, route: '/gardens' },
   { id: 'gardens_analytics', placement: 'center', isModal: true, route: '/gardens' },
+  { id: 'gardens_seedling', placement: 'center', isModal: true, route: '/gardens' },
+  { id: 'gardens_tasks', placement: 'center', isModal: true, route: '/gardens' },
+
+  // --- Complete ---
   { id: 'tutorial_complete', placement: 'center', isModal: true },
 ]
 
