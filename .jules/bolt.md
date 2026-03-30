@@ -14,3 +14,7 @@
 ## 2026-03-02 - Eliminate array allocations in Map initialization for hot paths
 **Learning:** Initializing a `Map` using `new Map(array.map(item => [key, value]))` creates a massive amount of garbage collection pressure on large collections because it allocates an intermediate array *and* a 2-element tuple array `[key, value]` for every single item in the original array.
 **Action:** Replace `new Map(array.map(...))` in hot paths or large data transformations with an empty `Map` initialization followed by a single-pass `for` loop that calls `.set()`.
+
+## 2026-03-03 - Avoid array allocations in discovery scoring hot path
+**Learning:** `scoreDiscoveryPlants` in `discoveryScoring.ts` is a critical hot path that calculates scores for thousands of plants. Chained array allocations like `plants.map(...)` and `scored.map(...)` force intermediate garbage collection and slow down rendering logic.
+**Action:** Replace `Array.prototype.map()` in performance-sensitive logic with pre-allocated arrays (`new Array(length)`) and single-pass `for` loops to minimize GC pressure and improve application speed.
