@@ -2733,6 +2733,10 @@
         "title": "Create a Garden",
         "description": "Start by creating your first garden. Give it a name and set its location — indoor, outdoor, or both!"
       },
+      "gardens_beginner": {
+        "title": "Beginner Garden 🎓",
+        "description": "New to gardening? Create a Beginner garden for a guided experience! It includes a step-by-step roadmap with lessons on plant care, watering routines, and growing your first healthy plant."
+      },
       "gardens_overview": {
         "title": "Garden Dashboard",
         "description": "Each garden has tabs to help you manage everything: overview, plants, tasks, journal, analytics, and settings."

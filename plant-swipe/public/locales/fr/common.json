@@ -2733,6 +2733,10 @@
         "title": "Créer un jardin",
         "description": "Commencez par créer votre premier jardin. Donnez-lui un nom et définissez son emplacement — intérieur, extérieur, ou les deux !"
       },
+      "gardens_beginner": {
+        "title": "Jardin Débutant 🎓",
+        "description": "Nouveau dans le jardinage ? Créez un jardin Débutant pour une expérience guidée ! Il inclut une feuille de route étape par étape avec des leçons sur l'entretien des plantes, les routines d'arrosage et la croissance de votre première plante."
+      },
       "gardens_overview": {
         "title": "Tableau de bord du jardin",
         "description": "Chaque jardin a des onglets pour tout gérer : aperçu, plantes, tâches, journal, analyses et paramètres."

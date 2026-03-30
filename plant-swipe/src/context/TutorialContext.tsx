@@ -12,6 +12,7 @@ export type TutorialStepId =
   | 'scan_identify'
   | 'nav_gardens'
   | 'gardens_create'
+  | 'gardens_beginner'
   | 'gardens_overview'
   | 'gardens_plants'
   | 'gardens_analytics'
@@ -48,6 +49,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   // --- Gardens ---
   { id: 'nav_gardens', targetSelector: '[data-tutorial="nav-gardens"]', placement: 'top', route: '/scan', fallbackToModal: true },
   { id: 'gardens_create', targetSelector: '[data-tutorial="create-garden"]', placement: 'bottom', route: '/gardens', fallbackToModal: true },
+  { id: 'gardens_beginner', placement: 'center', isModal: true, route: '/gardens' },
   { id: 'gardens_overview', placement: 'center', isModal: true, route: '/gardens' },
   { id: 'gardens_plants', placement: 'center', isModal: true, route: '/gardens' },
   { id: 'gardens_analytics', placement: 'center', isModal: true, route: '/gardens' },

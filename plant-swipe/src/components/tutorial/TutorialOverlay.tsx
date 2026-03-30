@@ -1,7 +1,7 @@
 import React from 'react'
 import { createPortal } from 'react-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronRight, X, Sparkles, Sprout, Heart, Info, BarChart3, Plus, ArrowDown, PartyPopper, Search, ScanLine, ListChecks, Grid3X3 } from 'lucide-react'
+import { ChevronRight, X, Sparkles, Sprout, Heart, Info, BarChart3, Plus, ArrowDown, PartyPopper, Search, ScanLine, ListChecks, Grid3X3, GraduationCap } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
@@ -20,6 +20,7 @@ const STEP_ICONS: Partial<Record<TutorialStepId, React.ReactNode>> = {
   scan_identify: <ScanLine className="h-5 w-5 text-cyan-500" />,
   nav_gardens: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_create: <Plus className="h-5 w-5 text-emerald-500" />,
+  gardens_beginner: <GraduationCap className="h-5 w-5 text-sky-500" />,
   gardens_overview: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_plants: <Sprout className="h-5 w-5 text-emerald-500" />,
   gardens_analytics: <BarChart3 className="h-5 w-5 text-purple-500" />,
