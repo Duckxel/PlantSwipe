@@ -67,11 +67,12 @@ export async function getEventItems(eventId: string, lang?: string): Promise<Eve
 }
 
 /** Fetch items the current user has already found for a given event. */
-export async function getUserProgress(eventId: string): Promise<EventUserProgressRow[]> {
+export async function getUserProgress(eventId: string, userId: string): Promise<EventUserProgressRow[]> {
   const { data, error } = await supabase
     .from('event_user_progress')
     .select('*')
     .eq('event_id', eventId)
+    .eq('user_id', userId)
 
   if (error || !data) return []
   return data as EventUserProgressRow[]

@@ -63,7 +63,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
       setItems(allItems)
 
       if (user) {
-        const progress = await getUserProgress(activeEvent.id)
+        const progress = await getUserProgress(activeEvent.id, user.id)
         if (cancelled) return
         const ids = new Set(progress.map((p) => p.item_id))
         setFoundItemIds(ids)
