@@ -7588,6 +7588,57 @@ app.options('/api/admin/deploy-edge-functions', (_req, res) => {
   res.status(204).end()
 })
 
+// List folders in the UTILITY bucket under admin/uploads prefix
+app.get('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    // List top-level items under admin/uploads to discover folders
+    const folders = new Set()
+
+    async function listFoldersRecursive(prefix) {
+      const { data, error } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
+      if (error) throw error
+      if (!data) return
+      for (const item of data) {
+        // Supabase returns folders as items with id === null
+        if (item.id === null) {
+          const folderPath = prefix ? `${prefix}/${item.name}` : item.name
+          folders.add(folderPath)
+          // Recurse into subfolder
+          await listFoldersRecursive(folderPath)
+        }
+      }
+    }
+
+    await listFoldersRecursive(adminUploadPrefix)
+
+    // Also list root-level folders in the bucket (for non-admin prefixes)
+    const { data: rootData } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .list('', { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
+    if (rootData) {
+      for (const item of rootData) {
+        if (item.id === null) {
+          folders.add(item.name)
+        }
+      }
+    }
+
+    res.json({ folders: Array.from(folders).sort() })
+  } catch (err) {
+    console.error('[upload-folders] failed to list folders', err)
+    res.status(500).json({ error: err?.message || 'Failed to list folders' })
+  }
+})
+
 app.post('/api/admin/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
@@ -7618,6 +7669,12 @@ app.post('/api/admin/upload-image', async (req, res) => {
       name: adminDisplayName || null,
     },
     prefixBuilder: ({ req }) => {
+      // folderPath = absolute path in bucket (e.g. "blog/images")
+      // folder = relative sub-folder under admin/uploads prefix
+      const folderPath = req.body?.folderPath || req.query?.folderPath
+      if (folderPath) {
+        return sanitizeFolderInput(folderPath)
+      }
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
