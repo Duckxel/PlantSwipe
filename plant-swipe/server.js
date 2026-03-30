@@ -7271,6 +7271,15 @@ async function verifySchemaAfterSync() {
     'garden_watering_schedule',
     'web_visits',
     'requested_plants',
+    'badges',
+    'badge_translations',
+    'user_badges',
+    'events',
+    'event_translations',
+    'event_registrations',
+    'event_items',
+    'event_item_translations',
+    'event_user_progress',
   ]
   const requiredFunctions = [
     'get_profile_public_by_display_name',
@@ -7278,6 +7287,9 @@ async function verifySchemaAfterSync() {
     'get_user_profile_public_stats',
     'count_unique_ips_last_minutes',
     'count_unique_ips_last_days',
+    'award_badge',
+    'cleanup_event',
+    'delete_event_completely',
   ]
   const requiredExtensions = [
     'pgcrypto',
