@@ -122,44 +122,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       setProfile(data as any)
-      
-      // Auto-update timezone and language if missing
+
+      // Sync profile language to the app: the database is the source of truth.
+      // If the profile has a saved language preference, apply it to i18n and localStorage.
+      // This ensures language persists across sessions even if localStorage was cleared.
+      if (data?.language && (data.language === 'en' || data.language === 'fr')) {
+        const { default: i18n } = await import('@/lib/i18n')
+        const currentAppLanguage = i18n.language
+        if (currentAppLanguage !== data.language) {
+          console.log(`[auth] Syncing app language to profile preference: '${currentAppLanguage}' → '${data.language}'`)
+          i18n.changeLanguage(data.language)
+        }
+        try { localStorage.setItem('plant-swipe-language', data.language) } catch {}
+      }
+
+      // Auto-update timezone and language if missing in profile
       // Detect from browser and update in background
       const needsTimezone = data && !data.timezone
       const needsLanguage = data && !data.language
 
-      // Also sync language if the current app language (from URL/localStorage) differs from the profile.
-      // This catches the case where a user navigates to an English URL but their profile was
-      // auto-detected as French on first login, so notifications arrive in the wrong language.
-      const currentAppLanguage = (() => {
-        try {
-          const saved = localStorage.getItem('plant-swipe-language')
-          if (saved === 'en' || saved === 'fr') return saved
-        } catch {}
-        return null
-      })()
-      const languageMismatch = data?.language && currentAppLanguage && data.language !== currentAppLanguage
-
-      if (needsTimezone || needsLanguage || languageMismatch) {
+      if (needsTimezone || needsLanguage) {
         const detectedTimezone = needsTimezone
           ? (typeof Intl !== 'undefined'
               ? Intl.DateTimeFormat().resolvedOptions().timeZone || DEFAULT_TIMEZONE
               : DEFAULT_TIMEZONE)
           : null
 
-        // Detect language: use current app language if available, otherwise detect from browser
-        const detectedLanguage = languageMismatch
-          ? currentAppLanguage
-          : needsLanguage
-            ? (() => {
-                try {
-                  const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
-                  return browserLang.startsWith('fr') ? 'fr' : 'en'
-                } catch {
-                  return 'en'
-                }
-              })()
-            : null
+        // Detect language from browser only if profile has no language at all
+        const detectedLanguage = needsLanguage
+          ? (() => {
+              try {
+                const browserLang = navigator.language || (navigator as any).languages?.[0] || ''
+                return browserLang.startsWith('fr') ? 'fr' : 'en'
+              } catch {
+                return 'en'
+              }
+            })()
+          : null
 
         // Update in background (non-blocking)
         void (async () => {
@@ -178,8 +177,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const updatedProfile = { ...data, ...updates }
               setProfile(updatedProfile as any)
               try { localStorage.setItem('plantswipe.profile', JSON.stringify(updatedProfile)) } catch {}
-              if (languageMismatch) {
-                console.log(`[auth] Synced profile language from '${data.language}' to '${detectedLanguage}' to match app language`)
+              // Also sync detected language to app if profile had none
+              if (detectedLanguage) {
+                try { localStorage.setItem('plant-swipe-language', detectedLanguage) } catch {}
               }
             }
           } catch {

@@ -287,6 +287,10 @@ export const plantSchema = {
   },
   infusionBenefits: { type: 'text', description: 'Benefits of infusion/tea from this plant' },
   infusionRecipeIdeas: { type: 'text', description: 'Infusion/tea recipe ideas' },
+  infusionMixes: {
+    type: 'dict',
+    description: 'Infusion mix name → benefit (e.g. {"Chamomile & Mint": "Digestive relief"}). Only when utility includes infusion.',
+  },
   medicinalBenefits: { type: 'text', description: 'Medicinal benefits' },
   medicinalUsage: { type: 'text', description: 'How to use medicinally' },
   medicinalWarning: { type: 'text', description: 'Safety warning (historical vs modern use)' },

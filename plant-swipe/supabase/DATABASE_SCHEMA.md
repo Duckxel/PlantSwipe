@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 14, 2026
+> **Last Updated:** March 16, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 16, 2026:** **Garden Living Space & Roadmap Persistence.** Added `living_space` text[] column to `gardens` table (values: indoor, outdoor, terrarium, greenhouse) — used for plant suggestions and beginner onboarding. New `garden_roadmap_completions` table tracks beginner roadmap step completions per garden (persistent, never reverted). RPC: `complete_roadmap_step(uuid, text)`. Schema file: `12_audit_and_analytics.sql`.
 - **Mar 14, 2026:** **Admin Event Notifications.** Added `admin_event_notifications` table for configurable push notifications sent to selected admins when special events occur (user reports, bug reports, plant reports, plant requests). Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and selectable list of admin recipients. Schema file: `17_admin_event_notifications.sql`. New admin panel: "Event Alerts" tab.
 - **Mar 11, 2026:** **Email timezone bug fix.** Added `original_scheduled_for` column to `admin_email_campaigns` — stores the admin's intended send time immutably. The campaign runner edge function now uses this column for per-user timezone calculations instead of `scheduled_for`, which gets overwritten with cron wake-up times after partial sends, preventing timezone offset compounding. Added detailed column documentation for `admin_email_campaigns` and `admin_campaign_sends` tables.
 - **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
@@ -66,7 +67,7 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `09_admin_logs_and_friends.sql` | Admin activity logs, friends system |
 | `10_garden_invites_and_cache.sql` | Garden invitations, task caching |
 | `11_notifications_and_tasks.sql` | Push notifications, task occurrences |
-| `12_audit_and_analytics.sql` | Analytics, AI advice, journal |
+| `12_audit_and_analytics.sql` | Analytics, AI advice, journal, garden type/living space, roadmap completions |
 | `13_messaging.sql` | Conversations, messages, reactions |
 | `14_scanning_and_bugs.sql` | Plant scanning, bug catcher system |
 | `15_gdpr_and_preferences.sql` | GDPR compliance, email verification, preferences |
@@ -152,6 +153,7 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `bookmarks` | Bookmark collections (includes special Likes bookmark per user with `is_like = true`) |
 | `bookmark_items` | Plants saved to bookmark collections |
 | `user_action_status` | Profile action completion & skip state (synced across devices) |
+| `garden_roadmap_completions` | Beginner roadmap step completions per garden (persistent, never reverted) |
 
 ### Messaging
 
@@ -315,15 +317,26 @@ name                TEXT NOT NULL
 owner_id            UUID REFERENCES profiles(id)
 description         TEXT
 is_public           BOOLEAN DEFAULT false
+privacy             TEXT DEFAULT 'public'          -- CHECK: public, friends_only, private
 timezone            TEXT
 latitude            NUMERIC
 longitude           NUMERIC
 location_name       TEXT
+location_city       TEXT
+location_country    TEXT
+location_timezone   TEXT
+location_lat        NUMERIC
+location_lon        NUMERIC
 cover_image_url     TEXT
 default_schedule    JSONB
 irrigation_type     TEXT
 soil_type           TEXT
 sunlight_exposure   TEXT
+preferred_language  TEXT
+hide_ai_chat        BOOLEAN DEFAULT false
+garden_type         TEXT NOT NULL DEFAULT 'default' -- CHECK: default, beginners
+living_space        TEXT[] NOT NULL DEFAULT '{}'    -- CHECK: values in (indoor, outdoor, terrarium, greenhouse)
+streak              INTEGER DEFAULT 0
 created_at          TIMESTAMPTZ DEFAULT now()
 updated_at          TIMESTAMPTZ DEFAULT now()
 ```
@@ -612,6 +625,29 @@ PRIMARY KEY (user_id, action_id)
 | `bulk_mark_actions_completed(uuid, text[])` | Batch version of the above. |
 | `skip_action(uuid, text)` | Set `skipped_at`. Preserves `completed_at`. |
 | `unskip_action(uuid, text)` | Clear `skipped_at`. Preserves `completed_at`. |
+
+### `garden_roadmap_completions` (Beginner Roadmap Progress)
+
+Tracks beginner roadmap step completions per garden (persistent across devices and sessions). Once `completed_at` is set it is **never cleared** — even if the user later deletes the underlying resource (e.g. removes their plant). Stored per garden, not per user.
+
+```sql
+garden_id    UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+step_key     TEXT NOT NULL              -- Step identifier (e.g. 'set_living_space', 'add_plant')
+completed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+completed_by UUID REFERENCES auth.users(id) ON DELETE SET NULL
+PRIMARY KEY (garden_id, step_key)
+```
+
+**Step keys:** `set_living_space`, `add_plant`, `read_plant_info`, `schedule_water`, `schedule_fertilize`, `create_journal`
+
+**RLS:** Garden members can SELECT and INSERT rows for their garden.
+
+**RPCs:**
+| Function | Purpose |
+|----------|---------|
+| `complete_roadmap_step(uuid, text)` | Mark a step as completed (idempotent — `ON CONFLICT DO NOTHING`). Verifies caller is garden member. |
+
+**Schema file:** `12_audit_and_analytics.sql`
 
 ### `plants` (Master Plant Catalog)
 
@@ -1318,6 +1354,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `get_task_occurrences_batch(uuid[])` | Get task occurrences efficiently |
 | `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` | Get occurrences pre-joined with task metadata (type, emoji) for multiple gardens in one query |
 | `ensure_task_occurrences_for_garden(uuid)` | Generate task instances |
+| `complete_roadmap_step(uuid, text)` | Mark a beginner roadmap step as completed (idempotent, verifies garden membership) |
 
 ### Shadow Ban Functions (Threat Level 3)
 
@@ -1542,6 +1579,14 @@ allowed_tables constant text[] := array[
   'new_table_name',  -- ADD HERE
   ...
 ];
+```
+
+#### 5b. Add Plant Columns Without Updating the Phase 4 Whitelist
+```sql
+-- In 03_plants_and_colors.sql, the plants sync ends with a Phase 4
+-- allowed_columns whitelist that drops every column not explicitly listed.
+-- If you add a new plants column in CREATE TABLE / Phase 1 but forget to add
+-- it to allowed_columns, the next admin schema sync will delete it again.
 ```
 
 #### 6. Many Consecutive ALTER TABLE Statements

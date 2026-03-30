@@ -771,6 +771,58 @@ alter table if exists public.gardens add column if not exists preferred_language
 -- Migration: Add hide_ai_chat column to gardens (default false = chat visible by default)
 alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
 
+-- Migration: Add garden_type column to gardens (default 'default')
+alter table if exists public.gardens add column if not exists garden_type text not null default 'default' check (garden_type in ('default', 'beginners', 'seedling'));
+
+-- Migration: Add living_space to gardens (mirrors plant LivingSpace values)
+alter table if exists public.gardens
+  add column if not exists living_space text[] not null default '{}'::text[];
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.check_constraints
+    where constraint_name = 'gardens_living_space_values'
+  ) then
+    alter table public.gardens
+      add constraint gardens_living_space_values
+      check (living_space <@ array['indoor','outdoor','terrarium','greenhouse','seedling']::text[]);
+  end if;
+end $$;
+
+-- ========== Garden Roadmap Completions ==========
+create table if not exists public.garden_roadmap_completions (
+  garden_id   uuid   not null references public.gardens(id) on delete cascade,
+  step_key    text   not null,
+  completed_at timestamptz not null default now(),
+  completed_by uuid  references auth.users(id) on delete set null,
+  primary key (garden_id, step_key)
+);
+create index if not exists grc_garden_idx on public.garden_roadmap_completions (garden_id);
+alter table public.garden_roadmap_completions enable row level security;
+grant select, insert on public.garden_roadmap_completions to authenticated;
+
+drop policy if exists "Garden members can view roadmap completions" on public.garden_roadmap_completions;
+create policy "Garden members can view roadmap completions"
+  on public.garden_roadmap_completions for select
+  using (exists (select 1 from public.garden_members gm where gm.garden_id = garden_roadmap_completions.garden_id and gm.user_id = auth.uid()));
+
+drop policy if exists "Garden members can insert roadmap completions" on public.garden_roadmap_completions;
+create policy "Garden members can insert roadmap completions"
+  on public.garden_roadmap_completions for insert
+  with check (exists (select 1 from public.garden_members gm where gm.garden_id = garden_roadmap_completions.garden_id and gm.user_id = auth.uid()));
+
+create or replace function public.complete_roadmap_step(_garden_id uuid, _step_key text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if not exists (select 1 from public.garden_members where garden_id = _garden_id and user_id = auth.uid()) then
+    raise exception 'Not a member of this garden';
+  end if;
+  insert into public.garden_roadmap_completions (garden_id, step_key, completed_by)
+  values (_garden_id, _step_key, auth.uid())
+  on conflict (garden_id, step_key) do nothing;
+end;
+$$;
+
 -- ========== Plant Stocks Management ==========
 -- Table to manage plant seed/plant availability, quantity, and pricing for the shop
 create table if not exists public.plant_stocks (
@@ -911,6 +963,61 @@ AS $$
 $$;
 
 GRANT EXECUTE ON FUNCTION public.top_viewed_plants(integer) TO anon, authenticated;
+
+-- ========== Seedling Tray ==========
+
+-- Tray dimension columns on gardens (only used when garden_type = 'seedling')
+alter table if exists public.gardens add column if not exists tray_rows integer;
+alter table if exists public.gardens add column if not exists tray_cols integer;
+
+-- Seedling tray cells table
+create table if not exists public.seedling_tray_cells (
+  id uuid primary key default gen_random_uuid(),
+  garden_id uuid not null references public.gardens(id) on delete cascade,
+  position integer not null,
+  plant_id text references public.plants(id) on delete set null,
+  stage text not null default 'empty'
+    check (stage in ('empty', 'sown', 'germinating', 'sprouted', 'ready')),
+  sow_date date,
+  last_watered date,
+  notes text default '',
+  created_at timestamptz default now(),
+  updated_at timestamptz default now(),
+  unique(garden_id, position)
+);
+
+create index if not exists idx_seedling_tray_cells_garden
+  on public.seedling_tray_cells(garden_id);
+
+alter table public.seedling_tray_cells enable row level security;
+
+do $$
+begin
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_select') then
+    create policy seedling_cells_select on public.seedling_tray_cells
+      for select using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_insert') then
+    create policy seedling_cells_insert on public.seedling_tray_cells
+      for insert with check (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_update') then
+    create policy seedling_cells_update on public.seedling_tray_cells
+      for update using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+  if not exists (select 1 from pg_policies where tablename = 'seedling_tray_cells' and policyname = 'seedling_cells_delete') then
+    create policy seedling_cells_delete on public.seedling_tray_cells
+      for delete using (
+        exists (select 1 from public.garden_members gm where gm.garden_id = seedling_tray_cells.garden_id and gm.user_id = auth.uid())
+      );
+  end if;
+end $$;
 
 -- ========== Messaging System ==========
 -- This adds a complete messaging system with:

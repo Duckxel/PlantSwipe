@@ -112,13 +112,14 @@
     },
     "options": {
       "plantType": {
-        "plant": "Plant",
-        "flower": "Flower",
-        "bamboo": "Bamboo",
+        "herb": "Herb",
         "shrub": "Shrub",
         "tree": "Tree",
-        "cactus": "Cactus",
-        "succulent": "Succulent"
+        "climber": "Climber",
+        "succulent": "Succulent",
+        "fern": "Fern",
+        "moss": "Moss",
+        "grass": "Grass"
       },
       "utility": {
         "comestible": "Edible",
@@ -453,6 +454,11 @@
       "cockchafer": "Cockchafer",
       "dungbeetle": "Dung beetle",
       "weevil": "Weevil",
+      "herb": "Herb",
+      "climber": "Climber",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass",
       "week": "Week",
       "month": "Month",
       "year": "Year",
@@ -463,11 +469,13 @@
       "approved": "Approved",
       "safe": "Safe",
       "at_risk": "At Risk",
-      "plant": "Plant",
-      "bamboo": "Bamboo",
+      "herb": "Herb",
       "shrub": "Shrub",
       "tree": "Tree",
-      "cactus": "Cactus"
+      "climber": "Climber",
+      "fern": "Fern",
+      "moss": "Moss",
+      "grass": "Grass"
     },
     "fields": {
       "commonNames": {

@@ -183,6 +183,7 @@ const ContextChipBadge: React.FC<{
   selectable?: boolean
   onSelect?: () => void
 }> = ({ chip, onRemove, selectable, onSelect }) => {
+  const { t } = useTranslation('common')
   const chipIcons: Record<string, React.ReactNode> = {
     garden: <Leaf className="w-3 h-3" />,
     plant: <Leaf className="w-3 h-3" />,
@@ -212,6 +213,8 @@ const ContextChipBadge: React.FC<{
             onRemove()
           }}
           className="ml-0.5 hover:bg-black/10 rounded-full p-0.5"
+          aria-label={t('common.remove', { defaultValue: 'Remove' })}
+          title={t('common.remove', { defaultValue: 'Remove' })}
         >
           <X className="w-3 h-3" />
         </button>
@@ -406,6 +409,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 size="icon"
                 onClick={onClose}
                 aria-label={t('common.close', 'Close')}
+                title={t('common.close', 'Close')}
                 className="w-9 h-9 md:hidden text-white/90 hover:text-white hover:bg-white/20 -ml-1"
               >
                 <X className="w-5 h-5" />
@@ -441,6 +445,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 size="icon"
                 onClick={onToggleMinimize}
                 aria-label={isMinimized ? t('common.maximize', 'Maximize') : t('common.minimize', 'Minimize')}
+                title={isMinimized ? t('common.maximize', 'Maximize') : t('common.minimize', 'Minimize')}
                 className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 {isMinimized ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -451,6 +456,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                 size="icon"
                 onClick={onClose}
                 aria-label={t('common.close', 'Close')}
+                title={t('common.close', 'Close')}
                 className="hidden md:flex w-8 h-8 text-white/70 hover:text-white hover:bg-white/20"
               >
                 <X className="w-4 h-4" />
@@ -583,7 +589,9 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                         )}
                         <button
                           onClick={() => onRemoveAttachment(att.id)}
-                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 transition-opacity"
+                          aria-label={t('common.remove', { defaultValue: 'Remove' })}
+                          title={t('common.remove', { defaultValue: 'Remove' })}
                         >
                           <X className="w-3 h-3" />
                         </button>
@@ -703,6 +711,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       size="icon"
                       onClick={onAbortStream}
                       aria-label={t('common.stop', 'Stop')}
+                      title={t('common.stop', 'Stop')}
                       className="flex-shrink-0 w-10 h-10 rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
                     >
                       <StopCircle className="w-5 h-5" />
@@ -714,6 +723,7 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       onClick={() => onSendMessage()}
                       disabled={isSending || (!input.trim() && pendingAttachments.length === 0)}
                       aria-label={t('common.send', 'Send message')}
+                      title={t('common.send', 'Send message')}
                       className={cn(
                         'flex-shrink-0 w-10 h-10',
                         'bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl',

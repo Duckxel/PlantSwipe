@@ -1,5 +1,5 @@
 import { supabase } from '@/lib/supabaseClient'
-import type { Garden, GardenMember, GardenPlant, GardenPrivacy } from '@/types/garden'
+import type { Garden, GardenMember, GardenPlant, GardenPrivacy, GardenType, GardenLivingSpace, GardenClimate, GardenUsage, SeedlingTrayCell, SeedlingStage } from '@/types/garden'
 import type { GardenTaskRow } from '@/types/garden'
 import type { GardenPlantTask, GardenPlantTaskOccurrence, TaskType, TaskScheduleKind, TaskUnit } from '@/types/garden'
 import type { Plant, PlantImage } from '@/types/plant'
@@ -382,21 +382,21 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
   let gerr: any = null
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, garden_type, living_space, climate, usage, tray_rows, tray_cols')
     .in('id', gardenIds)
   gardens = result.data || []
   gerr = result.error
-  
+
   // If error mentions privacy column, try without it
   if (gerr && String(gerr.message || '').toLowerCase().includes('privacy')) {
     const fallbackResult = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak')
+      .select('id, name, cover_image_url, created_by, created_at, streak, garden_type, living_space, climate, usage, tray_rows, tray_cols')
       .in('id', gardenIds)
     gardens = fallbackResult.data || []
     gerr = fallbackResult.error
   }
-  
+
   if (gerr) throw new Error(gerr.message)
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   return gardens.map((g: any) => ({
@@ -407,12 +407,26 @@ export async function getUserGardens(userId: string): Promise<Garden[]> {
     createdAt: String(g.created_at),
     streak: Number(g.streak ?? 0),
     privacy: (g.privacy || 'public') as GardenPrivacy,
+    gardenType: (g.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(g.living_space) ? g.living_space : []) as GardenLivingSpace[],
+    climate: (Array.isArray(g.climate) ? g.climate : []) as GardenClimate[],
+    usage: (Array.isArray(g.usage) ? g.usage : []) as GardenUsage[],
+    trayRows: g.tray_rows ?? null,
+    trayCols: g.tray_cols ?? null,
   }))
 }
 
-export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy }): Promise<Garden> {
-  const { name, coverImageUrl = null, ownerUserId, privacy = 'public' } = params
-  
+export async function createGarden(params: { name: string; coverImageUrl?: string | null; ownerUserId: string; privacy?: GardenPrivacy; gardenType?: GardenType; livingSpace?: GardenLivingSpace[]; trayRows?: number; trayCols?: number }): Promise<Garden> {
+  const { name, coverImageUrl = null, ownerUserId, privacy = 'public', gardenType = 'default', livingSpace = [], trayRows, trayCols } = params
+
+  // Build insert payload
+  /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+  const insertPayload: any = { name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy, garden_type: gardenType, living_space: livingSpace }
+  if (gardenType === 'seedling' && trayRows && trayCols) {
+    insertPayload.tray_rows = trayRows
+    insertPayload.tray_cols = trayCols
+  }
+
   // Try with privacy column first, fallback if column doesn't exist
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
   let data: any = null
@@ -420,23 +434,23 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
   let error: any = null
   const result = await supabase
     .from('gardens')
-    .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, privacy })
-    .select('id, name, cover_image_url, created_by, created_at, privacy')
+    .insert(insertPayload)
+    .select('id, name, cover_image_url, created_by, created_at, privacy, garden_type, living_space, tray_rows, tray_cols')
     .single()
   data = result.data
   error = result.error
-  
+
   // If error mentions privacy column, try without it
   if (error && String(error.message || '').toLowerCase().includes('privacy')) {
     const fallbackResult = await supabase
       .from('gardens')
-      .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId })
-      .select('id, name, cover_image_url, created_by, created_at')
+      .insert({ name, cover_image_url: coverImageUrl, created_by: ownerUserId, garden_type: gardenType, ...(gardenType === 'seedling' && trayRows && trayCols ? { tray_rows: trayRows, tray_cols: trayCols } : {}) })
+      .select('id, name, cover_image_url, created_by, created_at, garden_type, tray_rows, tray_cols')
       .single()
     data = fallbackResult.data
     error = fallbackResult.error
   }
-  
+
   if (error) throw new Error(error.message)
   const garden: Garden = {
     id: String(data.id),
@@ -446,12 +460,29 @@ export async function createGarden(params: { name: string; coverImageUrl?: strin
     createdAt: String(data.created_at),
     /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
     privacy: ((data as any).privacy || privacy) as GardenPrivacy,
+    gardenType: (data.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(data.living_space) ? data.living_space : livingSpace) as GardenLivingSpace[],
+    trayRows: data.tray_rows ?? null,
+    trayCols: data.tray_cols ?? null,
   }
   // Add owner as member
   const { error: merr } = await supabase
     .from('garden_members')
     .insert({ garden_id: garden.id, user_id: ownerUserId, role: 'owner' })
   if (merr) throw new Error(merr.message)
+
+  // Initialize empty tray cells for seedling gardens
+  if (gardenType === 'seedling' && trayRows && trayCols) {
+    const cells = Array.from({ length: trayRows * trayCols }, (_, i) => ({
+      garden_id: garden.id,
+      position: i,
+      stage: 'empty',
+      notes: '',
+    }))
+    const { error: cellErr } = await supabase.from('seedling_tray_cells').insert(cells)
+    if (cellErr) throw new Error(cellErr.message)
+  }
+
   return garden
 }
 
@@ -464,23 +495,23 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
   
   const result = await supabase
     .from('gardens')
-    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat')
+    .select('id, name, cover_image_url, created_by, created_at, streak, privacy, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage, tray_rows, tray_cols')
     .eq('id', gardenId)
     .maybeSingle()
-  
+
   if (result.error && result.error.message?.includes('privacy')) {
     // New column doesn't exist, try old is_public column
     const fallback1 = await supabase
       .from('gardens')
-      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat')
+      .select('id, name, cover_image_url, created_by, created_at, streak, is_public, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage, tray_rows, tray_cols')
       .eq('id', gardenId)
       .maybeSingle()
-    
+
     if (fallback1.error && fallback1.error.message?.includes('is_public')) {
       // Neither column exists, use base schema
       const fallback2 = await supabase
         .from('gardens')
-        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat')
+        .select('id, name, cover_image_url, created_by, created_at, streak, location_city, location_country, location_timezone, location_lat, location_lon, preferred_language, hide_ai_chat, garden_type, living_space, climate, usage')
         .eq('id', gardenId)
         .maybeSingle()
       data = fallback2.data
@@ -521,6 +552,12 @@ export async function getGarden(gardenId: string): Promise<Garden | null> {
     locationLon: data.location_lon || null,
     preferredLanguage: data.preferred_language || null,
     hideAiChat: Boolean(data.hide_ai_chat ?? false),
+    gardenType: (data.garden_type || 'default') as GardenType,
+    livingSpace: (Array.isArray(data.living_space) ? data.living_space : []) as GardenLivingSpace[],
+    climate: (Array.isArray(data.climate) ? data.climate : []) as GardenClimate[],
+    usage: (Array.isArray(data.usage) ? data.usage : []) as GardenUsage[],
+    trayRows: data.tray_rows ?? null,
+    trayCols: data.tray_cols ?? null,
   }
 }
 
@@ -1456,6 +1493,40 @@ export async function createDefaultWateringTask(params: { gardenId: string; gard
   const { data, error } = await supabase.rpc('create_default_watering_task', { _garden_id: gardenId, _garden_plant_id: gardenPlantId, _unit: unit })
   if (error) throw new Error(error.message)
   return String(data)
+}
+
+/** Create a single daily watering task for the entire seedling garden (required_count=1). */
+export async function createSeedlingWateringTask(params: { gardenId: string; gardenPlantId: string; customName?: string }): Promise<string> {
+  const { gardenId, gardenPlantId, customName } = params
+  const { data, error } = await supabase
+    .from('garden_plant_tasks')
+    .insert({
+      garden_id: gardenId,
+      garden_plant_id: gardenPlantId,
+      type: 'water',
+      custom_name: customName || 'Water seedling tray',
+      schedule_kind: 'repeat_duration',
+      interval_amount: 1,
+      interval_unit: 'day',
+      required_count: 1,
+    })
+    .select('id')
+    .single()
+  if (error) throw new Error(error.message)
+  return data.id
+}
+
+/** Check if a seedling garden already has its single watering task. */
+export async function getSeedlingWateringTaskId(gardenId: string): Promise<string | null> {
+  const { data } = await supabase
+    .from('garden_plant_tasks')
+    .select('id')
+    .eq('garden_id', gardenId)
+    .eq('type', 'water')
+    .eq('schedule_kind', 'repeat_duration')
+    .limit(1)
+    .maybeSingle()
+  return data?.id ?? null
 }
 
 export async function upsertOneTimeTask(params: { gardenId: string; gardenPlantId: string; type: TaskType; customName?: string | null; kind: TaskScheduleKind; dueAt?: string | null; intervalAmount?: number | null; intervalUnit?: TaskUnit | null; requiredCount?: number | null }): Promise<string> {
@@ -3791,7 +3862,104 @@ export async function fetchGardenAdvice(gardenId: string, forceRefresh = false):
     const err = await response.json().catch(() => ({ error: 'Failed to fetch advice' }))
     throw new Error(err.error || 'Failed to fetch advice')
   }
-  
+
   return response.json()
 }
 
+// ===== Seedling Tray Functions =====
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
+export async function getSeedlingTrayCells(gardenId: string): Promise<SeedlingTrayCell[]> {
+  const { data, error } = await supabase
+    .from('seedling_tray_cells')
+    .select('id, garden_id, position, plant_id, stage, sow_date, last_watered, notes')
+    .eq('garden_id', gardenId)
+    .order('position', { ascending: true })
+  if (error) throw new Error(error.message)
+  return (data || []).map((r: any) => ({
+    id: String(r.id),
+    gardenId: String(r.garden_id),
+    position: Number(r.position),
+    plantId: r.plant_id || null,
+    stage: (r.stage || 'empty') as SeedlingStage,
+    sowDate: r.sow_date || null,
+    lastWatered: r.last_watered || null,
+    notes: r.notes || '',
+  }))
+}
+
+export async function updateSeedlingTrayCell(cellId: string, updates: Partial<Pick<SeedlingTrayCell, 'plantId' | 'stage' | 'sowDate' | 'lastWatered' | 'notes'>>): Promise<void> {
+  const payload: any = { updated_at: new Date().toISOString() }
+  if (updates.plantId !== undefined) payload.plant_id = updates.plantId
+  if (updates.stage !== undefined) payload.stage = updates.stage
+  if (updates.sowDate !== undefined) payload.sow_date = updates.sowDate
+  if (updates.lastWatered !== undefined) payload.last_watered = updates.lastWatered
+  if (updates.notes !== undefined) payload.notes = updates.notes
+  const { error } = await supabase.from('seedling_tray_cells').update(payload).eq('id', cellId)
+  if (error) throw new Error(error.message)
+}
+
+export async function updateSeedlingTrayCells(cellIds: string[], updates: Partial<Pick<SeedlingTrayCell, 'plantId' | 'stage' | 'sowDate' | 'lastWatered' | 'notes'>>): Promise<void> {
+  const payload: any = { updated_at: new Date().toISOString() }
+  if (updates.plantId !== undefined) payload.plant_id = updates.plantId
+  if (updates.stage !== undefined) payload.stage = updates.stage
+  if (updates.sowDate !== undefined) payload.sow_date = updates.sowDate
+  if (updates.lastWatered !== undefined) payload.last_watered = updates.lastWatered
+  if (updates.notes !== undefined) payload.notes = updates.notes
+  const { error } = await supabase.from('seedling_tray_cells').update(payload).in('id', cellIds)
+  if (error) throw new Error(error.message)
+}
+
+export async function clearSeedlingTrayCell(cellId: string): Promise<void> {
+  const { error } = await supabase.from('seedling_tray_cells').update({
+    plant_id: null, stage: 'empty', sow_date: null, last_watered: null, notes: '', updated_at: new Date().toISOString(),
+  }).eq('id', cellId)
+  if (error) throw new Error(error.message)
+}
+
+export async function clearSeedlingTrayCells(cellIds: string[]): Promise<void> {
+  const { error } = await supabase.from('seedling_tray_cells').update({
+    plant_id: null, stage: 'empty', sow_date: null, last_watered: null, notes: '', updated_at: new Date().toISOString(),
+  }).in('id', cellIds)
+  if (error) throw new Error(error.message)
+}
+
+export async function resizeSeedlingTray(gardenId: string, newRows: number, newCols: number): Promise<void> {
+  const totalNew = newRows * newCols
+  // Delete cells beyond the new size
+  const { error: delErr } = await supabase
+    .from('seedling_tray_cells')
+    .delete()
+    .eq('garden_id', gardenId)
+    .gte('position', totalNew)
+  if (delErr) throw new Error(delErr.message)
+
+  // Get existing positions
+  const { data: existing } = await supabase
+    .from('seedling_tray_cells')
+    .select('position')
+    .eq('garden_id', gardenId)
+  const existingPositions = new Set((existing || []).map((r: any) => r.position))
+
+  // Insert missing positions
+  const missing = []
+  for (let i = 0; i < totalNew; i++) {
+    if (!existingPositions.has(i)) {
+      missing.push({ garden_id: gardenId, position: i, stage: 'empty', notes: '' })
+    }
+  }
+  if (missing.length > 0) {
+    const { error: insErr } = await supabase.from('seedling_tray_cells').insert(missing)
+    if (insErr) throw new Error(insErr.message)
+  }
+
+  // Update garden dimensions
+  const { error: updErr } = await supabase
+    .from('gardens')
+    .update({ tray_rows: newRows, tray_cols: newCols })
+    .eq('id', gardenId)
+  if (updErr) throw new Error(updErr.message)
+}
+
+/* eslint-enable @typescript-eslint/no-explicit-any */

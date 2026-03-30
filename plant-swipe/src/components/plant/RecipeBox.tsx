@@ -479,7 +479,10 @@ function RecipeRow({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setTimeOpen(prev => !prev) }}
-            className="sm:hidden inline-flex items-center gap-1 shrink-0 text-xs font-semibold rounded-md px-1.5 py-1 bg-stone-100 dark:bg-white/[.07] text-stone-500 dark:text-stone-400 transition-all"
+            className="sm:hidden inline-flex items-center gap-1 shrink-0 text-xs font-semibold rounded-md px-1.5 py-1 bg-stone-100 dark:bg-white/[.07] text-stone-500 dark:text-stone-400 transition-all focus-visible:ring-2 focus-visible:ring-sky-500 focus-visible:outline-none"
+            aria-expanded={timeOpen}
+            aria-label={resolvedTimeLabel}
+            title={resolvedTimeLabel}
           >
             {TimeIcon && <TimeIcon className="h-3 w-3" />}
             {timeOpen && (

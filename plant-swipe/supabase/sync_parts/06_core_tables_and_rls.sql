@@ -15,12 +15,38 @@ create table if not exists public.gardens (
   location_lon numeric
 );
 
--- Migration: Add location columns to existing gardens
+-- Migration: add newer columns to existing gardens
 alter table if exists public.gardens add column if not exists location_city text;
 alter table if exists public.gardens add column if not exists location_country text;
 alter table if exists public.gardens add column if not exists location_timezone text;
 alter table if exists public.gardens add column if not exists location_lat numeric;
 alter table if exists public.gardens add column if not exists location_lon numeric;
+alter table if exists public.gardens add column if not exists preferred_language text;
+alter table if exists public.gardens add column if not exists hide_ai_chat boolean not null default false;
+alter table if exists public.gardens add column if not exists garden_type text not null default 'default';
+alter table if exists public.gardens add column if not exists living_space text[] not null default '{}'::text[];
+alter table if exists public.gardens add column if not exists climate text[] not null default '{}'::text[];
+alter table if exists public.gardens add column if not exists usage text[] not null default '{}'::text[];
+
+-- Constraints for array columns
+do $$
+begin
+  if not exists (select 1 from information_schema.check_constraints where constraint_name = 'gardens_living_space_values') then
+    alter table public.gardens add constraint gardens_living_space_values check (living_space <@ array['indoor','outdoor','terrarium','greenhouse']::text[]);
+  end if;
+  if not exists (select 1 from information_schema.check_constraints where constraint_name = 'gardens_climate_values') then
+    alter table public.gardens add constraint gardens_climate_values check (climate <@ array[
+      'polar','montane','oceanic','degraded_oceanic','temperate_continental','mediterranean',
+      'tropical_dry','tropical_humid','tropical_volcanic','tropical_cyclonic',
+      'humid_insular','subtropical_humid','equatorial','windswept_coastal'
+    ]::text[]);
+  end if;
+  if not exists (select 1 from information_schema.check_constraints where constraint_name = 'gardens_usage_values') then
+    alter table public.gardens add constraint gardens_usage_values check (usage <@ array[
+      'decorative','edible','medicinal','aromatic','pollinator_friendly','air_purifying'
+    ]::text[]);
+  end if;
+end $$;
 
 -- Migration: Add/migrate privacy column (for existing databases)
 do $$

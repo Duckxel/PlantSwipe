@@ -887,6 +887,8 @@ const supabaseServiceKey =
 const supabaseServiceClient = (supabaseUrlEnv && supabaseServiceKey)
   ? createSupabaseClient(supabaseUrlEnv, supabaseServiceKey, { auth: { persistSession: false, autoRefreshToken: false } })
   : null
+// Prefer service role key for server-side REST API calls; fall back to anon key
+const supabaseServerApiKey = supabaseServiceKey || supabaseAnonKey
 
 const openaiApiKey = process.env.OPENAI_KEY || process.env.OPENAI_API_KEY || ''
 const openaiModel = process.env.OPENAI_MODEL || 'gpt-5.2-2025-12-11'
@@ -2379,7 +2381,7 @@ async function isAdminFromRequest(req) {
     // Supabase REST fallback: allow any authenticated user whose profile row has is_admin = true
     if (!isAdmin && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin&limit=1`
@@ -2439,7 +2441,7 @@ async function isEditorFromRequest(req) {
     // Supabase REST fallback
     if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
@@ -2498,7 +2500,7 @@ async function isProOrEditorFromRequest(req) {
 
     if (!hasAccess && supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
         const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(user.id)}&select=is_admin,roles&limit=1`
@@ -2585,7 +2587,7 @@ async function ensureProOrEditor(req, res) {
 async function insertAdminActivityViaRest(req, row) {
   try {
     if (!(supabaseUrlEnv && supabaseAnonKey)) return false
-    const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+    const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) headers['Authorization'] = `Bearer ${bearer}`
     const resp = await fetch(`${supabaseUrlEnv}/rest/v1/admin_activity_logs`, { method: 'POST', headers, body: JSON.stringify(row) })
@@ -3128,8 +3130,8 @@ function coerceValueForSchema(schemaNode, value, existingValue) {
 const SIMPLE_ENUM_FIELDS = new Set([
   'plantType',    // Single enum selection
   'utility',      // Array of enum values
-  'comestiblePart', // Array of enum values  
-  'fruitType',    // Array of enum values
+  'ediblePart',   // Array of enum values
+  'vegetable',    // Boolean field
   'seasons',      // Array of enum values
 ])
 
@@ -4211,11 +4213,8 @@ app.get('/api/csrf-token', (req, res) => {
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
 app.get('/api/admin/system-health', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Get CPU usage (averaged over cores)
     const cpus = os.cpus()
@@ -4311,11 +4310,8 @@ app.get('/api/admin/system-health', async (req, res) => {
 // Admin: Get current maintenance mode status
 app.get('/api/admin/maintenance-mode', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const status = getMaintenanceMode()
     res.json({
       ok: true,
@@ -4330,11 +4326,8 @@ app.get('/api/admin/maintenance-mode', async (req, res) => {
 // Admin: Enable maintenance mode (suppresses 502/503/504 errors in Sentry)
 app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     // Duration in milliseconds (default: 5 minutes, max: 30 minutes)
     const durationMs = Math.min(
       Math.max(Number(req.body?.durationMs) || 300000, 60000), // At least 1 minute
@@ -4361,11 +4354,8 @@ app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
 // Admin: Disable maintenance mode
 app.post('/api/admin/maintenance-mode/disable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     
     const success = disableMaintenanceMode()
     if (success) {
@@ -4399,11 +4389,8 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Check multiple possible sitemap locations
     const sitemapPaths = [
@@ -4466,11 +4453,8 @@ app.get('/api/admin/sitemap-info', async (req, res) => {
 // Admin: fetch admin activity logs for the last N days (default 30)
 app.get('/api/admin/admin-logs', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const daysParam = Number(req.query.days || 30)
     const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(90, Math.floor(daysParam)) : 30
     if (!sql) {
@@ -4479,7 +4463,7 @@ app.get('/api/admin/admin-logs', async (req, res) => {
         res.status(500).json({ error: 'Database not configured' })
         return
       }
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const sinceIso = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
@@ -5606,11 +5590,8 @@ app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
 // Admin: generic log endpoint to record an action from admin_api or UI
 app.post('/api/admin/log-action', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const body = req.body || {}
     const action = typeof body.action === 'string' ? body.action.trim() : ''
     if (!action) {
@@ -5620,11 +5601,9 @@ app.post('/api/admin/log-action', async (req, res) => {
     const target = (body.target == null || typeof body.target === 'string') ? body.target : String(body.target)
     const detail = (body.detail && typeof body.detail === 'object') ? body.detail : {}
 
-    let adminId = null
     let adminName = null
     try {
       const caller = await getUserFromRequest(req)
-      adminId = caller?.id || null
       // Resolve admin display name for clearer logs
       if (sql && adminId) {
         try {
@@ -5634,7 +5613,7 @@ app.post('/api/admin/log-action', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -6428,7 +6407,7 @@ async function computeNextVisitNum(sessionId) {
 async function insertWebVisitViaSupabaseRest(payload, req) {
   try {
     if (!supabaseUrlEnv || !supabaseAnonKey) return false
-    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
+    const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json', 'Prefer': 'return=minimal' }
     const token = getBearerTokenFromRequest(req)
     if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
     // First try full payload (new schema)
@@ -6552,11 +6531,8 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6570,7 +6546,7 @@ async function handleRestartServer(req, res) {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -6645,11 +6621,8 @@ function scheduleRestartAllServices(trigger = 'manual') {
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6663,7 +6636,7 @@ app.post('/api/admin/restart-all', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -7310,25 +7283,32 @@ async function verifySchemaAfterSync() {
     'pgcrypto',
     'pg_cron',
   ]
+  const requiredPlantColumns = [
+    'vegetable',
+  ]
 
-  const [tableRows, funcRows, extRows] = await Promise.all([
+  const [tableRows, funcRows, extRows, plantColumnRows] = await Promise.all([
     sql`select table_name from information_schema.tables where table_schema='public' and table_name = any(${sql.array(requiredTables)})`,
     sql`select p.proname as name from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = any(${sql.array(requiredFunctions)})`,
     sql`select extname from pg_extension where extname = any(${sql.array(requiredExtensions)})`,
+    sql`select column_name from information_schema.columns where table_schema='public' and table_name='plants' and column_name = any(${sql.array(requiredPlantColumns)})`,
   ])
 
   const presentTables = new Set((tableRows || []).map(r => r.table_name))
   const presentFunctions = new Set((funcRows || []).map(r => r.name))
   const presentExtensions = new Set((extRows || []).map(r => r.extname))
+  const presentPlantColumns = new Set((plantColumnRows || []).map(r => r.column_name))
 
   const missingTables = requiredTables.filter(n => !presentTables.has(n))
   const missingFunctions = requiredFunctions.filter(n => !presentFunctions.has(n))
   const missingExtensions = requiredExtensions.filter(n => !presentExtensions.has(n))
+  const missingPlantColumns = requiredPlantColumns.filter(n => !presentPlantColumns.has(n))
 
   return {
     tables: { required: requiredTables, present: Array.from(presentTables), missing: missingTables },
     functions: { required: requiredFunctions, present: Array.from(presentFunctions), missing: missingFunctions },
     extensions: { required: requiredExtensions, present: Array.from(presentExtensions), missing: missingExtensions },
+    plants: { requiredColumns: requiredPlantColumns, presentColumns: Array.from(presentPlantColumns), missingColumns: missingPlantColumns },
   }
 }
 
@@ -7340,11 +7320,8 @@ async function handleSyncSchema(req, res) {
   }
   try {
     // Require admin (robust detection; currently permissive via isAdminFromRequest)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Read all SQL files from sync_parts folder and execute them in order
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
@@ -7442,6 +7419,19 @@ async function handleSyncSchema(req, res) {
     // Verify important objects exist after sync
     let summary = null
     try { summary = await verifySchemaAfterSync() } catch { }
+    const schemaVerificationFailed = Boolean(
+      summary && (
+        summary.tables?.missing?.length ||
+        summary.functions?.missing?.length ||
+        summary.extensions?.missing?.length ||
+        summary.plants?.missingColumns?.length
+      )
+    )
+    if (schemaVerificationFailed) {
+      hasError = true
+      failedFile = failedFile || 'schema verification'
+      failedError = failedError || 'Critical schema objects or plant columns are missing after sync'
+    }
 
     // Log admin action
     try {
@@ -12621,7 +12611,7 @@ app.get('/api/admin/stats', async (req, res) => {
 
     // Fallback via Supabase REST RPC if DB connection not available
     if (!sql && supabaseUrlEnv && supabaseAnonKey) {
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       try {
         const pr = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_profiles_total`, {
           method: 'POST',
@@ -12687,7 +12677,7 @@ app.get('/api/admin/member', async (req, res) => {
         res.status(500).json({ error: 'Database not configured' })
         return
       }
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) Object.assign(baseHeaders, { 'Authorization': `Bearer ${token}` })
       // Resolve user id via RPC (security definer) using email or display name
       let targetId = null
@@ -13355,7 +13345,7 @@ app.get('/api/admin/member', async (req, res) => {
       try {
         const bearer = getBearerTokenFromRequest(req)
         const rpcHeaders = {
-          apikey: supabaseAnonKey,
+          apikey: supabaseServerApiKey,
           Accept: 'application/json',
           'Content-Type': 'application/json',
         }
@@ -13437,7 +13427,7 @@ app.get('/api/admin/member', async (req, res) => {
         `
         adminNotes = Array.isArray(rows) ? rows.map(r => ({ id: String(r.id), admin_id: r.admin_id || null, admin_name: r.admin_name || null, message: String(r.message || ''), created_at: r.created_at })) : []
       } else if (supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const token = getBearerTokenFromRequest(req)
         if (token) headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?profile_id=eq.${encodeURIComponent(user.id)}&select=id,profile_id,admin_id,admin_name,message,created_at&order=created_at.desc&limit=50`, { headers })
@@ -14087,7 +14077,7 @@ app.get('/api/admin/member-messages', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       // Get conversations
@@ -14351,7 +14341,7 @@ app.get('/api/admin/conversation-messages', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback - simplified version
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       // Get conversation
@@ -14498,7 +14488,7 @@ app.get('/api/admin/search-user-messages', async (req, res) => {
       // REST fallback - limited functionality (no ILIKE in REST)
       // Get conversations first
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       const convResp = await fetch(
@@ -14675,7 +14665,7 @@ app.get('/api/admin/user-images', async (req, res) => {
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       // REST fallback
       const token = getBearerTokenFromRequest(req)
-      const baseHeaders = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const baseHeaders = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       if (token) baseHeaders['Authorization'] = `Bearer ${token}`
       
       if (sentOnly) {
@@ -14785,7 +14775,7 @@ app.post('/api/admin/member-note', async (req, res) => {
         const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${adminUuid} limit 1`
         adminName = rows?.[0]?.name || null
       } else if (adminUuid && supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+        const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
         const token = getBearerTokenFromRequest(req)
         if (token) headers['Authorization'] = `Bearer ${token}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminUuid)}&select=display_name&limit=1`, { headers })
@@ -14809,7 +14799,7 @@ app.post('/api/admin/member-note', async (req, res) => {
       `
       created = rows?.[0]?.created_at || null
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes`, {
@@ -14860,7 +14850,7 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
       return
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const r = await fetch(`${supabaseUrlEnv}/rest/v1/profile_admin_notes?id=eq.${encodeURIComponent(noteId)}`, { method: 'DELETE', headers })
@@ -14881,11 +14871,8 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const raw = (req.query.ip || req.query.q || '').toString().trim()
     const ip = normalizeIp(raw)
     if (!ip) {
@@ -14985,7 +14972,7 @@ app.get('/api/admin/members-by-ip', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json' }
+    const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json' }
     const bearer = getBearerTokenFromRequest(req)
     if (bearer) Object.assign(headers, { 'Authorization': `Bearer ${bearer}` })
     // Fetch visits for IP to get distinct user_ids and last_seen
@@ -15114,7 +15101,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
 
     const resolveUserIdViaRest = async (email) => {
       if (!supabaseUrlEnv || !supabaseAnonKey) return null
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
       try {
@@ -15175,7 +15162,7 @@ app.get('/api/admin/member-visits-series', async (req, res) => {
 
     // Supabase REST fallback - try RPC first, then direct query
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
 
@@ -15416,7 +15403,7 @@ app.get('/api/admin/member-list', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_recent_members`, {
@@ -15501,7 +15488,7 @@ app.get('/api/admin/search-users', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers['Authorization'] = `Bearer ${token}`
 
@@ -15688,7 +15675,7 @@ app.get('/api/admin/member-suggest', async (req, res) => {
       } else {
         // Fallback via Supabase REST (security-definer RPC; token optional)
         if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
           // Email suggestions
@@ -15739,11 +15726,8 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15806,11 +15790,8 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15873,11 +15854,8 @@ app.post('/api/admin/roles/add', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15970,11 +15948,8 @@ app.post('/api/admin/roles/remove', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -16053,13 +16028,11 @@ app.options('/api/admin/roles/remove', (_req, res) => {
 // Admin: get a user's roles
 app.get('/api/admin/roles/:userId', async (req, res) => {
   try {
+    const caller = await ensureAdmin(req, res)
+    if (!caller) return
+
     if (!sql) {
       res.status(500).json({ error: 'Database not configured' })
-      return
-    }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
       return
     }
     const userId = (req.params.userId || '').toString().trim()
@@ -16352,11 +16325,8 @@ app.post('/api/admin/ban', async (req, res) => {
       return
     }
     // Require admin with robust detection
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, reason: rawReason } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const reason = (rawReason || '').toString().trim() || null
@@ -17215,7 +17185,7 @@ async function handlePullCode(req, res) {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -17255,11 +17225,8 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     if (!uid) return
 
     // Require admin (same policy as other admin endpoints)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -17297,7 +17264,7 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
       }
       if (!adminName && supabaseUrlEnv && supabaseAnonKey && adminId) {
         try {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) headers['Authorization'] = `Bearer ${bearer}`
           const url = `${supabaseUrlEnv}/rest/v1/profiles?id=eq.${encodeURIComponent(adminId)}&select=display_name&limit=1`
@@ -18157,7 +18124,16 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Gardens processing partial:', err?.message) }
 
     try {
-      // 17. Clear task cache
+      // 17a. Delete discovery seen-plants history
+      if (sql) {
+        await sql`DELETE FROM public.discovery_seen_plants WHERE user_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('discovery_seen_plants').delete().eq('user_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Discovery seen-plants deletion partial:', err?.message) }
+
+    try {
+      // 17b. Clear task cache
       if (sql) {
         await sql`DELETE FROM public.user_task_daily_cache WHERE user_id = ${userId}`
       } else {
@@ -18790,7 +18766,7 @@ app.get('/api/admin/visitors-stats', async (req, res) => {
       // Supabase REST fallback using security-definer RPCs
       if (supabaseUrlEnv && supabaseAnonKey) {
         try {
-          const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+          const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
           // Attempt to use caller token when present (not required for definer functions)
           const token = getBearerTokenFromRequest(req)
           if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
@@ -18910,7 +18886,7 @@ app.get('/api/admin/visitors-unique-7d', async (req, res) => {
 
     // Supabase REST fallback using security-definer RPC
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { 'apikey': supabaseAnonKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
+      const headers = { 'apikey': supabaseServerApiKey, 'Accept': 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) Object.assign(headers, { 'Authorization': `Bearer ${token}` })
       const r = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_days`, {
@@ -18968,7 +18944,7 @@ app.get('/api/admin/sources-breakdown', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       const daysParam = Number(req.query.days || 30)
@@ -19336,7 +19312,7 @@ app.get('/api/admin/online-ips', async (req, res) => {
 
     // Supabase REST fallback: query distinct IPs in window
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       // Use RPC if available; otherwise use REST with select distinct
@@ -19445,7 +19421,7 @@ app.get('/api/admin/online-users', async (req, res) => {
 
     // No direct DB connection: attempt Supabase REST fallback using RPC for unique IPs
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const token = getBearerTokenFromRequest(req)
       if (token) headers.Authorization = `Bearer ${token}`
       const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/count_unique_ips_last_minutes`, {
@@ -19516,7 +19492,7 @@ async function getActiveBroadcastRow() {
   // Supabase REST fallback for reads
   if (supabaseUrlEnv && supabaseAnonKey) {
     try {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const url = `${supabaseUrlEnv}/rest/v1/broadcast_messages?removed_at=is.null&select=id,message,severity,created_at,expires_at,created_by&order=created_at.desc&limit=10`
       const r = await fetch(url, { headers })
       if (r.ok) {
@@ -19651,7 +19627,7 @@ app.get('/api/self/memberships/stream', async (req, res) => {
           const list = (rows || []).map((r) => String(r.garden_id))
           return list.join(',')
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -19717,7 +19693,7 @@ app.get('/api/users/:id/private', async (req, res) => {
 
     if (supabaseUrlEnv && supabaseAnonKey) {
       try {
-        const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+        const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
         const bearer = getBearerTokenFromRequest(req)
         if (bearer) headers['Authorization'] = `Bearer ${bearer}`
         const resp = await fetch(`${supabaseUrlEnv}/rest/v1/rpc/get_user_private_info`, {
@@ -19775,7 +19751,7 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
           const list = (rows || []).map((r) => String(r.garden_id))
           return list
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const bearer = getBearerTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
           const url = `${supabaseUrlEnv}/rest/v1/garden_members?user_id=eq.${encodeURIComponent(user.id)}&select=garden_id`
@@ -19819,7 +19795,7 @@ app.get('/api/self/gardens/activity/stream', async (req, res) => {
             })
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getBearerTokenFromRequest(req) || (req.query?.token ? String(req.query.token) : (req.query?.access_token ? String(req.query.access_token) : null))
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -19870,7 +19846,7 @@ async function isGardenMember(req, gardenId, userIdOverride = null) {
       return Array.isArray(rows) && rows.length > 0
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=garden_id&limit=1`
@@ -19902,7 +19878,7 @@ async function isGardenOwner(req, gardenId, userIdOverride = null) {
       }
     }
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_members?garden_id=eq.${encodeURIComponent(gardenId)}&user_id=eq.${encodeURIComponent(user.id)}&select=role&limit=1`
@@ -21138,7 +21114,7 @@ app.get('/api/garden/:id/activity', async (req, res) => {
         order by occurred_at desc
       `
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const url = `${supabaseUrlEnv}/rest/v1/garden_activity_logs?garden_id=eq.${encodeURIComponent(gardenId)}&occurred_at=gte.${encodeURIComponent(start)}&select=id,garden_id,actor_id,actor_name,actor_color,kind,message,plant_name,task_name,occurred_at&order=occurred_at.desc&limit=200`
@@ -21217,7 +21193,7 @@ app.get('/api/garden/:id/tasks', async (req, res) => {
         order by day asc
       `
     } else if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getAuthTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const query = [
@@ -21304,7 +21280,7 @@ app.post('/api/garden/:id/activity', async (req, res) => {
     }
 
     if (supabaseUrlEnv && supabaseAnonKey) {
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json', 'Content-Type': 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json', 'Content-Type': 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
       const payload = {
@@ -21362,7 +21338,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         gRows = await sql`
           select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, coalesce(privacy, 'public') as privacy,
                  location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                 coalesce(hide_ai_chat, false) as hide_ai_chat
+                 coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type,
+                 coalesce(living_space, '{}') as living_space, coalesce(climate, '{}') as climate, coalesce(usage, '{}') as usage
           from public.gardens where id = ${gardenId} limit 1
         `
         console.log('[overview] Garden query succeeded (attempt 1), rows:', gRows?.length || 0)
@@ -21376,7 +21353,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
           gRows = await sql`
             select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, coalesce(streak, 0)::int as streak, 'public' as privacy,
                    location_city, location_country, location_timezone, location_lat, location_lon, coalesce(preferred_language, 'en') as preferred_language,
-                   coalesce(hide_ai_chat, false) as hide_ai_chat
+                   coalesce(hide_ai_chat, false) as hide_ai_chat, coalesce(garden_type, 'default') as garden_type,
+                   coalesce(living_space, '{}') as living_space, coalesce(climate, '{}') as climate, coalesce(usage, '{}') as usage
             from public.gardens where id = ${gardenId} limit 1
           `
           console.log('[overview] Garden query succeeded (attempt 2), rows:', gRows?.length || 0)
@@ -21390,7 +21368,8 @@ app.get('/api/garden/:id/overview', async (req, res) => {
             gRows = await sql`
               select id::text as id, name, cover_image_url, created_by::text as created_by, created_at, 0 as streak, 'public' as privacy,
                      location_city, location_country, location_timezone, location_lat, location_lon, 'en' as preferred_language,
-                     false as hide_ai_chat
+                     false as hide_ai_chat, 'default' as garden_type,
+                     '{}'::text[] as living_space, '{}'::text[] as climate, '{}'::text[] as usage
               from public.gardens where id = ${gardenId} limit 1
             `
             console.log('[overview] Garden query succeeded (attempt 3), rows:', gRows?.length || 0)
@@ -21521,18 +21500,18 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       console.log('[overview] Finished SQL queries for garden', gardenId)
     } else if (supabaseUrlEnv && supabaseAnonKey) {
       console.log('[overview] Using Supabase REST API for garden', gardenId)
-      const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+      const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
       const bearer = getBearerTokenFromRequest(req)
       if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
 
       // Garden (include privacy field and location if available)
-      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon&limit=1`
+      const gUrl = `${supabaseUrlEnv}/rest/v1/gardens?id=eq.${encodeURIComponent(gardenId)}&select=id,name,cover_image_url,created_by,created_at,streak,privacy,location_city,location_country,location_timezone,location_lat,location_lon,preferred_language,hide_ai_chat,garden_type,living_space,climate,usage&limit=1`
       console.log('[overview] Fetching garden via REST API')
       const gResp = await fetch(gUrl, { headers })
       if (gResp.ok) {
         const arr = await gResp.json().catch(() => [])
         const row = Array.isArray(arr) && arr[0] ? arr[0] : null
-        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null }
+        if (row) garden = { id: String(row.id), name: row.name, cover_image_url: row.cover_image_url || null, created_by: String(row.created_by), created_at: row.created_at, streak: Number(row.streak || 0), privacy: row.privacy || 'public', location_city: row.location_city || null, location_country: row.location_country || null, location_timezone: row.location_timezone || null, location_lat: row.location_lat || null, location_lon: row.location_lon || null, preferred_language: row.preferred_language || null, hide_ai_chat: row.hide_ai_chat || false, garden_type: row.garden_type || 'default', living_space: Array.isArray(row.living_space) ? row.living_space : [], climate: Array.isArray(row.climate) ? row.climate : [], usage: Array.isArray(row.usage) ? row.usage : [] }
         console.log('[overview] Garden found via REST:', !!garden)
       } else {
         console.error('[overview] Garden REST query failed:', gResp.status, await gResp.text().catch(() => ''))
@@ -21627,6 +21606,10 @@ app.get('/api/garden/:id/overview', async (req, res) => {
       locationLon: garden.location_lon || null,
       preferredLanguage: garden.preferred_language || 'en',
       hideAiChat: Boolean(garden.hide_ai_chat ?? false),
+      gardenType: garden.garden_type || 'default',
+      livingSpace: Array.isArray(garden.living_space) ? garden.living_space : [],
+      climate: Array.isArray(garden.climate) ? garden.climate : [],
+      usage: Array.isArray(garden.usage) ? garden.usage : [],
     } : null
 
     // Check access: members always allowed, otherwise check privacy
@@ -21662,7 +21645,7 @@ app.get('/api/garden/:id/overview', async (req, res) => {
         } else if (supabaseUrlEnv && supabaseAnonKey) {
           // REST fallback
           try {
-            const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+            const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
             const bearer = getAuthTokenFromRequest(req)
             if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
             const idsStr = memberIds.join(',')
@@ -21813,7 +21796,7 @@ app.get('/api/garden/:id/stream', async (req, res) => {
             })
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           // Include Authorization from bearer header or token query param (EventSource)
           const bearer = getAuthTokenFromRequest(req)
           if (bearer) Object.assign(headers, { Authorization: `Bearer ${bearer}` })
@@ -21883,7 +21866,7 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
         sseWrite(res, 'snapshot', { logs: list })
         if (list[0]?.occurred_at) lastSeen = list[0].occurred_at
       } else if (supabaseUrlEnv && supabaseAnonKey) {
-        const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+        const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
         const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gte.${encodeURIComponent(new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString())}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.desc&limit=200`
         const r = await fetch(url, { headers })
         if (r.ok) {
@@ -21925,7 +21908,7 @@ app.get('/api/admin/admin-logs/stream', async (req, res) => {
             sseWrite(res, 'append', payload)
           }
         } else if (supabaseUrlEnv && supabaseAnonKey) {
-          const headers = { apikey: supabaseAnonKey, Accept: 'application/json' }
+          const headers = { apikey: supabaseServerApiKey, Accept: 'application/json' }
           const url = `${supabaseUrlEnv}/rest/v1/admin_activity_logs?occurred_at=gt.${encodeURIComponent(lastSeen)}&select=occurred_at,admin_id,admin_name,action,target,detail&order=occurred_at.asc&limit=500`
           const r = await fetch(url, { headers })
           if (r.ok) {

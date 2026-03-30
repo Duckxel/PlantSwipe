@@ -886,6 +886,17 @@ if [[ -f "$REFRESH_SCRIPT" ]]; then
         BUN_PATH="$SERVICE_HOME/.bun/bin"
       fi
     fi
+    # Clean nested node_modules to prevent duplicate-type TS errors
+    if [[ -d "$NODE_DIR/node_modules" ]]; then
+      log "Cleaning nested node_modules to prevent duplicate packages…"
+      find "$NODE_DIR/node_modules" -mindepth 3 -maxdepth 4 -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
+    fi
+    # Update @tiptap/* to latest compatible versions (prevents duplicate @tiptap/core)
+    TIPTAP_PKGS="$(cd "$NODE_DIR" && grep -oP '"@tiptap/[^"]+":' package.json | tr -d '":' | sort -u | tr '\n' ' ')"
+    if [[ -n "$TIPTAP_PKGS" ]]; then
+      log "Updating @tiptap packages to latest compatible versions…"
+      sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun update $TIPTAP_PKGS" 2>&1 || log "[WARN] bun update @tiptap/* non-zero (continuing)"
+    fi
     sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
     log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
     NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
@@ -908,6 +919,17 @@ else
       sudo chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
       BUN_PATH="$SERVICE_HOME/.bun/bin"
     fi
+  fi
+  # Clean nested node_modules to prevent duplicate-type TS errors
+  if [[ -d "$NODE_DIR/node_modules" ]]; then
+    log "Cleaning nested node_modules to prevent duplicate packages…"
+    find "$NODE_DIR/node_modules" -mindepth 3 -maxdepth 4 -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
+  fi
+  # Update @tiptap/* to latest compatible versions (prevents duplicate @tiptap/core)
+  TIPTAP_PKGS="$(cd "$NODE_DIR" && grep -oP '"@tiptap/[^"]+":' package.json | tr -d '":' | sort -u | tr '\n' ' ')"
+  if [[ -n "$TIPTAP_PKGS" ]]; then
+    log "Updating @tiptap packages to latest compatible versions…"
+    sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun update $TIPTAP_PKGS" 2>&1 || log "[WARN] bun update @tiptap/* non-zero (continuing)"
   fi
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && cd '$NODE_DIR' && bun install"
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"

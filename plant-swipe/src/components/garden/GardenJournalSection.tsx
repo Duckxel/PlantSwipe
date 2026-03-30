@@ -5,6 +5,8 @@ import { Input } from "@/components/ui/input";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
+import { ImageUploadArea } from "@/components/ui/image-upload-area";
+import { useImageUpload } from "@/hooks/useImageUpload";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
@@ -25,7 +27,6 @@ import {
   BookOpen,
   CheckCircle2,
   X,
-  Upload,
   Tag,
   Lock,
   Globe,
@@ -153,11 +154,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [entryIsPrivate, setEntryIsPrivate] = React.useState(false);
   const [entryTags, setEntryTags] = React.useState<string[]>([]);
   const [newTag, setNewTag] = React.useState("");
-  const [uploadingPhotos, setUploadingPhotos] = React.useState(false);
-  const [pendingPhotos, setPendingPhotos] = React.useState<File[]>([]);
-  const [photoPreviewUrls, setPhotoPreviewUrls] = React.useState<string[]>([]);
-  
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  // Shared image upload hook – handles file picking, validation, preview & upload
+  const imageUpload = useImageUpload({ maxFiles: 10, multiple: true });
 
   // Get today's entry if exists
   const todayEntry = React.useMemo(() => {
@@ -461,23 +459,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     fetchEntries();
   }, [fetchEntries]);
 
-  // Handle photo selection
-  const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length === 0) return;
-    
-    // Create preview URLs
-    const urls = files.map((file) => URL.createObjectURL(file));
-    setPendingPhotos((prev) => [...prev, ...files]);
-    setPhotoPreviewUrls((prev) => [...prev, ...urls]);
-  };
-
-  // Remove pending photo
-  const removePendingPhoto = (index: number) => {
-    URL.revokeObjectURL(photoPreviewUrls[index]);
-    setPendingPhotos((prev) => prev.filter((_, i) => i !== index));
-    setPhotoPreviewUrls((prev) => prev.filter((_, i) => i !== index));
-  };
+  // Photo selection & removal are now handled by imageUpload hook
 
   // Add tag
   const handleAddTag = () => {
@@ -499,9 +481,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     setEntryMood(null);
     setEntryIsPrivate(false);
     setEntryTags([]);
-    pendingPhotos.forEach((_, i) => URL.revokeObjectURL(photoPreviewUrls[i]));
-    setPendingPhotos([]);
-    setPhotoPreviewUrls([]);
+    imageUpload.clearAll();
     setEditingEntry(null);
     setIsEditing(false);
   };
@@ -519,31 +499,13 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       };
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      // First, upload photos if any
-      const uploadedPhotoUrls: string[] = [];
-      if (pendingPhotos.length > 0) {
-        setUploadingPhotos(true);
-        for (const file of pendingPhotos) {
-          const formData = new FormData();
-          formData.append("file", file);
-          formData.append("folder", `journal`);
-          
-          const uploadResp = await fetch(`/api/garden/${gardenId}/upload`, {
-            method: "POST",
-            headers: { Authorization: headers.Authorization || "" },
-            body: formData,
-            credentials: "same-origin",
-          });
-          
-          if (uploadResp.ok) {
-            const uploadData = await uploadResp.json();
-            if (uploadData?.url) {
-              uploadedPhotoUrls.push(uploadData.url);
-            }
-          }
-        }
-        setUploadingPhotos(false);
-      }
+      // Upload photos via shared hook
+      const uploadResults = await imageUpload.uploadAll({
+        url: `/api/garden/${gardenId}/upload`,
+        headers: { Authorization: headers.Authorization || "" },
+        extraFields: { folder: "journal" },
+      });
+      const uploadedPhotoUrls = uploadResults.map((r) => r.url);
 
       const entryData = {
         entryId: editingEntry?.id || undefined,
@@ -1141,49 +1103,25 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   />
                 </div>
 
-                {/* Photo upload */}
+                {/* Photo upload – shared component */}
                 <div>
                   <label className="text-sm font-medium mb-2 flex items-center gap-2">
                     <Camera className="w-4 h-4" />
                     {t("gardenDashboard.journalSection.photos", "Photos")}
                   </label>
-                  <div className="flex flex-wrap gap-3 mt-2">
-                    {photoPreviewUrls.map((url, index) => (
-                      <div key={index} className="relative group">
-                        <img
-                          src={url}
-                          alt={`Photo ${index + 1}`}
-                          className="w-24 h-24 object-cover rounded-xl border-2 border-stone-200 dark:border-stone-700"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => removePendingPhoto(index)}
-                          className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-red-500"
-                          aria-label={t("common.remove", "Remove")}
-                          title={t("common.remove", "Remove")}
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="w-24 h-24 border-2 border-dashed border-stone-300 dark:border-stone-600 rounded-xl flex flex-col items-center justify-center gap-1 text-stone-400 hover:border-amber-400 hover:text-amber-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
-                      aria-label={t("gardenDashboard.journalSection.addPhoto", "Add photo")}
-                      title={t("gardenDashboard.journalSection.addPhoto", "Add photo")}
-                    >
-                      <Upload className="w-6 h-6" />
-                      <span className="text-xs">{t("gardenDashboard.journalSection.addPhoto", "Add")}</span>
-                    </button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handlePhotoSelect}
-                      className="hidden"
+                  <div className="mt-2">
+                    <ImageUploadArea
+                      pending={imageUpload.pending}
+                      uploading={imageUpload.uploading}
+                      error={imageUpload.error}
+                      onAdd={imageUpload.openFilePicker}
+                      onRemove={imageUpload.removePending}
+                      onClearError={imageUpload.clearError}
+                      addLabel={t("gardenDashboard.journalSection.addPhoto", "Add")}
+                      removeLabel={t("common.remove", "Remove")}
                     />
+                    {/* Hidden file input driven by shared hook */}
+                    <input {...imageUpload.inputProps} />
                   </div>
                 </div>
 
@@ -1286,10 +1224,10 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     disabled={!entryContent.trim() || saving}
                     className="rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white gap-2"
                   >
-                    {saving || uploadingPhotos ? (
+                    {saving || imageUpload.uploading ? (
                       <>
                         <Loader2 className="w-4 h-4 animate-spin" />
-                        {uploadingPhotos 
+                        {imageUpload.uploading
                           ? t("gardenDashboard.journalSection.uploadingPhotos", "Uploading photos...")
                           : t("gardenDashboard.journalSection.saving", "Saving...")
                         }

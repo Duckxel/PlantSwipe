@@ -616,11 +616,26 @@ if ! "${GIT_LOCAL_CMD[@]}" pull --ff-only; then
 fi
 fi
 
+# Normalize working-tree ownership after git pull.
+# When the script runs as root, git pull creates files owned by root.
+# Subsequent steps (email sync, bun install) run as REPO_OWNER and need write access.
+if [[ -n "$REPO_OWNER" && "$CURRENT_USER" != "$REPO_OWNER" ]]; then
+  log "Fixing working-tree ownership to $REPO_OWNER…"
+  $SUDO chown -R "$REPO_OWNER:$REPO_OWNER" "$WORK_DIR" || {
+    log "[WARN] Could not chown working tree to $REPO_OWNER; continuing anyway"
+  }
+fi
+
 # Sync email template (generates .mjs for Node.js + copies to Supabase _shared)
+# Run as repo owner to avoid permission denied when www-data executes the script
 SYNC_EMAIL_SCRIPT="$NODE_DIR/scripts/sync-email-template.sh"
 if [[ -f "$SYNC_EMAIL_SCRIPT" ]]; then
   log "Syncing email template…"
-  bash "$SYNC_EMAIL_SCRIPT"
+  if [[ ${#RUN_AS_PREFIX[@]} -gt 0 ]]; then
+    "${RUN_AS_PREFIX[@]}" bash "$SYNC_EMAIL_SCRIPT"
+  else
+    bash "$SYNC_EMAIL_SCRIPT"
+  fi
 fi
 
 # Install and build Node app using Bun
@@ -714,11 +729,13 @@ fi
 
 log "Using Bun at: $BUN_BIN (version: $("$BUN_BIN" --version 2>/dev/null || echo 'unknown'))"
 
-# Check if we can skip bun install by comparing bun.lockb hash
+# Check if we can skip bun install by comparing lock file hash
 LOCK_HASH_FILE="$NODE_DIR/.bun-lock-hash"
 CURRENT_LOCK_HASH=""
-# Try bun.lockb first, fall back to package-lock.json for migration
-if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+# Try bun.lock (text, v1.2+), then bun.lockb (binary), then package-lock.json
+if [[ -f "$NODE_DIR/bun.lock" ]]; then
+  CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || true)"
+elif [[ -f "$NODE_DIR/bun.lockb" ]]; then
   CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
 elif [[ -f "$NODE_DIR/package-lock.json" ]]; then
   CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || md5sum "$NODE_DIR/package-lock.json" 2>/dev/null | cut -d' ' -f1 || true)"
@@ -735,6 +752,8 @@ if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && 
 fi
 
 if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
+  # NOTE: Aggressive cleanup (nested node_modules removal, @tiptap updates)
+  # lives in setup.sh only. The refresh script just does a plain install.
   log "Running bun install…"
   # Always run bun as the repo owner to keep ownership consistent
   if [[ "$REPO_OWNER" != "" ]]; then
@@ -757,7 +776,9 @@ if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
   # Trust all packages to run postinstall scripts
   bun pm trust --all 2>/dev/null || true
   # Save the lock hash for next time
-  if [[ -f "$NODE_DIR/bun.lockb" ]]; then
+  if [[ -f "$NODE_DIR/bun.lock" ]]; then
+    CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lock" 2>/dev/null | cut -d' ' -f1 || true)"
+  elif [[ -f "$NODE_DIR/bun.lockb" ]]; then
     CURRENT_LOCK_HASH="$(sha256sum "$NODE_DIR/bun.lockb" 2>/dev/null | cut -d' ' -f1 || true)"
   fi
   if [[ -n "$CURRENT_LOCK_HASH" ]]; then
