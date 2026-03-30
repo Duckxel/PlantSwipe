@@ -2,6 +2,7 @@ import React from 'react'
 import { motion } from 'framer-motion'
 import { Egg, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { useTranslation } from 'react-i18next'
 
 type EggFoundModalProps = {
   description: string
@@ -9,6 +10,8 @@ type EggFoundModalProps = {
 }
 
 export function EggFoundModal({ description, onClose }: EggFoundModalProps) {
+  const { t } = useTranslation('common')
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -32,7 +35,7 @@ export function EggFoundModal({ description, onClose }: EggFoundModalProps) {
         <button
           onClick={onClose}
           className="absolute top-3 right-3 p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
-          aria-label="Close"
+          aria-label={t('common.close')}
         >
           <X className="h-4 w-4 text-stone-500" />
         </button>
@@ -49,7 +52,7 @@ export function EggFoundModal({ description, onClose }: EggFoundModalProps) {
           </motion.div>
 
           <h3 className="text-lg font-semibold text-stone-900 dark:text-stone-100">
-            You found an egg!
+            {t('eggHunt.foundTitle')}
           </h3>
 
           <p className="text-sm text-stone-600 dark:text-stone-300">
@@ -57,7 +60,7 @@ export function EggFoundModal({ description, onClose }: EggFoundModalProps) {
           </p>
 
           <Button onClick={onClose} className="rounded-2xl w-full mt-2">
-            Continue hunting
+            {t('eggHunt.continueButton')}
           </Button>
         </div>
       </motion.div>

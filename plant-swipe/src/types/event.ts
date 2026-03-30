@@ -34,6 +34,23 @@ export type EventItemRow = {
   created_at: string
 }
 
+/** Row from `event_item_translations`. Cleared on cleanup (CASCADE). */
+export type EventItemTranslationRow = {
+  id: string
+  item_id: string
+  language: string
+  description: string
+}
+
+/** Row from `event_translations`. */
+export type EventTranslationRow = {
+  id: string
+  event_id: string
+  language: string
+  name: string
+  description: string
+}
+
 /** Row from `event_user_progress` — per-user discovery tracking. Cleared on cleanup. */
 export type EventUserProgressRow = {
   id: string

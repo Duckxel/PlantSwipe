@@ -1,8 +1,8 @@
 import { supabase } from '@/lib/supabaseClient'
 import type { EventRow, EventItemRow, EventUserProgressRow } from '@/types/event'
 
-/** Fetch the currently active event (if any). */
-export async function getActiveEvent(): Promise<EventRow | null> {
+/** Fetch the currently active event (if any), with translations applied for the given language. */
+export async function getActiveEvent(lang?: string): Promise<EventRow | null> {
   const now = new Date().toISOString()
   const { data, error } = await supabase
     .from('events')
@@ -15,18 +15,55 @@ export async function getActiveEvent(): Promise<EventRow | null> {
     .single()
 
   if (error || !data) return null
-  return data as EventRow
+  const event = data as EventRow
+
+  // Apply translation overlay if a non-default language is requested
+  if (lang && lang !== 'en') {
+    const { data: translation } = await supabase
+      .from('event_translations')
+      .select('name, description')
+      .eq('event_id', event.id)
+      .eq('language', lang)
+      .single()
+
+    if (translation) {
+      if (translation.name) event.name = translation.name
+      if (translation.description) event.description = translation.description
+    }
+  }
+
+  return event
 }
 
-/** Fetch all items (eggs) for a given event. */
-export async function getEventItems(eventId: string): Promise<EventItemRow[]> {
+/** Fetch all items (eggs) for a given event, with translations applied for the given language. */
+export async function getEventItems(eventId: string, lang?: string): Promise<EventItemRow[]> {
   const { data, error } = await supabase
     .from('event_items')
     .select('*')
     .eq('event_id', eventId)
 
   if (error || !data) return []
-  return data as EventItemRow[]
+  const items = data as EventItemRow[]
+
+  // Apply translation overlays
+  if (lang && lang !== 'en' && items.length > 0) {
+    const itemIds = items.map((i) => i.id)
+    const { data: translations } = await supabase
+      .from('event_item_translations')
+      .select('item_id, description')
+      .in('item_id', itemIds)
+      .eq('language', lang)
+
+    if (translations) {
+      const translationMap = new Map(translations.map((t) => [t.item_id, t.description]))
+      for (const item of items) {
+        const translated = translationMap.get(item.id)
+        if (translated) item.description = translated
+      }
+    }
+  }
+
+  return items
 }
 
 /** Fetch items the current user has already found for a given event. */

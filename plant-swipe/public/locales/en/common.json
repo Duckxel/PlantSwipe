@@ -2564,5 +2564,13 @@
     "edibleDesc": "All plants with edible parts",
     "advanced": "Advanced",
     "browseAll": "Access our full encyclopedia"
+  },
+  "eggHunt": {
+    "foundTitle": "You found an egg!",
+    "continueButton": "Continue hunting",
+    "congratulations": "Congratulations! You found them all!",
+    "remaining": "{{count}} remaining",
+    "alreadyFound": "Already found!",
+    "clickMe": "Click me!"
   }
 }

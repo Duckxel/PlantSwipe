@@ -78,6 +78,42 @@ ALTER TABLE event_items ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "event_items_select_all" ON event_items
   FOR SELECT USING (true);
 
+-- ── 3b. TEMPORARY: event_item_translations ───────────────────
+-- Multilingual descriptions for event items.
+-- Deleted when the event is cleaned up (CASCADE from event_items).
+CREATE TABLE IF NOT EXISTS event_item_translations (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id       uuid NOT NULL REFERENCES event_items(id) ON DELETE CASCADE,
+  language      text NOT NULL,
+  description   text NOT NULL DEFAULT '',
+  UNIQUE(item_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_item_translations_item ON event_item_translations(item_id);
+
+ALTER TABLE event_item_translations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "event_item_translations_select_all" ON event_item_translations
+  FOR SELECT USING (true);
+
+-- ── 3c. PERMANENT: event_translations ────────────────────────
+-- Multilingual name & description for events themselves.
+CREATE TABLE IF NOT EXISTS event_translations (
+  id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  event_id      uuid NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+  language      text NOT NULL,
+  name          text NOT NULL DEFAULT '',
+  description   text NOT NULL DEFAULT '',
+  UNIQUE(event_id, language)
+);
+
+CREATE INDEX IF NOT EXISTS idx_event_translations_event ON event_translations(event_id);
+
+ALTER TABLE event_translations ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "event_translations_select_all" ON event_translations
+  FOR SELECT USING (true);
+
 -- ── 4. TEMPORARY: event_user_progress ─────────────────────────
 -- Tracks which user found which item. Deleted when the event is cleaned up.
 CREATE TABLE IF NOT EXISTS event_user_progress (

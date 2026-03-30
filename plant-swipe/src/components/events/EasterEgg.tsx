@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Egg } from 'lucide-react'
 import { useEggHunt } from '@/context/EggHuntContext'
 import { EggFoundModal } from './EggFoundModal'
+import { useTranslation } from 'react-i18next'
 
 type EasterEggProps = {
   /** The page path this egg belongs to (e.g. '/about'). */
@@ -16,6 +17,7 @@ type EasterEggProps = {
  */
 export function EasterEgg({ pagePath }: EasterEggProps) {
   const { getItemForPage, foundItemIds, collectItem, event } = useEggHunt()
+  const { t } = useTranslation('common')
   const [modalDescription, setModalDescription] = useState<string | null>(null)
   const [showModal, setShowModal] = useState(false)
 
@@ -54,8 +56,8 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
           top: `${topPercent}%`,
           left: `${leftPercent}%`,
         }}
-        aria-label="Hidden Easter egg"
-        title={alreadyFound ? 'Already found!' : 'Click me!'}
+        aria-label={t('eggHunt.foundTitle')}
+        title={alreadyFound ? t('eggHunt.alreadyFound') : t('eggHunt.clickMe')}
       >
         <div className="relative">
           <Egg

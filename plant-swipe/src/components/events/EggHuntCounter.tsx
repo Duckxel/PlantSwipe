@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Egg, Trophy, ChevronUp, ChevronDown } from 'lucide-react'
 import { useEggHunt } from '@/context/EggHuntContext'
+import { useTranslation } from 'react-i18next'
 
 /**
  * A floating counter widget that shows event progress.
@@ -10,9 +11,12 @@ import { useEggHunt } from '@/context/EggHuntContext'
  */
 export function EggHuntCounter() {
   const { event, totalItems, foundCount, completed, loading } = useEggHunt()
+  const { t } = useTranslation('common')
   const [expanded, setExpanded] = useState(false)
 
   if (loading || !event || totalItems === 0) return null
+
+  const remaining = totalItems - foundCount
 
   return (
     <motion.div
@@ -66,8 +70,8 @@ export function EggHuntCounter() {
             </div>
             <p className="text-xs text-stone-500 dark:text-stone-400 mt-2">
               {completed
-                ? 'Congratulations! You found them all!'
-                : `${totalItems - foundCount} remaining`}
+                ? t('eggHunt.congratulations')
+                : t('eggHunt.remaining', { count: remaining })}
             </p>
           </motion.div>
         )}

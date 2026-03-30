@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/context/AuthContext'
 import type { EventRow, EventItemRow } from '@/types/event'
 import { getActiveEvent, getEventItems, getUserProgress, markItemFound, markEventCompleted } from '@/lib/events'
@@ -29,11 +30,14 @@ const EggHuntContext = createContext<EggHuntContextValue | undefined>(undefined)
 
 export function EggHuntProvider({ children }: { children: React.ReactNode }) {
   const { user } = useAuth()
+  const { i18n } = useTranslation()
   const [event, setEvent] = useState<EventRow | null>(null)
   const [items, setItems] = useState<EventItemRow[]>([])
   const [foundItemIds, setFoundItemIds] = useState<Set<string>>(new Set())
   const [completed, setCompleted] = useState(false)
   const [loading, setLoading] = useState(true)
+
+  const lang = i18n.language
 
   // Load active event + items + user progress
   useEffect(() => {
@@ -41,7 +45,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
     async function load() {
       setLoading(true)
-      const activeEvent = await getActiveEvent()
+      const activeEvent = await getActiveEvent(lang)
       if (cancelled) return
 
       if (!activeEvent) {
@@ -54,7 +58,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
       }
 
       setEvent(activeEvent)
-      const allItems = await getEventItems(activeEvent.id)
+      const allItems = await getEventItems(activeEvent.id, lang)
       if (cancelled) return
       setItems(allItems)
 
@@ -82,7 +86,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
     load()
     return () => { cancelled = true }
-  }, [user])
+  }, [user, lang])
 
   const getItemForPage = useCallback(
     (pagePath: string) => {
