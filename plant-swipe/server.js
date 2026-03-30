@@ -4213,11 +4213,8 @@ app.get('/api/csrf-token', (req, res) => {
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
 app.get('/api/admin/system-health', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Get CPU usage (averaged over cores)
     const cpus = os.cpus()
@@ -4313,11 +4310,8 @@ app.get('/api/admin/system-health', async (req, res) => {
 // Admin: Get current maintenance mode status
 app.get('/api/admin/maintenance-mode', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const status = getMaintenanceMode()
     res.json({
       ok: true,
@@ -4332,11 +4326,8 @@ app.get('/api/admin/maintenance-mode', async (req, res) => {
 // Admin: Enable maintenance mode (suppresses 502/503/504 errors in Sentry)
 app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     // Duration in milliseconds (default: 5 minutes, max: 30 minutes)
     const durationMs = Math.min(
       Math.max(Number(req.body?.durationMs) || 300000, 60000), // At least 1 minute
@@ -4363,11 +4354,8 @@ app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
 // Admin: Disable maintenance mode
 app.post('/api/admin/maintenance-mode/disable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     
     const success = disableMaintenanceMode()
     if (success) {
@@ -4401,11 +4389,8 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Check multiple possible sitemap locations
     const sitemapPaths = [
@@ -4468,11 +4453,8 @@ app.get('/api/admin/sitemap-info', async (req, res) => {
 // Admin: fetch admin activity logs for the last N days (default 30)
 app.get('/api/admin/admin-logs', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const daysParam = Number(req.query.days || 30)
     const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(90, Math.floor(daysParam)) : 30
     if (!sql) {
@@ -5608,11 +5590,8 @@ app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
 // Admin: generic log endpoint to record an action from admin_api or UI
 app.post('/api/admin/log-action', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const body = req.body || {}
     const action = typeof body.action === 'string' ? body.action.trim() : ''
     if (!action) {
@@ -5622,11 +5601,9 @@ app.post('/api/admin/log-action', async (req, res) => {
     const target = (body.target == null || typeof body.target === 'string') ? body.target : String(body.target)
     const detail = (body.detail && typeof body.detail === 'object') ? body.detail : {}
 
-    let adminId = null
     let adminName = null
     try {
       const caller = await getUserFromRequest(req)
-      adminId = caller?.id || null
       // Resolve admin display name for clearer logs
       if (sql && adminId) {
         try {
@@ -6554,11 +6531,8 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6647,11 +6621,8 @@ function scheduleRestartAllServices(trigger = 'manual') {
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -7349,11 +7320,8 @@ async function handleSyncSchema(req, res) {
   }
   try {
     // Require admin (robust detection; currently permissive via isAdminFromRequest)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Read all SQL files from sync_parts folder and execute them in order
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
@@ -14903,11 +14871,8 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const raw = (req.query.ip || req.query.q || '').toString().trim()
     const ip = normalizeIp(raw)
     if (!ip) {
@@ -15761,11 +15726,8 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15828,11 +15790,8 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15895,11 +15854,8 @@ app.post('/api/admin/roles/add', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15992,11 +15948,8 @@ app.post('/api/admin/roles/remove', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -16372,11 +16325,8 @@ app.post('/api/admin/ban', async (req, res) => {
       return
     }
     // Require admin with robust detection
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, reason: rawReason } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const reason = (rawReason || '').toString().trim() || null
@@ -17275,11 +17225,8 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     if (!uid) return
 
     // Require admin (same policy as other admin endpoints)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
