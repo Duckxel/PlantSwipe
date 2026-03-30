@@ -22,42 +22,25 @@ export type TutorialStepId =
 
 export type TutorialStep = {
   id: TutorialStepId
-  targetSelector?: string
-  placement: 'center' | 'top' | 'bottom' | 'left' | 'right'
-  route?: string
-  highlightPadding?: number
-  isModal?: boolean
-  fallbackToModal?: boolean
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
-  // --- Welcome ---
-  { id: 'welcome', placement: 'center', isModal: true },
-
-  // --- Discovery ---
-  { id: 'discovery_swipe', targetSelector: '[data-tutorial="swipe-card"]', placement: 'bottom', route: '/discovery', fallbackToModal: true, highlightPadding: 12 },
-  { id: 'discovery_like', targetSelector: '[data-tutorial="like-button"]', placement: 'top', route: '/discovery', fallbackToModal: true },
-  { id: 'discovery_info', targetSelector: '[data-tutorial="info-button"]', placement: 'top', route: '/discovery', fallbackToModal: true },
-
-  // --- Encyclopedia ---
-  { id: 'encyclopedia_nav', targetSelector: '[data-tutorial="nav-search"]', placement: 'top', route: '/discovery', fallbackToModal: true },
-  { id: 'encyclopedia_categories', targetSelector: '[data-tutorial="category-grid"]', placement: 'bottom', route: '/search/categories', fallbackToModal: true },
-
-  // --- Scan ---
-  { id: 'scan_identify', targetSelector: '[data-tutorial="scan-card"]', placement: 'bottom', route: '/scan', fallbackToModal: true },
-
-  // --- Gardens ---
-  { id: 'nav_gardens', targetSelector: '[data-tutorial="nav-gardens"]', placement: 'top', route: '/scan', fallbackToModal: true },
-  { id: 'gardens_create', targetSelector: '[data-tutorial="create-garden"]', placement: 'bottom', route: '/gardens', fallbackToModal: true },
-  { id: 'gardens_beginner', placement: 'center', isModal: true, route: '/gardens' },
-  { id: 'gardens_overview', placement: 'center', isModal: true, route: '/gardens' },
-  { id: 'gardens_plants', placement: 'center', isModal: true, route: '/gardens' },
-  { id: 'gardens_analytics', placement: 'center', isModal: true, route: '/gardens' },
-  { id: 'gardens_seedling', placement: 'center', isModal: true, route: '/gardens' },
-  { id: 'gardens_tasks', placement: 'center', isModal: true, route: '/gardens' },
-
-  // --- Complete ---
-  { id: 'tutorial_complete', placement: 'center', isModal: true },
+  { id: 'welcome' },
+  { id: 'discovery_swipe' },
+  { id: 'discovery_like' },
+  { id: 'discovery_info' },
+  { id: 'encyclopedia_nav' },
+  { id: 'encyclopedia_categories' },
+  { id: 'scan_identify' },
+  { id: 'nav_gardens' },
+  { id: 'gardens_create' },
+  { id: 'gardens_beginner' },
+  { id: 'gardens_overview' },
+  { id: 'gardens_plants' },
+  { id: 'gardens_analytics' },
+  { id: 'gardens_seedling' },
+  { id: 'gardens_tasks' },
+  { id: 'tutorial_complete' },
 ]
 
 type TutorialContextValue = {
@@ -66,6 +49,7 @@ type TutorialContextValue = {
   currentStep: TutorialStep | null
   totalSteps: number
   next: () => void
+  prev: () => void
   skip: () => void
   startTutorial: () => void
 }
@@ -106,6 +90,10 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     })
   }, [markComplete])
 
+  const prev = React.useCallback(() => {
+    setCurrentStepIndex(prev => Math.max(0, prev - 1))
+  }, [])
+
   const skip = React.useCallback(() => {
     markComplete()
   }, [markComplete])
@@ -123,6 +111,7 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     currentStep,
     totalSteps: TUTORIAL_STEPS.length,
     next,
+    prev,
     skip,
     startTutorial,
   }

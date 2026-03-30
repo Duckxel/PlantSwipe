@@ -2694,72 +2694,73 @@
     "skip": "Skip tutorial",
     "skipAll": "Skip tutorial",
     "next": "Next",
+    "back": "Back",
     "start": "Let's go!",
     "finish": "Get started!",
     "steps": {
       "welcome": {
         "title": "Welcome to Aphylia! 🌱",
-        "description": "Let us show you around! This quick tour will help you discover the main features of the app. You can skip at any time."
+        "description": "Here's a quick overview of what you can do with the app. No actions required — just swipe through to see the highlights. You can skip at any time."
       },
       "discovery_swipe": {
-        "title": "Discover Plants",
-        "description": "Swipe through plant cards to explore our collection. Swipe right to like, left to skip — just like a dating app, but for plants!"
+        "title": "Discovery — Swipe to Explore",
+        "description": "The Discovery page shows you a deck of plant cards. Swipe right to like a plant, left to pass. It's like a dating app — but for plants!"
       },
       "discovery_like": {
-        "title": "Like Your Favorites",
-        "description": "Tap the heart button to save plants you love. They'll be added to your bookmarks for easy access later."
+        "title": "Discovery — Like & Save",
+        "description": "See a plant you love? The heart button saves it to your bookmarks. Double-tap the card for a quick like. You'll find all your saved plants in your profile."
       },
       "discovery_info": {
-        "title": "Plant Details",
-        "description": "Tap any plant card to see detailed information — care instructions, watering schedule, sunlight needs, and more."
+        "title": "Discovery — Plant Details",
+        "description": "Every plant has a detail page with care instructions, watering schedule, sunlight needs, toxicity info, and more. Tap any card to learn everything about it."
       },
       "encyclopedia_nav": {
         "title": "Encyclopedia 📚",
-        "description": "The Encyclopedia lets you search and filter our entire plant collection. Find exactly what you're looking for by name, type, or care needs."
+        "description": "The Encyclopedia is your plant library. Search by name, filter by type, care level, or specific needs. It's the fastest way to find the perfect plant."
       },
       "encyclopedia_categories": {
         "title": "Browse by Category",
-        "description": "Explore plants organized into categories — succulents, flowering plants, vegetables, pet-safe options, and many more. Tap a category to dive in!"
+        "description": "Plants are organized into handy categories — succulents, flowering plants, vegetables, pet-safe options, and many more. A great way to discover something new!"
       },
       "scan_identify": {
         "title": "Plant Scanner 📷",
-        "description": "Don't know what a plant is? Take a photo or upload an image and our AI will identify it instantly. Your scan history is saved for reference."
+        "description": "Found a plant you can't identify? Snap a photo or upload an image and our AI will tell you what it is. Your scan history is saved so you can always look back."
       },
       "nav_gardens": {
         "title": "Your Gardens",
-        "description": "Head to the Gardens section to manage your real-life plant collections. Let's check it out!"
+        "description": "Gardens are where you track your real-life plant collections. You can create multiple gardens — one for your balcony, one for indoors, one for the backyard."
       },
       "gardens_create": {
-        "title": "Create a Garden",
-        "description": "Start by creating your first garden. Give it a name and set its location — indoor, outdoor, or both!"
+        "title": "Creating a Garden",
+        "description": "You can create a garden in seconds — give it a name, pick indoor or outdoor, and you're done. You'll choose between Default, Beginner, or Seedling garden types."
       },
       "gardens_beginner": {
         "title": "Beginner Garden 🎓",
-        "description": "New to gardening? Create a Beginner garden for a guided experience! It includes a step-by-step roadmap with lessons on plant care, watering routines, and growing your first healthy plant."
+        "description": "New to gardening? The Beginner mode gives you a guided roadmap with step-by-step lessons: choosing your first plant, setting up watering, learning care habits, and more."
       },
       "gardens_overview": {
         "title": "Garden Dashboard",
-        "description": "Each garden has tabs to help you manage everything: overview, plants, tasks, journal, analytics, and settings."
+        "description": "Each garden has its own dashboard with tabs: Overview, Plants, Tasks, Journal, Analytics, and Settings. Everything you need to manage your garden in one place."
       },
       "gardens_plants": {
-        "title": "Add Plants to Your Garden",
-        "description": "The Plants tab lets you add and track the plants in your garden. Log watering, pruning, and other care events."
+        "title": "Plants in Your Garden",
+        "description": "The Plants tab shows everything growing in your garden. You can track each plant's watering, pruning, fertilizing, and care history with a simple tap."
       },
       "gardens_analytics": {
         "title": "Garden Analytics 📊",
-        "description": "Track your garden's progress with analytics — see watering patterns, growth stats, and care history at a glance."
+        "description": "The Analytics tab shows your garden's progress over time — watering streaks, growth patterns, care frequency, and task completion stats at a glance."
       },
       "gardens_seedling": {
         "title": "Seedling Tray 🌱",
-        "description": "Start seeds in a virtual seedling tray! Track germination, watering, and growth stages for each cell. Transplant to your garden when they're ready."
+        "description": "Starting from seeds? The Seedling Tray lets you track germination, growth stages, and watering for each cell. When they're ready, transplant them into your garden."
       },
       "gardens_tasks": {
         "title": "Tasks & Journal 📝",
-        "description": "The Tasks tab shows your daily to-dos — watering, fertilizing, pruning. The Journal lets you log notes and track your garden's story over time."
+        "description": "Tasks keep you on track with daily care — watering, fertilizing, pruning reminders. The Journal lets you write notes and build a timeline of your garden's story."
       },
       "tutorial_complete": {
         "title": "You're All Set! 🎉",
-        "description": "You now know the basics of Aphylia. Start exploring, create your first garden, and let your green thumb shine!"
+        "description": "That's the tour! Your profile has a checklist to guide you through your first real actions — creating a garden, adding a plant, and more. Enjoy Aphylia!"
       }
     }
   }
