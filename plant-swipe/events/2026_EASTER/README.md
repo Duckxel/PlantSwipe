@@ -126,6 +126,7 @@ Adjust seeds in `setup.sql` if an egg lands in an awkward spot.
 | `components/EggFoundModal.tsx` | Modal showing fun fact on egg click |
 | `components/EggHuntCounter.tsx` | Floating progress counter widget |
 | `setup.sql` | Idempotent SQL to create/update the event + eggs |
+| `clean.sql` | SQL to remove all temporary event data after event ends |
 | `README.md` | This file — event documentation |
 | `../../badges/event_2026_easter.sql` | Badge definition (run first) |
 
@@ -137,12 +138,12 @@ When the event is over and you want to remove all Easter code:
 
 ### Step 1: Clean up the database
 
-In **Admin > Events**, click the event → **Cleanup** → **Confirm Cleanup**.
-
-Or via SQL:
-```sql
-SELECT cleanup_event((SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026'));
+Run the cleanup SQL:
+```bash
+psql $DATABASE_URL -f events/2026_EASTER/clean.sql
 ```
+
+Or via **Admin > Events** → click the event → **Cleanup** → **Confirm Cleanup**.
 
 ### Step 2: Remove imports from pages (3 files)
 
