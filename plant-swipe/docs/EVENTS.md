@@ -287,36 +287,200 @@ ORDER BY ub.earned_at ASC;
 
 ### Setup Checklist
 
-- [ ] Create badge: `INSERT INTO badges (slug, name, description, category) VALUES ('easter-2026', 'Easter Egg Hunter 2026', 'Found all hidden Easter eggs!', 'event');`
-- [ ] Create event row with `badge_id` linked, `is_active = true`, dates: April 1-7
-- [ ] Insert `event_items` for each page (About, Search, Discovery, Blog, etc.)
-- [ ] Add `<EasterEgg pagePath="..." />` to each target page component
-- [ ] Test: verify eggs show up, click -> modal, counter updates, badge awarded on completion
-- [ ] Deploy
+- [ ] Run the SQL below in order (badge, event, items, translations)
+- [ ] Deploy the branch (code already has `<EasterEgg>` on About + PlantInfoPage)
+- [ ] In Admin > Events, toggle "Admin Only" + "Active" to test
+- [ ] Verify: eggs appear on the 9 pages, click shows fun fact, counter works
+- [ ] When ready to go public: turn off "Admin Only" in Admin > Events
+- [ ] After event ends: click "Cleanup" in Admin > Events
 
-### Page/Egg Mapping (Example)
+### Complete SQL Setup
 
-| Page | Path | Description | Seed |
-|------|------|-------------|------|
-| About | `/about` | test | 42 |
-| Search | `/search` | Plants can communicate through fungi! | 17 |
-| Discovery | `/discovery` | The oldest tree is over 5,000 years old! | 73 |
-| Blog | `/blog` | Bamboo can grow up to 91 cm per day! | 8 |
-| Pricing | `/pricing` | There are over 390,000 plant species! | 55 |
+Run these in order on your Supabase SQL editor:
+
+```sql
+-- ═══════════════════════════════════════════════════════
+-- STEP 1: Create the Easter badge
+-- ═══════════════════════════════════════════════════════
+INSERT INTO badges (slug, name, description, category)
+VALUES ('easter-2026', 'Easter Egg Hunter 2026', 'Found all hidden Easter eggs during the 2026 hunt!', 'event')
+ON CONFLICT (slug) DO NOTHING;
+
+INSERT INTO badge_translations (badge_id, language, name, description)
+VALUES (
+  (SELECT id FROM badges WHERE slug = 'easter-2026'),
+  'fr',
+  'Chasseur d''oeufs de Paques 2026',
+  'A trouve tous les oeufs de Paques caches lors de la chasse 2026 !'
+) ON CONFLICT (badge_id, language) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════
+-- STEP 2: Create the Easter event
+-- ═══════════════════════════════════════════════════════
+INSERT INTO events (name, description, event_type, badge_id, starts_at, ends_at, is_active, admin_only)
+VALUES (
+  'Easter Egg Hunt 2026',
+  'Find all hidden eggs across the site to earn a special badge!',
+  'egg_hunt',
+  (SELECT id FROM badges WHERE slug = 'easter-2026'),
+  '2026-04-05T00:00:00Z',
+  '2026-04-12T23:59:59Z',
+  true,
+  true  -- admin only for testing, set to false when ready to go public
+);
+
+INSERT INTO event_translations (event_id, language, name, description)
+VALUES (
+  (SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026'),
+  'fr',
+  'Chasse aux oeufs de Paques 2026',
+  'Trouvez tous les oeufs caches sur le site pour obtenir un badge special !'
+) ON CONFLICT (event_id, language) DO NOTHING;
+
+-- ═══════════════════════════════════════════════════════
+-- STEP 3: Add eggs (9 total: 1 About page + 8 plant pages)
+-- ═══════════════════════════════════════════════════════
+-- The plant pages use /plants/<uuid>, so we look up IDs by name.
+-- Adjust the ILIKE patterns if your plant names differ.
+
+DO $$
+DECLARE
+  eid uuid := (SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026');
+  pid uuid;
+BEGIN
+  -- 1. About page
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/about', 'Aphylia was born in Montpellier, inspired by the Aphyllante flower native to the region!', 42);
+
+  -- 2. Primevere
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%primev%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'In Celtic folklore, the primrose is called the "fairy flower" — it was believed to open the doors to the supernatural world!', 17);
+  END IF;
+
+  -- 3. Jonquille / Narcisse
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%jonquille%' OR name ILIKE '%narciss%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'In Greek mythology, the daffodil is linked to Narcissus, who fell in love with his own reflection in a river!', 73);
+  END IF;
+
+  -- 4. Palmier
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%palmier%' OR name ILIKE '%palm tree%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'Palm fossils date back over 100 million years! Palm branches were waved at Jesus'' entry into Jerusalem — the origin of Palm Sunday.', 8);
+  END IF;
+
+  -- 5. Olivier
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%olivier%' OR name ILIKE '%olive%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'After the Great Flood, Noah''s dove returned with an olive branch — the universal symbol of peace. Olive branches are still blessed every Palm Sunday!', 55);
+  END IF;
+
+  -- 6. Paquerette
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%paquerette%' OR name ILIKE '%daisy%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'The daisy''s French name "paquerette" literally comes from "Paques" (Easter)! It symbolizes purity, innocence, and the return of spring.', 31);
+  END IF;
+
+  -- 7. Ble germe
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%ble germ%' OR name ILIKE '%ble%germ%' OR name ILIKE '%sprouted wheat%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'Ancient Romans sprouted wheat for spring festivals to honor Demeter and Persephone. This Mediterranean Easter tradition symbolizes rebirth and abundance!', 89);
+  END IF;
+
+  -- 8. Lys blanc
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%lys blanc%' OR name ILIKE '%white lily%' OR name ILIKE '%lys%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'In the Annunciation paintings, the angel Gabriel holds a white lily when announcing the birth of Jesus to Mary. The lily represents purity, resurrection, and eternal life!', 64);
+  END IF;
+
+  -- 9. Buis
+  SELECT id INTO pid FROM plants WHERE name ILIKE '%buis%' OR name ILIKE '%boxwood%' LIMIT 1;
+  IF pid IS NOT NULL THEN
+    INSERT INTO event_items (event_id, page_path, description, position_seed)
+    VALUES (eid, '/plants/' || pid, 'In regions where palm trees don''t grow, boxwood branches are used instead on Palm Sunday! As an evergreen, boxwood has symbolized eternal life since ancient times.', 22);
+  END IF;
+END $$;
+
+-- ═══════════════════════════════════════════════════════
+-- STEP 4: Add French translations for each egg
+-- ═══════════════════════════════════════════════════════
+DO $$
+DECLARE
+  eid uuid := (SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026');
+  rec record;
+BEGIN
+  FOR rec IN
+    SELECT id, page_path FROM event_items WHERE event_id = eid
+  LOOP
+    INSERT INTO event_item_translations (item_id, language, description)
+    VALUES (
+      rec.id,
+      'fr',
+      CASE
+        WHEN rec.page_path = '/about'
+          THEN 'Aphylia est nee a Montpellier, inspiree par l''Aphyllante, une fleur native de la region !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE name ILIKE '%primev%' LIMIT 1)::text || '%'
+          THEN 'Dans le folklore celtique, la primevere est appelee "fleur des fees" — on croyait qu''elle ouvrait les portes du monde surnaturel !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%jonquille%' OR name ILIKE '%narciss%') LIMIT 1)::text || '%'
+          THEN 'Dans la mythologie grecque, la jonquille est liee au mythe de Narcisse, qui tomba amoureux de son propre reflet dans une riviere !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%palmier%' OR name ILIKE '%palm tree%') LIMIT 1)::text || '%'
+          THEN 'Des fossiles de palmier datent de plus de 100 millions d''annees ! Les rameaux de palmier furent agites a l''entree de Jesus a Jerusalem — l''origine du Dimanche des Rameaux.'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%olivier%' OR name ILIKE '%olive%') LIMIT 1)::text || '%'
+          THEN 'Apres le Deluge, la colombe de Noe rapporta une branche d''olivier — le symbole universel de paix. Les rameaux d''olivier sont encore benis chaque Dimanche des Rameaux !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%paquerette%' OR name ILIKE '%daisy%') LIMIT 1)::text || '%'
+          THEN 'Le nom "paquerette" vient directement de "Paques" ! Elle symbolise la purete, l''innocence et le retour du printemps.'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%ble germ%' OR name ILIKE '%ble%germ%') LIMIT 1)::text || '%'
+          THEN 'Les Romains faisaient germer du ble lors des fetes de printemps en l''honneur de Demeter et Persephone. Cette tradition mediterraneenne de Paques symbolise la renaissance et l''abondance !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%lys blanc%' OR name ILIKE '%lys%') LIMIT 1)::text || '%'
+          THEN 'Dans les tableaux de l''Annonciation, l''ange Gabriel tient un lys blanc pour annoncer la naissance de Jesus a Marie. Le lys represente la purete, la resurrection et la vie eternelle !'
+        WHEN rec.page_path LIKE '%' || (SELECT id FROM plants WHERE (name ILIKE '%buis%' OR name ILIKE '%boxwood%') LIMIT 1)::text || '%'
+          THEN 'Dans les regions ou le palmier ne pousse pas, on utilise des branches de buis le Dimanche des Rameaux ! Plante a feuilles persistantes, le buis symbolise la vie eternelle depuis l''Antiquite.'
+        ELSE 'Oeuf de Paques trouve !'
+      END
+    ) ON CONFLICT (item_id, language) DO NOTHING;
+  END LOOP;
+END $$;
+
+-- ═══════════════════════════════════════════════════════
+-- VERIFY: Check what was created
+-- ═══════════════════════════════════════════════════════
+SELECT ei.page_path, ei.description AS en_description, eit.description AS fr_description, ei.position_seed
+FROM event_items ei
+LEFT JOIN event_item_translations eit ON eit.item_id = ei.id AND eit.language = 'fr'
+WHERE ei.event_id = (SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026')
+ORDER BY ei.created_at;
+```
+
+### Egg Locations (9 total)
+
+| # | Page | Plant | Seed | Description (EN) |
+|---|------|-------|------|------------------|
+| 1 | About | — | 42 | Aphylia born in Montpellier, inspired by Aphyllante |
+| 2 | Primevere | Fairy flower in Celtic folklore | 17 | Opens doors to supernatural world |
+| 3 | Jonquille | Narcissus myth | 73 | Fell in love with his reflection |
+| 4 | Palmier | Palm Sunday origin | 8 | 100M year old fossils, Jerusalem entry |
+| 5 | Olivier | Noah's dove | 55 | Olive branch = peace, blessed on Palm Sunday |
+| 6 | Paquerette | Name = Easter | 31 | French name literally from "Paques" |
+| 7 | Ble germe | Ancient spring rites | 89 | Romans honored Demeter & Persephone |
+| 8 | Lys blanc | Annunciation art | 64 | Gabriel holds lily announcing Jesus to Mary |
+| 9 | Buis | Palm Sunday substitute | 22 | Evergreen = eternal life since antiquity |
 
 ### Post-Event Cleanup
 
+In **Admin > Events**, click the event card, then **Cleanup** > **Confirm Cleanup**.
+
+Or via SQL:
 ```sql
-SELECT cleanup_event('<easter-2026-event-id>');
+SELECT cleanup_event((SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026'));
 ```
-
-Then remove the `<EasterEgg>` components from pages (or leave them — they render nothing when no active event exists).
-
-**What stays permanently:**
-- `events` row: "Easter Egg Hunt 2026" entry in event history
-- `event_registrations`: record of every user who completed it
-- `badges` row: "Easter Egg Hunter 2026" badge definition
-- `user_badges`: every user who earned the badge keeps it forever
 
 ---
 
