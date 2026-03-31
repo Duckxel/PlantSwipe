@@ -240,24 +240,13 @@ export const AdminEventsPanel: React.FC = () => {
     }
   }
 
-  const handleDelete = async (eventId: string) => {
-    try {
-      const { error } = await supabase.from('events').delete().eq('id', eventId)
-      if (error) throw error
-      setSuccess('Event deleted')
-      setConfirmDelete(null)
-      await loadEvents()
-    } catch (err: any) {
-      setError(err.message || 'Failed to delete event')
-    }
-  }
-
   const handleCleanup = async (eventId: string) => {
     setCleaning(eventId)
     try {
       const { error } = await supabase.rpc('cleanup_event', { target_event_id: eventId })
       if (error) throw error
       setSuccess('Event cleaned up — items and progress removed')
+      setConfirmDelete(null)
       await loadEvents()
     } catch (err: any) {
       setError(err.message || 'Cleanup failed')
@@ -413,19 +402,16 @@ export const AdminEventsPanel: React.FC = () => {
                   Edit
                 </Button>
 
-                <Button
-                  size="sm" variant="outline" className="rounded-xl text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
-                  onClick={() => handleCleanup(event.id)}
-                  disabled={cleaning === event.id}
-                >
-                  {cleaning === event.id ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
-                  Cleanup
-                </Button>
-
                 {confirmDelete === event.id ? (
                   <div className="flex items-center gap-1.5">
-                    <Button size="sm" variant="destructive" className="rounded-xl" onClick={() => handleDelete(event.id)}>
-                      Confirm Delete
+                    <Button
+                      size="sm" variant="outline"
+                      className="rounded-xl text-amber-600 border-amber-300 bg-amber-50 dark:bg-amber-900/20"
+                      onClick={() => handleCleanup(event.id)}
+                      disabled={cleaning === event.id}
+                    >
+                      {cleaning === event.id ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5 mr-1.5" />}
+                      Confirm Cleanup
                     </Button>
                     <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setConfirmDelete(null)}>
                       Cancel
@@ -433,12 +419,11 @@ export const AdminEventsPanel: React.FC = () => {
                   </div>
                 ) : (
                   <Button
-                    size="sm" variant="outline"
-                    className="rounded-xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    size="sm" variant="outline" className="rounded-xl text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:hover:bg-amber-900/20"
                     onClick={() => setConfirmDelete(event.id)}
                   >
                     <Trash2 className="h-3.5 w-3.5 mr-1.5" />
-                    Delete
+                    Cleanup
                   </Button>
                 )}
               </div>
