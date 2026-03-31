@@ -17,8 +17,6 @@ import { useAuth } from "@/context/AuthContext"
 import { checkEditorAccess } from "@/constants/userRoles"
 import { RequestPlantDialog } from "@/components/plant/RequestPlantDialog"
 import { supabase } from "@/lib/supabaseClient"
-import { useTutorial } from "@/context/TutorialContext"
-import { DEMO_CATEGORY_PREVIEWS } from "@/lib/tutorialDemoData"
 interface Category {
   key: string
   params: string
@@ -281,17 +279,12 @@ export default function CategoriesPage() {
   const navigate = useLanguageNavigate()
   const language = useLanguage()
   const { user, profile } = useAuth()
-  const { active: tutorialActive } = useTutorial()
   const [searchValue, setSearchValue] = React.useState("")
   const [requestDialogOpen, setRequestDialogOpen] = React.useState(false)
   const [categoryPreviews, setCategoryPreviews] = useState<Record<string, CategoryPlantPreview[]>>({})
   const [advancedOpen, setAdvancedOpen] = useState(false)
 
   useEffect(() => {
-    if (tutorialActive) {
-      setCategoryPreviews(DEMO_CATEGORY_PREVIEWS)
-      return
-    }
     let cancelled = false
 
     // Restore from cache immediately for instant rendering
@@ -397,7 +390,7 @@ export default function CategoriesPage() {
     return () => {
       cancelled = true
     }
-  }, [language, tutorialActive])
+  }, [language])
 
   usePageMetadata({
     title: t("categories.title", { defaultValue: "Categories" }),

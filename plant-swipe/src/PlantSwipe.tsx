@@ -25,7 +25,6 @@ import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateM
 import { BannedModal } from "@/components/moderation/BannedModal";
 import { TutorialOverlay } from "@/components/tutorial/TutorialOverlay";
 import { useTutorial } from "@/context/TutorialContext";
-import { DEMO_PLANT } from "@/lib/tutorialDemoData";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -2830,7 +2829,7 @@ export default function PlantSwipe() {
               element={(plants.length > 0 || tutorialActive) ? (
                 <Suspense fallback={<SwipeCardSkeleton />}>
                   <SwipePage
-                    current={tutorialActive ? DEMO_PLANT : current}
+                    current={tutorialActive ? (current ?? plants.find(p => getDiscoveryPageImageUrl(p))) : current}
                     index={index}
                     setIndex={setIndex}
                     x={x}
