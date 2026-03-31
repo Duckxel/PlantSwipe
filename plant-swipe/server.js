@@ -3916,7 +3916,7 @@ app.use((req, res, next) => {
 })
 
 // Catch-all OPTIONS for any /api/* route (defense-in-depth)
-app.options('/api/*', (_req, res) => {
+app.options('/api/{*splat}', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
   res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
@@ -33599,7 +33599,7 @@ app.get('/api/preview-ssr', async (req, res) => {
   }
 })
 
-app.get('*', async (req, res) => {
+app.get('{*splat}', async (req, res) => {
   const userAgent = req.get('user-agent') || ''
   const pagePath = req.originalUrl || req.path || '/'
 
@@ -33682,7 +33682,10 @@ app.get('*', async (req, res) => {
 app.use((err, req, res, next) => {
   // Log error for debugging (server-side only)
   console.error('[Server] Express error:', err?.message || err)
-  
+
+  // Express 5 auto-forwards rejected promises here; bail if headers already sent
+  if (res.headersSent) return next(err)
+
   // Capture error in Sentry with GDPR-compliant context
   Sentry.withScope((scope) => {
     // Only include path without query params (may contain tokens)
