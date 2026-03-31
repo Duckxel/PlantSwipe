@@ -56,6 +56,11 @@ type FileUploadStatus = {
 const BYTES_IN_MB = 1024 * 1024
 const DEFAULT_MAX_MB = 15
 
+/** Shown in breadcrumbs; must match server ADMIN_UPLOAD_PREFIX default. */
+const ADMIN_UPLOAD_PREFIX =
+  (import.meta.env?.VITE_ADMIN_UPLOAD_PREFIX as string | undefined)?.trim().replace(/^\/+|\/+$/g, "") ||
+  "admin/uploads"
+
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg", "image/png", "image/webp", "image/avif",
   "image/heic", "image/heif", "image/gif", "image/tiff",
@@ -543,11 +548,9 @@ function FileExplorer({
       {/* Footer status */}
       <div className="px-3 py-1.5 border-t border-stone-100 dark:border-[#2a2a2d] bg-stone-50/50 dark:bg-[#1a1a1d] text-xs text-stone-400">
         {folders.length} folder{folders.length !== 1 ? "s" : ""}, {files.length} file{files.length !== 1 ? "s" : ""}
-        {currentPath && (
-          <span className="ml-2 font-mono">
-            /{currentPath}
-          </span>
-        )}
+        <span className="ml-2 font-mono">
+          {currentPath ? `/${currentPath}` : "/ (bucket root)"}
+        </span>
       </div>
     </div>
   )
@@ -560,9 +563,10 @@ function FileExplorer({
 export const AdminUploadPanel: React.FC = () => {
   const { adminToken, getHeaders } = useAdminHeaders()
 
-  // File explorer state
+  // File explorer state (paths relative to UTILITY bucket root)
   const [currentPath, setCurrentPath] = React.useState("")
-  const [uploadTargetPath, setUploadTargetPath] = React.useState("")
+  /** null = upload to default admin prefix on server; string = explicit path from bucket root ("" = bucket root) */
+  const [uploadTargetPath, setUploadTargetPath] = React.useState<string | null>(null)
 
   // Upload state
   const [dragActive, setDragActive] = React.useState(false)
@@ -609,7 +613,8 @@ export const AdminUploadPanel: React.FC = () => {
       const form = new FormData()
       form.append("file", file)
       form.append("optimize", optimize ? "true" : "false")
-      if (uploadTargetPath) {
+      if (uploadTargetPath !== null) {
+        form.append("folderMode", "explorer")
         form.append("folderPath", uploadTargetPath)
       }
       // Don't send Content-Type - browser sets it with boundary for FormData
@@ -710,7 +715,12 @@ export const AdminUploadPanel: React.FC = () => {
     [handleFiles],
   )
 
-  const displayedTarget = uploadTargetPath || "admin/uploads (default)"
+  const displayedTarget =
+    uploadTargetPath === null
+      ? `UTILITY/${ADMIN_UPLOAD_PREFIX} (default)`
+      : uploadTargetPath === ""
+        ? "UTILITY/ (bucket root)"
+        : `UTILITY/${uploadTargetPath}`
 
   return (
     <div className="space-y-5">
@@ -721,7 +731,9 @@ export const AdminUploadPanel: React.FC = () => {
           Upload Media
         </h2>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Browse folders, manage files, and upload to the <span className="font-medium text-emerald-600">UTILITY</span> bucket
+          Browse the <span className="font-medium text-emerald-600">UTILITY</span> bucket from its root. Use{" "}
+          <span className="font-medium">Upload here</span> to set the destination; otherwise uploads go to{" "}
+          <span className="font-mono text-xs">{ADMIN_UPLOAD_PREFIX}</span>.
         </p>
       </div>
 
@@ -746,15 +758,15 @@ export const AdminUploadPanel: React.FC = () => {
             {displayedTarget}
           </p>
         </div>
-        {uploadTargetPath && (
+        {uploadTargetPath !== null && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="rounded-lg text-xs h-7"
-            onClick={() => setUploadTargetPath("")}
+            onClick={() => setUploadTargetPath(null)}
           >
-            Reset
+            Use default folder
           </Button>
         )}
       </div>

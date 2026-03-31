@@ -2182,11 +2182,12 @@ function sanitizeFolderInput(value) {
     .join('/')
 }
 
-/** Full object path in UTILITY for admin upload explorer (relative path is under adminUploadPrefix). */
-function adminUploadExplorerObjectPath(relativePath) {
-  const rel = sanitizeFolderInput(relativePath || '')
-  if (!rel) return adminUploadPrefix
-  return `${adminUploadPrefix}/${rel}`.replace(/\/{2,}/g, '/')
+/**
+ * Full object path in UTILITY bucket for admin explorer.
+ * Relative path is from bucket root (empty string = list/create at bucket root).
+ */
+function adminUtilityExplorerObjectPath(relativePath) {
+  return sanitizeFolderInput(relativePath || '')
 }
 
 async function listAllStorageObjectPathsUnderPrefix(bucket, prefix) {
@@ -7669,6 +7670,12 @@ app.post('/api/admin/upload-image', async (req, res) => {
       name: adminDisplayName || null,
     },
     prefixBuilder: ({ req }) => {
+      const mode = String(req.body?.folderMode || req.query?.folderMode || '').toLowerCase()
+      if (mode === 'explorer') {
+        return sanitizeFolderInput(
+          req.body?.folderPath ?? req.query?.folderPath ?? '',
+        )
+      }
       const raw =
         req.body?.folderPath ??
         req.body?.folder ??
@@ -7684,8 +7691,8 @@ app.post('/api/admin/upload-image', async (req, res) => {
 })
 
 /**
- * Admin UTILITY bucket explorer: list folders and files under adminUploadPrefix.
- * GET ?path= relative path inside the admin upload area (optional).
+ * Admin UTILITY bucket explorer: list folders and files from bucket root.
+ * GET ?path= path relative to bucket root (optional; empty = root).
  */
 app.get('/api/admin/upload-folder-contents', async (req, res) => {
   if (!supabaseServiceClient) {
@@ -7697,7 +7704,7 @@ app.get('/api/admin/upload-folder-contents', async (req, res) => {
 
   try {
     const relative = sanitizeFolderInput(req.query?.path || '')
-    const listPath = adminUploadExplorerObjectPath(relative)
+    const listPath = adminUtilityExplorerObjectPath(relative)
     const { data, error } = await supabaseServiceClient.storage.from(adminUploadBucket).list(listPath, {
       limit: 1000,
       offset: 0,
@@ -7744,7 +7751,7 @@ app.options('/api/admin/upload-folder-contents', (_req, res) => {
   res.status(204).end()
 })
 
-/** Create a folder under the admin upload prefix (Supabase: placeholder object). */
+/** Create a folder under the given path in UTILITY (Supabase: placeholder object). */
 app.post('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
@@ -7759,7 +7766,7 @@ app.post('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (re
     return
   }
 
-  const fullPath = adminUploadExplorerObjectPath(folderPath)
+  const fullPath = adminUtilityExplorerObjectPath(folderPath)
   const placeholderPath = `${fullPath}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
   try {
     const empty = Buffer.alloc(0)
@@ -7787,7 +7794,7 @@ app.options('/api/admin/upload-folders', (_req, res) => {
   res.status(204).end()
 })
 
-/** Delete a folder and all objects under it (within admin upload prefix). */
+/** Delete a folder and all objects under it (path relative to UTILITY bucket root). */
 app.delete('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
@@ -7802,7 +7809,7 @@ app.delete('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (
     return
   }
 
-  const fullPrefix = adminUploadExplorerObjectPath(folderPath)
+  const fullPrefix = adminUtilityExplorerObjectPath(folderPath)
   try {
     const toRemove = await listAllStorageObjectPathsUnderPrefix(adminUploadBucket, fullPrefix)
     const placeholder = `${fullPrefix}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
@@ -7827,7 +7834,7 @@ app.delete('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (
   }
 })
 
-/** Delete a single file under the admin upload prefix. */
+/** Delete a single object (path relative to UTILITY bucket root). */
 app.delete('/api/admin/upload-file', express.json({ limit: '32kb' }), async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
@@ -7842,7 +7849,7 @@ app.delete('/api/admin/upload-file', express.json({ limit: '32kb' }), async (req
     return
   }
 
-  const objectPath = adminUploadExplorerObjectPath(relativeFile)
+  const objectPath = adminUtilityExplorerObjectPath(relativeFile)
   try {
     const { error: removeError } = await supabaseServiceClient.storage.from(adminUploadBucket).remove([objectPath])
     if (removeError) {
