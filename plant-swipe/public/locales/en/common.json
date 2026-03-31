@@ -1864,7 +1864,6 @@
       "bannedHint": "Banned • shadow-banned from platform"
     },
     "highlights": "Highlights",
-    "badges": "Badges",
     "plantsOwned": "Plants owned",
     "gardens": "Gardens",
     "currentStreak": "Current streak",
@@ -2599,15 +2598,6 @@
     "edibleDesc": "All plants with edible parts",
     "advanced": "Advanced",
     "browseAll": "Access our full encyclopedia"
-  },
-  "eggHunt": {
-    "foundTitle": "You found an egg!",
-    "alreadyFoundTitle": "You already found this one!",
-    "continueButton": "Continue hunting",
-    "congratulations": "Congratulations! You found them all!",
-    "remaining": "{{count}} remaining",
-    "alreadyFound": "Already found!",
-    "clickMe": "Click me!"
   },
   "seedlingTray": {
     "cellTitle": "Cell {{index}}",
