@@ -184,8 +184,11 @@ function FileExplorer({
       })
       const data = await resp.json().catch(() => null)
       if (!resp.ok) throw new Error(data?.error || "Failed to load folder")
-      setFolders(data.folders || [])
-      setFiles(data.files || [])
+      if (!data || typeof data !== "object") {
+        throw new Error("Invalid response from server (expected JSON with folders/files)")
+      }
+      setFolders(Array.isArray(data.folders) ? data.folders : [])
+      setFiles(Array.isArray(data.files) ? data.files : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load folder contents")
     } finally {
