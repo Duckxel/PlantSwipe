@@ -19,9 +19,10 @@ type EasterEggProps = {
 }
 
 /**
- * Renders a hidden egg icon on the page if there's an active event
+ * Renders a hidden egg on the page if there's an active event
  * with an item assigned to the given page path.
- * Uses the item's position_seed to pick a deterministic position and egg variant.
+ * Position is deterministic from the seed. The egg is absolutely
+ * positioned inside the nearest relative parent.
  */
 export function EasterEgg({ pagePath }: EasterEggProps) {
   const { getItemForPage, foundItemIds, collectItem, event } = useEggHunt()
@@ -35,10 +36,10 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
 
   const alreadyFound = foundItemIds.has(item.id)
 
-  // Deterministic position from seed
+  // Deterministic position from seed — keep within safe visible area
   const seed = item.position_seed
-  const topPercent = 20 + (((seed * 7) % 60))    // 20-80%
-  const leftPercent = 10 + (((seed * 13) % 75))   // 10-85%
+  const topPercent = 15 + (((seed * 7) % 55))    // 15-70%
+  const rightPercent = 2 + (((seed * 11) % 12))   // 2-14% from right edge
 
   // Pick egg variant from seed
   const eggSvg = EGG_SVGS[seed % EGG_SVGS.length]
@@ -58,16 +59,16 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
         onClick={handleClick}
         initial={{ opacity: 0, scale: 0 }}
         animate={{
-          opacity: alreadyFound ? 0.6 : 1,
+          opacity: alreadyFound ? 0.5 : 1,
           scale: 1,
         }}
-        whileHover={{ scale: 1.15, rotate: [0, -8, 8, 0] }}
+        whileHover={{ scale: 1.2, rotate: [0, -10, 10, 0] }}
         whileTap={{ scale: 0.9 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         className="absolute z-40 cursor-pointer group"
         style={{
           top: `${topPercent}%`,
-          left: `${leftPercent}%`,
+          right: `${rightPercent}%`,
         }}
         aria-label={t('eggHunt.foundTitle')}
         title={alreadyFound ? t('eggHunt.alreadyFound') : t('eggHunt.clickMe')}
@@ -76,25 +77,25 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
           <img
             src={eggSvg}
             alt="Easter egg"
-            className={`h-10 w-10 drop-shadow-lg transition-all ${
+            className={`h-12 w-12 drop-shadow-[0_2px_8px_rgba(0,0,0,0.3)] transition-all ${
               alreadyFound
-                ? 'grayscale opacity-70'
-                : 'group-hover:scale-105 group-hover:drop-shadow-xl'
+                ? 'grayscale opacity-60'
+                : 'group-hover:drop-shadow-[0_4px_12px_rgba(0,0,0,0.4)]'
             }`}
             draggable={false}
           />
           {/* Pulsing glow only on unfound eggs */}
           {!alreadyFound && (
             <motion.div
-              className="absolute -inset-1 rounded-full bg-amber-300/30 dark:bg-amber-400/20"
-              animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+              className="absolute -inset-2 rounded-full bg-amber-400/25 dark:bg-amber-300/20"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0, 0.6] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
           )}
           {/* Small checkmark for found eggs */}
           {alreadyFound && (
-            <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 flex items-center justify-center">
-              <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <div className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+              <svg className="h-2.5 w-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>
