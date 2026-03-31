@@ -17,3 +17,11 @@
 ## 2025-02-28 - Keyboard Accessibility for Hover-Revealed Actions
 **Learning:** Icon-only buttons within a container that reveals on hover (like `opacity-0 hover:opacity-100`) are invisible when focused by keyboard users. They receive focus but are visually hidden.
 **Action:** Always ensure to add `group-focus-within:opacity-100` to the container/button and `focus-visible:ring-2` to the button itself so it becomes visible and accessible for keyboard navigation.
+
+## 2026-03-25 - Add aria-label to task completion buttons
+**Learning:** The "Complete" (checkmark) and "Complete All" buttons in `TasksSidebar.tsx` were icon-only without accessible labels. Screen reader users could not determine the purpose of these buttons, especially in a list of tasks where multiple identical-looking buttons appear.
+**Action:** Add `aria-label` attributes (using `t()` translations) to individual task complete buttons and bulk "Complete All" buttons in task management UIs.
+
+## 2026-03-30 - Add title attributes to chat panel icon buttons
+**Learning:** The Close, Minimize/Maximize, Stop, and Send buttons in `AphyliaChatPanel.tsx` had `aria-label` but lacked `title` attributes. Sighted mouse users on desktop had no tooltip to explain icon-only buttons.
+**Action:** Add explicit `title` attributes (mapped to existing `t()` translations) alongside `aria-label` on all icon-only buttons in chat/panel UIs to provide tooltip feedback for sighted users.
