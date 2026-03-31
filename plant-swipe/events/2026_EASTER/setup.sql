@@ -6,37 +6,27 @@
 -- It uses ON CONFLICT / DO UPDATE to upsert all data.
 -- Re-run after editing descriptions, dates, or adding plants.
 --
+-- PREREQUISITE: Run badges/event_2026_easter.sql first
+--   (or paste it above this script)
+--
 -- Usage:
---   psql -f events/2026_EASTER/setup.sql
---   OR paste into Supabase SQL Editor
+--   1. psql -f badges/event_2026_easter.sql
+--   2. psql -f events/2026_EASTER/setup.sql
+--   OR paste both into Supabase SQL Editor
 --
 -- ═══════════════════════════════════════════════════════════════
 
 
--- ─── 1. BADGE ────────────────────────────────────────────────
+-- ─── 1. BADGE (reference) ───────────────────────────────────
+-- The badge is managed in: badges/event_2026_easter.sql
+-- Run that file first. This ensures the badge exists:
 
-INSERT INTO badges (slug, name, description, category)
-VALUES (
-  'easter-2026',
-  'Easter Egg Hunter 2026',
-  'Found all hidden Easter eggs during the 2026 hunt!',
-  'event'
-)
-ON CONFLICT (slug) DO UPDATE SET
-  name        = EXCLUDED.name,
-  description = EXCLUDED.description,
-  category    = EXCLUDED.category;
-
-INSERT INTO badge_translations (badge_id, language, name, description)
-VALUES (
-  (SELECT id FROM badges WHERE slug = 'easter-2026'),
-  'fr',
-  'Chasseur d''oeufs de Paques 2026',
-  'A trouve tous les oeufs de Paques caches lors de la chasse 2026 !'
-)
-ON CONFLICT (badge_id, language) DO UPDATE SET
-  name        = EXCLUDED.name,
-  description = EXCLUDED.description;
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM badges WHERE slug = 'easter-2026') THEN
+    RAISE EXCEPTION 'Badge "easter-2026" not found. Run badges/event_2026_easter.sql first.';
+  END IF;
+END $$;
 
 
 -- ─── 2. EVENT ────────────────────────────────────────────────

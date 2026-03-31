@@ -9,16 +9,19 @@
 
 ## Setup
 
-Run the SQL setup script on your Supabase database:
+Run in order on your Supabase database:
 
 ```bash
-# Via psql
-psql $DATABASE_URL -f plant-swipe/events/2026_EASTER/setup.sql
+# 1. Create/update the badge
+psql $DATABASE_URL -f plant-swipe/badges/event_2026_easter.sql
 
-# Or paste into Supabase SQL Editor
+# 2. Create/update the event + eggs
+psql $DATABASE_URL -f plant-swipe/events/2026_EASTER/setup.sql
 ```
 
-The script is **idempotent** — re-run it after editing descriptions, dates, or plants. It will update existing data without creating duplicates.
+Or paste both files into the Supabase SQL Editor (badge first, then event).
+
+Both scripts are **idempotent** — re-run after editing descriptions, dates, or plants. They will update existing data without creating duplicates.
 
 The event starts in **admin-only mode** for testing. Toggle it public via Admin > Events when ready.
 
@@ -118,5 +121,6 @@ Adjust seeds in `setup.sql` if an egg lands in an awkward spot.
 
 | File | Purpose |
 |------|---------|
-| `setup.sql` | Idempotent SQL to create/update the entire event |
+| `setup.sql` | Idempotent SQL to create/update the event + eggs |
 | `README.md` | This file — event documentation |
+| `../../badges/event_2026_easter.sql` | Badge definition (run first) |
