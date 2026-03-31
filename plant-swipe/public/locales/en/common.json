@@ -2602,6 +2602,7 @@
   },
   "eggHunt": {
     "foundTitle": "You found an egg!",
+    "alreadyFoundTitle": "You already found this one!",
     "continueButton": "Continue hunting",
     "congratulations": "Congratulations! You found them all!",
     "remaining": "{{count}} remaining",
