@@ -221,10 +221,17 @@ export const AdminEventsPanel: React.FC = () => {
 
       if (!editingEvent) return
 
+      // If admin_only was on and is now being turned off via the form, auto-reset progress
+      if (editingEvent.admin_only && !formData.admin_only) {
+        await supabase.rpc('reset_event_progress', { target_event_id: editingEvent.id })
+      }
+
       const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
       if (updateError) throw updateError
 
-      setSuccess('Event updated')
+      setSuccess(editingEvent.admin_only && !formData.admin_only
+        ? 'Event updated — progress reset for public launch'
+        : 'Event updated')
       handleCancel()
       await loadEvents()
     } catch (err: any) {
