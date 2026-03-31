@@ -97,37 +97,22 @@ BEGIN
     42);
 
   -- ── Primevere ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%primev%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'In Celtic folklore, the primrose is called the "fairy flower" — it was believed to open the doors to the supernatural world!',
-      17);
-  ELSE
-    RAISE WARNING 'Plant "Primevere" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/96c11643-db89-416e-91fb-819443724c56',
+    'In Celtic folklore, the primrose is the "fairy flower" — placed on doorsteps, it could either ward off fairies or reveal their hidden realm!',
+    17);
 
   -- ── Jonquille / Narcisse ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%jonquille%' OR name ILIKE '%narciss%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'In Greek mythology, the daffodil is linked to Narcissus, who fell in love with his own reflection in a river!',
-      73);
-  ELSE
-    RAISE WARNING 'Plant "Jonquille/Narcisse" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/53854638-3128-4ba2-b84c-19742f96f0b6',
+    'In Greek mythology, the daffodil is linked to Narcissus, who fell in love with his own reflection in a river!',
+    73);
 
   -- ── Palmier ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%palmier%' OR name ILIKE '%palm tree%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'Palm fossils date back over 100 million years! Palm branches were waved at Jesus'' entry into Jerusalem — the origin of Palm Sunday.',
-      8);
-  ELSE
-    RAISE WARNING 'Plant "Palmier" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/49ced2da-b940-4c4e-82fa-9e36c2a0dc2a',
+    'Palm fossils date back over 100 million years! Palm branches were waved at Jesus'' entry into Jerusalem — the origin of Palm Sunday.',
+    8);
 
   -- ── Olivier ──
   SELECT id INTO pid FROM plants WHERE name ILIKE '%olivier%' OR name ILIKE '%olive tree%' LIMIT 1;
@@ -152,26 +137,16 @@ BEGIN
   END IF;
 
   -- ── Ble germe ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%ble germ%' OR name ILIKE '%bl_ germ%' OR name ILIKE '%sprouted wheat%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'Ancient Romans sprouted wheat for spring festivals to honor Demeter and Persephone. This Mediterranean Easter tradition symbolizes rebirth and abundance!',
-      89);
-  ELSE
-    RAISE WARNING 'Plant "Ble germe" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/4e69910c-56d3-4202-9370-f7b1b03f09ef',
+    'In the Mediterranean, wheat is sprouted before Easter to symbolize rebirth and abundance — a tradition dating back to ancient Rome, where spring rites honored the goddess Demeter.',
+    89);
 
   -- ── Lys blanc ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%lys blanc%' OR name ILIKE '%white lily%' OR name ILIKE '%lys%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'In the Annunciation paintings, the angel Gabriel holds a white lily when announcing the birth of Jesus to Mary. The lily represents purity, resurrection, and eternal life!',
-      64);
-  ELSE
-    RAISE WARNING 'Plant "Lys blanc" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/b99967c7-a1d8-4616-a978-d35a43bdff94',
+    'In the Annunciation paintings, the angel Gabriel holds a white lily when announcing the birth of Jesus to Mary. The lily represents purity, resurrection, and eternal life!',
+    64);
 
   -- ── Buis ──
   SELECT id INTO pid FROM plants WHERE name ILIKE '%buis%' OR name ILIKE '%boxwood%' LIMIT 1;
@@ -201,19 +176,19 @@ BEGIN
     fr_text := CASE
       WHEN rec.page_path = '/about'
         THEN 'Aphylia est nee a Montpellier, inspiree par l''Aphyllante, une fleur native de la region !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE name ILIKE '%primev%' LIMIT 1)::text, 'NONE') || '%'
-        THEN 'Dans le folklore celtique, la primevere est appelee "fleur des fees" — on croyait qu''elle ouvrait les portes du monde surnaturel !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%jonquille%' OR name ILIKE '%narciss%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%96c11643-db89-416e-91fb-819443724c56%'
+        THEN 'Dans le folklore celtique, la primevere est la "fleur des fees" — placee sur le seuil, elle pouvait repousser les fees ou reveler leur royaume cache !'
+      WHEN rec.page_path LIKE '%53854638-3128-4ba2-b84c-19742f96f0b6%'
         THEN 'Dans la mythologie grecque, la jonquille est liee au mythe de Narcisse, qui tomba amoureux de son propre reflet dans une riviere !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%palmier%' OR name ILIKE '%palm tree%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%49ced2da-b940-4c4e-82fa-9e36c2a0dc2a%'
         THEN 'Des fossiles de palmier datent de plus de 100 millions d''annees ! Les rameaux de palmier furent agites a l''entree de Jesus a Jerusalem — l''origine du Dimanche des Rameaux.'
       WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%olivier%' OR name ILIKE '%olive tree%') LIMIT 1)::text, 'NONE') || '%'
         THEN 'Apres le Deluge, la colombe de Noe rapporta une branche d''olivier — le symbole universel de paix. Les rameaux d''olivier sont encore benis chaque Dimanche des Rameaux !'
       WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%paquerette%' OR name ILIKE '%p_querette%' OR name ILIKE '%daisy%') LIMIT 1)::text, 'NONE') || '%'
         THEN 'Le nom "paquerette" vient directement de "Paques" ! Elle symbolise la purete, l''innocence et le retour du printemps.'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%ble germ%' OR name ILIKE '%bl_ germ%') LIMIT 1)::text, 'NONE') || '%'
-        THEN 'Les Romains faisaient germer du ble lors des fetes de printemps en l''honneur de Demeter et Persephone. Cette tradition mediterraneenne de Paques symbolise la renaissance et l''abondance !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%lys blanc%' OR name ILIKE '%lys%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%4e69910c-56d3-4202-9370-f7b1b03f09ef%'
+        THEN 'En Mediterranee, le ble est fait germer avant Paques pour symboliser la renaissance et l''abondance — une tradition remontant a la Rome antique, ou les rites de printemps honoraient la deesse Demeter.'
+      WHEN rec.page_path LIKE '%b99967c7-a1d8-4616-a978-d35a43bdff94%'
         THEN 'Dans les tableaux de l''Annonciation, l''ange Gabriel tient un lys blanc pour annoncer la naissance de Jesus a Marie. Le lys represente la purete, la resurrection et la vie eternelle !'
       WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%buis%' OR name ILIKE '%boxwood%') LIMIT 1)::text, 'NONE') || '%'
         THEN 'Dans les regions ou le palmier ne pousse pas, on utilise des branches de buis le Dimanche des Rameaux ! Plante a feuilles persistantes, le buis symbolise la vie eternelle depuis l''Antiquite.'
