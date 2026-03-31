@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Trophy,
-  Plus,
   Trash2,
   Edit2,
   Loader2,
@@ -178,14 +177,6 @@ export const AdminBadgesPanel: React.FC = () => {
     setShowTranslations(false)
   }
 
-  // Open form for creating
-  const handleCreate = () => {
-    setEditingBadge(null)
-    setFormData({ ...emptyForm })
-    setShowForm(true)
-    setShowTranslations(false)
-  }
-
   // Close form
   const handleCancel = () => {
     setShowForm(false)
@@ -261,45 +252,26 @@ export const AdminBadgesPanel: React.FC = () => {
     setSaving(true)
     setError(null)
     try {
-      let badgeId: string
+      if (!editingBadge) return
+      const badgeId = editingBadge.id
 
-      if (editingBadge) {
-        // Update existing
-        const { error: updateError } = await supabase
-          .from('badges')
-          .update({
-            slug: formData.slug.trim(),
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            icon_url: formData.icon_url.trim() || null,
-            category: formData.category,
-            is_active: formData.is_active,
-          })
-          .eq('id', editingBadge.id)
+      // Update existing
+      const { error: updateError } = await supabase
+        .from('badges')
+        .update({
+          slug: formData.slug.trim(),
+          name: formData.name.trim(),
+          description: formData.description.trim() || null,
+          icon_url: formData.icon_url.trim() || null,
+          category: formData.category,
+          is_active: formData.is_active,
+        })
+        .eq('id', badgeId)
 
-        if (updateError) throw updateError
-        badgeId = editingBadge.id
+      if (updateError) throw updateError
 
-        // Delete existing translations
-        await supabase.from('badge_translations').delete().eq('badge_id', badgeId)
-      } else {
-        // Create new
-        const { data: newBadge, error: createError } = await supabase
-          .from('badges')
-          .insert({
-            slug: formData.slug.trim(),
-            name: formData.name.trim(),
-            description: formData.description.trim() || null,
-            icon_url: formData.icon_url.trim() || null,
-            category: formData.category,
-            is_active: formData.is_active,
-          })
-          .select()
-          .single()
-
-        if (createError) throw createError
-        badgeId = newBadge.id
-      }
+      // Delete existing translations
+      await supabase.from('badge_translations').delete().eq('badge_id', badgeId)
 
       // Auto-translate if missing translations
       let translationsToSave = [...formData.translations]
@@ -348,7 +320,7 @@ export const AdminBadgesPanel: React.FC = () => {
         }
       }
 
-      setSuccess(editingBadge ? 'Badge updated' : 'Badge created')
+      setSuccess('Badge updated')
       handleCancel()
       await loadBadges()
     } catch (err: any) {
@@ -569,7 +541,7 @@ export const AdminBadgesPanel: React.FC = () => {
       <CardContent className="p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
-            {editingBadge ? 'Edit Badge' : 'New Badge'}
+            Edit Badge
           </h3>
           <button
             onClick={handleCancel}
@@ -766,7 +738,7 @@ export const AdminBadgesPanel: React.FC = () => {
             disabled={saving || !formData.name.trim() || !formData.slug.trim()}
           >
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-            {editingBadge ? 'Update Badge' : 'Create Badge'}
+            Update Badge
           </Button>
           <Button variant="outline" className="rounded-xl" onClick={handleCancel}>
             Cancel
@@ -836,18 +808,16 @@ export const AdminBadgesPanel: React.FC = () => {
           placeholder="Search badges..."
           className="flex-1"
         />
-        <Button
-          className="rounded-xl flex-shrink-0"
-          onClick={handleCreate}
-          disabled={showForm}
-        >
-          <Plus className="h-4 w-4 mr-1.5" />
-          New Badge
-        </Button>
       </div>
 
-      {/* Form */}
-      {showForm && renderForm()}
+      {/* Info: badges are created via SQL files */}
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-stone-50 dark:bg-[#2d2d30] border border-stone-200 dark:border-[#3e3e42] text-xs text-stone-500 dark:text-stone-400">
+        <Trophy className="h-4 w-4 flex-shrink-0" />
+        To create a new badge, add a SQL file in <code className="font-mono bg-stone-200 dark:bg-stone-700 px-1 rounded">badges/</code> and run it on the database.
+      </div>
+
+      {/* Edit form (no creation — badges are managed via SQL files) */}
+      {showForm && editingBadge && renderForm()}
 
       {/* Badge list */}
       {loading ? (

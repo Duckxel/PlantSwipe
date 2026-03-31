@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Calendar,
-  Plus,
   Trash2,
   Edit2,
   Loader2,
@@ -178,12 +177,6 @@ export const AdminEventsPanel: React.FC = () => {
     }
   }, [success])
 
-  const handleCreate = () => {
-    setEditingEvent(null)
-    setFormData({ ...emptyForm })
-    setShowForm(true)
-  }
-
   const handleEdit = (event: EventWithStats) => {
     setEditingEvent(event)
     setFormData({
@@ -222,15 +215,12 @@ export const AdminEventsPanel: React.FC = () => {
         updated_at: new Date().toISOString(),
       }
 
-      if (editingEvent) {
-        const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
-        if (updateError) throw updateError
-      } else {
-        const { error: createError } = await supabase.from('events').insert(payload)
-        if (createError) throw createError
-      }
+      if (!editingEvent) return
 
-      setSuccess(editingEvent ? 'Event updated' : 'Event created')
+      const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
+      if (updateError) throw updateError
+
+      setSuccess('Event updated')
       handleCancel()
       await loadEvents()
     } catch (err: any) {
@@ -439,7 +429,7 @@ export const AdminEventsPanel: React.FC = () => {
       <CardContent className="p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
-            {editingEvent ? 'Edit Event' : 'New Event'}
+            Edit Event
           </h3>
           <button onClick={handleCancel} className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
             <X className="h-4 w-4 text-stone-500" />
@@ -572,7 +562,7 @@ export const AdminEventsPanel: React.FC = () => {
         <div className="flex items-center gap-2 pt-2">
           <Button className="rounded-xl flex-1" onClick={handleSave} disabled={saving || !formData.name.trim()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-            {editingEvent ? 'Update Event' : 'Create Event'}
+            Update Event
           </Button>
           <Button variant="outline" className="rounded-xl" onClick={handleCancel}>Cancel</Button>
         </div>
@@ -630,16 +620,14 @@ export const AdminEventsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* New Event button */}
-      <div className="flex items-center gap-3">
-        <Button className="rounded-xl" onClick={handleCreate} disabled={showForm}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          New Event
-        </Button>
+      {/* Info: events are created via SQL files */}
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-stone-50 dark:bg-[#2d2d30] border border-stone-200 dark:border-[#3e3e42] text-xs text-stone-500 dark:text-stone-400">
+        <Package className="h-4 w-4 flex-shrink-0" />
+        To create a new event, add a folder in <code className="font-mono bg-stone-200 dark:bg-stone-700 px-1 rounded">events/</code> with a <code className="font-mono bg-stone-200 dark:bg-stone-700 px-1 rounded">setup.sql</code> file and run it on the database.
       </div>
 
-      {/* Form */}
-      {showForm && renderForm()}
+      {/* Edit form (no creation — events are managed via SQL files) */}
+      {showForm && editingEvent && renderForm()}
 
       {/* Event list */}
       {loading ? (
