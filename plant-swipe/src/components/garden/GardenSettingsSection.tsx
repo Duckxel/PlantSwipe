@@ -15,8 +15,10 @@ import {
   Home,
   CloudSun,
   Target,
+  Grid3X3,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
+import { SeedlingTrayDimensionEditor } from "@/components/seedling-tray/SeedlingTrayDimensionEditor";
 
 // Settings category type
 type SettingsCategory = "general" | "location" | "privacy" | "members" | "danger";
@@ -206,6 +208,7 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
               </Card>
             </div>
 
+            {garden.gardenType !== 'seedling' && (
             <div>
               <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
                 <Home className="w-5 h-5 text-emerald-600" />
@@ -222,6 +225,27 @@ export const GardenSettingsSection: React.FC<GardenSettingsSectionProps> = ({
                 />
               </Card>
             </div>
+            )}
+
+            {/* Seedling Tray Configuration (only for seedling gardens) */}
+            {garden.gardenType === 'seedling' && (
+              <div>
+                <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">
+                  <Grid3X3 className="w-5 h-5 text-emerald-600" />
+                  {t("seedlingTray.settings.trayConfig", { defaultValue: "Tray Configuration" })}
+                </h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  {t("seedlingTray.settings.trayConfigDesc", { defaultValue: "Adjust your seedling tray dimensions." })}
+                </p>
+                <Card className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-6">
+                  <SeedlingTrayDimensionEditor
+                    garden={garden}
+                    onSaved={onRefreshGarden}
+                    canEdit={viewerIsOwner}
+                  />
+                </Card>
+              </div>
+            )}
 
             <div>
               <h3 className="text-xl font-semibold mb-2 flex items-center gap-2">

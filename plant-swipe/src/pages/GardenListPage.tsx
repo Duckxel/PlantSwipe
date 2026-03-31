@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any -- heavy use of dynamic API/Supabase data */
 // @ts-nocheck
 import React from "react";
-import { Leaf, Sprout, Home, Trees, FlaskConical, Warehouse } from "lucide-react";
+import { Leaf, Sprout, Home, Trees, FlaskConical, Warehouse, Grid3X3, Minus, Plus } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,7 +70,9 @@ export const GardenListPage: React.FC = () => {
   const [error, setError] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
   const [name, setName] = React.useState("");
-  const [gardenType, setGardenType] = React.useState<"default" | "beginners">("default");
+  const [gardenType, setGardenType] = React.useState<"default" | "beginners" | "seedling">("default");
+  const [trayRows, setTrayRows] = React.useState(4);
+  const [trayCols, setTrayCols] = React.useState(6);
   const [livingSpace, setLivingSpace] = React.useState<Array<"indoor" | "outdoor" | "terrarium" | "greenhouse">>([]);
   const [submitting, setSubmitting] = React.useState(false);
   const [progressByGarden, setProgressByGarden] = React.useState<
@@ -1381,7 +1383,12 @@ export const GardenListPage: React.FC = () => {
         (o) => o.gardenPlantId === gardenPlantId,
       );
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       const optimisticOccs = occs.map((o) => ({
         ...o,
@@ -1390,7 +1397,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
@@ -1520,7 +1532,12 @@ export const GardenListPage: React.FC = () => {
         : [];
 
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       // Optimistic update - mark all as completed immediately
       const optimisticOccs = occs.map((o) => ({
@@ -1530,7 +1547,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
@@ -1793,12 +1815,15 @@ export const GardenListPage: React.FC = () => {
         ownerUserId: user.id,
         privacy: defaultPrivacy as any,
         gardenType,
-        livingSpace,
+        livingSpace: gardenType === "seedling" ? ["seedling" as const] : livingSpace,
+        ...(gardenType === "seedling" ? { trayRows, trayCols } : {}),
       });
       setOpen(false);
       setName("");
       setGardenType("default");
       setLivingSpace([]);
+      setTrayRows(4);
+      setTrayCols(6);
       // Navigate to the new garden dashboard
       navigate(`/garden/${garden.id}`);
     } catch (e: any) {
@@ -2191,6 +2216,11 @@ export const GardenListPage: React.FC = () => {
                                 {t("garden.beginnerTag", { defaultValue: "Beginner" })}
                               </span>
                             )}
+                            {g.gardenType === 'seedling' && (
+                              <span className="flex-shrink-0 text-[10px] md:text-xs font-medium bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-2 py-0.5">
+                                {t("garden.seedlingTag", { defaultValue: "Seedling" })}
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center flex-wrap gap-2 md:gap-3 text-xs md:text-sm text-stone-600 dark:text-stone-300">
                             <div className="flex items-center gap-1.5">
@@ -2297,45 +2327,70 @@ export const GardenListPage: React.FC = () => {
                 </div>
                 <div className="grid gap-2">
                   <Label>{t("garden.gardenType", { defaultValue: "Garden Type" })}</Label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setGardenType("default")}
-                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
-                        gardenType === "default"
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
-                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
-                      }`}
-                    >
-                      <div className={`rounded-xl p-2.5 ${
-                        gardenType === "default"
-                          ? "bg-emerald-100 dark:bg-emerald-800/40"
-                          : "bg-stone-100 dark:bg-stone-800"
-                      }`}>
-                        <Leaf className="h-6 w-6" />
-                      </div>
-                      <span>{t("garden.gardenTypeDefault", { defaultValue: "Default" })}</span>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setGardenType("beginners")}
-                      className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
-                        gardenType === "beginners"
-                          ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
-                          : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
-                      }`}
-                    >
-                      <div className={`rounded-xl p-2.5 ${
-                        gardenType === "beginners"
-                          ? "bg-emerald-100 dark:bg-emerald-800/40"
-                          : "bg-stone-100 dark:bg-stone-800"
-                      }`}>
-                        <Sprout className="h-6 w-6" />
-                      </div>
-                      <span>{t("garden.gardenTypeBeginners", { defaultValue: "Beginners" })}</span>
-                    </button>
+                  <div className="grid grid-cols-3 gap-3">
+                    {([
+                      { key: "default" as const, icon: <Leaf className="h-6 w-6" />, label: t("garden.gardenTypeDefault", { defaultValue: "Default" }) },
+                      { key: "beginners" as const, icon: <Sprout className="h-6 w-6" />, label: t("garden.gardenTypeBeginners", { defaultValue: "Beginners" }) },
+                      { key: "seedling" as const, icon: <Grid3X3 className="h-6 w-6" />, label: t("garden.gardenTypeSeedling", { defaultValue: "Seedling" }) },
+                    ]).map((opt) => (
+                      <button
+                        key={opt.key}
+                        type="button"
+                        onClick={() => setGardenType(opt.key)}
+                        className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
+                          gardenType === opt.key
+                            ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                            : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
+                        }`}
+                      >
+                        <div className={`rounded-xl p-2.5 ${
+                          gardenType === opt.key
+                            ? "bg-emerald-100 dark:bg-emerald-800/40"
+                            : "bg-stone-100 dark:bg-stone-800"
+                        }`}>
+                          {opt.icon}
+                        </div>
+                        <span>{opt.label}</span>
+                      </button>
+                    ))}
                   </div>
+                  {/* Seedling tray dimension picker */}
+                  {gardenType === "seedling" && (
+                    <div className="mt-3 bg-stone-50 dark:bg-stone-800/50 rounded-2xl p-4 border border-stone-200 dark:border-stone-700">
+                      <div className="text-xs text-muted-foreground mb-3">{t("garden.trayDimensions", { defaultValue: "Tray Dimensions" })}</div>
+                      <div className="grid grid-cols-2 gap-4">
+                        {([
+                          [t("garden.trayRows", { defaultValue: "Rows" }), trayRows, setTrayRows, 1, 8] as const,
+                          [t("garden.trayCols", { defaultValue: "Columns" }), trayCols, setTrayCols, 1, 12] as const,
+                        ]).map(([lbl, val, setter, mn, mx]) => (
+                          <div key={lbl}>
+                            <div className="text-xs text-muted-foreground mb-2">{lbl}</div>
+                            <div className="flex items-center gap-2.5">
+                              <button type="button" onClick={() => setter((v: number) => Math.max(mn, v - 1))}
+                                className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors cursor-pointer">
+                                <Minus className="h-4 w-4" />
+                              </button>
+                              <div className="text-lg font-semibold min-w-[28px] text-center">{val}</div>
+                              <button type="button" onClick={() => setter((v: number) => Math.min(mx, v + 1))}
+                                className="w-8 h-8 rounded-lg border border-border flex items-center justify-center hover:bg-muted transition-colors cursor-pointer text-emerald-600 dark:text-emerald-400">
+                                <Plus className="h-4 w-4" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="mt-3 text-xs text-muted-foreground">
+                        {t("garden.trayTotalCells", { count: trayRows * trayCols, defaultValue: "Total: {{count}} cells" })}
+                      </div>
+                      <div className="mt-2 inline-grid gap-1" style={{ gridTemplateColumns: `repeat(${trayCols}, 1fr)` }}>
+                        {Array.from({ length: trayRows * trayCols }).map((_, i) => (
+                          <div key={i} className="w-4 h-4 rounded bg-stone-200 dark:bg-stone-700 border border-stone-300 dark:border-stone-600" />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+                {gardenType !== "seedling" && (
                 <div className="grid gap-2">
                   <Label>{t("garden.livingSpace", { defaultValue: "Living Space" })}</Label>
                   <p className="text-xs text-muted-foreground -mt-1">
@@ -2367,6 +2422,7 @@ export const GardenListPage: React.FC = () => {
                     })}
                   </div>
                 </div>
+                )}
                 <div className="flex gap-2 justify-end pt-2">
                   <Button
                     variant="secondary"

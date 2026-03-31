@@ -4,9 +4,9 @@ export type WaterFreqUnit = 'day' | 'week' | 'month' | 'year'
 
 export type GardenPrivacy = 'public' | 'friends_only' | 'private'
 
-export type GardenType = 'default' | 'beginners'
+export type GardenType = 'default' | 'beginners' | 'seedling'
 
-export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse'
+export type GardenLivingSpace = 'indoor' | 'outdoor' | 'terrarium' | 'greenhouse' | 'seedling'
 
 export type GardenClimate =
   | 'polar' | 'montane' | 'oceanic' | 'degraded_oceanic'
@@ -39,6 +39,9 @@ export interface Garden {
   livingSpace?: GardenLivingSpace[]
   climate?: GardenClimate[]
   usage?: GardenUsage[]
+  /** Seedling tray dimensions (only when gardenType === 'seedling') */
+  trayRows?: number | null
+  trayCols?: number | null
 }
 
 export interface GardenMember {
@@ -50,6 +53,21 @@ export interface GardenMember {
   email?: string | null
   accentKey?: string | null
   avatarUrl?: string | null
+}
+
+// ===== Seedling Tray =====
+
+export type SeedlingStage = 'empty' | 'sown' | 'germinating' | 'sprouted' | 'ready'
+
+export interface SeedlingTrayCell {
+  id: string
+  gardenId: string
+  position: number
+  plantId: string | null
+  stage: SeedlingStage
+  sowDate: string | null
+  lastWatered: string | null
+  notes: string
 }
 
 export type PlantHealthStatus = 'thriving' | 'healthy' | 'okay' | 'struggling' | 'critical'

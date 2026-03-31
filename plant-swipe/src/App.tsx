@@ -3,6 +3,8 @@ const PlantSwipe = React.lazy(() => import("@/PlantSwipe"))
 import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 import { AuthProvider } from '@/context/AuthContext'
 import { ThemeProvider } from '@/context/ThemeContext'
+import { EggHuntProvider } from '@/context/EggHuntContext'
+import { EggHuntCounter } from '@events/2026_EASTER'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, getDomainDefaultLanguage } from '@/lib/i18n'
@@ -143,9 +145,12 @@ export default function App() {
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <BrowserRouter basename={routerBase}>
-            <LanguageRoutes />
-          </BrowserRouter>
+          <EggHuntProvider>
+            <BrowserRouter basename={routerBase}>
+              <LanguageRoutes />
+            </BrowserRouter>
+            <EggHuntCounter />
+          </EggHuntProvider>
           <ServiceWorkerToast />
         </AuthProvider>
       </ThemeProvider>

@@ -25,7 +25,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed, Grid3X3 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
 import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
@@ -89,8 +89,11 @@ import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
 import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
 import { AphyliaChat } from "@/components/aphylia";
+import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
+import type { SeedlingTrayCell } from "@/types/garden";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
-type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings";
+type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
 const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
   overview: LayoutDashboard,
@@ -99,6 +102,7 @@ const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
   journal: BookOpen,
   analytics: BarChart3,
   settings: Settings,
+  tray: Grid3X3,
 };
 
 const getMaxScheduleSelections = (period: "week" | "month" | "year") =>
@@ -156,6 +160,35 @@ export const GardenDashboardPage: React.FC = () => {
   const [taskCountsByPlant, setTaskCountsByPlant] = React.useState<
     Record<string, number>
   >({});
+  // Seedling tray state
+  const [seedlingCells, setSeedlingCells] = React.useState<SeedlingTrayCell[]>([]);
+  const [seedlingLoading, setSeedlingLoading] = React.useState(false);
+  const [seedlingSelectMode, setSeedlingSelectMode] = React.useState(false);
+  const [seedlingSelected, setSeedlingSelected] = React.useState<Set<number>>(new Set());
+  const [seedlingModal, setSeedlingModal] = React.useState<{ type: "single" | "multi"; index: number; indices?: Set<number> } | null>(null);
+  const pendingSeedlingModalRef = React.useRef<typeof seedlingModal>(null);
+  const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
+  // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const seedlingPlantMap = React.useMemo(() => {
+    const m: Record<string, any> = {};
+    for (const p of plants) {
+      const pid = p.plant?.id || p.plantId;
+      if (pid && p.plant) m[pid] = p.plant;
+    }
+    return m;
+  }, [plants]);
+  // Compute cell count per plantId for seedling gardens (used in Plants tab)
+  const seedlingCellCountByPlant = React.useMemo(() => {
+    if (!garden || garden.gardenType !== 'seedling') return {};
+    const counts: Record<string, number> = {};
+    for (const cell of seedlingCells) {
+      if (cell.plantId) {
+        counts[cell.plantId] = (counts[cell.plantId] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [seedlingCells, garden]);
   // Beginner roadmap flags
   const [hasWaterTask, setHasWaterTask] = React.useState(false);
   const [hasFertilizeTask, setHasFertilizeTask] = React.useState(false);
@@ -461,6 +494,8 @@ export const GardenDashboardPage: React.FC = () => {
                   livingSpace: (Array.isArray(data.garden.livingSpace ?? data.garden.living_space) ? (data.garden.livingSpace ?? data.garden.living_space) : []) as GardenLivingSpace[],
                   climate: (Array.isArray(data.garden.climate) ? data.garden.climate : []) as GardenClimate[],
                   usage: (Array.isArray(data.garden.usage) ? data.garden.usage : []) as GardenUsage[],
+                  trayRows: data.garden.trayRows ?? data.garden.tray_rows ?? null,
+                  trayCols: data.garden.trayCols ?? data.garden.tray_cols ?? null,
                 });
                 hydratedGarden = true;
               }
@@ -838,7 +873,12 @@ export const GardenDashboardPage: React.FC = () => {
             }
             setDailyStats((prev) => {
               if (!prev || prev.length === 0) return days;
-              const prevByDate = new Map(prev.map((entry) => [entry.date, entry]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [date, entry] array allocations which cause massive GC pressure
+              const prevByDate = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevByDate.set(prev[i].date, prev[i]);
+              }
               return days.map((day) => {
                 const cached = prevByDate.get(day.date);
                 if (!cached) return day;
@@ -1277,8 +1317,16 @@ export const GardenDashboardPage: React.FC = () => {
             // Update state using functional updates to preserve existing items
             setTodayTaskOccurrences((prev) => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
-              const prevMap = new Map(prev.map((o) => [o.id, o]));
-              const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [id, entry] array allocations which cause massive GC pressure
+              const prevMap = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevMap.set(prev[i].id, prev[i]);
+              }
+              const _newMap = new Map();
+              for (let i = 0; i < occsWithType.length; i++) {
+                _newMap.set(occsWithType[i].id, occsWithType[i]);
+              }
               const result: typeof occsWithType = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
@@ -1447,7 +1495,12 @@ export const GardenDashboardPage: React.FC = () => {
           const gpsRaw = await getGardenPlants(id, currentLang);
           setPlants((prev) => {
             // Merge: preserve order and existing items, update changed ones
-            const prevMap = new Map(prev.map((p: { id: string }) => [p.id, p]));
+            // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+            // [id, entry] array allocations which cause massive GC pressure
+            const prevMap = new Map();
+            for (let i = 0; i < prev.length; i++) {
+              prevMap.set(prev[i].id, prev[i]);
+            }
             const merged = [] as typeof gpsRaw;
             // Use new order but preserve existing objects where possible
             for (const newP of gpsRaw) {
@@ -1712,6 +1765,49 @@ export const GardenDashboardPage: React.FC = () => {
       return () => { ignore = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [garden?.gardenType, garden?.livingSpace?.join(','), currentLang, isMember]);
+
+    // Seedling tray: load cells when garden is seedling type
+    const loadSeedlingCells = React.useCallback(async () => {
+      if (!id || garden?.gardenType !== 'seedling') return;
+      setSeedlingLoading(true);
+      try {
+        const cells = await getSeedlingTrayCells(id);
+        setSeedlingCells(cells);
+      } catch (e) {
+        console.error('Failed to load seedling cells:', e);
+      } finally {
+        setSeedlingLoading(false);
+      }
+    }, [id, garden?.gardenType]);
+
+    React.useEffect(() => {
+      loadSeedlingCells();
+    }, [loadSeedlingCells]);
+
+    // Seedling gardens: ensure ONE watering task exists for the whole garden
+    const seedlingTaskSyncedRef = React.useRef(false);
+    React.useEffect(() => {
+      if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      if (seedlingTaskSyncedRef.current) return;
+      let cancelled = false;
+      (async () => {
+        try {
+          const existingTaskId = await getSeedlingWateringTaskId(id);
+          if (existingTaskId || cancelled) return; // Already has a garden-level task
+          seedlingTaskSyncedRef.current = true;
+          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id });
+          if (!cancelled) {
+            await load({ silent: true, preserveHeavy: true });
+            await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+            try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+          }
+        } catch (err) {
+          console.warn("Failed to auto-create seedling watering task:", err);
+          seedlingTaskSyncedRef.current = false;
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [id, garden?.gardenType, plants, load, loadHeavyForCurrentTab, serverToday]);
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
@@ -2180,9 +2276,18 @@ export const GardenDashboardPage: React.FC = () => {
           }
         });
         const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
+        // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+        // [id, email] array allocations which cause massive GC pressure
+        const emailMap = new Map();
+        for (let i = 0; i < emails.length; i++) {
+          emailMap.set(emails[i].id, emails[i].email);
+        }
 
-        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+        const profileMap = new Map();
+        const profilesList = profiles || [];
+        for (let i = 0; i < profilesList.length; i++) {
+          profileMap.set(profilesList[i].id, profilesList[i]);
+        }
         const friendsWithProfiles = (data || []).map((f) => {
           const profile = profileMap.get(f.friend_id);
           return {
@@ -2379,9 +2484,29 @@ export const GardenDashboardPage: React.FC = () => {
       setAddOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      // Open Tasks with default watering 2x (user can change unit)
-      setPendingGardenPlantId(gp.id);
-      setTaskOpen(true);
+      // Seedling gardens: ensure the single garden-level watering task exists; normal gardens: open task editor
+      if (garden?.gardenType === "seedling") {
+        try {
+          const existing = await getSeedlingWateringTaskId(id);
+          if (!existing) {
+            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
+            await load({ silent: true, preserveHeavy: true });
+            await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+            try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
+          }
+        } catch (taskErr: unknown) {
+          console.warn("Failed to ensure seedling watering task:", taskErr);
+        }
+        // Reopen cell modal if "Add New Plant" was used from within a cell
+        if (pendingSeedlingModalRef.current) {
+          const saved = pendingSeedlingModalRef.current;
+          pendingSeedlingModalRef.current = null;
+          setTimeout(() => setSeedlingModal(saved), 300);
+        }
+      } else {
+        setPendingGardenPlantId(gp.id);
+        setTaskOpen(true);
+      }
       emitGardenRealtime("plants");
     } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
@@ -2649,6 +2774,17 @@ export const GardenDashboardPage: React.FC = () => {
           await progressTaskOccurrence(o.id, 1);
         }
       }
+      // Seedling gardens: completing all tasks marks all cells as watered
+      if (garden?.gardenType === "seedling") {
+        const todayStr = new Date().toISOString().split("T")[0];
+        const needsWater = seedlingCells.filter(
+          (c) => c.plantId && c.stage !== "empty" && c.lastWatered !== todayStr
+        );
+        if (needsWater.length > 0) {
+          await updateSeedlingTrayCells(needsWater.map((c) => c.id), { lastWatered: todayStr });
+          loadSeedlingCells();
+        }
+      }
       // Log summary activity for this plant
       try {
         if (id) {
@@ -2719,6 +2855,29 @@ export const GardenDashboardPage: React.FC = () => {
 
       try {
         await progressTaskOccurrence(occId, inc);
+
+        // Seedling gardens: completing the task marks all non-empty cells as watered today
+        if (garden?.gardenType === "seedling") {
+          const o = todayTaskOccurrences.find((x: { id: string }) => x.id === occId);
+          if (o) {
+            const newCount = Number(o.completedCount || 0) + inc;
+            const required = Number(o.requiredCount || 1);
+            if (newCount >= required) {
+              const todayStr = new Date().toISOString().split("T")[0];
+              const needsWater = seedlingCells.filter(
+                (c) => c.plantId && c.stage !== "empty" && c.lastWatered !== todayStr
+              );
+              if (needsWater.length > 0) {
+                await updateSeedlingTrayCells(
+                  needsWater.map((c) => c.id),
+                  { lastWatered: todayStr }
+                );
+                loadSeedlingCells();
+              }
+            }
+          }
+        }
+
         const o = todayTaskOccurrences.find((x: { id: string }) => x.id === occId);
         if (o && id) {
           const gp = plants.find(
@@ -2881,6 +3040,7 @@ export const GardenDashboardPage: React.FC = () => {
                 canViewFullGarden
                   ? [
                       ["overview", t("gardenDashboard.overview")] as const,
+                      ...(garden?.gardenType === 'seedling' ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
                       ["plants", t("gardenDashboard.plants")] as const,
                       ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
                       ["journal", t("gardenDashboard.journal", "Journal")] as const,
@@ -3095,22 +3255,25 @@ export const GardenDashboardPage: React.FC = () => {
                               )}
                               <div className="flex flex-wrap gap-1.5 mt-1.5">
                                 <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                  {Number(gp.plantsOnHand ?? 0)} {t("gardenDashboard.plantsSection.onHand")}
+                                  {garden?.gardenType === "seedling"
+                                    ? `${seedlingCellCountByPlant[gp.plantId] || 0} ${t("seedlingTray.inCells", "in cells")}`
+                                    : `${Number(gp.plantsOnHand ?? 0)} ${t("gardenDashboard.plantsSection.onHand")}`
+                                  }
                                 </span>
-                                {(taskCountsByPlant[gp.id] || 0) > 0 ? (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
-                                    {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
-                                  </span>
-                                ) : (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
-                                    ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
-                                  </span>
-                                )}
-                                {(taskOccDueToday[gp.id] || 0) > 0 && (
-                                  <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
-                                    📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
-                                  </span>
-                                )}
+                                    {(taskCountsByPlant[gp.id] || 0) > 0 ? (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                                        {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
+                                      </span>
+                                    ) : (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
+                                        ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
+                                      </span>
+                                    )}
+                                    {(taskOccDueToday[gp.id] || 0) > 0 && (
+                                      <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
+                                        📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
+                                      </span>
+                                    )}
                               </div>
                               {/* Plant Notes Preview */}
                               {gp.notes && (
@@ -3119,52 +3282,53 @@ export const GardenDashboardPage: React.FC = () => {
                                 </div>
                               )}
                               <div className="mt-2 flex gap-2 flex-wrap">
-                                {/* Complete All button if tasks are due today */}
-                                {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
-                                  const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
-                                  const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
-                                  if (allDone) return null;
-                                  return (
+                                {/* Complete All button + Tasks button */}
+                                    {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
+                                      const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
+                                      const allDone = plantOccs.every((o) => (o.completedCount || 0) >= Math.max(1, o.requiredCount || 1));
+                                      if (allDone) return null;
+                                      return (
+                                        <Button
+                                          variant="default"
+                                          className="rounded-2xl gap-1"
+                                          size="sm"
+                                          draggable={false}
+                                          onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                          onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+                                          disabled={completingPlantIds.has(gp.id)}
+                                          onClick={() => completeAllTodayForPlant(gp.id)}
+                                          aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
+                                        >
+                                          {completingPlantIds.has(gp.id) ? (
+                                            <span className="animate-pulse">...</span>
+                                          ) : (
+                                            <>✓ {t("garden.completeAll", "Complete All")}</>
+                                          )}
+                                        </Button>
+                                      );
+                                    })()}
                                     <Button
-                                      variant="default"
-                                      className="rounded-2xl gap-1"
-                                      size="sm"
+                                      variant="secondary"
+                                      className="rounded-2xl"
                                       draggable={false}
                                       onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
                                       onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                      disabled={completingPlantIds.has(gp.id)}
-                                      onClick={() => completeAllTodayForPlant(gp.id)}
-                                      aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: gp.nickname || gp.plant?.name || "Plant" })}
+                                      onClick={() => {
+                                        setPendingGardenPlantId(gp.id);
+                                        setTaskOpen(true);
+                                      }}
                                     >
-                                      {completingPlantIds.has(gp.id) ? (
-                                        <span className="animate-pulse">...</span>
-                                      ) : (
-                                        <>✓ {t("garden.completeAll", "Complete All")}</>
+                                      {t(
+                                        "gardenDashboard.plantsSection.tasksButton",
                                       )}
                                     </Button>
-                                  );
-                                })()}
-                                <Button
-                                  variant="secondary"
-                                  className="rounded-2xl"
-                                  draggable={false}
-                                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                                  onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                  onClick={() => {
-                                    setPendingGardenPlantId(gp.id);
-                                    setTaskOpen(true);
-                                  }}
-                                >
-                                  {t(
-                                    "gardenDashboard.plantsSection.tasksButton",
-                                  )}
-                                </Button>
                                 <EditPlantButton
                                   gp={gp}
                                   gardenId={id!}
                                   onChanged={load}
                                   serverToday={serverToday}
                                   actorColorCss={getActorColorCss()}
+                                  gardenType={garden?.gardenType}
                                 />
                                 <Button
                                   variant="secondary"
@@ -3337,21 +3501,21 @@ export const GardenDashboardPage: React.FC = () => {
                 path="tasks"
                 element={
                   canViewFullGarden ? (
-                    <GardenTasksSection
-                      plants={plants}
-                      todayTaskOccurrences={todayTaskOccurrences}
-                      onProgressOccurrence={progressOccurrenceHandler}
-                      progressingOccIds={progressingOccIds}
-                      completingPlantIds={completingPlantIds}
-                      completeAllTodayForPlant={completeAllTodayForPlant}
-                      weekDays={weekDays}
-                      weekCounts={weekCounts}
-                      weekCountsByType={weekCountsByType}
-                      serverToday={serverToday}
-                      dueThisWeekByPlant={dueThisWeekByPlant}
-                      duePlantIds={dueToday}
-                      weekTaskOccurrences={weekTaskOccurrences}
-                    />
+                      <GardenTasksSection
+                        plants={plants}
+                        todayTaskOccurrences={todayTaskOccurrences}
+                        onProgressOccurrence={progressOccurrenceHandler}
+                        progressingOccIds={progressingOccIds}
+                        completingPlantIds={completingPlantIds}
+                        completeAllTodayForPlant={completeAllTodayForPlant}
+                        weekDays={weekDays}
+                        weekCounts={weekCounts}
+                        weekCountsByType={weekCountsByType}
+                        serverToday={serverToday}
+                        dueThisWeekByPlant={dueThisWeekByPlant}
+                        duePlantIds={dueToday}
+                        weekTaskOccurrences={weekTaskOccurrences}
+                      />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -3385,6 +3549,162 @@ export const GardenDashboardPage: React.FC = () => {
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
                       hideAiFeatures={garden?.hideAiChat ?? false}
                     />
+                  ) : (
+                    <Navigate to={`/garden/${id}/overview`} replace />
+                  )
+                }
+              />
+              {/* Seedling Tray Tab */}
+              <Route
+                path="tray"
+                element={
+                  canViewFullGarden && garden?.gardenType === 'seedling' ? (
+                    <div className="space-y-6">
+                      {/* Tray Grid */}
+                      <SeedlingTrayGrid
+                        cells={seedlingCells}
+                        rows={garden.trayRows ?? 4}
+                        cols={garden.trayCols ?? 6}
+                        trayName={garden.name}
+                        plantMap={seedlingPlantMap}
+                        onCellClick={(i) => {
+                          if (seedlingSelectMode) {
+                            setSeedlingSelected(prev => {
+                              const next = new Set(prev);
+                              next.has(i) ? next.delete(i) : next.add(i);
+                              return next;
+                            });
+                          } else {
+                            setSeedlingModal({ type: "single", index: i });
+                          }
+                        }}
+                        selectMode={seedlingSelectMode}
+                        selected={seedlingSelected}
+                        onToggleSelectMode={() => setSeedlingSelectMode(true)}
+                        onSelectAll={() => setSeedlingSelected(new Set(seedlingCells.map((_, i) => i)))}
+                        onSelectNone={() => setSeedlingSelected(new Set())}
+                        onOpenMultiEdit={() => {
+                          if (seedlingSelected.size === 0) return;
+                          setSeedlingModal({ type: "multi", index: [...seedlingSelected][0], indices: new Set(seedlingSelected) });
+                        }}
+                        onExitSelectMode={() => { setSeedlingSelectMode(false); setSeedlingSelected(new Set()); }}
+                      />
+
+                      {/* Care List */}
+                      <SeedlingCareList
+                        cells={seedlingCells}
+                        plantMap={seedlingPlantMap}
+                        onWater={async (cellId) => {
+                          const todayStr = new Date().toISOString().split('T')[0];
+                          await updateSeedlingTrayCell(cellId, { lastWatered: todayStr });
+                          await loadSeedlingCells();
+                          // Check if ALL non-empty cells are now watered today → auto-complete the task
+                          const updatedCells = await getSeedlingTrayCells(id);
+                          const nonEmpty = updatedCells.filter((c) => c.plantId && c.stage !== "empty");
+                          const allWatered = nonEmpty.length > 0 && nonEmpty.every((c) => c.lastWatered === todayStr);
+                          if (allWatered) {
+                            const incompleteOcc = todayTaskOccurrences.find(
+                              (o) => (o as any).taskType === "water" && (Number(o.completedCount || 0) < Number(o.requiredCount || 1))
+                            );
+                            if (incompleteOcc) {
+                              const remaining = Math.max(0, Number(incompleteOcc.requiredCount || 1) - Number(incompleteOcc.completedCount || 0));
+                              for (let i = 0; i < remaining; i++) {
+                                await progressTaskOccurrence(incompleteOcc.id, 1);
+                              }
+                              skipTodayCacheRef.current = true;
+                              await updateTodayProgressState();
+                              await load({ silent: true, preserveHeavy: true });
+                              await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+                              emitGardenRealtime("tasks");
+                            }
+                          }
+                        }}
+                        onEdit={(index) => setSeedlingModal({ type: "single", index })}
+                        onTransplant={(cell) => setTransplantCell(cell)}
+                      />
+
+                      {/* Analytics */}
+                      <SeedlingTrayAnalytics cells={seedlingCells} plantMap={seedlingPlantMap} />
+
+                      {/* Cell Modal */}
+                      {seedlingModal && seedlingCells[seedlingModal.index] && (
+                        <SeedlingCellModal
+                          open={!!seedlingModal}
+                          cell={seedlingCells[seedlingModal.index]}
+                          index={seedlingModal.index}
+                          isMulti={seedlingModal.type === "multi"}
+                          count={seedlingModal.type === "multi" ? (seedlingModal.indices?.size ?? 0) : 1}
+                          plants={plants.map((p: any) => p.plant).filter(Boolean)}
+                          plantMap={seedlingPlantMap}
+                          onClose={() => setSeedlingModal(null)}
+                          onSave={async (data) => {
+                            if (seedlingModal.type === "multi" && seedlingModal.indices) {
+                              const ids = [...seedlingModal.indices].map(i => seedlingCells[i]?.id).filter(Boolean);
+                              if (ids.length > 0) await updateSeedlingTrayCells(ids, data);
+                            } else {
+                              await updateSeedlingTrayCell(seedlingCells[seedlingModal.index].id, data);
+                            }
+                            await loadSeedlingCells();
+                            // Auto-complete task if all non-empty cells are watered
+                            if (data.lastWatered) {
+                              const todayStr = new Date().toISOString().split('T')[0];
+                              const updatedCells = await getSeedlingTrayCells(id);
+                              const nonEmpty = updatedCells.filter((c) => c.plantId && c.stage !== "empty");
+                              const allWatered = nonEmpty.length > 0 && nonEmpty.every((c) => c.lastWatered === todayStr);
+                              if (allWatered) {
+                                const incompleteOcc = todayTaskOccurrences.find(
+                                  (o) => (o as any).taskType === "water" && (Number(o.completedCount || 0) < Number(o.requiredCount || 1))
+                                );
+                                if (incompleteOcc) {
+                                  const remaining = Math.max(0, Number(incompleteOcc.requiredCount || 1) - Number(incompleteOcc.completedCount || 0));
+                                  for (let i = 0; i < remaining; i++) {
+                                    await progressTaskOccurrence(incompleteOcc.id, 1);
+                                  }
+                                  skipTodayCacheRef.current = true;
+                                  await updateTodayProgressState();
+                                  await load({ silent: true, preserveHeavy: true });
+                                  await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+                                  emitGardenRealtime("tasks");
+                                }
+                              }
+                            }
+                          }}
+                          onClear={async () => {
+                            if (seedlingModal.type === "multi" && seedlingModal.indices) {
+                              const ids = [...seedlingModal.indices].map(i => seedlingCells[i]?.id).filter(Boolean);
+                              if (ids.length > 0) await clearSeedlingTrayCells(ids);
+                            } else {
+                              await clearSeedlingTrayCell(seedlingCells[seedlingModal.index].id);
+                            }
+                            loadSeedlingCells();
+                          }}
+                          onTransplant={(cell) => {
+                            setSeedlingModal(null);
+                            setTransplantCell(cell);
+                          }}
+                          onAddNewPlant={() => {
+                            pendingSeedlingModalRef.current = seedlingModal;
+                            setSeedlingModal(null);
+                            setAddOpen(true);
+                          }}
+                        />
+                      )}
+
+                      {/* Transplant Dialog */}
+                      {transplantCell && transplantCell.plantId && seedlingPlantMap[transplantCell.plantId] && (
+                        <TransplantToGardenDialog
+                          open={!!transplantCell}
+                          onClose={() => setTransplantCell(null)}
+                          cell={transplantCell}
+                          plant={seedlingPlantMap[transplantCell.plantId]}
+                          userId={currentUserId}
+                          onTransplanted={() => {
+                            setTransplantCell(null);
+                            loadSeedlingCells();
+                          }}
+                        />
+                      )}
+                    </div>
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
                   )
@@ -3554,6 +3874,7 @@ export const GardenDashboardPage: React.FC = () => {
                     )}
                   />
                 </div>
+                {garden?.gardenType !== "seedling" && (
                 <div>
                   <label className="text-sm font-medium">
                     {t("gardenDashboard.plantsSection.numberOfFlowers")}
@@ -3567,6 +3888,7 @@ export const GardenDashboardPage: React.FC = () => {
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddCount(Number(e.target.value))}
                   />
                 </div>
+                )}
                 <div className="flex justify-end gap-2 pt-2">
                   <Button
                     variant="secondary"
@@ -4827,6 +5149,14 @@ function OverviewSection({
                         {t("garden.beginnerTag", { defaultValue: "Beginner" })}
                       </div>
                     )}
+                    {garden?.gardenType === 'seedling' && (
+                      <div className="flex items-center gap-1.5 bg-emerald-500/30 backdrop-blur-sm text-white rounded-full px-3 py-1.5 text-sm font-medium">
+                        {t("garden.seedlingTag", { defaultValue: "Seedling" })}
+                        {garden.trayRows && garden.trayCols && (
+                          <span className="text-xs opacity-70">{garden.trayRows}×{garden.trayCols}</span>
+                        )}
+                      </div>
+                    )}
                     <div className="flex items-center gap-2 bg-black/30 backdrop-blur-sm rounded-full px-3 py-1.5">
                       <span className="text-lg">🌱</span>
                       <span className="font-medium">{totalOnHand}</span>
@@ -4922,6 +5252,14 @@ function OverviewSection({
                   {garden?.gardenType === 'beginners' && (
                     <div className="flex items-center gap-1.5 bg-sky-100 dark:bg-sky-900/30 text-sky-700 dark:text-sky-300 rounded-full px-3 py-1.5 border border-sky-200/50 dark:border-sky-500/20 text-sm font-medium">
                       {t("garden.beginnerTag", { defaultValue: "Beginner" })}
+                    </div>
+                  )}
+                  {garden?.gardenType === 'seedling' && (
+                    <div className="flex items-center gap-1.5 bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20 text-sm font-medium">
+                      {t("garden.seedlingTag", { defaultValue: "Seedling" })}
+                      {garden.trayRows && garden.trayCols && (
+                        <span className="text-xs opacity-70 ml-1">{garden.trayRows}×{garden.trayCols}</span>
+                      )}
                     </div>
                   )}
                   <div className="flex items-center gap-2 bg-white/60 dark:bg-white/10 backdrop-blur-sm rounded-full px-3 py-1.5 border border-emerald-200/50 dark:border-emerald-500/20">
@@ -6103,6 +6441,7 @@ function EditPlantButton({
   onChanged,
   serverToday,
   actorColorCss,
+  gardenType,
 }: {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant with plant relation
   gp: any;
@@ -6110,6 +6449,7 @@ function EditPlantButton({
   onChanged: () => Promise<void>;
   serverToday: string | null;
   actorColorCss?: string | null;
+  gardenType?: string;
 }) {
   const { t } = useTranslation("common");
   const [open, setOpen] = React.useState(false);
@@ -6253,6 +6593,7 @@ function EditPlantButton({
                 )}
               />
             </div>
+            {gardenType !== "seedling" && (
             <div>
               <label className="text-sm font-medium">
                 {t("gardenDashboard.plantsSection.numberOfPlants")}
@@ -6264,7 +6605,8 @@ function EditPlantButton({
                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(Number(e.target.value))}
               />
             </div>
-            
+            )}
+
             {/* Health Status Selector */}
             <div>
               <div className="flex items-center justify-between gap-3 mb-2">

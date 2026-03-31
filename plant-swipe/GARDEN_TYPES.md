@@ -10,13 +10,13 @@ Every garden has a `garden_type` column (stored in the `gardens` DB table) that 
 
 ```sql
 garden_type TEXT NOT NULL DEFAULT 'default'
-  CHECK (garden_type IN ('default', 'beginners'))
+  CHECK (garden_type IN ('default', 'beginners', 'seedling'))
 ```
 
 **TypeScript type:**
 
 ```ts
-type GardenType = 'default' | 'beginners'
+type GardenType = 'default' | 'beginners' | 'seedling'
 ```
 
 **Key files:**
@@ -26,9 +26,10 @@ type GardenType = 'default' | 'beginners'
 | `src/types/garden.ts` | `GardenType` type, `Garden.gardenType` field |
 | `src/lib/gardens.ts` | `createGarden()`, `getGarden()`, `getUserGardens()` — read/write `garden_type` |
 | `src/pages/GardenListPage.tsx` | Creation dialog with type selector |
-| `src/pages/GardenDashboardPage.tsx` | Roadmap, suggestions, beginner tag |
-| `supabase/sync_parts/12_audit_and_analytics.sql` | DB migration for `garden_type` column |
-| `public/locales/{en,fr}/common.json` | i18n keys under `garden.*`, `gardenDashboard.beginnerRoadmap.*`, `gardenDashboard.beginnerSuggestions.*` |
+| `src/pages/GardenDashboardPage.tsx` | Roadmap, suggestions, beginner tag, seedling tray tab |
+| `src/components/seedling-tray/` | Seedling tray components (grid, modal, care list, analytics) |
+| `supabase/sync_parts/12_audit_and_analytics.sql` | DB migration for `garden_type` column, seedling tray tables |
+| `public/locales/{en,fr}/common.json` | i18n keys under `garden.*`, `gardenDashboard.*`, `seedlingTray.*` |
 
 ---
 
@@ -152,6 +153,65 @@ This data comes from the plant's catalog entry and is passed through:
 `GardenDashboardPage` → `TaskEditorDialog` → `TaskCreateDialog`
 
 This feature is **not limited to beginner gardens** — it appears for all garden types when the plant has watering frequency data.
+
+---
+
+## Type: Seedling
+
+A seedling tray management experience for tracking individual cells in a physical seedling tray. Users configure tray dimensions (rows × columns) at creation and manage plants cell-by-cell with growth stage tracking.
+
+### Tag
+
+An emerald **"Seedling"** badge is shown (with tray dimensions):
+- In the garden overview hero section
+- On the garden card in the garden list page
+
+### Tray Configuration
+
+Set at creation time via inline dimension pickers in the creation dialog:
+- **Rows:** 1–8 (default 4)
+- **Columns:** 1–12 (default 6)
+- **Preview grid** displayed below pickers
+- Dimensions can be changed later in Settings > General > Tray Configuration
+
+**DB columns:** `gardens.tray_rows INTEGER`, `gardens.tray_cols INTEGER`
+
+### Seedling Tray Cells
+
+Each cell in the tray is stored in `seedling_tray_cells`:
+- `id`, `garden_id`, `position` (0-based index), `plant_id` (from catalog), `stage`, `sow_date`, `last_watered`, `notes`
+
+**Growth stages:** `empty` → `sown` → `germinating` → `sprouted` → `ready`
+
+### Dashboard: Tray Tab
+
+The seedling garden dashboard includes a **Tray** tab (in addition to all standard tabs) containing:
+1. **Tray Grid** — Visual grid of cells with stage-based coloring, plant names, and water indicators
+2. **Select Mode** — Multi-select cells for bulk editing (set plant, stage, watering)
+3. **Care Schedule** — List of planted cells with water status and quick actions
+4. **Tray Analytics** — Stage breakdown bars, plant overview, tray utilization
+
+### Cell Modal
+
+Click a cell to open an edit dialog with:
+- Plant species picker (search the plant catalog)
+- Growth stage selector
+- Sow date with germination/transplant day estimates (manual input)
+- Watering tracker
+- Notes (single cell only)
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/components/seedling-tray/SeedlingStageIcon.tsx` | Visual icon per growth stage |
+| `src/components/seedling-tray/SeedlingTrayGrid.tsx` | Main tray grid with toolbar and select mode |
+| `src/components/seedling-tray/SeedlingCellModal.tsx` | Cell edit dialog (single & multi) |
+| `src/components/seedling-tray/SeedlingCareList.tsx` | Care schedule list view |
+| `src/components/seedling-tray/SeedlingTrayAnalytics.tsx` | Stage breakdown and tray stats |
+| `src/components/seedling-tray/SeedlingTrayDimensionEditor.tsx` | Tray resize in settings |
+| `src/lib/gardens.ts` | CRUD functions: `getSeedlingTrayCells`, `updateSeedlingTrayCell`, etc. |
+| `supabase/migrations/20260325000000_add_seedling_tray.sql` | DB migration |
 
 ---
 

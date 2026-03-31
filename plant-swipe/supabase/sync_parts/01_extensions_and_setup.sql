@@ -194,7 +194,31 @@ do $$ declare
     -- Plant Stocks (shop availability & pricing)
     'plant_stocks',
     -- Admin Event Notifications (alert settings for admin)
-    'admin_event_notifications'
+    'admin_event_notifications',
+    -- Task Cache
+    'garden_task_daily_cache',
+    'garden_task_weekly_cache',
+    'garden_plant_task_counts_cache',
+    'garden_task_occurrences_today_cache',
+    'user_task_daily_cache',
+    'garden_task_audit_log',
+    -- Garden Roadmap
+    'garden_roadmap_completions',
+    -- Discovery
+    'discovery_seen_plants',
+    -- Seedling Tray
+    'seedling_tray_cells',
+    -- Badges & Achievements
+    'badges',
+    'badge_translations',
+    'user_badges',
+    -- Events (egg hunts, seasonal campaigns)
+    'events',
+    'event_translations',
+    'event_registrations',
+    'event_items',
+    'event_item_translations',
+    'event_user_progress'
   ];
   rec record;
 begin
@@ -205,7 +229,11 @@ begin
       and tablename not like 'pg_%'
       and tablename not like 'sql_%'
   loop
-    if not (rec.tablename = any(allowed_tables)) then
+    if not (
+      rec.tablename = any(allowed_tables)
+      OR rec.tablename LIKE 'event_%'   -- all event system tables (current + future)
+      OR rec.tablename LIKE 'badge%'    -- all badge system tables (badges, badge_translations)
+    ) then
       execute format('drop table if exists public.%I cascade', rec.tablename);
     end if;
   end loop;
