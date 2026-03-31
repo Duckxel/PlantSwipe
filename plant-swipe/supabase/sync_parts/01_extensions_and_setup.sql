@@ -207,7 +207,18 @@ do $$ declare
     -- Discovery
     'discovery_seen_plants',
     -- Seedling Tray
-    'seedling_tray_cells'
+    'seedling_tray_cells',
+    -- Badges & Achievements
+    'badges',
+    'badge_translations',
+    'user_badges',
+    -- Events (egg hunts, seasonal campaigns)
+    'events',
+    'event_translations',
+    'event_registrations',
+    'event_items',
+    'event_item_translations',
+    'event_user_progress'
   ];
   rec record;
 begin
