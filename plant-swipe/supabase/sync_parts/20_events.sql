@@ -1,5 +1,5 @@
 -- ============================================================
--- 18 · Events system (egg hunts, seasonal events, etc.)
+-- 20 · Events system (egg hunts, seasonal events, etc.)
 -- ============================================================
 --
 -- NAMING CONVENTION:
@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS events (
 
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "events_select_all" ON events;
 CREATE POLICY "events_select_all" ON events
   FOR SELECT USING (true);
 
@@ -53,9 +54,11 @@ CREATE INDEX IF NOT EXISTS idx_event_registrations_user  ON event_registrations(
 
 ALTER TABLE event_registrations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "event_registrations_select_own" ON event_registrations;
 CREATE POLICY "event_registrations_select_own" ON event_registrations
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "event_registrations_insert_own" ON event_registrations;
 CREATE POLICY "event_registrations_insert_own" ON event_registrations
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
@@ -75,6 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_event_items_event ON event_items(event_id);
 
 ALTER TABLE event_items ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "event_items_select_all" ON event_items;
 CREATE POLICY "event_items_select_all" ON event_items
   FOR SELECT USING (true);
 
@@ -93,6 +97,7 @@ CREATE INDEX IF NOT EXISTS idx_event_item_translations_item ON event_item_transl
 
 ALTER TABLE event_item_translations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "event_item_translations_select_all" ON event_item_translations;
 CREATE POLICY "event_item_translations_select_all" ON event_item_translations
   FOR SELECT USING (true);
 
@@ -111,6 +116,7 @@ CREATE INDEX IF NOT EXISTS idx_event_translations_event ON event_translations(ev
 
 ALTER TABLE event_translations ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "event_translations_select_all" ON event_translations;
 CREATE POLICY "event_translations_select_all" ON event_translations
   FOR SELECT USING (true);
 
@@ -129,9 +135,11 @@ CREATE INDEX IF NOT EXISTS idx_event_user_progress_user ON event_user_progress(u
 
 ALTER TABLE event_user_progress ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "event_user_progress_select_own" ON event_user_progress;
 CREATE POLICY "event_user_progress_select_own" ON event_user_progress
   FOR SELECT USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "event_user_progress_insert_own" ON event_user_progress;
 CREATE POLICY "event_user_progress_insert_own" ON event_user_progress
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 

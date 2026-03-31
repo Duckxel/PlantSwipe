@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS badges (
 
 ALTER TABLE badges ENABLE ROW LEVEL SECURITY;
 
--- Everyone can read badges
+DROP POLICY IF EXISTS "badges_select_all" ON badges;
 CREATE POLICY "badges_select_all" ON badges
   FOR SELECT USING (true);
 
@@ -48,7 +48,7 @@ CREATE INDEX IF NOT EXISTS idx_badge_translations_badge ON badge_translations(ba
 
 ALTER TABLE badge_translations ENABLE ROW LEVEL SECURITY;
 
--- Everyone can read badge translations
+DROP POLICY IF EXISTS "badge_translations_select_all" ON badge_translations;
 CREATE POLICY "badge_translations_select_all" ON badge_translations
   FOR SELECT USING (true);
 
@@ -67,15 +67,15 @@ CREATE INDEX IF NOT EXISTS idx_user_badges_badge ON user_badges(badge_id);
 
 ALTER TABLE user_badges ENABLE ROW LEVEL SECURITY;
 
--- Users can read their own badges
+DROP POLICY IF EXISTS "user_badges_select_own" ON user_badges;
 CREATE POLICY "user_badges_select_own" ON user_badges
   FOR SELECT USING (auth.uid() = user_id);
 
--- Anyone can see any user's badges (for public profiles)
+DROP POLICY IF EXISTS "user_badges_select_public" ON user_badges;
 CREATE POLICY "user_badges_select_public" ON user_badges
   FOR SELECT USING (true);
 
--- Users can earn badges (insert own)
+DROP POLICY IF EXISTS "user_badges_insert_own" ON user_badges;
 CREATE POLICY "user_badges_insert_own" ON user_badges
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
