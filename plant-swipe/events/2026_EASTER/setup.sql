@@ -129,7 +129,7 @@ BEGIN
 
   -- ── Lys blanc ──
   INSERT INTO event_items (event_id, page_path, description, position_seed)
-  VALUES (eid, '/plants/b99967c7-a1d8-4616-a978-d35a43bdff94',
+  VALUES (eid, '/plants/fc3c2bc4-39ba-4ec1-bdab-0d3a490460e6',
     'In the Annunciation paintings, the angel Gabriel holds a white lily when announcing the birth of Jesus to Mary. The lily represents purity, resurrection, and eternal life!',
     64);
 
@@ -168,7 +168,7 @@ BEGIN
         THEN 'Le nom "paquerette" vient directement de "Paques" ! Elle symbolise la purete, l''innocence et le retour du printemps.'
       WHEN rec.page_path LIKE '%4e69910c-56d3-4202-9370-f7b1b03f09ef%'
         THEN 'En Mediterranee, le ble est fait germer avant Paques pour symboliser la renaissance et l''abondance — une tradition remontant a la Rome antique, ou les rites de printemps honoraient la deesse Demeter.'
-      WHEN rec.page_path LIKE '%b99967c7-a1d8-4616-a978-d35a43bdff94%'
+      WHEN rec.page_path LIKE '%fc3c2bc4-39ba-4ec1-bdab-0d3a490460e6%'
         THEN 'Dans les tableaux de l''Annonciation, l''ange Gabriel tient un lys blanc pour annoncer la naissance de Jesus a Marie. Le lys represente la purete, la resurrection et la vie eternelle !'
       WHEN rec.page_path LIKE '%60553d09-b816-4457-ac22-4d0bfb0594fe%'
         THEN 'Dans les regions ou le palmier ne pousse pas, on utilise des branches de buis le Dimanche des Rameaux ! Plante a feuilles persistantes, le buis symbolise la vie eternelle depuis l''Antiquite.'
