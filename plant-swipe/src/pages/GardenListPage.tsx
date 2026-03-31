@@ -1383,7 +1383,12 @@ export const GardenListPage: React.FC = () => {
         (o) => o.gardenPlantId === gardenPlantId,
       );
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       const optimisticOccs = occs.map((o) => ({
         ...o,
@@ -1392,7 +1397,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
@@ -1522,7 +1532,12 @@ export const GardenListPage: React.FC = () => {
         : [];
 
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       // Optimistic update - mark all as completed immediately
       const optimisticOccs = occs.map((o) => ({
@@ -1532,7 +1547,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
