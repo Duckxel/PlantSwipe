@@ -20,6 +20,7 @@ import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark 
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { EasterEgg } from '@/components/events/EasterEgg'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -935,7 +936,10 @@ const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+      {/* Easter Egg Hunt */}
+      {id && <EasterEgg pagePath={`/plants/${id}`} />}
+
       <div className="flex items-center gap-2 justify-between">
         <Button
           type="button"
