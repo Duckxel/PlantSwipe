@@ -9,12 +9,16 @@ export async function getActiveEvent(lang?: string, isAdmin?: boolean): Promise<
     .from('events')
     .select('*')
     .eq('is_active', true)
-    .or(`starts_at.is.null,starts_at.lte.${now}`)
-    .or(`ends_at.is.null,ends_at.gte.${now}`)
 
-  // Non-admins cannot see admin_only events
-  if (!isAdmin) {
-    query = query.eq('admin_only', false)
+  if (isAdmin) {
+    // Admins can see all active events (including future ones and admin_only)
+    // No date or admin_only filtering
+  } else {
+    // Regular users: must be within date range and not admin_only
+    query = query
+      .eq('admin_only', false)
+      .or(`starts_at.is.null,starts_at.lte.${now}`)
+      .or(`ends_at.is.null,ends_at.gte.${now}`)
   }
 
   const { data, error } = await query
