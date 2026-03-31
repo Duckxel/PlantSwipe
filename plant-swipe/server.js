@@ -7588,6 +7588,217 @@ app.options('/api/admin/deploy-edge-functions', (_req, res) => {
   res.status(204).end()
 })
 
+// List folders in the UTILITY bucket with file counts – returns a tree-friendly flat list
+app.get('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    // folderStats: path -> { fileCount }
+    const folderStats = {}
+
+    async function listRecursive(prefix) {
+      const { data, error } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
+      if (error) throw error
+      if (!data) return
+      let fileCount = 0
+      for (const item of data) {
+        if (item.id === null) {
+          // It's a sub-folder
+          const folderPath = prefix ? `${prefix}/${item.name}` : item.name
+          await listRecursive(folderPath)
+        } else {
+          // It's a file – skip the .emptyFolderPlaceholder Supabase sometimes creates
+          if (item.name !== '.emptyFolderPlaceholder') {
+            fileCount++
+          }
+        }
+      }
+      // Register this prefix as a folder (even root '')
+      if (prefix !== '') {
+        folderStats[prefix] = { fileCount }
+      }
+    }
+
+    // Start from bucket root to discover everything
+    await listRecursive('')
+
+    // Build sorted array
+    const folders = Object.entries(folderStats)
+      .map(([path, stats]) => ({ path, fileCount: stats.fileCount }))
+      .sort((a, b) => a.path.localeCompare(b.path))
+
+    res.json({ folders })
+  } catch (err) {
+    console.error('[upload-folders] failed to list folders', err)
+    res.status(500).json({ error: err?.message || 'Failed to list folders' })
+  }
+})
+
+// Delete a folder (and all files in it) in the UTILITY bucket
+app.delete('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || req.query?.folderPath)
+  if (!folderPath) {
+    res.status(400).json({ error: 'Missing folderPath' })
+    return
+  }
+
+  try {
+    // Collect all file paths recursively under this folder
+    const filesToDelete = []
+
+    async function collectFiles(prefix) {
+      const { data, error } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .list(prefix, { limit: 1000 })
+      if (error) throw error
+      if (!data) return
+      for (const item of data) {
+        if (item.id === null) {
+          await collectFiles(`${prefix}/${item.name}`)
+        } else {
+          filesToDelete.push(`${prefix}/${item.name}`)
+        }
+      }
+    }
+
+    await collectFiles(folderPath)
+
+    if (filesToDelete.length > 0) {
+      const { error: deleteError } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .remove(filesToDelete)
+      if (deleteError) throw deleteError
+    }
+
+    // Also try to remove the empty folder marker if it exists
+    try {
+      await supabaseServiceClient.storage
+        .from('UTILITY')
+        .remove([`${folderPath}/.emptyFolderPlaceholder`])
+    } catch { }
+
+    res.json({ ok: true, deletedFiles: filesToDelete.length })
+  } catch (err) {
+    console.error('[upload-folders] failed to delete folder', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete folder' })
+  }
+})
+
+// List immediate contents (files + sub-folders) of a single folder in UTILITY bucket
+app.get('/api/admin/upload-folder-contents', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const prefix = sanitizeFolderInput(req.query?.path || '')
+
+  try {
+    const { data, error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
+    if (error) throw error
+
+    const folders = []
+    const files = []
+    for (const item of (data || [])) {
+      if (item.name === '.emptyFolderPlaceholder') continue
+      if (item.id === null) {
+        // Sub-folder
+        folders.push({ name: item.name })
+      } else {
+        // File
+        files.push({
+          name: item.name,
+          id: item.id,
+          size: item.metadata?.size || 0,
+          mimeType: item.metadata?.mimetype || '',
+          updatedAt: item.updated_at || item.created_at || '',
+        })
+      }
+    }
+
+    res.json({ path: prefix, folders, files })
+  } catch (err) {
+    console.error('[upload-folder-contents] failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to list folder contents' })
+  }
+})
+
+// Create an empty folder (placeholder) in UTILITY bucket
+app.post('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath)
+  if (!folderPath) {
+    res.status(400).json({ error: 'Missing folderPath' })
+    return
+  }
+
+  try {
+    const placeholder = `${folderPath}/.emptyFolderPlaceholder`
+    const { error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .upload(placeholder, new Uint8Array(0), {
+        contentType: 'application/octet-stream',
+        upsert: true,
+      })
+    if (error) throw error
+    res.json({ ok: true, path: folderPath })
+  } catch (err) {
+    console.error('[upload-folders] failed to create folder', err)
+    res.status(500).json({ error: err?.message || 'Failed to create folder' })
+  }
+})
+
+// Delete a single file from UTILITY bucket
+app.delete('/api/admin/upload-file', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const filePath = req.body?.filePath || req.query?.filePath
+  if (!filePath || typeof filePath !== 'string') {
+    res.status(400).json({ error: 'Missing filePath' })
+    return
+  }
+
+  try {
+    const { error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .remove([filePath])
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[upload-file] failed to delete file', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete file' })
+  }
+})
+
 app.post('/api/admin/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
@@ -7618,6 +7829,12 @@ app.post('/api/admin/upload-image', async (req, res) => {
       name: adminDisplayName || null,
     },
     prefixBuilder: ({ req }) => {
+      // folderPath = absolute path in bucket (e.g. "blog/images")
+      // folder = relative sub-folder under admin/uploads prefix
+      const folderPath = req.body?.folderPath || req.query?.folderPath
+      if (folderPath) {
+        return sanitizeFolderInput(folderPath)
+      }
       const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
