@@ -22,25 +22,27 @@ export type TutorialStepId =
 
 export type TutorialStep = {
   id: TutorialStepId
+  /** The fake page shown behind the tutorial card */
+  demoPage: 'discovery' | 'encyclopedia' | 'scan' | 'gardens' | 'garden-dashboard' | 'none'
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
-  { id: 'welcome' },
-  { id: 'discovery_swipe' },
-  { id: 'discovery_like' },
-  { id: 'discovery_info' },
-  { id: 'encyclopedia_nav' },
-  { id: 'encyclopedia_categories' },
-  { id: 'scan_identify' },
-  { id: 'nav_gardens' },
-  { id: 'gardens_create' },
-  { id: 'gardens_beginner' },
-  { id: 'gardens_overview' },
-  { id: 'gardens_plants' },
-  { id: 'gardens_analytics' },
-  { id: 'gardens_seedling' },
-  { id: 'gardens_tasks' },
-  { id: 'tutorial_complete' },
+  { id: 'welcome', demoPage: 'none' },
+  { id: 'discovery_swipe', demoPage: 'discovery' },
+  { id: 'discovery_like', demoPage: 'discovery' },
+  { id: 'discovery_info', demoPage: 'discovery' },
+  { id: 'encyclopedia_nav', demoPage: 'encyclopedia' },
+  { id: 'encyclopedia_categories', demoPage: 'encyclopedia' },
+  { id: 'scan_identify', demoPage: 'scan' },
+  { id: 'nav_gardens', demoPage: 'gardens' },
+  { id: 'gardens_create', demoPage: 'gardens' },
+  { id: 'gardens_beginner', demoPage: 'garden-dashboard' },
+  { id: 'gardens_overview', demoPage: 'garden-dashboard' },
+  { id: 'gardens_plants', demoPage: 'garden-dashboard' },
+  { id: 'gardens_analytics', demoPage: 'garden-dashboard' },
+  { id: 'gardens_seedling', demoPage: 'garden-dashboard' },
+  { id: 'gardens_tasks', demoPage: 'garden-dashboard' },
+  { id: 'tutorial_complete', demoPage: 'none' },
 ]
 
 type TutorialContextValue = {

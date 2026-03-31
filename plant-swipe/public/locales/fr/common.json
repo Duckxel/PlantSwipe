@@ -2697,6 +2697,21 @@
     "back": "Retour",
     "start": "C'est parti !",
     "finish": "Commencer !",
+    "demo": {
+      "balconyGarden": "Mon Jardin Balcon",
+      "indoorGarden": "Plantes d'Intérieur",
+      "herbGarden": "Jardin d'Herbes",
+      "wateringHistory": "Historique d'arrosage",
+      "completionRate": "Taux de complétion",
+      "dayStreak": "Jours consécutifs",
+      "totalWaterings": "Arrosages totaux",
+      "activePlants": "Plantes actives",
+      "waterMonstera": "Arroser Monstera",
+      "waterSnakePlant": "Arroser Sansevière",
+      "fertilizeLavender": "Fertiliser Lavande",
+      "pruneBasil": "Tailler Basilic",
+      "checkOrchid": "Vérifier Orchidée"
+    },
     "steps": {
       "welcome": {
         "title": "Bienvenue sur Aphylia ! 🌱",
