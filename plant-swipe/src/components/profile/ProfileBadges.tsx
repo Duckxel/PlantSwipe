@@ -114,29 +114,29 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
           </span>
         </div>
 
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-4">
           {badges.map((earned) => (
             <div
               key={earned.id}
-              className="relative"
+              className="relative group"
               onMouseEnter={() => setHoveredBadge(earned.id)}
               onMouseLeave={() => setHoveredBadge(null)}
               onTouchStart={() => setHoveredBadge(hoveredBadge === earned.id ? null : earned.id)}
             >
               {/* Badge icon */}
               <motion.div
-                whileHover={{ scale: 1.1 }}
-                className="flex items-center justify-center h-14 w-14 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md"
+                whileHover={{ scale: 1.08 }}
+                className="flex items-center justify-center h-20 w-20 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md"
               >
                 {earned.badge.icon_url ? (
                   <img
                     src={earned.badge.icon_url}
                     alt={earned.displayName}
-                    className="h-9 w-9 object-contain"
+                    className="h-14 w-14 object-contain"
                     loading="lazy"
                   />
                 ) : (
-                  <Trophy className="h-7 w-7 text-amber-400 dark:text-amber-300" />
+                  <Trophy className="h-10 w-10 text-amber-400 dark:text-amber-300" />
                 )}
               </motion.div>
 
@@ -148,9 +148,9 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 pointer-events-none"
+                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none w-max"
                   >
-                    <div className="rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3.5 py-2.5 shadow-lg min-w-[180px] max-w-[240px]">
+                    <div className="relative rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3.5 py-2.5 shadow-lg min-w-[180px] max-w-[240px]">
                       <p className="text-xs font-semibold leading-tight">
                         {earned.displayName}
                       </p>
@@ -164,7 +164,7 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                       </p>
 
                       {/* Arrow */}
-                      <div className="absolute left-1/2 -translate-x-1/2 top-full h-0 w-0 border-x-[5px] border-x-transparent border-t-[5px] border-t-stone-900 dark:border-t-stone-100" />
+                      <div className="absolute left-1/2 -translate-x-1/2 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-stone-900 dark:border-t-stone-100" />
                     </div>
                   </motion.div>
                 )}
