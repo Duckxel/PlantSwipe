@@ -20,7 +20,7 @@ import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark 
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
-import { EasterEgg } from '@/components/events/EasterEgg'
+import { EasterEgg } from '@events/2026_EASTER'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {

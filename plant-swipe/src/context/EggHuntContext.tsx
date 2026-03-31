@@ -41,11 +41,23 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
   const lang = i18n.language
 
   // Load active event + items + user progress
+  // Only for signed-in users (admins can always see, public events require login)
   useEffect(() => {
     let cancelled = false
 
     async function load() {
       setLoading(true)
+
+      // Not signed in and event is public → don't show anything
+      if (!user && !isAdmin) {
+        setEvent(null)
+        setItems([])
+        setFoundItemIds(new Set())
+        setCompleted(false)
+        setLoading(false)
+        return
+      }
+
       const activeEvent = await getActiveEvent(lang, isAdmin)
       if (cancelled) return
 
@@ -69,18 +81,6 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
         const ids = new Set(progress.map((p) => p.item_id))
         setFoundItemIds(ids)
         setCompleted(ids.size >= allItems.length && allItems.length > 0)
-      } else {
-        // For logged-out users, use localStorage as fallback
-        const stored = localStorage.getItem(`event_progress_${activeEvent.id}`)
-        if (stored) {
-          try {
-            const ids = new Set(JSON.parse(stored) as string[])
-            setFoundItemIds(ids)
-            setCompleted(ids.size >= allItems.length && allItems.length > 0)
-          } catch {
-            setFoundItemIds(new Set())
-          }
-        }
       }
       setLoading(false)
     }
@@ -101,36 +101,27 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
   const collectItem = useCallback(
     async (itemId: string): Promise<string | null> => {
-      if (!event) return null
+      if (!event || !user) return null
       const item = items.find((i) => i.id === itemId)
       if (!item) return null
 
-      // Already found
+      // Already found — show description again without re-counting
       if (foundItemIds.has(itemId)) return item.description
 
-      if (user) {
-        const ok = await markItemFound(event.id, itemId, user.id)
-        if (!ok) return null
-      }
+      const ok = await markItemFound(event.id, itemId, user.id)
+      if (!ok) return null
 
       const newFound = new Set(foundItemIds)
       newFound.add(itemId)
       setFoundItemIds(newFound)
 
-      // Persist for logged-out users
-      if (!user) {
-        localStorage.setItem(`event_progress_${event.id}`, JSON.stringify([...newFound]))
-      }
-
       // Check completion
       if (newFound.size >= items.length && items.length > 0) {
         setCompleted(true)
-        if (user) {
-          await markEventCompleted(event.id, user.id)
-          // Award the event's badge if one is configured
-          if (event.badge_id) {
-            await awardBadgeById(user.id, event.badge_id)
-          }
+        await markEventCompleted(event.id, user.id)
+        // Award the event's badge if one is configured
+        if (event.badge_id) {
+          await awardBadgeById(user.id, event.badge_id)
         }
       }
 

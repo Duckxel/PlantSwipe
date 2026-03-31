@@ -11,14 +11,26 @@ Each event lives in its own folder under `events/`:
 ```
 events/
   2026_EASTER/
+    index.ts        — Barrel export of all event components
+    components/     — Event-specific UI components
     setup.sql       — Idempotent SQL to create/update the event
-    README.md       — Event details, egg locations, descriptions
+    clean.sql       — SQL to remove all temporary data after event ends
+    README.md       — Event details, descriptions, removal guide
   2027_HALLOWEEN/   — (future example)
+    index.ts
+    components/
     setup.sql
+    clean.sql
     README.md
+
+badges/
+  event_2026_easter.sql  — Badge definition (per-badge SQL file)
 ```
 
-To set up an event, run its `setup.sql` on the database. To edit descriptions or add plants, edit the SQL and re-run — it will update in place.
+- **`setup.sql`** — run to create/update the event. Idempotent, safe to re-run.
+- **`clean.sql`** — run after the event ends. Removes items + progress, keeps registrations + badges.
+- **`index.ts`** — barrel export. Pages import from `@events/2026_EASTER`.
+- **`components/`** — event-specific UI. Easily deleted without touching core code.
 
 ---
 

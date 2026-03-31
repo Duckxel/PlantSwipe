@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useEggHunt } from '@/context/EggHuntContext'
 import { EggFoundModal } from './EggFoundModal'
@@ -19,9 +19,9 @@ type EasterEggProps = {
 }
 
 /**
- * Renders a hidden egg icon on the page if there's an active event
+ * Renders an egg on the page if there's an active event
  * with an item assigned to the given page path.
- * Uses the item's position_seed to pick a deterministic position and egg variant.
+ * Position randomizes on every page load/navigation.
  */
 export function EasterEgg({ pagePath }: EasterEggProps) {
   const { getItemForPage, foundItemIds, collectItem, event } = useEggHunt()
@@ -30,17 +30,19 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
   const [showModal, setShowModal] = useState(false)
   const [wasAlreadyFound, setWasAlreadyFound] = useState(false)
 
+  // Random position — changes every time the component mounts (page load/navigation)
+  const position = useMemo(() => ({
+    top: 10 + Math.floor(Math.random() * 60),    // 10-70%
+    right: 1 + Math.floor(Math.random() * 15),   // 1-16% from right
+  }), [])
+
   const item = getItemForPage(pagePath)
   if (!item || !event) return null
 
   const alreadyFound = foundItemIds.has(item.id)
-
-  // Deterministic position from seed
   const seed = item.position_seed
-  const topPercent = 20 + (((seed * 7) % 60))    // 20-80%
-  const leftPercent = 10 + (((seed * 13) % 75))   // 10-85%
 
-  // Pick egg variant from seed
+  // Pick egg variant from seed (stays consistent per page)
   const eggSvg = EGG_SVGS[seed % EGG_SVGS.length]
 
   const handleClick = async () => {
@@ -58,16 +60,16 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
         onClick={handleClick}
         initial={{ opacity: 0, scale: 0 }}
         animate={{
-          opacity: alreadyFound ? 0.6 : 1,
+          opacity: alreadyFound ? 0.5 : 1,
           scale: 1,
         }}
-        whileHover={{ scale: 1.15, rotate: [0, -8, 8, 0] }}
+        whileHover={{ scale: 1.2, rotate: [0, -10, 10, 0] }}
         whileTap={{ scale: 0.9 }}
         transition={{ type: 'spring', stiffness: 300, damping: 20 }}
         className="absolute z-40 cursor-pointer group"
         style={{
-          top: `${topPercent}%`,
-          left: `${leftPercent}%`,
+          top: `${position.top}%`,
+          right: `${position.right}%`,
         }}
         aria-label={t('eggHunt.foundTitle')}
         title={alreadyFound ? t('eggHunt.alreadyFound') : t('eggHunt.clickMe')}
@@ -76,25 +78,25 @@ export function EasterEgg({ pagePath }: EasterEggProps) {
           <img
             src={eggSvg}
             alt="Easter egg"
-            className={`h-10 w-10 drop-shadow-lg transition-all ${
+            className={`h-16 w-16 drop-shadow-[0_2px_10px_rgba(0,0,0,0.35)] transition-all ${
               alreadyFound
-                ? 'grayscale opacity-70'
-                : 'group-hover:scale-105 group-hover:drop-shadow-xl'
+                ? 'grayscale opacity-60'
+                : 'group-hover:drop-shadow-[0_4px_16px_rgba(0,0,0,0.45)]'
             }`}
             draggable={false}
           />
           {/* Pulsing glow only on unfound eggs */}
           {!alreadyFound && (
             <motion.div
-              className="absolute -inset-1 rounded-full bg-amber-300/30 dark:bg-amber-400/20"
-              animate={{ scale: [1, 1.4, 1], opacity: [0.5, 0, 0.5] }}
+              className="absolute -inset-3 rounded-full bg-amber-400/25 dark:bg-amber-300/20"
+              animate={{ scale: [1, 1.5, 1], opacity: [0.6, 0, 0.6] }}
               transition={{ duration: 2, repeat: Infinity }}
             />
           )}
           {/* Small checkmark for found eggs */}
           {alreadyFound && (
-            <div className="absolute -bottom-0.5 -right-0.5 h-3.5 w-3.5 rounded-full bg-emerald-500 flex items-center justify-center">
-              <svg className="h-2 w-2 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+            <div className="absolute -bottom-0.5 -right-0.5 h-5 w-5 rounded-full bg-emerald-500 flex items-center justify-center shadow-sm">
+              <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
               </svg>
             </div>

@@ -2,18 +2,25 @@ import { supabase } from '@/lib/supabaseClient'
 import type { EventRow, EventItemRow, EventUserProgressRow } from '@/types/event'
 
 /** Fetch the currently active event (if any), with translations applied for the given language.
- *  When isAdmin is false, admin_only events are filtered out. */
+ *
+ *  Visibility rules:
+ *    is_active=false           → invisible to everyone (even admins on frontend)
+ *    is_active=true, admin_only=true  → visible to admins only (test mode)
+ *    is_active=true, admin_only=false → public, auto-goes live when starts_at arrives
+ */
 export async function getActiveEvent(lang?: string, isAdmin?: boolean): Promise<EventRow | null> {
-  const now = new Date().toISOString()
+  // Always require is_active = true
   let query = supabase
     .from('events')
     .select('*')
     .eq('is_active', true)
-    .or(`starts_at.is.null,starts_at.lte.${now}`)
-    .or(`ends_at.is.null,ends_at.gte.${now}`)
 
-  // Non-admins cannot see admin_only events
-  if (!isAdmin) {
+  if (isAdmin) {
+    // Admins see admin_only events (test mode)
+    // But still filter by date for non-admin_only events
+    // (admin_only events skip date check so admins can test before start date)
+  } else {
+    // Regular users: no admin_only events, must be within date range
     query = query.eq('admin_only', false)
   }
 
@@ -24,6 +31,18 @@ export async function getActiveEvent(lang?: string, isAdmin?: boolean): Promise<
 
   if (error || !data) return null
   const event = data as EventRow
+
+  // For non-admin users, enforce date range in JS
+  // (Supabase .or() chaining is unreliable with multiple calls)
+  if (!isAdmin) {
+    if (event.starts_at && new Date(event.starts_at) > new Date()) return null
+    if (event.ends_at && new Date(event.ends_at) < new Date()) return null
+  } else if (!event.admin_only) {
+    // Admin viewing a public event — still respect date range
+    if (event.starts_at && new Date(event.starts_at) > new Date()) return null
+    if (event.ends_at && new Date(event.ends_at) < new Date()) return null
+  }
+  // admin_only events: admins see them regardless of dates (test mode)
 
   // Apply translation overlay if a non-default language is requested
   if (lang && lang !== 'en') {

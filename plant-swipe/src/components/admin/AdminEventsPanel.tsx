@@ -6,7 +6,6 @@ import { Card, CardContent } from '@/components/ui/card'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Calendar,
-  Plus,
   Trash2,
   Edit2,
   Loader2,
@@ -19,11 +18,12 @@ import {
   ChevronDown,
   ChevronUp,
   Play,
-  Pause,
   ShieldCheck,
   Clock,
   Eye,
+  EyeOff,
   Package,
+  RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { EventRow } from '@/types/event'
@@ -84,8 +84,8 @@ function toLocalInputValue(dateStr: string | null): string {
 }
 
 function getEventStatus(event: EventRow): { label: string; color: string; icon: React.ComponentType<any> } {
-  if (!event.is_active) return { label: 'Inactive', color: 'text-stone-400', icon: Pause }
-  if (event.admin_only) return { label: 'Admin Only', color: 'text-purple-500', icon: ShieldCheck }
+  if (!event.is_active) return { label: 'Invisible', color: 'text-stone-400', icon: EyeOff }
+  if (event.admin_only) return { label: 'Admin Testing', color: 'text-purple-500', icon: ShieldCheck }
   const now = new Date()
   if (event.starts_at && new Date(event.starts_at) > now) return { label: 'Scheduled', color: 'text-blue-500', icon: Clock }
   if (event.ends_at && new Date(event.ends_at) < now) return { label: 'Ended', color: 'text-amber-500', icon: CheckCircle2 }
@@ -105,6 +105,8 @@ export const AdminEventsPanel: React.FC = () => {
   const [expandedEvent, setExpandedEvent] = React.useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null)
   const [cleaning, setCleaning] = React.useState<string | null>(null)
+  const [resetting, setResetting] = React.useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = React.useState<string | null>(null)
 
   // Load events with stats
   const loadEvents = React.useCallback(async () => {
@@ -178,12 +180,6 @@ export const AdminEventsPanel: React.FC = () => {
     }
   }, [success])
 
-  const handleCreate = () => {
-    setEditingEvent(null)
-    setFormData({ ...emptyForm })
-    setShowForm(true)
-  }
-
   const handleEdit = (event: EventWithStats) => {
     setEditingEvent(event)
     setFormData({
@@ -222,15 +218,19 @@ export const AdminEventsPanel: React.FC = () => {
         updated_at: new Date().toISOString(),
       }
 
-      if (editingEvent) {
-        const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
-        if (updateError) throw updateError
-      } else {
-        const { error: createError } = await supabase.from('events').insert(payload)
-        if (createError) throw createError
+      if (!editingEvent) return
+
+      // If admin_only was on and is now being turned off via the form, auto-reset progress
+      if (editingEvent.admin_only && !formData.admin_only) {
+        await supabase.rpc('reset_event_progress', { target_event_id: editingEvent.id })
       }
 
-      setSuccess(editingEvent ? 'Event updated' : 'Event created')
+      const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
+      if (updateError) throw updateError
+
+      setSuccess(editingEvent.admin_only && !formData.admin_only
+        ? 'Event updated — progress reset for public launch'
+        : 'Event updated')
       handleCancel()
       await loadEvents()
     } catch (err: any) {
@@ -255,6 +255,21 @@ export const AdminEventsPanel: React.FC = () => {
     }
   }
 
+  const handleReset = async (eventId: string) => {
+    setResetting(eventId)
+    try {
+      const { error } = await supabase.rpc('reset_event_progress', { target_event_id: eventId })
+      if (error) throw error
+      setSuccess('Progress reset — event is fresh for all users')
+      setConfirmReset(null)
+      await loadEvents()
+    } catch (err: any) {
+      setError(err.message || 'Reset failed')
+    } finally {
+      setResetting(null)
+    }
+  }
+
   const toggleActive = async (event: EventWithStats) => {
     try {
       const { error } = await supabase.from('events').update({
@@ -271,12 +286,19 @@ export const AdminEventsPanel: React.FC = () => {
 
   const toggleAdminOnly = async (event: EventWithStats) => {
     try {
+      // When going public (admin_only → false), auto-reset all progress
+      // so test data from admin testing doesn't interfere
+      if (event.admin_only) {
+        const { error: resetError } = await supabase.rpc('reset_event_progress', { target_event_id: event.id })
+        if (resetError) throw resetError
+      }
+
       const { error } = await supabase.from('events').update({
         admin_only: !event.admin_only,
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
       if (error) throw error
-      setSuccess(event.admin_only ? 'Event visible to all users' : 'Event restricted to admins')
+      setSuccess(event.admin_only ? 'Event is now public — all progress has been reset' : 'Event restricted to admins')
       await loadEvents()
     } catch (err: any) {
       setError(err.message || 'Failed to toggle admin-only')
@@ -382,17 +404,19 @@ export const AdminEventsPanel: React.FC = () => {
                   size="sm" variant="outline" className="rounded-xl"
                   onClick={() => toggleActive(event)}
                 >
-                  {event.is_active ? <Pause className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
-                  {event.is_active ? 'Deactivate' : 'Activate'}
+                  {event.is_active ? <EyeOff className="h-3.5 w-3.5 mr-1.5" /> : <Eye className="h-3.5 w-3.5 mr-1.5" />}
+                  {event.is_active ? 'Make Invisible' : 'Make Visible'}
                 </Button>
 
-                <Button
-                  size="sm" variant="outline" className="rounded-xl"
-                  onClick={() => toggleAdminOnly(event)}
-                >
-                  <ShieldCheck className={cn('h-3.5 w-3.5 mr-1.5', event.admin_only ? 'text-purple-500' : '')} />
-                  {event.admin_only ? 'Make Public' : 'Admin Only'}
-                </Button>
+                {event.is_active && (
+                  <Button
+                    size="sm" variant="outline" className="rounded-xl"
+                    onClick={() => toggleAdminOnly(event)}
+                  >
+                    <ShieldCheck className={cn('h-3.5 w-3.5 mr-1.5', event.admin_only ? 'text-purple-500' : '')} />
+                    {event.admin_only ? 'Make Public' : 'Admin Testing'}
+                  </Button>
+                )}
 
                 <Button
                   size="sm" variant="outline" className="rounded-xl"
@@ -402,6 +426,33 @@ export const AdminEventsPanel: React.FC = () => {
                   Edit
                 </Button>
 
+                {/* Reset Progress (two-step) */}
+                {confirmReset === event.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm" variant="outline"
+                      className="rounded-xl text-blue-600 border-blue-300 bg-blue-50 dark:bg-blue-900/20"
+                      onClick={() => handleReset(event.id)}
+                      disabled={resetting === event.id}
+                    >
+                      {resetting === event.id ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
+                      Confirm Reset
+                    </Button>
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setConfirmReset(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm" variant="outline" className="rounded-xl text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => setConfirmReset(event.id)}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                    Reset Progress
+                  </Button>
+                )}
+
+                {/* Cleanup (two-step) */}
                 {confirmDelete === event.id ? (
                   <div className="flex items-center gap-1.5">
                     <Button
@@ -439,7 +490,7 @@ export const AdminEventsPanel: React.FC = () => {
       <CardContent className="p-5 space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
-            {editingEvent ? 'Edit Event' : 'New Event'}
+            Edit Event
           </h3>
           <button onClick={handleCancel} className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
             <X className="h-4 w-4 text-stone-500" />
@@ -545,10 +596,10 @@ export const AdminEventsPanel: React.FC = () => {
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium flex items-center gap-1.5">
-                <Play className={cn('h-4 w-4', formData.is_active ? 'text-emerald-500' : 'text-stone-400')} />
-                Active
+                <Eye className={cn('h-4 w-4', formData.is_active ? 'text-emerald-500' : 'text-stone-400')} />
+                Visible
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">Event is visible and running</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">When off, event is invisible to everyone including admins</p>
             </div>
           </label>
 
@@ -561,9 +612,9 @@ export const AdminEventsPanel: React.FC = () => {
             <div className="flex-1">
               <div className="text-sm font-medium flex items-center gap-1.5">
                 <ShieldCheck className={cn('h-4 w-4', formData.admin_only ? 'text-purple-500' : 'text-stone-400')} />
-                Admin Only
+                Admin Testing
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">Only admins can see and interact with this event — use for testing before going public</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">Only admins see eggs — when off, the event goes public automatically on the start date</p>
             </div>
           </label>
         </div>
@@ -572,7 +623,7 @@ export const AdminEventsPanel: React.FC = () => {
         <div className="flex items-center gap-2 pt-2">
           <Button className="rounded-xl flex-1" onClick={handleSave} disabled={saving || !formData.name.trim()}>
             {saving ? <Loader2 className="h-4 w-4 animate-spin mr-1.5" /> : null}
-            {editingEvent ? 'Update Event' : 'Create Event'}
+            Update Event
           </Button>
           <Button variant="outline" className="rounded-xl" onClick={handleCancel}>Cancel</Button>
         </div>
@@ -630,16 +681,14 @@ export const AdminEventsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* New Event button */}
-      <div className="flex items-center gap-3">
-        <Button className="rounded-xl" onClick={handleCreate} disabled={showForm}>
-          <Plus className="h-4 w-4 mr-1.5" />
-          New Event
-        </Button>
+      {/* Info: events are created via SQL files */}
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-stone-50 dark:bg-[#2d2d30] border border-stone-200 dark:border-[#3e3e42] text-xs text-stone-500 dark:text-stone-400">
+        <Package className="h-4 w-4 flex-shrink-0" />
+        To create a new event, add a folder in <code className="font-mono bg-stone-200 dark:bg-stone-700 px-1 rounded">events/</code> with a <code className="font-mono bg-stone-200 dark:bg-stone-700 px-1 rounded">setup.sql</code> file and run it on the database.
       </div>
 
-      {/* Form */}
-      {showForm && renderForm()}
+      {/* Edit form (no creation — events are managed via SQL files) */}
+      {showForm && editingEvent && renderForm()}
 
       {/* Event list */}
       {loading ? (

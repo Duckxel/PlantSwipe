@@ -168,7 +168,22 @@ BEGIN
 END;
 $$;
 
--- ── 6. FULL EVENT DELETION (optional) ────────────────────────
+-- ── 6. RESET EVENT PROGRESS ──────────────────────────────────
+-- Wipes all user progress and registrations so the event is fresh.
+-- Keeps: event row, items, translations — only removes finds.
+-- Usage: SELECT reset_event_progress('<event-uuid>');
+CREATE OR REPLACE FUNCTION reset_event_progress(target_event_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  DELETE FROM event_user_progress WHERE event_id = target_event_id;
+  DELETE FROM event_registrations WHERE event_id = target_event_id;
+END;
+$$;
+
+-- ── 7. FULL EVENT DELETION (optional) ────────────────────────
 -- Removes EVERYTHING including permanent records for an event.
 -- Usage: SELECT delete_event_completely('<event-uuid>');
 CREATE OR REPLACE FUNCTION delete_event_completely(target_event_id uuid)
