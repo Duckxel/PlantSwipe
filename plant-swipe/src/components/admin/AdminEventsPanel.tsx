@@ -225,8 +225,14 @@ export const AdminEventsPanel: React.FC = () => {
         await supabase.rpc('reset_event_progress', { target_event_id: editingEvent.id })
       }
 
-      const { error: updateError } = await supabase.from('events').update(payload).eq('id', editingEvent.id)
+      const { data: updatedRow, error: updateError } = await supabase
+        .from('events')
+        .update(payload)
+        .eq('id', editingEvent.id)
+        .select('id')
+        .maybeSingle()
       if (updateError) throw updateError
+      if (!updatedRow) throw new Error('Event was not updated (no permission or row missing).')
 
       setSuccess(editingEvent.admin_only && !formData.admin_only
         ? 'Event updated — progress reset for public launch'
@@ -272,11 +278,17 @@ export const AdminEventsPanel: React.FC = () => {
 
   const toggleActive = async (event: EventWithStats) => {
     try {
-      const { error } = await supabase.from('events').update({
-        is_active: !event.is_active,
-        updated_at: new Date().toISOString(),
-      }).eq('id', event.id)
+      const { data: updatedRow, error } = await supabase
+        .from('events')
+        .update({
+          is_active: !event.is_active,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', event.id)
+        .select('id, is_active')
+        .maybeSingle()
       if (error) throw error
+      if (!updatedRow) throw new Error('Event was not updated (no permission or row missing).')
       setSuccess(event.is_active ? 'Event deactivated' : 'Event activated')
       await loadEvents()
     } catch (err: any) {
@@ -293,11 +305,17 @@ export const AdminEventsPanel: React.FC = () => {
         if (resetError) throw resetError
       }
 
-      const { error } = await supabase.from('events').update({
-        admin_only: !event.admin_only,
-        updated_at: new Date().toISOString(),
-      }).eq('id', event.id)
+      const { data: updatedRow, error } = await supabase
+        .from('events')
+        .update({
+          admin_only: !event.admin_only,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', event.id)
+        .select('id')
+        .maybeSingle()
       if (error) throw error
+      if (!updatedRow) throw new Error('Event was not updated (no permission or row missing).')
       setSuccess(event.admin_only ? 'Event is now public — all progress has been reset' : 'Event restricted to admins')
       await loadEvents()
     } catch (err: any) {

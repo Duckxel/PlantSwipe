@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
 - **Mar 25, 2026:** **Seedling Tray Garden Type.** Added `seedling` to `garden_type` CHECK constraint and `living_space` values. Added `tray_rows` and `tray_cols` INTEGER columns to `gardens` table (used when `garden_type = 'seedling'`). New `seedling_tray_cells` table with per-cell tracking (position, plant, stage, sow date, watering, notes). Stages: `empty`, `sown`, `germinating`, `sprouted`, `ready`. RLS policies for garden member access. Schema file: `12_audit_and_analytics.sql`. Migration: `20260325000000_add_seedling_tray.sql`.
 - **Mar 16, 2026:** **Garden Living Space & Roadmap Persistence.** Added `living_space` text[] column to `gardens` table (values: indoor, outdoor, terrarium, greenhouse) — used for plant suggestions and beginner onboarding. New `garden_roadmap_completions` table tracks beginner roadmap step completions per garden (persistent, never reverted). RPC: `complete_roadmap_step(uuid, text)`. Schema file: `12_audit_and_analytics.sql`.
 - **Mar 14, 2026:** **Admin Event Notifications.** Added `admin_event_notifications` table for configurable push notifications sent to selected admins when special events occur (user reports, bug reports, plant reports, plant requests). Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and selectable list of admin recipients. Schema file: `17_admin_event_notifications.sql`. New admin panel: "Event Alerts" tab.
@@ -1360,6 +1361,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `plant_scans` | Users can manage own scans |
 | `impressions` | Admin SELECT only; server writes via service role |
 | `plant_stocks` | Authenticated users can SELECT; only admins can INSERT/UPDATE/DELETE |
+| `events` | Anyone can SELECT; only admins can UPDATE (`events_update_admin` via `is_admin_user`) |
 
 ---
 

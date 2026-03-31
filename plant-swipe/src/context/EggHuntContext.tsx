@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext'
 import type { EventRow, EventItemRow } from '@/types/event'
 import { getActiveEvent, getEventItems, getUserProgress, markItemFound, markEventCompleted } from '@/lib/events'
 import { awardBadgeById } from '@/lib/badges'
+import { supabase } from '@/lib/supabaseClient'
 
 type EggHuntContextValue = {
   /** The active event, or null if none. */
@@ -37,8 +38,24 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
   const [foundItemIds, setFoundItemIds] = useState<Set<string>>(new Set())
   const [completed, setCompleted] = useState(false)
   const [loading, setLoading] = useState(true)
+  /** Bumps when `events` rows change so we refetch (e.g. admin toggles is_active). */
+  const [eventsRefreshNonce, setEventsRefreshNonce] = useState(0)
 
   const lang = i18n.language
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('egg-hunt-events-sync')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'events' },
+        () => setEventsRefreshNonce((n) => n + 1),
+      )
+      .subscribe()
+    return () => {
+      void supabase.removeChannel(channel)
+    }
+  }, [])
 
   // Load active event + items + user progress
   // Only for signed-in users (admins can always see, public events require login)
@@ -87,7 +104,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
     load()
     return () => { cancelled = true }
-  }, [user, lang, isAdmin])
+  }, [user, lang, isAdmin, eventsRefreshNonce])
 
   const getItemForPage = useCallback(
     (pagePath: string) => {
