@@ -7289,6 +7289,7 @@ async function verifySchemaAfterSync() {
     'count_unique_ips_last_days',
     'award_badge',
     'cleanup_event',
+    'reset_event_progress',
     'delete_event_completely',
   ]
   const requiredExtensions = [

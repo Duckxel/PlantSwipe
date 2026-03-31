@@ -22,7 +22,9 @@ import {
   ShieldCheck,
   Clock,
   Eye,
+  EyeOff,
   Package,
+  RotateCcw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { EventRow } from '@/types/event'
@@ -83,8 +85,8 @@ function toLocalInputValue(dateStr: string | null): string {
 }
 
 function getEventStatus(event: EventRow): { label: string; color: string; icon: React.ComponentType<any> } {
-  if (!event.is_active) return { label: 'Inactive', color: 'text-stone-400', icon: Pause }
-  if (event.admin_only) return { label: 'Admin Only', color: 'text-purple-500', icon: ShieldCheck }
+  if (!event.is_active) return { label: 'Invisible', color: 'text-stone-400', icon: EyeOff }
+  if (event.admin_only) return { label: 'Admin Testing', color: 'text-purple-500', icon: ShieldCheck }
   const now = new Date()
   if (event.starts_at && new Date(event.starts_at) > now) return { label: 'Scheduled', color: 'text-blue-500', icon: Clock }
   if (event.ends_at && new Date(event.ends_at) < now) return { label: 'Ended', color: 'text-amber-500', icon: CheckCircle2 }
@@ -104,6 +106,8 @@ export const AdminEventsPanel: React.FC = () => {
   const [expandedEvent, setExpandedEvent] = React.useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null)
   const [cleaning, setCleaning] = React.useState<string | null>(null)
+  const [resetting, setResetting] = React.useState<string | null>(null)
+  const [confirmReset, setConfirmReset] = React.useState<string | null>(null)
 
   // Load events with stats
   const loadEvents = React.useCallback(async () => {
@@ -245,6 +249,21 @@ export const AdminEventsPanel: React.FC = () => {
     }
   }
 
+  const handleReset = async (eventId: string) => {
+    setResetting(eventId)
+    try {
+      const { error } = await supabase.rpc('reset_event_progress', { target_event_id: eventId })
+      if (error) throw error
+      setSuccess('Progress reset — event is fresh for all users')
+      setConfirmReset(null)
+      await loadEvents()
+    } catch (err: any) {
+      setError(err.message || 'Reset failed')
+    } finally {
+      setResetting(null)
+    }
+  }
+
   const toggleActive = async (event: EventWithStats) => {
     try {
       const { error } = await supabase.from('events').update({
@@ -372,17 +391,19 @@ export const AdminEventsPanel: React.FC = () => {
                   size="sm" variant="outline" className="rounded-xl"
                   onClick={() => toggleActive(event)}
                 >
-                  {event.is_active ? <Pause className="h-3.5 w-3.5 mr-1.5" /> : <Play className="h-3.5 w-3.5 mr-1.5" />}
-                  {event.is_active ? 'Deactivate' : 'Activate'}
+                  {event.is_active ? <EyeOff className="h-3.5 w-3.5 mr-1.5" /> : <Eye className="h-3.5 w-3.5 mr-1.5" />}
+                  {event.is_active ? 'Make Invisible' : 'Make Visible'}
                 </Button>
 
-                <Button
-                  size="sm" variant="outline" className="rounded-xl"
-                  onClick={() => toggleAdminOnly(event)}
-                >
-                  <ShieldCheck className={cn('h-3.5 w-3.5 mr-1.5', event.admin_only ? 'text-purple-500' : '')} />
-                  {event.admin_only ? 'Make Public' : 'Admin Only'}
-                </Button>
+                {event.is_active && (
+                  <Button
+                    size="sm" variant="outline" className="rounded-xl"
+                    onClick={() => toggleAdminOnly(event)}
+                  >
+                    <ShieldCheck className={cn('h-3.5 w-3.5 mr-1.5', event.admin_only ? 'text-purple-500' : '')} />
+                    {event.admin_only ? 'Make Public' : 'Admin Testing'}
+                  </Button>
+                )}
 
                 <Button
                   size="sm" variant="outline" className="rounded-xl"
@@ -392,6 +413,33 @@ export const AdminEventsPanel: React.FC = () => {
                   Edit
                 </Button>
 
+                {/* Reset Progress (two-step) */}
+                {confirmReset === event.id ? (
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      size="sm" variant="outline"
+                      className="rounded-xl text-blue-600 border-blue-300 bg-blue-50 dark:bg-blue-900/20"
+                      onClick={() => handleReset(event.id)}
+                      disabled={resetting === event.id}
+                    >
+                      {resetting === event.id ? <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" /> : <RotateCcw className="h-3.5 w-3.5 mr-1.5" />}
+                      Confirm Reset
+                    </Button>
+                    <Button size="sm" variant="outline" className="rounded-xl" onClick={() => setConfirmReset(null)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <Button
+                    size="sm" variant="outline" className="rounded-xl text-blue-600 hover:text-blue-700 hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                    onClick={() => setConfirmReset(event.id)}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
+                    Reset Progress
+                  </Button>
+                )}
+
+                {/* Cleanup (two-step) */}
                 {confirmDelete === event.id ? (
                   <div className="flex items-center gap-1.5">
                     <Button
@@ -535,10 +583,10 @@ export const AdminEventsPanel: React.FC = () => {
             </div>
             <div className="flex-1">
               <div className="text-sm font-medium flex items-center gap-1.5">
-                <Play className={cn('h-4 w-4', formData.is_active ? 'text-emerald-500' : 'text-stone-400')} />
-                Active
+                <Eye className={cn('h-4 w-4', formData.is_active ? 'text-emerald-500' : 'text-stone-400')} />
+                Visible
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">Event is visible and running</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">When off, event is invisible to everyone including admins</p>
             </div>
           </label>
 
@@ -551,9 +599,9 @@ export const AdminEventsPanel: React.FC = () => {
             <div className="flex-1">
               <div className="text-sm font-medium flex items-center gap-1.5">
                 <ShieldCheck className={cn('h-4 w-4', formData.admin_only ? 'text-purple-500' : 'text-stone-400')} />
-                Admin Only
+                Admin Testing
               </div>
-              <p className="text-xs text-stone-500 dark:text-stone-400">Only admins can see and interact with this event — use for testing before going public</p>
+              <p className="text-xs text-stone-500 dark:text-stone-400">Only admins see eggs — when off, the event goes public automatically on the start date</p>
             </div>
           </label>
         </div>
