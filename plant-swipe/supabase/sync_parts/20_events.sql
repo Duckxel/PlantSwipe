@@ -43,6 +43,14 @@ DROP POLICY IF EXISTS "events_select_all" ON events;
 CREATE POLICY "events_select_all" ON events
   FOR SELECT USING (true);
 
+-- Admins manage event flags (is_active, admin_only, dates) from /admin/events.
+-- Without an UPDATE policy, RLS blocks writes: PostgREST returns success with 0 rows changed.
+DROP POLICY IF EXISTS "events_update_admin" ON events;
+CREATE POLICY "events_update_admin" ON events
+  FOR UPDATE TO authenticated
+  USING (public.is_admin_user((select auth.uid())))
+  WITH CHECK (public.is_admin_user((select auth.uid())));
+
 -- ── 2. PERMANENT: event_registrations ─────────────────────────
 -- Records users who completed or participated in an event. Never deleted.
 CREATE TABLE IF NOT EXISTS event_registrations (
