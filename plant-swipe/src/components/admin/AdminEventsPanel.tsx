@@ -280,12 +280,19 @@ export const AdminEventsPanel: React.FC = () => {
 
   const toggleAdminOnly = async (event: EventWithStats) => {
     try {
+      // When going public (admin_only → false), auto-reset all progress
+      // so test data from admin testing doesn't interfere
+      if (event.admin_only) {
+        const { error: resetError } = await supabase.rpc('reset_event_progress', { target_event_id: event.id })
+        if (resetError) throw resetError
+      }
+
       const { error } = await supabase.from('events').update({
         admin_only: !event.admin_only,
         updated_at: new Date().toISOString(),
       }).eq('id', event.id)
       if (error) throw error
-      setSuccess(event.admin_only ? 'Event visible to all users' : 'Event restricted to admins')
+      setSuccess(event.admin_only ? 'Event is now public — all progress has been reset' : 'Event restricted to admins')
       await loadEvents()
     } catch (err: any) {
       setError(err.message || 'Failed to toggle admin-only')
