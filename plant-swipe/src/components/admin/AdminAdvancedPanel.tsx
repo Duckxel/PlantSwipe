@@ -18,10 +18,12 @@ import {
   Palette,
   Users,
   Smartphone,
+  Trophy,
 } from "lucide-react"
 import { AdminColorsPanel } from "./AdminColorsPanel"
 import { AdminTeamPanel } from "./AdminTeamPanel"
 import { AdminLandingPanel } from "./AdminLandingPanel"
+import { AdminBadgesPanel } from "./AdminBadgesPanel"
 
 // ========================
 // LOGS TAB (existing AdminLogs functionality)
@@ -1010,7 +1012,7 @@ const SitemapTab: React.FC = () => {
 // ========================
 // MAIN PANEL COMPONENT
 // ========================
-type AdvancedView = "logs" | "sitemap" | "colors" | "team" | "landing"
+type AdvancedView = "logs" | "sitemap" | "colors" | "team" | "landing" | "badges"
 
 export const AdminAdvancedPanel: React.FC = () => {
   const location = useLocation()
@@ -1020,6 +1022,7 @@ export const AdminAdvancedPanel: React.FC = () => {
     if (location.pathname.includes("/advanced/colors")) return "colors"
     if (location.pathname.includes("/advanced/team")) return "team"
     if (location.pathname.includes("/advanced/landing")) return "landing"
+    if (location.pathname.includes("/advanced/badges")) return "badges"
     return "logs"
   }, [location.pathname])
 
@@ -1030,7 +1033,7 @@ export const AdminAdvancedPanel: React.FC = () => {
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-stone-900 dark:text-white">Advanced</h1>
           <p className="text-xs sm:text-sm text-stone-500 dark:text-stone-400 mt-1">
-            Logs, sitemap, colors, team management, and landing page CMS
+            Logs, sitemap, colors, team management, landing page CMS, and badges
           </p>
         </div>
 
@@ -1096,6 +1099,18 @@ export const AdminAdvancedPanel: React.FC = () => {
             <Smartphone className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
             Landing
           </Link>
+          <Link
+            to="/admin/advanced/badges"
+            className={cn(
+              "flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all whitespace-nowrap flex-shrink-0",
+              activeView === "badges"
+                ? "bg-emerald-600 text-white shadow-lg shadow-emerald-500/25"
+                : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-200 dark:hover:bg-[#3a3a3d]"
+            )}
+          >
+            <Trophy className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            Badges
+          </Link>
         </div>
       </div>
 
@@ -1105,6 +1120,7 @@ export const AdminAdvancedPanel: React.FC = () => {
       {activeView === "colors" && <AdminColorsPanel />}
       {activeView === "team" && <AdminTeamPanel />}
       {activeView === "landing" && <AdminLandingPanel />}
+      {activeView === "badges" && <AdminBadgesPanel />}
     </div>
   )
 }
