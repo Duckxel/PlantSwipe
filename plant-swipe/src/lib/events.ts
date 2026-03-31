@@ -1,15 +1,23 @@
 import { supabase } from '@/lib/supabaseClient'
 import type { EventRow, EventItemRow, EventUserProgressRow } from '@/types/event'
 
-/** Fetch the currently active event (if any), with translations applied for the given language. */
-export async function getActiveEvent(lang?: string): Promise<EventRow | null> {
+/** Fetch the currently active event (if any), with translations applied for the given language.
+ *  When isAdmin is false, admin_only events are filtered out. */
+export async function getActiveEvent(lang?: string, isAdmin?: boolean): Promise<EventRow | null> {
   const now = new Date().toISOString()
-  const { data, error } = await supabase
+  let query = supabase
     .from('events')
     .select('*')
     .eq('is_active', true)
     .or(`starts_at.is.null,starts_at.lte.${now}`)
     .or(`ends_at.is.null,ends_at.gte.${now}`)
+
+  // Non-admins cannot see admin_only events
+  if (!isAdmin) {
+    query = query.eq('admin_only', false)
+  }
+
+  const { data, error } = await query
     .order('created_at', { ascending: false })
     .limit(1)
     .single()

@@ -10,6 +10,7 @@ export type EventRow = {
   starts_at: string | null
   ends_at: string | null
   is_active: boolean
+  admin_only: boolean
   created_at: string
   updated_at: string
 }

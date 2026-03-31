@@ -29,9 +29,13 @@ CREATE TABLE IF NOT EXISTS events (
   starts_at     timestamptz,
   ends_at       timestamptz,
   is_active     boolean NOT NULL DEFAULT false,
+  admin_only    boolean NOT NULL DEFAULT false,    -- when true, only admins can see the event (debug/test mode)
   created_at    timestamptz NOT NULL DEFAULT now(),
   updated_at    timestamptz NOT NULL DEFAULT now()
 );
+
+-- Add admin_only column if table already exists
+ALTER TABLE events ADD COLUMN IF NOT EXISTS admin_only boolean NOT NULL DEFAULT false;
 
 ALTER TABLE events ENABLE ROW LEVEL SECURITY;
 

@@ -29,8 +29,9 @@ type EggHuntContextValue = {
 const EggHuntContext = createContext<EggHuntContextValue | undefined>(undefined)
 
 export function EggHuntProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const { i18n } = useTranslation()
+  const isAdmin = Boolean(profile?.is_admin)
   const [event, setEvent] = useState<EventRow | null>(null)
   const [items, setItems] = useState<EventItemRow[]>([])
   const [foundItemIds, setFoundItemIds] = useState<Set<string>>(new Set())
@@ -45,7 +46,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
     async function load() {
       setLoading(true)
-      const activeEvent = await getActiveEvent(lang)
+      const activeEvent = await getActiveEvent(lang, isAdmin)
       if (cancelled) return
 
       if (!activeEvent) {
@@ -86,7 +87,7 @@ export function EggHuntProvider({ children }: { children: React.ReactNode }) {
 
     load()
     return () => { cancelled = true }
-  }, [user, lang])
+  }, [user, lang, isAdmin])
 
   const getItemForPage = useCallback(
     (pagePath: string) => {
