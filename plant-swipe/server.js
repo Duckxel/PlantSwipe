@@ -7588,7 +7588,7 @@ app.options('/api/admin/deploy-edge-functions', (_req, res) => {
   res.status(204).end()
 })
 
-// List folders in the UTILITY bucket under admin/uploads prefix
+// List folders in the UTILITY bucket with file counts – returns a tree-friendly flat list
 app.get('/api/admin/upload-folders', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured' })
@@ -7598,44 +7598,103 @@ app.get('/api/admin/upload-folders', async (req, res) => {
   if (!adminPrincipal) return
 
   try {
-    // List top-level items under admin/uploads to discover folders
-    const folders = new Set()
+    // folderStats: path -> { fileCount }
+    const folderStats = {}
 
-    async function listFoldersRecursive(prefix) {
+    async function listRecursive(prefix) {
       const { data, error } = await supabaseServiceClient.storage
         .from('UTILITY')
         .list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
       if (error) throw error
       if (!data) return
+      let fileCount = 0
       for (const item of data) {
-        // Supabase returns folders as items with id === null
         if (item.id === null) {
+          // It's a sub-folder
           const folderPath = prefix ? `${prefix}/${item.name}` : item.name
-          folders.add(folderPath)
-          // Recurse into subfolder
-          await listFoldersRecursive(folderPath)
+          await listRecursive(folderPath)
+        } else {
+          // It's a file – skip the .emptyFolderPlaceholder Supabase sometimes creates
+          if (item.name !== '.emptyFolderPlaceholder') {
+            fileCount++
+          }
         }
+      }
+      // Register this prefix as a folder (even root '')
+      if (prefix !== '') {
+        folderStats[prefix] = { fileCount }
       }
     }
 
-    await listFoldersRecursive(adminUploadPrefix)
+    // Start from bucket root to discover everything
+    await listRecursive('')
 
-    // Also list root-level folders in the bucket (for non-admin prefixes)
-    const { data: rootData } = await supabaseServiceClient.storage
-      .from('UTILITY')
-      .list('', { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
-    if (rootData) {
-      for (const item of rootData) {
-        if (item.id === null) {
-          folders.add(item.name)
-        }
-      }
-    }
+    // Build sorted array
+    const folders = Object.entries(folderStats)
+      .map(([path, stats]) => ({ path, fileCount: stats.fileCount }))
+      .sort((a, b) => a.path.localeCompare(b.path))
 
-    res.json({ folders: Array.from(folders).sort() })
+    res.json({ folders })
   } catch (err) {
     console.error('[upload-folders] failed to list folders', err)
     res.status(500).json({ error: err?.message || 'Failed to list folders' })
+  }
+})
+
+// Delete a folder (and all files in it) in the UTILITY bucket
+app.delete('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || req.query?.folderPath)
+  if (!folderPath) {
+    res.status(400).json({ error: 'Missing folderPath' })
+    return
+  }
+
+  try {
+    // Collect all file paths recursively under this folder
+    const filesToDelete = []
+
+    async function collectFiles(prefix) {
+      const { data, error } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .list(prefix, { limit: 1000 })
+      if (error) throw error
+      if (!data) return
+      for (const item of data) {
+        if (item.id === null) {
+          await collectFiles(`${prefix}/${item.name}`)
+        } else {
+          filesToDelete.push(`${prefix}/${item.name}`)
+        }
+      }
+    }
+
+    await collectFiles(folderPath)
+
+    if (filesToDelete.length > 0) {
+      const { error: deleteError } = await supabaseServiceClient.storage
+        .from('UTILITY')
+        .remove(filesToDelete)
+      if (deleteError) throw deleteError
+    }
+
+    // Also try to remove the empty folder marker if it exists
+    try {
+      await supabaseServiceClient.storage
+        .from('UTILITY')
+        .remove([`${folderPath}/.emptyFolderPlaceholder`])
+    } catch { }
+
+    res.json({ ok: true, deletedFiles: filesToDelete.length })
+  } catch (err) {
+    console.error('[upload-folders] failed to delete folder', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete folder' })
   }
 })
 
