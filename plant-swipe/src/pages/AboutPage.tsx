@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
 import { supabase } from "@/lib/supabaseClient"
-import { EasterEgg } from "@/components/events/EasterEgg"
+import { EasterEgg } from "@events/2026_EASTER"
 
 type PillarCard = { eyebrow: string; title: string; description: string | string[] }
 

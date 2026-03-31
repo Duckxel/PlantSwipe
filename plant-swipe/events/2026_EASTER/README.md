@@ -121,6 +121,62 @@ Adjust seeds in `setup.sql` if an egg lands in an awkward spot.
 
 | File | Purpose |
 |------|---------|
+| `index.ts` | Barrel export — all components for pages to import |
+| `components/EasterEgg.tsx` | Clickable egg on pages (positioned by seed) |
+| `components/EggFoundModal.tsx` | Modal showing fun fact on egg click |
+| `components/EggHuntCounter.tsx` | Floating progress counter widget |
 | `setup.sql` | Idempotent SQL to create/update the event + eggs |
 | `README.md` | This file — event documentation |
 | `../../badges/event_2026_easter.sql` | Badge definition (run first) |
+
+---
+
+## Removal Guide
+
+When the event is over and you want to remove all Easter code:
+
+### Step 1: Clean up the database
+
+In **Admin > Events**, click the event → **Cleanup** → **Confirm Cleanup**.
+
+Or via SQL:
+```sql
+SELECT cleanup_event((SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026'));
+```
+
+### Step 2: Remove imports from pages (3 files)
+
+**`src/App.tsx`** — remove these lines:
+```tsx
+import { EggHuntCounter } from '@events/2026_EASTER'
+// and inside the JSX:
+<EggHuntCounter />
+```
+
+**`src/pages/AboutPage.tsx`** — remove these lines:
+```tsx
+import { EasterEgg } from '@events/2026_EASTER'
+// and inside the JSX:
+<EasterEgg pagePath="/about" />
+```
+
+**`src/pages/PlantInfoPage.tsx`** — remove these lines:
+```tsx
+import { EasterEgg } from '@events/2026_EASTER'
+// and inside the JSX:
+{id && <EasterEgg pagePath={`/plants/${id}`} />}
+```
+
+### Step 3: Delete this folder
+
+```bash
+rm -rf events/2026_EASTER/
+```
+
+### Step 4 (optional): Remove the badge SQL
+
+```bash
+rm badges/event_2026_easter.sql
+```
+
+The badge itself stays in the database forever — users keep their earned badges.
