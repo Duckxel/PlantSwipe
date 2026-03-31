@@ -8,9 +8,9 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
+import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
-import { TutorialDemoPage } from './TutorialDemoPages'
 
 const STEP_ICONS: Partial<Record<TutorialStepId, React.ReactNode>> = {
   welcome: <Sparkles className="h-5 w-5 text-emerald-500" />,
@@ -46,12 +46,28 @@ function useIsMobile() {
 export function TutorialOverlay() {
   const { active, currentStep, currentStepIndex, totalSteps, next, prev, skip } = useTutorial()
   const { t } = useTranslation('common')
+  const navigate = useLanguageNavigate()
   const isMobile = useIsMobile()
   const [dir, setDir] = React.useState(1)
+  const lastRouteRef = React.useRef<string | null>(null)
 
   const handleNext = React.useCallback(() => { setDir(1); next() }, [next])
   const handlePrev = React.useCallback(() => { setDir(-1); prev() }, [prev])
 
+  // Navigate to the step's route
+  React.useEffect(() => {
+    if (!active || !currentStep?.route) return
+    if (lastRouteRef.current !== currentStep.route) {
+      lastRouteRef.current = currentStep.route
+      navigate(currentStep.route)
+    }
+  }, [active, currentStep?.route, currentStep?.id, navigate])
+
+  React.useEffect(() => {
+    if (!active) lastRouteRef.current = null
+  }, [active])
+
+  // Keyboard nav
   React.useEffect(() => {
     if (!active) return
     const h = (e: KeyboardEvent) => {
@@ -63,62 +79,54 @@ export function TutorialOverlay() {
     return () => window.removeEventListener('keydown', h)
   }, [active, handleNext, handlePrev, skip])
 
-  React.useEffect(() => {
-    if (!active) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => { document.body.style.overflow = prev }
-  }, [active])
-
   if (!active || !currentStep) return null
 
   const stepId = currentStep.id
   const isWelcome = stepId === 'welcome'
   const isComplete = stepId === 'tutorial_complete'
   const canGoBack = currentStepIndex > 0
-  const hasDemoPage = currentStep.demoPage !== 'none'
+  const hasRoute = !!currentStep.route
 
   return createPortal(
-    <div className="fixed inset-0" style={{ zIndex: 9997 }}>
-      {/* Demo page behind */}
-      {hasDemoPage && (
-        <div className="absolute inset-0 overflow-y-auto" style={{ zIndex: 9997 }}>
-          <TutorialDemoPage step={currentStep} />
-        </div>
-      )}
-
-      {/* Semi-transparent overlay */}
+    <>
+      {/* Dark overlay — full for welcome/complete, partial for page steps */}
       <motion.div
-        className="absolute inset-0"
-        style={{ zIndex: 9998, backgroundColor: hasDemoPage ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,0.6)' }}
+        className="fixed inset-0"
+        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
       />
 
-      {/* Floating card */}
+      {/* Floating tutorial card */}
       <AnimatePresence mode="wait" custom={dir}>
         <motion.div
           key={stepId}
           custom={dir}
           className={cn(
-            "absolute rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] shadow-2xl overflow-hidden",
+            "fixed border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] shadow-2xl overflow-hidden",
             isMobile
-              ? "bottom-0 left-0 right-0 rounded-b-none rounded-t-3xl"
-              : "bottom-6 left-1/2 -translate-x-1/2 w-full max-w-md"
+              ? "bottom-0 left-0 right-0 rounded-t-3xl"
+              : hasRoute
+                ? "bottom-6 left-1/2 w-full max-w-md rounded-2xl"
+                : "top-1/2 left-1/2 w-full max-w-md rounded-2xl"
           )}
           style={{ zIndex: 10000 }}
           initial={isMobile
             ? { y: 200, opacity: 0 }
-            : { opacity: 0, x: dir > 0 ? 60 : -60, y: 0 }
+            : hasRoute
+              ? { opacity: 0, x: dir > 0 ? 60 : -60, y: 0 }
+              : { opacity: 0, scale: 0.92, x: '-50%', y: '-50%' }
           }
           animate={isMobile
             ? { y: 0, opacity: 1 }
-            : { opacity: 1, x: '-50%', y: 0 }
+            : hasRoute
+              ? { opacity: 1, x: '-50%', y: 0 }
+              : { opacity: 1, scale: 1, x: '-50%', y: '-50%' }
           }
           exit={isMobile
             ? { y: 200, opacity: 0 }
-            : { opacity: 0, x: dir > 0 ? -60 : 60, y: 0 }
+            : { opacity: 0, x: dir > 0 ? -60 : 60 }
           }
           transition={{ duration: 0.25, ease: 'easeOut' }}
         >
@@ -160,39 +168,21 @@ export function TutorialOverlay() {
             {/* Buttons */}
             <div className="flex items-center gap-2">
               {canGoBack ? (
-                <Button
-                  variant="ghost"
-                  size={isMobile ? 'default' : 'sm'}
-                  className={cn("rounded-xl text-stone-500 dark:text-stone-400", isMobile && "min-h-[44px]")}
-                  onClick={handlePrev}
-                >
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  {t('tutorial.back', { defaultValue: 'Back' })}
+                <Button variant="ghost" size={isMobile ? 'default' : 'sm'} className={cn("rounded-xl text-stone-500", isMobile && "min-h-[44px]")} onClick={handlePrev}>
+                  <ChevronLeft className="h-4 w-4 mr-1" />{t('tutorial.back', { defaultValue: 'Back' })}
                 </Button>
               ) : (
-                <Button
-                  variant="ghost"
-                  size={isMobile ? 'default' : 'sm'}
-                  className={cn("rounded-xl text-stone-500 dark:text-stone-400", isMobile && "min-h-[44px]")}
-                  onClick={skip}
-                >
+                <Button variant="ghost" size={isMobile ? 'default' : 'sm'} className={cn("rounded-xl text-stone-500", isMobile && "min-h-[44px]")} onClick={skip}>
                   {t('tutorial.skipAll', { defaultValue: 'Skip tutorial' })}
                 </Button>
               )}
               <div className="flex-1" />
               <Button
                 size={isMobile ? 'default' : 'sm'}
-                className={cn(
-                  "rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shadow-lg shadow-emerald-500/25",
-                  isMobile && "min-h-[44px] px-5 text-sm font-semibold"
-                )}
+                className={cn("rounded-xl bg-emerald-500 hover:bg-emerald-600 text-white gap-1.5 shadow-lg shadow-emerald-500/25", isMobile && "min-h-[44px] px-5 text-sm font-semibold")}
                 onClick={handleNext}
               >
-                {isComplete
-                  ? t('tutorial.finish', { defaultValue: 'Get started!' })
-                  : isWelcome
-                    ? t('tutorial.start', { defaultValue: "Let's go!" })
-                    : t('tutorial.next', { defaultValue: 'Next' })}
+                {isComplete ? t('tutorial.finish', { defaultValue: 'Get started!' }) : isWelcome ? t('tutorial.start', { defaultValue: "Let's go!" }) : t('tutorial.next', { defaultValue: 'Next' })}
                 {!isComplete && <ChevronRight className="h-4 w-4" />}
               </Button>
             </div>
@@ -200,19 +190,13 @@ export function TutorialOverlay() {
             {/* Progress dots */}
             <div className="flex items-center justify-center gap-1 mt-3">
               {Array.from({ length: totalSteps }).map((_, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "h-1.5 rounded-full transition-all duration-200",
-                    i === currentStepIndex ? "w-4 bg-emerald-500" : i < currentStepIndex ? "w-1.5 bg-emerald-300 dark:bg-emerald-700" : "w-1.5 bg-stone-200 dark:bg-stone-600"
-                  )}
-                />
+                <div key={i} className={cn("h-1.5 rounded-full transition-all duration-200", i === currentStepIndex ? "w-4 bg-emerald-500" : i < currentStepIndex ? "w-1.5 bg-emerald-300 dark:bg-emerald-700" : "w-1.5 bg-stone-200 dark:bg-stone-600")} />
               ))}
             </div>
           </div>
         </motion.div>
       </AnimatePresence>
-    </div>,
+    </>,
     document.body
   )
 }

@@ -24,6 +24,8 @@ import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
 import { TutorialOverlay } from "@/components/tutorial/TutorialOverlay";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_PLANT } from "@/lib/tutorialDemoData";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -158,6 +160,7 @@ export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const { active: tutorialActive } = useTutorial()
   
   // Track all navigation globally for back button functionality
   useGlobalNavigationTracker()
@@ -2824,10 +2827,10 @@ export default function PlantSwipe() {
             />
             <Route
               path="/discovery"
-              element={plants.length > 0 ? (
+              element={(plants.length > 0 || tutorialActive) ? (
                 <Suspense fallback={<SwipeCardSkeleton />}>
                   <SwipePage
-                    current={current}
+                    current={tutorialActive ? DEMO_PLANT : current}
                     index={index}
                     setIndex={setIndex}
                     x={x}

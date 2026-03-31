@@ -52,6 +52,8 @@ import {
   type GardenRealtimeKind,
 } from "@/lib/realtime";
 import type { Garden } from "@/types/garden";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS, DEMO_GARDEN_PROGRESS, DEMO_GARDEN_MEMBER_COUNTS } from "@/lib/tutorialDemoData";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
@@ -64,6 +66,7 @@ export const GardenListPage: React.FC = () => {
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
+  const { active: tutorialActive } = useTutorial();
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -207,6 +210,14 @@ export const GardenListPage: React.FC = () => {
   );
 
   const load = React.useCallback(async () => {
+    if (tutorialActive) {
+      setGardens(DEMO_GARDENS);
+      gardensRef.current = DEMO_GARDENS;
+      setProgressByGarden(DEMO_GARDEN_PROGRESS);
+      setMemberCountsByGarden(DEMO_GARDEN_MEMBER_COUNTS);
+      setLoading(false);
+      return;
+    }
     if (!user?.id) {
       setGardens([]);
       gardensRef.current = [];

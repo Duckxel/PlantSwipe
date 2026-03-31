@@ -22,30 +22,31 @@ export type TutorialStepId =
 
 export type TutorialStep = {
   id: TutorialStepId
-  /** The fake page shown behind the tutorial card */
-  demoPage: 'discovery' | 'encyclopedia' | 'scan' | 'gardens' | 'garden-dashboard' | 'none'
+  /** Route to navigate to for this step (pages render with demo data) */
+  route?: string
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
-  { id: 'welcome', demoPage: 'none' },
-  { id: 'discovery_swipe', demoPage: 'discovery' },
-  { id: 'discovery_like', demoPage: 'discovery' },
-  { id: 'discovery_info', demoPage: 'discovery' },
-  { id: 'encyclopedia_nav', demoPage: 'encyclopedia' },
-  { id: 'encyclopedia_categories', demoPage: 'encyclopedia' },
-  { id: 'scan_identify', demoPage: 'scan' },
-  { id: 'nav_gardens', demoPage: 'gardens' },
-  { id: 'gardens_create', demoPage: 'gardens' },
-  { id: 'gardens_beginner', demoPage: 'garden-dashboard' },
-  { id: 'gardens_overview', demoPage: 'garden-dashboard' },
-  { id: 'gardens_plants', demoPage: 'garden-dashboard' },
-  { id: 'gardens_analytics', demoPage: 'garden-dashboard' },
-  { id: 'gardens_seedling', demoPage: 'garden-dashboard' },
-  { id: 'gardens_tasks', demoPage: 'garden-dashboard' },
-  { id: 'tutorial_complete', demoPage: 'none' },
+  { id: 'welcome' },
+  { id: 'discovery_swipe', route: '/discovery' },
+  { id: 'discovery_like', route: '/discovery' },
+  { id: 'discovery_info', route: '/discovery' },
+  { id: 'encyclopedia_nav', route: '/discovery' },
+  { id: 'encyclopedia_categories', route: '/search/categories' },
+  { id: 'scan_identify', route: '/scan' },
+  { id: 'nav_gardens', route: '/gardens' },
+  { id: 'gardens_create', route: '/gardens' },
+  { id: 'gardens_beginner', route: '/gardens' },
+  { id: 'gardens_overview', route: '/gardens' },
+  { id: 'gardens_plants', route: '/gardens' },
+  { id: 'gardens_analytics', route: '/gardens' },
+  { id: 'gardens_seedling', route: '/gardens' },
+  { id: 'gardens_tasks', route: '/gardens' },
+  { id: 'tutorial_complete' },
 ]
 
 type TutorialContextValue = {
+  /** True when the tutorial slideshow is running */
   active: boolean
   currentStepIndex: number
   currentStep: TutorialStep | null
@@ -107,19 +108,17 @@ export const TutorialProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
   const currentStep = active ? TUTORIAL_STEPS[currentStepIndex] ?? null : null
 
-  const value: TutorialContextValue = {
-    active,
-    currentStepIndex,
-    currentStep,
-    totalSteps: TUTORIAL_STEPS.length,
-    next,
-    prev,
-    skip,
-    startTutorial,
-  }
-
   return (
-    <TutorialContext.Provider value={value}>
+    <TutorialContext.Provider value={{
+      active,
+      currentStepIndex,
+      currentStep,
+      totalSteps: TUTORIAL_STEPS.length,
+      next,
+      prev,
+      skip,
+      startTutorial,
+    }}>
       {children}
     </TutorialContext.Provider>
   )

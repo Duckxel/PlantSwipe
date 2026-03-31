@@ -45,12 +45,15 @@ import {
 } from '@/lib/plantScan'
 import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { useTutorial } from '@/context/TutorialContext'
+import { DEMO_SCANS } from '@/lib/tutorialDemoData'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic scan API data */
 export const ScanPage: React.FC = () => {
   const { t } = useTranslation('common')
   const { user } = useAuth()
   const navigate = useLanguageNavigate()
+  const { active: tutorialActive } = useTutorial()
   
   usePageMetadata({ 
     title: t('scan.pageTitle', { defaultValue: 'Plant Scanner' }),
@@ -91,6 +94,11 @@ export const ScanPage: React.FC = () => {
   
   // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
+    if (tutorialActive) {
+      setScans(DEMO_SCANS)
+      setLoading(false)
+      return
+    }
     if (!user?.id) return
     try {
       setError(null)
@@ -103,7 +111,7 @@ export const ScanPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [user?.id, t])
+  }, [user?.id, t, tutorialActive])
   
   // Load more scans (pagination)
   // Note: recheckMatches is enabled (default) to ensure consistent UX across all pages
@@ -330,7 +338,7 @@ export const ScanPage: React.FC = () => {
     })
   }
   
-  if (!user) {
+  if (!user && !tutorialActive) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
         <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-4">
