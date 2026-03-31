@@ -14,3 +14,11 @@
 ## 2026-03-02 - Eliminate array allocations in Map initialization for hot paths
 **Learning:** Initializing a `Map` using `new Map(array.map(item => [key, value]))` creates a massive amount of garbage collection pressure on large collections because it allocates an intermediate array *and* a 2-element tuple array `[key, value]` for every single item in the original array.
 **Action:** Replace `new Map(array.map(...))` in hot paths or large data transformations with an empty `Map` initialization followed by a single-pass `for` loop that calls `.set()`.
+
+## 2026-03-25 - Optimize swipeList generation to reduce GC overhead
+**Learning:** In `swipeList` generation, chained `.map().filter()` calls and `new Map(array.map(p => [p.id, p]))` created significant garbage collection pressure on each render cycle. These patterns allocate multiple intermediate arrays that are immediately discarded.
+**Action:** Replace chained `.map().filter()` with single-pass `for` loops and replace `new Map(array.map(...))` with loop-based `.set()` initialization in frequently re-rendered list generation code.
+
+## 2026-03-29 - Pre-allocate arrays in discovery scoring hot paths
+**Learning:** In `scoreDiscoveryPlants` (in `discoveryScoring.ts`), functional `.map()` operations on scoring arrays created intermediate allocations on every scoring pass. For large plant collections this compounds into measurable GC pauses.
+**Action:** Replace `.map()` with pre-allocated arrays and index-based `for` loops in scoring functions that run on every discovery feed refresh.
