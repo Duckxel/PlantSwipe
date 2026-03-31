@@ -31,9 +31,9 @@ END $$;
 
 -- ─── 2. EVENT ────────────────────────────────────────────────
 
--- Upsert by name (unique enough for our purposes)
+-- Insert only if the event does not already exist
 INSERT INTO events (name, description, event_type, badge_id, starts_at, ends_at, is_active, admin_only)
-VALUES (
+SELECT
   'Easter Egg Hunt 2026',
   'Find all hidden eggs across the site to earn a special badge!',
   'egg_hunt',
@@ -42,11 +42,7 @@ VALUES (
   '2026-04-12T23:59:59Z',   -- 1 week
   true,                       -- active
   true                        -- admin only (flip to false when ready to go public)
-)
-ON CONFLICT ON CONSTRAINT events_pkey DO NOTHING;
--- Note: if the event already exists, update it manually via Admin > Events UI
--- or delete and re-insert. We avoid ON CONFLICT here because events has no
--- natural unique key besides the PK.
+WHERE NOT EXISTS (SELECT 1 FROM events WHERE name = 'Easter Egg Hunt 2026');
 
 -- If re-running and the event already exists, update its fields:
 UPDATE events SET
@@ -79,7 +75,6 @@ ON CONFLICT (event_id, language) DO UPDATE SET
 DO $$
 DECLARE
   eid  uuid := (SELECT id FROM events WHERE name = 'Easter Egg Hunt 2026');
-  pid  uuid;
 BEGIN
   IF eid IS NULL THEN
     RAISE EXCEPTION 'Event "Easter Egg Hunt 2026" not found. Run steps 1-2 first.';
@@ -115,26 +110,16 @@ BEGIN
     8);
 
   -- ── Olivier ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%olivier%' OR name ILIKE '%olive tree%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'After the Great Flood, Noah''s dove returned with an olive branch — the universal symbol of peace. Olive branches are still blessed every Palm Sunday!',
-      55);
-  ELSE
-    RAISE WARNING 'Plant "Olivier" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/23cd3ac4-52da-47e3-926c-7fc67219c925',
+    'After the Great Flood, Noah''s dove returned with an olive branch — the universal symbol of peace. Olive branches are still blessed every Palm Sunday!',
+    55);
 
   -- ── Paquerette ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%paquerette%' OR name ILIKE '%p_querette%' OR name ILIKE '%daisy%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'The daisy''s French name "paquerette" literally comes from "Paques" (Easter)! It symbolizes purity, innocence, and the return of spring.',
-      31);
-  ELSE
-    RAISE WARNING 'Plant "Paquerette" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/1a7954f1-585d-4c3f-becf-fb8796eb4205',
+    'The daisy''s French name "paquerette" literally comes from "Paques" (Easter)! It symbolizes purity, innocence, and the return of spring.',
+    31);
 
   -- ── Ble germe ──
   INSERT INTO event_items (event_id, page_path, description, position_seed)
@@ -149,15 +134,10 @@ BEGIN
     64);
 
   -- ── Buis ──
-  SELECT id INTO pid FROM plants WHERE name ILIKE '%buis%' OR name ILIKE '%boxwood%' LIMIT 1;
-  IF pid IS NOT NULL THEN
-    INSERT INTO event_items (event_id, page_path, description, position_seed)
-    VALUES (eid, '/plants/' || pid,
-      'In regions where palm trees don''t grow, boxwood branches are used instead on Palm Sunday! As an evergreen, boxwood has symbolized eternal life since ancient times.',
-      22);
-  ELSE
-    RAISE WARNING 'Plant "Buis" not found — skipping';
-  END IF;
+  INSERT INTO event_items (event_id, page_path, description, position_seed)
+  VALUES (eid, '/plants/60553d09-b816-4457-ac22-4d0bfb0594fe',
+    'In regions where palm trees don''t grow, boxwood branches are used instead on Palm Sunday! As an evergreen, boxwood has symbolized eternal life since ancient times.',
+    22);
 
   RAISE NOTICE 'Inserted % egg(s) for Easter 2026', (SELECT count(*) FROM event_items WHERE event_id = eid);
 END $$;
@@ -182,15 +162,15 @@ BEGIN
         THEN 'Dans la mythologie grecque, la jonquille est liee au mythe de Narcisse, qui tomba amoureux de son propre reflet dans une riviere !'
       WHEN rec.page_path LIKE '%49ced2da-b940-4c4e-82fa-9e36c2a0dc2a%'
         THEN 'Des fossiles de palmier datent de plus de 100 millions d''annees ! Les rameaux de palmier furent agites a l''entree de Jesus a Jerusalem — l''origine du Dimanche des Rameaux.'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%olivier%' OR name ILIKE '%olive tree%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%23cd3ac4-52da-47e3-926c-7fc67219c925%'
         THEN 'Apres le Deluge, la colombe de Noe rapporta une branche d''olivier — le symbole universel de paix. Les rameaux d''olivier sont encore benis chaque Dimanche des Rameaux !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%paquerette%' OR name ILIKE '%p_querette%' OR name ILIKE '%daisy%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%1a7954f1-585d-4c3f-becf-fb8796eb4205%'
         THEN 'Le nom "paquerette" vient directement de "Paques" ! Elle symbolise la purete, l''innocence et le retour du printemps.'
       WHEN rec.page_path LIKE '%4e69910c-56d3-4202-9370-f7b1b03f09ef%'
         THEN 'En Mediterranee, le ble est fait germer avant Paques pour symboliser la renaissance et l''abondance — une tradition remontant a la Rome antique, ou les rites de printemps honoraient la deesse Demeter.'
       WHEN rec.page_path LIKE '%b99967c7-a1d8-4616-a978-d35a43bdff94%'
         THEN 'Dans les tableaux de l''Annonciation, l''ange Gabriel tient un lys blanc pour annoncer la naissance de Jesus a Marie. Le lys represente la purete, la resurrection et la vie eternelle !'
-      WHEN rec.page_path LIKE '%' || COALESCE((SELECT id FROM plants WHERE (name ILIKE '%buis%' OR name ILIKE '%boxwood%') LIMIT 1)::text, 'NONE') || '%'
+      WHEN rec.page_path LIKE '%60553d09-b816-4457-ac22-4d0bfb0594fe%'
         THEN 'Dans les regions ou le palmier ne pousse pas, on utilise des branches de buis le Dimanche des Rameaux ! Plante a feuilles persistantes, le buis symbolise la vie eternelle depuis l''Antiquite.'
       ELSE 'Oeuf de Paques trouve !'
     END;
