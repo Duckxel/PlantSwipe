@@ -148,7 +148,7 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: 4 }}
                     transition={{ duration: 0.15 }}
-                    className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 z-50 pointer-events-none w-max"
+                    className="absolute bottom-full left-0 mb-3 z-50 pointer-events-none w-max"
                   >
                     <div className="relative rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3.5 py-2.5 shadow-lg min-w-[180px] max-w-[240px]">
                       <p className="text-xs font-semibold leading-tight">
@@ -163,8 +163,8 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                         {formatDate(earned.earned_at)}
                       </p>
 
-                      {/* Arrow */}
-                      <div className="absolute left-1/2 -translate-x-1/2 top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-stone-900 dark:border-t-stone-100" />
+                      {/* Arrow – points at badge center (40px = half of 80px badge) */}
+                      <div className="absolute left-[34px] top-full h-0 w-0 border-x-[6px] border-x-transparent border-t-[6px] border-t-stone-900 dark:border-t-stone-100" />
                     </div>
                   </motion.div>
                 )}
