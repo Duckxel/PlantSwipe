@@ -18,7 +18,6 @@ import {
   ChevronDown,
   ChevronUp,
   Play,
-  Pause,
   ShieldCheck,
   Clock,
   Eye,

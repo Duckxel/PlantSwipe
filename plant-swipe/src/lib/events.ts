@@ -9,8 +9,6 @@ import type { EventRow, EventItemRow, EventUserProgressRow } from '@/types/event
  *    is_active=true, admin_only=false → public, auto-goes live when starts_at arrives
  */
 export async function getActiveEvent(lang?: string, isAdmin?: boolean): Promise<EventRow | null> {
-  const now = new Date().toISOString()
-
   // Always require is_active = true
   let query = supabase
     .from('events')
