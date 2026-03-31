@@ -15,7 +15,6 @@ import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel"
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
-import { AdminEventsPanel } from "@/components/admin/AdminEventsPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
@@ -261,7 +260,6 @@ type AdminTab =
   | "upload"
   | "notifications"
   | "emails"
-  | "events"
   | "admin_logs";
 
 type ListedMember = {
@@ -5310,7 +5308,6 @@ export const AdminPage: React.FC = () => {
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
-    { key: "events", label: "Events", Icon: Calendar, path: "/admin/events", adminOnly: true },
     { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
   
@@ -5329,7 +5326,6 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
-    if (currentPath.includes("/admin/events")) return "events";
     if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
@@ -10930,9 +10926,6 @@ export const AdminPage: React.FC = () => {
 
                     {/* Emails Tab */}
                     {activeTab === "emails" && <AdminEmailsPanel />}
-
-                    {/* Events Tab */}
-                    {activeTab === "events" && <AdminEventsPanel />}
 
                   {/* Advanced Tab */}
                   {activeTab === "admin_logs" && <AdminAdvancedPanel />}

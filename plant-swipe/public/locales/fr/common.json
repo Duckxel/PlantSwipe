@@ -1864,7 +1864,6 @@
       "bannedHint": "Banni • banni de la plateforme"
     },
     "highlights": "Aperçu",
-    "badges": "Badges",
     "plantsOwned": "Plantes possédées",
     "gardens": "Jardins",
     "currentStreak": "Série actuelle",
@@ -2599,15 +2598,6 @@
     "edibleDesc": "Toutes les plantes aux parties comestibles",
     "advanced": "Avancé",
     "browseAll": "Accéder à notre encyclopédie complète"
-  },
-  "eggHunt": {
-    "foundTitle": "Vous avez trouvé un œuf !",
-    "alreadyFoundTitle": "Vous avez déjà trouvé celui-ci !",
-    "continueButton": "Continuer la chasse",
-    "congratulations": "Félicitations ! Vous les avez tous trouvés !",
-    "remaining": "{{count}} restant(s)",
-    "alreadyFound": "Déjà trouvé !",
-    "clickMe": "Cliquez-moi !"
   },
   "seedlingTray": {
     "cellTitle": "Cellule {{index}}",
