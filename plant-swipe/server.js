@@ -7698,6 +7698,107 @@ app.delete('/api/admin/upload-folders', async (req, res) => {
   }
 })
 
+// List immediate contents (files + sub-folders) of a single folder in UTILITY bucket
+app.get('/api/admin/upload-folder-contents', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const prefix = sanitizeFolderInput(req.query?.path || '')
+
+  try {
+    const { data, error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .list(prefix, { limit: 1000, sortBy: { column: 'name', order: 'asc' } })
+    if (error) throw error
+
+    const folders = []
+    const files = []
+    for (const item of (data || [])) {
+      if (item.name === '.emptyFolderPlaceholder') continue
+      if (item.id === null) {
+        // Sub-folder
+        folders.push({ name: item.name })
+      } else {
+        // File
+        files.push({
+          name: item.name,
+          id: item.id,
+          size: item.metadata?.size || 0,
+          mimeType: item.metadata?.mimetype || '',
+          updatedAt: item.updated_at || item.created_at || '',
+        })
+      }
+    }
+
+    res.json({ path: prefix, folders, files })
+  } catch (err) {
+    console.error('[upload-folder-contents] failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to list folder contents' })
+  }
+})
+
+// Create an empty folder (placeholder) in UTILITY bucket
+app.post('/api/admin/upload-folders', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath)
+  if (!folderPath) {
+    res.status(400).json({ error: 'Missing folderPath' })
+    return
+  }
+
+  try {
+    const placeholder = `${folderPath}/.emptyFolderPlaceholder`
+    const { error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .upload(placeholder, new Uint8Array(0), {
+        contentType: 'application/octet-stream',
+        upsert: true,
+      })
+    if (error) throw error
+    res.json({ ok: true, path: folderPath })
+  } catch (err) {
+    console.error('[upload-folders] failed to create folder', err)
+    res.status(500).json({ error: err?.message || 'Failed to create folder' })
+  }
+})
+
+// Delete a single file from UTILITY bucket
+app.delete('/api/admin/upload-file', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const filePath = req.body?.filePath || req.query?.filePath
+  if (!filePath || typeof filePath !== 'string') {
+    res.status(400).json({ error: 'Missing filePath' })
+    return
+  }
+
+  try {
+    const { error } = await supabaseServiceClient.storage
+      .from('UTILITY')
+      .remove([filePath])
+    if (error) throw error
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[upload-file] failed to delete file', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete file' })
+  }
+})
+
 app.post('/api/admin/upload-image', async (req, res) => {
   if (!supabaseServiceClient) {
     res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
