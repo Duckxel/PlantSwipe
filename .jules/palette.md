@@ -18,6 +18,10 @@
 **Learning:** Icon-only buttons within a container that reveals on hover (like `opacity-0 hover:opacity-100`) are invisible when focused by keyboard users. They receive focus but are visually hidden.
 **Action:** Always ensure to add `group-focus-within:opacity-100` to the container/button and `focus-visible:ring-2` to the button itself so it becomes visible and accessible for keyboard navigation.
 
+## 2026-03-26 - Accessible Color Picker Swatches
+**Learning:** Color picker swatches often rely entirely on a background color for their visual appearance, lacking any text. For screen reader users, without an `aria-label` (even if `title` is provided for visual tooltips), these interactive buttons are 'empty' and inaccessible.
+**Action:** Always provide an explicit `aria-label` alongside the `title` tooltip on interactive color swatches to ensure they are fully navigable and understandable via assistive technologies.
+
 ## 2026-03-25 - Add aria-label to task completion buttons
 **Learning:** The "Complete" (checkmark) and "Complete All" buttons in `TasksSidebar.tsx` were icon-only without accessible labels. Screen reader users could not determine the purpose of these buttons, especially in a list of tasks where multiple identical-looking buttons appear.
 **Action:** Add `aria-label` attributes (using `t()` translations) to individual task complete buttons and bulk "Complete All" buttons in task management UIs.
