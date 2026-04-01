@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // They will be added when the schema migration is applied
     const { data, error } = await supabase
       .from('profiles')
-      .select('id, display_name, is_admin, roles, username, country, city, bio, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified, tutorial_completed, parent')
+      .select('id, display_name, is_admin, roles, username, country, city, bio, avatar_url, timezone, language, experience_years, accent_key, is_private, disable_friend_requests, threat_level, terms_version_accepted, privacy_version_accepted, terms_accepted_date, privacy_policy_accepted_date, setup_completed, garden_type, experience_level, looking_for, notification_time, email_verified, parent')
       .eq('id', currentId)
       .maybeSingle()
     if (!error) {
@@ -112,6 +112,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .maybeSingle()
       if (!pwError && pwData && data) {
         ;(data as any).force_password_change = pwData.force_password_change ?? false
+      }
+      // Try to fetch tutorial_completed separately (column may not exist yet)
+      const { data: tutData, error: tutError } = await supabase
+        .from('profiles')
+        .select('tutorial_completed')
+        .eq('id', currentId)
+        .maybeSingle()
+      if (!tutError && tutData && data) {
+        ;(data as any).tutorial_completed = tutData.tutorial_completed ?? false
       }
       // Check if user is banned (threat_level === 3)
       // Instead of silently signing out, flag as banned so the UI can show a BannedModal
