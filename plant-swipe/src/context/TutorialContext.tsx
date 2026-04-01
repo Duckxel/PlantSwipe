@@ -39,11 +39,11 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   { id: 'nav_gardens', route: '/gardens' },
   { id: 'gardens_create', route: '/gardens', highlight: '[data-tutorial="create-garden"]' },
   { id: 'gardens_beginner', route: '/gardens', highlight: '[data-tutorial="garden-type-beginners"]' },
-  { id: 'gardens_overview', route: '/gardens' },
-  { id: 'gardens_plants', route: '/gardens' },
-  { id: 'gardens_analytics', route: '/gardens' },
-  { id: 'gardens_seedling', route: '/gardens' },
-  { id: 'gardens_tasks', route: '/gardens' },
+  { id: 'gardens_overview', route: '/garden/demo-garden-1/overview' },
+  { id: 'gardens_plants', route: '/garden/demo-garden-1/plants' },
+  { id: 'gardens_analytics', route: '/garden/demo-garden-1/analytics' },
+  { id: 'gardens_seedling', route: '/garden/demo-garden-1/tray' },
+  { id: 'gardens_tasks', route: '/garden/demo-garden-1/tasks' },
   { id: 'tutorial_complete' },
 ]
 

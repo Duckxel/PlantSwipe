@@ -3,6 +3,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -114,6 +116,7 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation();
   const { user, profile, refreshProfile } = useAuth();
   const { t } = useTranslation("common");
+  const { active: tutorialActive } = useTutorial();
   const currentLang = useLanguage();
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
@@ -446,6 +449,46 @@ export const GardenDashboardPage: React.FC = () => {
       suppressError?: boolean;
     }) => {
       if (!id) return;
+      // Tutorial demo mode: inject fake garden data
+      if (tutorialActive && id.startsWith('demo-')) {
+        const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
+        // Override garden type to seedling when showing the tray tab
+        const pathWithoutLang = removeLanguagePrefix(location.pathname);
+        const isTrayTab = pathWithoutLang.includes('/tray');
+        setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
+        setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
+        setPlants([
+          { id: 'gp1', gardenId: id, plantId: 'p1', nickname: 'Monstera', plant: { id: 'p1', name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
+          { id: 'gp2', gardenId: id, plantId: 'p2', nickname: 'Snake Plant', plant: { id: 'p2', name: 'Snake Plant', scientificNameSpecies: 'Sansevieria trifasciata' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
+          { id: 'gp3', gardenId: id, plantId: 'p3', nickname: 'Basil', plant: { id: 'p3', name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
+        ] as any);
+        const today = new Date().toISOString().slice(0, 10);
+        setServerToday(today);
+        serverTodayRef.current = today;
+        setDailyStats(Array.from({ length: 14 }, (_, i) => {
+          const d = new Date(); d.setDate(d.getDate() - (13 - i));
+          const due = 3 + Math.floor(Math.random() * 3);
+          const completed = Math.min(due, Math.floor(Math.random() * (due + 1)));
+          return { date: d.toISOString().slice(0, 10), due, completed, success: completed >= due };
+        }));
+        setTodayTaskOccurrences([
+          { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+        ] as any);
+        if (isTrayTab) {
+          setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
+            id: `sc-${i}`, gardenId: id, position: i,
+            plantId: i < 4 ? 'p1' : i < 7 ? 'p2' : null,
+            stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
+            sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
+            lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,
+            notes: '',
+          })) as any);
+        }
+        setLoading(false);
+        return;
+      }
       // Keep UI visible on subsequent reloads to avoid blink
       const silent = opts?.silent ?? garden !== null;
       const suppressError = opts?.suppressError ?? false;
