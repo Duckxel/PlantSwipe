@@ -9,6 +9,14 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -55,6 +63,11 @@ type FileUploadStatus = {
 
 const BYTES_IN_MB = 1024 * 1024
 const DEFAULT_MAX_MB = 15
+
+/** Shown in breadcrumbs; must match server ADMIN_UPLOAD_PREFIX default. */
+const ADMIN_UPLOAD_PREFIX =
+  (import.meta.env?.VITE_ADMIN_UPLOAD_PREFIX as string | undefined)?.trim().replace(/^\/+|\/+$/g, "") ||
+  "admin/uploads"
 
 const ALLOWED_MIME_TYPES = new Set([
   "image/jpeg", "image/png", "image/webp", "image/avif",
@@ -170,6 +183,7 @@ function FileExplorer({
   // Deletion state
   const [deletingItem, setDeletingItem] = React.useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = React.useState<{ type: "folder" | "file"; name: string } | null>(null)
+  const [copiedStoragePath, setCopiedStoragePath] = React.useState<string | null>(null)
 
   const loadContents = React.useCallback(async () => {
     setLoading(true)
@@ -184,8 +198,11 @@ function FileExplorer({
       })
       const data = await resp.json().catch(() => null)
       if (!resp.ok) throw new Error(data?.error || "Failed to load folder")
-      setFolders(data.folders || [])
-      setFiles(data.files || [])
+      if (!data || typeof data !== "object") {
+        throw new Error("Invalid response from server (expected JSON with folders/files)")
+      }
+      setFolders(Array.isArray(data.folders) ? data.folders : [])
+      setFiles(Array.isArray(data.files) ? data.files : [])
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load folder contents")
     } finally {
@@ -268,6 +285,25 @@ function FileExplorer({
       setDeletingItem(null)
     }
   }, [currentPath, adminHeaders, loadContents])
+
+  const storagePathForEntry = React.useCallback((entryName: string) => {
+    const rel = currentPath ? `${currentPath}/${entryName}` : entryName
+    return rel.startsWith("/") ? rel : `/${rel}`
+  }, [currentPath])
+
+  const copyFileStoragePath = React.useCallback(
+    async (fileName: string) => {
+      const path = storagePathForEntry(fileName)
+      try {
+        await navigator.clipboard.writeText(path)
+        setCopiedStoragePath(path)
+        window.setTimeout(() => setCopiedStoragePath(null), 2000)
+      } catch {
+        setError("Unable to copy path to clipboard.")
+      }
+    },
+    [storagePathForEntry],
+  )
 
   // Breadcrumb segments
   const pathSegments = currentPath ? currentPath.split("/") : []
@@ -413,35 +449,62 @@ function FileExplorer({
         </div>
       )}
 
-      {/* Delete confirmation dialog */}
-      {confirmDelete && (
-        <div className="px-3 py-2.5 border-b border-amber-200 dark:border-amber-900/30 bg-amber-50 dark:bg-amber-900/10 flex items-center gap-3 text-sm">
-          <span className="text-amber-800 dark:text-amber-200 flex-1">
-            Delete {confirmDelete.type} <span className="font-mono font-semibold">{confirmDelete.name}</span>?
-            {confirmDelete.type === "folder" && " (all contents will be removed)"}
-          </span>
-          <Button
-            type="button"
-            size="sm"
-            variant="destructive"
-            className="rounded-md h-7 text-xs"
-            disabled={!!deletingItem}
-            onClick={() => {
-              if (confirmDelete.type === "folder") void handleDeleteFolder(confirmDelete.name)
-              else void handleDeleteFile(confirmDelete.name)
-            }}
-          >
-            {deletingItem === confirmDelete.name ? <Loader2 className="h-3 w-3 animate-spin" /> : "Delete"}
-          </Button>
-          <button
-            type="button"
-            onClick={() => setConfirmDelete(null)}
-            className="p-1 rounded hover:bg-amber-200 dark:hover:bg-amber-900/30"
-          >
-            <X className="h-3.5 w-3.5 text-amber-600" />
-          </button>
-        </div>
-      )}
+      <Dialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirmDelete(null)
+        }}
+      >
+        <DialogContent className="sm:max-w-md" hideCloseButton={false}>
+          {confirmDelete && (
+            <>
+              <DialogHeader>
+                <DialogTitle>
+                  {confirmDelete.type === "folder" ? "Delete folder?" : "Delete file?"}
+                </DialogTitle>
+                <DialogDescription className="text-left">
+                  {confirmDelete.type === "folder"
+                    ? "This removes the folder and everything inside it from storage. This cannot be undone."
+                    : "This removes the file from storage. This cannot be undone."}
+                </DialogDescription>
+              </DialogHeader>
+              <div className="font-mono text-xs break-all text-stone-800 dark:text-stone-200 bg-stone-100 dark:bg-[#2a2a2d] rounded-md px-2 py-1.5 -mt-1">
+                UTILITY
+                {storagePathForEntry(confirmDelete.name)}
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-md"
+                  disabled={!!deletingItem}
+                  onClick={() => setConfirmDelete(null)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  className="rounded-md"
+                  disabled={!!deletingItem}
+                  onClick={() => {
+                    if (confirmDelete.type === "folder") void handleDeleteFolder(confirmDelete.name)
+                    else void handleDeleteFile(confirmDelete.name)
+                  }}
+                >
+                  {deletingItem === confirmDelete.name ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    "Delete"
+                  )}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Content list */}
       <div className="max-h-[400px] overflow-y-auto">
@@ -483,6 +546,7 @@ function FileExplorer({
                   }}
                   className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 hover:text-red-600 transition-all flex-shrink-0"
                   title="Delete folder"
+                  aria-label={`Delete folder ${folder.name}`}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
                 </button>
@@ -523,10 +587,32 @@ function FileExplorer({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation()
+                      void copyFileStoragePath(file.name)
+                    }}
+                    className={cn(
+                      "p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all flex-shrink-0",
+                      copiedStoragePath === storagePathForEntry(file.name)
+                        ? "text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/30"
+                        : "hover:bg-stone-200 dark:hover:bg-[#3a3a3d] text-stone-500 dark:text-stone-400",
+                    )}
+                    title="Copy storage path"
+                    aria-label={`Copy path for ${file.name}`}
+                  >
+                    {copiedStoragePath === storagePathForEntry(file.name) ? (
+                      <Check className="h-3.5 w-3.5" />
+                    ) : (
+                      <Copy className="h-3.5 w-3.5" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
                       setConfirmDelete({ type: "file", name: file.name })
                     }}
                     className="p-1.5 rounded-lg opacity-0 group-hover:opacity-100 hover:bg-red-100 dark:hover:bg-red-900/30 text-red-400 hover:text-red-600 transition-all flex-shrink-0"
                     title="Delete file"
+                    aria-label={`Delete file ${file.name}`}
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -540,11 +626,9 @@ function FileExplorer({
       {/* Footer status */}
       <div className="px-3 py-1.5 border-t border-stone-100 dark:border-[#2a2a2d] bg-stone-50/50 dark:bg-[#1a1a1d] text-xs text-stone-400">
         {folders.length} folder{folders.length !== 1 ? "s" : ""}, {files.length} file{files.length !== 1 ? "s" : ""}
-        {currentPath && (
-          <span className="ml-2 font-mono">
-            /{currentPath}
-          </span>
-        )}
+        <span className="ml-2 font-mono">
+          {currentPath ? `/${currentPath}` : "/ (bucket root)"}
+        </span>
       </div>
     </div>
   )
@@ -557,9 +641,10 @@ function FileExplorer({
 export const AdminUploadPanel: React.FC = () => {
   const { adminToken, getHeaders } = useAdminHeaders()
 
-  // File explorer state
+  // File explorer state (paths relative to UTILITY bucket root)
   const [currentPath, setCurrentPath] = React.useState("")
-  const [uploadTargetPath, setUploadTargetPath] = React.useState("")
+  /** null = upload to default admin prefix on server; string = explicit path from bucket root ("" = bucket root) */
+  const [uploadTargetPath, setUploadTargetPath] = React.useState<string | null>(null)
 
   // Upload state
   const [dragActive, setDragActive] = React.useState(false)
@@ -606,7 +691,8 @@ export const AdminUploadPanel: React.FC = () => {
       const form = new FormData()
       form.append("file", file)
       form.append("optimize", optimize ? "true" : "false")
-      if (uploadTargetPath) {
+      if (uploadTargetPath !== null) {
+        form.append("folderMode", "explorer")
         form.append("folderPath", uploadTargetPath)
       }
       // Don't send Content-Type - browser sets it with boundary for FormData
@@ -707,7 +793,12 @@ export const AdminUploadPanel: React.FC = () => {
     [handleFiles],
   )
 
-  const displayedTarget = uploadTargetPath || "admin/uploads (default)"
+  const displayedTarget =
+    uploadTargetPath === null
+      ? `UTILITY/${ADMIN_UPLOAD_PREFIX} (default)`
+      : uploadTargetPath === ""
+        ? "UTILITY/ (bucket root)"
+        : `UTILITY/${uploadTargetPath}`
 
   return (
     <div className="space-y-5">
@@ -718,7 +809,9 @@ export const AdminUploadPanel: React.FC = () => {
           Upload Media
         </h2>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Browse folders, manage files, and upload to the <span className="font-medium text-emerald-600">UTILITY</span> bucket
+          Browse the <span className="font-medium text-emerald-600">UTILITY</span> bucket from its root. Use{" "}
+          <span className="font-medium">Upload here</span> to set the destination; otherwise uploads go to{" "}
+          <span className="font-mono text-xs">{ADMIN_UPLOAD_PREFIX}</span>.
         </p>
       </div>
 
@@ -743,15 +836,15 @@ export const AdminUploadPanel: React.FC = () => {
             {displayedTarget}
           </p>
         </div>
-        {uploadTargetPath && (
+        {uploadTargetPath !== null && (
           <Button
             type="button"
             variant="ghost"
             size="sm"
             className="rounded-lg text-xs h-7"
-            onClick={() => setUploadTargetPath("")}
+            onClick={() => setUploadTargetPath(null)}
           >
-            Reset
+            Use default folder
           </Button>
         )}
       </div>

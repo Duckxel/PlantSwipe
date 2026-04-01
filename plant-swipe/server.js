@@ -2182,6 +2182,45 @@ function sanitizeFolderInput(value) {
     .join('/')
 }
 
+/**
+ * Full object path in UTILITY bucket for admin explorer.
+ * Relative path is from bucket root (empty string = list/create at bucket root).
+ */
+function adminUtilityExplorerObjectPath(relativePath) {
+  return sanitizeFolderInput(relativePath || '')
+}
+
+async function listAllStorageObjectPathsUnderPrefix(bucket, prefix) {
+  const paths = []
+  const queue = [String(prefix || '').replace(/^\/+|\/+$/g, '')].filter(Boolean)
+  while (queue.length) {
+    const current = queue.pop()
+    let offset = 0
+    const pageSize = 1000
+    for (;;) {
+      const { data, error } = await supabaseServiceClient.storage.from(bucket).list(current, {
+        limit: pageSize,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      })
+      if (error) throw new Error(error.message || 'Storage list failed')
+      const rows = Array.isArray(data) ? data : []
+      if (rows.length === 0) break
+      for (const row of rows) {
+        const name = row?.name
+        if (!name || name === '.emptyFolderPlaceholder') continue
+        const full = current ? `${current}/${name}` : name
+        const isSubfolder = row.id == null
+        if (isSubfolder) queue.push(full)
+        else paths.push(full)
+      }
+      if (rows.length < pageSize) break
+      offset += pageSize
+    }
+  }
+  return paths
+}
+
 function parseStoragePublicUrl(url) {
   try {
     if (!url) return null
@@ -7631,13 +7670,203 @@ app.post('/api/admin/upload-image', async (req, res) => {
       name: adminDisplayName || null,
     },
     prefixBuilder: ({ req }) => {
-      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      const mode = String(req.body?.folderMode || req.query?.folderMode || '').toLowerCase()
+      if (mode === 'explorer') {
+        return sanitizeFolderInput(
+          req.body?.folderPath ?? req.query?.folderPath ?? '',
+        )
+      }
+      const raw =
+        req.body?.folderPath ??
+        req.body?.folder ??
+        req.query?.folderPath ??
+        req.query?.folder
+      const folder = sanitizeFolderInput(raw)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
     // Admin uploads: UTILITY bucket, 90% quality (highest)
     bucket: 'UTILITY',
     webpQuality: 90,
   })
+})
+
+/**
+ * Admin UTILITY bucket explorer: list folders and files from bucket root.
+ * GET ?path= path relative to bucket root (optional; empty = root).
+ */
+app.get('/api/admin/upload-folder-contents', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    const relative = sanitizeFolderInput(req.query?.path || '')
+    const listPath = adminUtilityExplorerObjectPath(relative)
+    const { data, error } = await supabaseServiceClient.storage.from(adminUploadBucket).list(listPath, {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+    if (error) {
+      res.status(500).json({ error: error.message || 'Failed to list storage' })
+      return
+    }
+    const rows = Array.isArray(data) ? data : []
+    const folders = []
+    const files = []
+    for (const row of rows) {
+      const name = row?.name
+      if (!name || name === '.emptyFolderPlaceholder') continue
+      if (row.id == null) {
+        folders.push({ name })
+        continue
+      }
+      const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {}
+      const size = Number(meta.size ?? meta.contentLength ?? 0) || 0
+      const mimeType =
+        typeof meta.mimetype === 'string' && meta.mimetype
+          ? meta.mimetype
+          : 'application/octet-stream'
+      files.push({
+        name,
+        id: row.id || name,
+        size,
+        mimeType,
+        updatedAt: row.updated_at || row.created_at || '',
+      })
+    }
+    res.json({ folders, files, path: relative, prefix: listPath })
+  } catch (err) {
+    console.error('[admin] upload-folder-contents failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to load folder contents' })
+  }
+})
+
+app.options('/api/admin/upload-folder-contents', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+/** Create a folder under the given path in UTILITY (Supabase: placeholder object). */
+app.post('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || '')
+  if (!folderPath) {
+    res.status(400).json({ error: 'folderPath is required' })
+    return
+  }
+
+  const fullPath = adminUtilityExplorerObjectPath(folderPath)
+  const placeholderPath = `${fullPath}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
+  try {
+    const empty = Buffer.alloc(0)
+    const { error: uploadError } = await supabaseServiceClient.storage
+      .from(adminUploadBucket)
+      .upload(placeholderPath, empty, {
+        cacheControl: '3600',
+        contentType: 'application/octet-stream',
+        upsert: false,
+      })
+    if (uploadError) {
+      res.status(400).json({ error: uploadError.message || 'Failed to create folder' })
+      return
+    }
+    res.json({ ok: true, folderPath: fullPath })
+  } catch (err) {
+    console.error('[admin] upload-folders POST failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to create folder' })
+  }
+})
+
+app.options('/api/admin/upload-folders', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+/** Delete a folder and all objects under it (path relative to UTILITY bucket root). */
+app.delete('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || '')
+  if (!folderPath) {
+    res.status(400).json({ error: 'folderPath is required' })
+    return
+  }
+
+  const fullPrefix = adminUtilityExplorerObjectPath(folderPath)
+  try {
+    const toRemove = await listAllStorageObjectPathsUnderPrefix(adminUploadBucket, fullPrefix)
+    const placeholder = `${fullPrefix}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
+    const paths = [...new Set([...toRemove, placeholder])]
+    if (paths.length === 0) {
+      res.json({ ok: true, removed: 0 })
+      return
+    }
+    const batchSize = 100
+    for (let i = 0; i < paths.length; i += batchSize) {
+      const chunk = paths.slice(i, i + batchSize)
+      const { error: removeError } = await supabaseServiceClient.storage.from(adminUploadBucket).remove(chunk)
+      if (removeError) {
+        res.status(500).json({ error: removeError.message || 'Failed to delete folder contents' })
+        return
+      }
+    }
+    res.json({ ok: true, removed: paths.length })
+  } catch (err) {
+    console.error('[admin] upload-folders DELETE failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete folder' })
+  }
+})
+
+/** Delete a single object (path relative to UTILITY bucket root). */
+app.delete('/api/admin/upload-file', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const relativeFile = sanitizeFolderInput(req.body?.filePath || '')
+  if (!relativeFile) {
+    res.status(400).json({ error: 'filePath is required' })
+    return
+  }
+
+  const objectPath = adminUtilityExplorerObjectPath(relativeFile)
+  try {
+    const { error: removeError } = await supabaseServiceClient.storage.from(adminUploadBucket).remove([objectPath])
+    if (removeError) {
+      res.status(400).json({ error: removeError.message || 'Failed to delete file' })
+      return
+    }
+    res.json({ ok: true, path: objectPath })
+  } catch (err) {
+    console.error('[admin] upload-file DELETE failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete file' })
+  }
+})
+
+app.options('/api/admin/upload-file', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Mockups upload - for PWA screenshots and app mockup images
