@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
-import { useLanguageNavigate } from '@/lib/i18nRouting'
+import { useLanguageNavigate, usePathWithoutLanguage } from '@/lib/i18nRouting'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabaseClient'
@@ -113,11 +113,15 @@ function useIsMobile() {
   return v
 }
 
+const TUTORIAL_EXCLUDED_PATHS = ['/admin', '/setup', '/verify-email', '/forgot-password', '/password-change']
+
 export function TutorialOverlay() {
   const { active, currentStep, currentStepIndex, totalSteps, next, prev, skip } = useTutorial()
   const { t } = useTranslation('common')
   const navigate = useLanguageNavigate()
+  const pathWithoutLang = usePathWithoutLanguage()
   const isMobile = useIsMobile()
+  const isExcludedPage = TUTORIAL_EXCLUDED_PATHS.some(p => pathWithoutLang.startsWith(p))
   const [dir, setDir] = React.useState(1)
   const lastRouteRef = React.useRef<string | null>(null)
 
@@ -198,7 +202,7 @@ export function TutorialOverlay() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(iv); window.removeEventListener('scroll', measure, true) }
   }, [active, currentStep?.highlight, currentStep?.id])
 
-  if (!active || !currentStep) return null
+  if (!active || !currentStep || isExcludedPage) return null
 
   const stepId = currentStep.id
   const isWelcome = stepId === 'welcome'
