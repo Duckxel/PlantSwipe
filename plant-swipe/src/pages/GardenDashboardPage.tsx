@@ -3127,7 +3127,7 @@ export const GardenDashboardPage: React.FC = () => {
                 canViewFullGarden
                   ? [
                       ["overview", t("gardenDashboard.overview")] as const,
-                      ...(garden?.gardenType === 'seedling' ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
+                      ...((garden?.gardenType === 'seedling' || isDemoGarden) ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
                       ["plants", t("gardenDashboard.plants")] as const,
                       ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
                       ["journal", t("gardenDashboard.journal", "Journal")] as const,
@@ -3647,7 +3647,7 @@ export const GardenDashboardPage: React.FC = () => {
               <Route
                 path="tray"
                 element={
-                  canViewFullGarden && garden?.gardenType === 'seedling' ? (
+                  canViewFullGarden && (garden?.gardenType === 'seedling' || isDemoGarden) ? (
                     <div className="space-y-6">
                       {/* Tray Grid */}
                       <SeedlingTrayGrid
