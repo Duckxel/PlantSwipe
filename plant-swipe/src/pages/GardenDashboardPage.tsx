@@ -458,12 +458,16 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday]);
 
-  // Tutorial demo mode — inject all fake data via a single effect reacting to tab
+  // Tutorial demo mode — inject all fake data synchronously before paint
+  // Uses useLayoutEffect + location.pathname (not tab state) to avoid
+  // the render-before-state-update race that causes tray → overview redirect
   const demoLoadedRef = React.useRef(false);
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     if (!isDemoGarden || !id) return;
+    const pathWithoutLang = removeLanguagePrefix(location.pathname);
+    const isTrayTab = pathWithoutLang.includes('/tray');
     const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
-    const isTrayTab = tab === 'tray';
+    // Always update garden type synchronously so the Route guard sees it
     setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
     if (!demoLoadedRef.current) {
       setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
@@ -494,7 +498,7 @@ export const GardenDashboardPage: React.FC = () => {
       })) as any);
     }
     setLoading(false);
-  }, [isDemoGarden, id, tab]);
+  }, [isDemoGarden, id, location.pathname]);
 
   const load = React.useCallback(
     async (opts?: {
