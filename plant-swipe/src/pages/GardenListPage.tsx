@@ -66,7 +66,7 @@ export const GardenListPage: React.FC = () => {
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
-  const { active: tutorialActive } = useTutorial();
+  const { active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -495,6 +495,16 @@ export const GardenListPage: React.FC = () => {
     load();
   }, [load]);
 
+  // Tutorial: auto-open create garden dialog for the beginner garden step
+  React.useEffect(() => {
+    if (tutorialActive && tutorialStep?.id === 'gardens_beginner') {
+      setOpen(true);
+      setGardenType('beginners');
+    } else if (tutorialActive && tutorialStep?.id !== 'gardens_beginner') {
+      setOpen(false);
+    }
+  }, [tutorialActive, tutorialStep?.id]);
+
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(
     async (
@@ -502,6 +512,17 @@ export const GardenListPage: React.FC = () => {
       todayOverride?: string | null,
       skipResync = false,
     ) => {
+      if (tutorialActive) {
+        setTodayTaskOccurrences([
+          { id: 't1', taskId: 'dt1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't2', taskId: 'dt2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't3', taskId: 'dt3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+          { id: 't4', taskId: 'dt4', gardenPlantId: 'gp4', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'water' },
+          { id: 't5', taskId: 'dt5', gardenPlantId: 'gp5', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'cut' },
+        ]);
+        setLoadingTasks(false);
+        return;
+      }
       const today = todayOverride ?? serverTodayRef.current ?? serverToday;
       const gardensList = gardensOverride ?? gardensRef.current ?? gardens;
       if (!today) return;
@@ -2348,6 +2369,7 @@ export const GardenListPage: React.FC = () => {
                       <button
                         key={opt.key}
                         type="button"
+                        data-tutorial={opt.key === 'beginners' ? 'garden-type-beginners' : undefined}
                         onClick={() => setGardenType(opt.key)}
                         className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
                           gardenType === opt.key

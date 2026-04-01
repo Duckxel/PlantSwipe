@@ -38,7 +38,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   { id: 'scan_identify', route: '/scan' },
   { id: 'nav_gardens', route: '/gardens' },
   { id: 'gardens_create', route: '/gardens', highlight: '[data-tutorial="create-garden"]' },
-  { id: 'gardens_beginner', route: '/gardens' },
+  { id: 'gardens_beginner', route: '/gardens', highlight: '[data-tutorial="garden-type-beginners"]' },
   { id: 'gardens_overview', route: '/gardens' },
   { id: 'gardens_plants', route: '/gardens' },
   { id: 'gardens_analytics', route: '/gardens' },
