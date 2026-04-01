@@ -496,11 +496,19 @@ export const GardenListPage: React.FC = () => {
   }, [load]);
 
   // Tutorial: auto-open create garden dialog for the beginner garden step
+  const prevTutorialStepRef = React.useRef<string | null>(null);
   React.useEffect(() => {
-    if (tutorialActive && tutorialStep?.id === 'gardens_beginner') {
-      setOpen(true);
-      setGardenType('beginners');
-    } else if (tutorialActive && tutorialStep?.id !== 'gardens_beginner') {
+    const stepId = tutorialStep?.id ?? null;
+    const prevId = prevTutorialStepRef.current;
+    prevTutorialStepRef.current = stepId;
+
+    if (tutorialActive && stepId === 'gardens_beginner') {
+      // Small delay so the page has rendered before opening the dialog
+      const t = setTimeout(() => { setOpen(true); setGardenType('beginners'); }, 150);
+      return () => clearTimeout(t);
+    }
+    // Only close when LEAVING the beginner step (not on every non-beginner render)
+    if (prevId === 'gardens_beginner' && stepId !== 'gardens_beginner') {
       setOpen(false);
     }
   }, [tutorialActive, tutorialStep?.id]);
