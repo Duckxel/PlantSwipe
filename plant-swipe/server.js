@@ -18446,6 +18446,7 @@ app.get('/api/account/export', async (req, res) => {
       scans: [],
       notifications: [],
       activityLogs: [],
+      roadmapCompletions: [],
       bugReports: [],
       cookieConsent: null
     }
@@ -18494,14 +18495,18 @@ app.get('/api/account/export', async (req, res) => {
         `
         if (gardens && gardens.length > 0) {
           const gardenIds = gardens.map(g => g.id)
-          const [allPlants, allTasks] = await Promise.all([
+          const [allPlants, allTasks, allRoadmapCompletions] = await Promise.all([
             sql`SELECT gp.*, p.name as plant_name
                 FROM public.garden_plants gp
                 LEFT JOIN public.plants p ON p.id = gp.plant_id
                 WHERE gp.garden_id = ANY(${gardenIds})`,
             sql`SELECT * FROM public.garden_plant_tasks
-                WHERE garden_id = ANY(${gardenIds})`
+                WHERE garden_id = ANY(${gardenIds})`,
+            sql`SELECT garden_id, step_key, completed_at
+                FROM public.garden_roadmap_completions
+                WHERE completed_by = ${userId}`
           ])
+          exportData.roadmapCompletions = allRoadmapCompletions || []
           for (const garden of gardens) {
             exportData.gardens.push({
               ...garden,
@@ -18520,11 +18525,15 @@ app.get('/api/account/export', async (req, res) => {
           const gardenIds = memberships.map(m => m.garden_id)
           const roleMap = Object.fromEntries(memberships.map(m => [m.garden_id, m.role]))
           // Fetch gardens, plants, tasks in parallel instead of per-garden
-          const [gardensRes, plantsRes, tasksRes] = await Promise.all([
+          const [gardensRes, plantsRes, tasksRes, roadmapRes] = await Promise.all([
             supabaseServiceClient.from('gardens').select('*').in('id', gardenIds),
             supabaseServiceClient.from('garden_plants').select('*').in('garden_id', gardenIds),
             supabaseServiceClient.from('garden_plant_tasks').select('*').in('garden_id', gardenIds),
+            supabaseServiceClient.from('garden_roadmap_completions')
+              .select('garden_id, step_key, completed_at')
+              .eq('completed_by', userId),
           ])
+          exportData.roadmapCompletions = roadmapRes.data || []
           for (const garden of (gardensRes.data || [])) {
             exportData.gardens.push({
               ...garden,
