@@ -29,3 +29,7 @@
 ## 2026-03-30 - Add title attributes to chat panel icon buttons
 **Learning:** The Close, Minimize/Maximize, Stop, and Send buttons in `AphyliaChatPanel.tsx` had `aria-label` but lacked `title` attributes. Sighted mouse users on desktop had no tooltip to explain icon-only buttons.
 **Action:** Add explicit `title` attributes (mapped to existing `t()` translations) alongside `aria-label` on all icon-only buttons in chat/panel UIs to provide tooltip feedback for sighted users.
+
+## 2024-05-19 - [Adding Keyboard Focus to Icon-Only Action Buttons in MessageBubble]
+**Learning:** Icon-only action buttons (e.g., reaction popovers, edit controls, reply/more options buttons) in `MessageBubble.tsx` correctly included `aria-label` and `title` attributes for screen readers and tooltips. However, they lacked explicit focus indicators, which hindered keyboard accessibility for users navigating the chat interface. Adding `focus-visible` utility classes (e.g., `focus-visible:ring-2 focus-visible:ring-blue-500`) resolves this and aligns with existing accessibility requirements.
+**Action:** Always ensure that interactive icon-only elements feature visible focus states for keyboard users in addition to `aria-label` and `title` attributes. Use Tailwind's `focus-visible` pseudo-class (like `focus-visible:ring-2 focus-visible:outline-none`) to provide clear visual feedback without affecting pointer interactions.
