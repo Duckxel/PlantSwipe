@@ -117,6 +117,7 @@ export const GardenDashboardPage: React.FC = () => {
   const { user, profile, refreshProfile } = useAuth();
   const { t } = useTranslation("common");
   const { active: tutorialActive } = useTutorial();
+  const isDemoGarden = !!(id && id.startsWith('demo-'));
   const currentLang = useLanguage();
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
@@ -1753,7 +1754,7 @@ export const GardenDashboardPage: React.FC = () => {
     >([]);
 
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !isMember) {
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !isMember) {
         setSuggestedPlants([]);
         return;
       }
@@ -1811,7 +1812,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Seedling tray: load cells when garden is seedling type
     const loadSeedlingCells = React.useCallback(async () => {
-      if (!id || garden?.gardenType !== 'seedling') return;
+      if (!id || garden?.gardenType !== 'seedling' || isDemoGarden) return;
       setSeedlingLoading(true);
       try {
         const cells = await getSeedlingTrayCells(id);
@@ -1830,7 +1831,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Seedling gardens: ensure ONE watering task exists for the whole garden
     const seedlingTaskSyncedRef = React.useRef(false);
     React.useEffect(() => {
-      if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      if (!id || isDemoGarden || garden?.gardenType !== 'seedling' || plants.length === 0) return;
       if (seedlingTaskSyncedRef.current) return;
       let cancelled = false;
       (async () => {
@@ -1854,7 +1855,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1871,7 +1872,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: load persistent completions from DB
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1891,7 +1892,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Detect when steps are completed live and persist them
     const syncRoadmapRef = React.useRef<Set<string>>(new Set());
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
       const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
       const liveSteps: Array<{ key: string; done: boolean }> = [
         { key: 'set_living_space', done: hasLivingSpace },
@@ -1943,7 +1944,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Check if viewer is a friend of any garden member (for friends_only privacy)
     React.useEffect(() => {
-      if (!user?.id || isMember || members.length === 0) {
+      if (isDemoGarden || !user?.id || isMember || members.length === 0) {
         setIsFriendOfMember(false);
         return;
       }
@@ -1962,7 +1963,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
-      if (loading || !id || !serverToday) return;
+      if (loading || !id || !serverToday || isDemoGarden) return;
       if (tab !== "overview" && tab !== "plants" && tab !== "tasks") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
@@ -1982,7 +1983,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
 
     const channel = supabase
       .channel(`rt-garden-${id}`)
@@ -2116,7 +2117,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, navigate, updateTargeted]);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
     let active = true;
     let teardown: (() => Promise<void>) | null = null;
 
