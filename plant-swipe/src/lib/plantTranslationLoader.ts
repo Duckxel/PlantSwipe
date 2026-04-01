@@ -239,7 +239,8 @@ function mapDbRowToPlant(
     medicinalHistory: (translation.medicinal_history as string) || undefined,
     aromatherapyBenefits: (translation.aromatherapy_benefits as string) || undefined,
     essentialOilBlends: (translation.essential_oil_blends as string) || undefined,
-    infusionMixes: Object.keys(infusionMixes).length > 0 ? infusionMixes : undefined,
+    // ⚡ Bolt: Use isEmptyPlainObject to avoid intermediate array allocation
+    infusionMixes: !isEmptyPlainObject(infusionMixes) ? infusionMixes : undefined,
     spiceMixes: (translation.spice_mixes as string[]) || [],
 
     // Section 8: Misc
@@ -336,7 +337,10 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
       return val.charAt(0).toUpperCase() + val.slice(1)
     }
 
-    return plants.map((basePlant: Record<string, unknown>) => {
+    // ⚡ Bolt: Optimize mapping of large dataset using pre-allocated array and single-pass for loop
+    const resultPlants = new Array(plants.length)
+    for (let index = 0; index < plants.length; index++) {
+      const basePlant = plants[index] as Record<string, unknown>
       const translation = translationMap.get(basePlant.id as string) || {}
 
       const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
@@ -401,7 +405,7 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
 
       const recipes = (basePlant.plant_recipes as Record<string, unknown>[]) || []
 
-      return mapDbRowToPlant(
+      resultPlants[index] = mapDbRowToPlant(
         basePlant,
         translation,
         colorObjects,
@@ -413,7 +417,8 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         popularityMap.get(String(basePlant.id)),
         language,
       )
-    })
+    }
+    return resultPlants
   } catch (error) {
     console.error('Failed to load plants with translations:', error)
     return []
@@ -515,7 +520,10 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
       (translationsData as Record<string, unknown>[]).forEach((t) => translationMap.set(t.plant_id as string, t))
     }
 
-    return plants.map((basePlant) => {
+    // ⚡ Bolt: Optimize large array mapping with single-pass for loop and pre-allocated array to reduce garbage collection overhead
+    const resultPlants = new Array(plants.length)
+    for (let index = 0; index < plants.length; index++) {
+      const basePlant = plants[index] as Record<string, unknown>
       const translation = translationMap.get(basePlant.id as string) || {}
 
       const colorObjects: Array<{ id?: string; name: string; hexCode?: string }> = []
@@ -554,7 +562,7 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         }
       }
 
-      return mapDbRowToPlant(
+      resultPlants[index] = mapDbRowToPlant(
         basePlant,
         translation,
         colorObjects,
@@ -566,7 +574,8 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         popularityMap.get(String(basePlant.id)),
         language,
       )
-    })
+    }
+    return resultPlants
   } catch (error) {
     console.error('Failed to load plant previews:', error)
     return []

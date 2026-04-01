@@ -22,3 +22,7 @@
 ## 2026-03-29 - Pre-allocate arrays in discovery scoring hot paths
 **Learning:** In `scoreDiscoveryPlants` (in `discoveryScoring.ts`), functional `.map()` operations on scoring arrays created intermediate allocations on every scoring pass. For large plant collections this compounds into measurable GC pauses.
 **Action:** Replace `.map()` with pre-allocated arrays and index-based `for` loops in scoring functions that run on every discovery feed refresh.
+
+## 2024-05-19 - Avoid .map on large database responses and use isEmptyPlainObject
+**Learning:** Using `.map` directly on thousands of database rows (like in `loadPlantsWithTranslations` and `preparedPlants` mapping) creates large intermediate arrays that cause significant garbage collection pressure. Similarly, using `Object.keys(obj).length > 0` in mappers allocates unnecessary arrays just to check if an object is empty.
+**Action:** Replace `.map` on large datasets with pre-allocated arrays (`new Array(length)`) and single-pass `for` loops. Replace `Object.keys(obj).length > 0` with a helper like `!isEmptyPlainObject(obj)` that uses a `for...in` early return.

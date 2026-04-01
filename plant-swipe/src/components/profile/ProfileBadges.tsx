@@ -49,7 +49,7 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
 
       // Fetch translations for all badges
       const badgeIds = data.map((row: any) => row.badge?.id).filter(Boolean)
-      let translationMap: Record<string, { name: string; description: string }> = {}
+      const translationMap: Record<string, { name: string; description: string }> = {}
 
       if (badgeIds.length > 0 && lang !== 'en') {
         const { data: translations } = await supabase
