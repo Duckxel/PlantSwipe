@@ -24,6 +24,8 @@ export type TutorialStep = {
   id: TutorialStepId
   /** Route to navigate to for this step (pages render with demo data) */
   route?: string
+  /** CSS selector of an element to spotlight-highlight on this step */
+  highlight?: string
 }
 
 export const TUTORIAL_STEPS: TutorialStep[] = [
@@ -35,7 +37,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   { id: 'encyclopedia_nav', route: '/search' },
   { id: 'scan_identify', route: '/scan' },
   { id: 'nav_gardens', route: '/gardens' },
-  { id: 'gardens_create', route: '/gardens' },
+  { id: 'gardens_create', route: '/gardens', highlight: '[data-tutorial="create-garden"]' },
   { id: 'gardens_beginner', route: '/gardens' },
   { id: 'gardens_overview', route: '/gardens' },
   { id: 'gardens_plants', route: '/gardens' },

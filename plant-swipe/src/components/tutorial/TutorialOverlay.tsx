@@ -179,6 +179,25 @@ export function TutorialOverlay() {
     return () => window.removeEventListener('keydown', h)
   }, [active, handleNext, handlePrev, skip])
 
+  // Track highlighted element position
+  const [highlightRect, setHighlightRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null)
+  React.useEffect(() => {
+    if (!active || !currentStep?.highlight) { setHighlightRect(null); return }
+    const measure = () => {
+      const el = document.querySelector(currentStep.highlight!)
+      if (el) {
+        const r = el.getBoundingClientRect()
+        setHighlightRect({ top: r.top, left: r.left, width: r.width, height: r.height })
+      }
+    }
+    // Delay to let page render after navigation
+    const t1 = setTimeout(measure, 400)
+    const t2 = setTimeout(measure, 800)
+    const iv = setInterval(measure, 500)
+    window.addEventListener('scroll', measure, true)
+    return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(iv); window.removeEventListener('scroll', measure, true) }
+  }, [active, currentStep?.highlight, currentStep?.id])
+
   if (!active || !currentStep) return null
 
   const stepId = currentStep.id
@@ -197,6 +216,26 @@ export function TutorialOverlay() {
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
       />
+
+      {/* Spotlight highlight ring on a specific element */}
+      {highlightRect && (
+        <motion.div
+          className="fixed pointer-events-none"
+          style={{
+            zIndex: 9999,
+            top: highlightRect.top - 6,
+            left: highlightRect.left - 6,
+            width: highlightRect.width + 12,
+            height: highlightRect.height + 12,
+            borderRadius: 16,
+            border: '2.5px solid rgb(16 185 129)',
+            boxShadow: '0 0 0 4000px rgba(0,0,0,0.35), 0 0 20px 4px rgba(16,185,129,0.4)',
+          }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: [1, 1.03, 1] }}
+          transition={{ scale: { repeat: Infinity, duration: 2, ease: 'easeInOut' } }}
+        />
+      )}
 
       {/* Gesture hints on discovery card */}
       {stepId === 'discovery_swipe' && <SwipeGestureHints isMobile={isMobile} />}
