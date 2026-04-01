@@ -258,6 +258,7 @@ export const EditProfileDialog: React.FC<{
                     onClick={() => chooseAccent(opt.key)}
                     className="relative aspect-square rounded-full transition-all duration-150 hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                     title={opt.label}
+                    aria-label={opt.label}
                     style={{ backgroundColor: opt.hex }}
                     aria-pressed={active}
                   >

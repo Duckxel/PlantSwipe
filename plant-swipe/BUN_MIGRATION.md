@@ -52,8 +52,8 @@ Both npm and bun use Vite under the hood for building, so build times are compar
 
 ### Lock Files
 
-Bun generates a binary lock file called `bun.lockb` instead of `package-lock.json`. Both files are kept for compatibility:
-- `bun.lockb` - Primary lock file for Bun
+Bun generates a lock file called `bun.lock` (text-based JSONC format since Bun 1.2+, previously binary `bun.lockb`). Both the lock file and `package-lock.json` are kept for compatibility:
+- `bun.lock` - Primary lock file for Bun (text format, human-readable)
 - `package-lock.json` - Kept for npm fallback compatibility
 
 ## Server Deployment
@@ -111,7 +111,7 @@ Files modified:
 - `package.json` - Scripts updated to use Bun
 
 New files:
-- `bun.lockb` - Bun lock file
+- `bun.lock` - Bun lock file (text format)
 - `BUN_MIGRATION.md` - This documentation
 
 ## Further Reading

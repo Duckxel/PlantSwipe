@@ -873,7 +873,12 @@ export const GardenDashboardPage: React.FC = () => {
             }
             setDailyStats((prev) => {
               if (!prev || prev.length === 0) return days;
-              const prevByDate = new Map(prev.map((entry) => [entry.date, entry]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [date, entry] array allocations which cause massive GC pressure
+              const prevByDate = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevByDate.set(prev[i].date, prev[i]);
+              }
               return days.map((day) => {
                 const cached = prevByDate.get(day.date);
                 if (!cached) return day;
@@ -1312,8 +1317,16 @@ export const GardenDashboardPage: React.FC = () => {
             // Update state using functional updates to preserve existing items
             setTodayTaskOccurrences((prev) => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
-              const prevMap = new Map(prev.map((o) => [o.id, o]));
-              const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [id, entry] array allocations which cause massive GC pressure
+              const prevMap = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevMap.set(prev[i].id, prev[i]);
+              }
+              const _newMap = new Map();
+              for (let i = 0; i < occsWithType.length; i++) {
+                _newMap.set(occsWithType[i].id, occsWithType[i]);
+              }
               const result: typeof occsWithType = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
@@ -1482,7 +1495,12 @@ export const GardenDashboardPage: React.FC = () => {
           const gpsRaw = await getGardenPlants(id, currentLang);
           setPlants((prev) => {
             // Merge: preserve order and existing items, update changed ones
-            const prevMap = new Map(prev.map((p: { id: string }) => [p.id, p]));
+            // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+            // [id, entry] array allocations which cause massive GC pressure
+            const prevMap = new Map();
+            for (let i = 0; i < prev.length; i++) {
+              prevMap.set(prev[i].id, prev[i]);
+            }
             const merged = [] as typeof gpsRaw;
             // Use new order but preserve existing objects where possible
             for (const newP of gpsRaw) {
@@ -2258,9 +2276,18 @@ export const GardenDashboardPage: React.FC = () => {
           }
         });
         const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
+        // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+        // [id, email] array allocations which cause massive GC pressure
+        const emailMap = new Map();
+        for (let i = 0; i < emails.length; i++) {
+          emailMap.set(emails[i].id, emails[i].email);
+        }
 
-        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+        const profileMap = new Map();
+        const profilesList = profiles || [];
+        for (let i = 0; i < profilesList.length; i++) {
+          profileMap.set(profilesList[i].id, profilesList[i]);
+        }
         const friendsWithProfiles = (data || []).map((f) => {
           const profile = profileMap.get(f.friend_id);
           return {

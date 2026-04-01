@@ -4,6 +4,8 @@ import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 import { AuthProvider } from '@/context/AuthContext'
 import { TutorialProvider } from '@/context/TutorialContext'
 import { ThemeProvider } from '@/context/ThemeContext'
+import { EggHuntProvider } from '@/context/EggHuntContext'
+import { EggHuntCounter } from '@events/2026_EASTER'
 import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, getDomainDefaultLanguage } from '@/lib/i18n'
@@ -145,9 +147,12 @@ export default function App() {
       <ThemeProvider>
         <AuthProvider>
           <TutorialProvider>
-            <BrowserRouter basename={routerBase}>
-              <LanguageRoutes />
-            </BrowserRouter>
+            <EggHuntProvider>
+              <BrowserRouter basename={routerBase}>
+                <LanguageRoutes />
+              </BrowserRouter>
+              <EggHuntCounter />
+            </EggHuntProvider>
           </TutorialProvider>
           <ServiceWorkerToast />
         </AuthProvider>

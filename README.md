@@ -262,7 +262,7 @@ flowchart TB
 | **Routing** | React Router 7.8.2 | Client-side routing with i18n |
 | **i18n** | react-i18next 16.2.4 + i18next 25.6.0 | Internationalization |
 | **Charts** | Recharts 3.2.1 | Data visualization |
-| **Rich Text** | TipTap 3.11.0 | Rich text editing |
+| **Rich Text** | TipTap 3.17.1 | Rich text editing |
 | **3D Graphics** | Three.js 0.181.1 | 3D visualizations |
 | **PWA** | vite-plugin-pwa + Workbox 7.3.0 | Progressive Web App support |
 
@@ -520,7 +520,7 @@ sudo systemctl reload nginx
 | react-i18next | 16.2.4 | i18n |
 | i18next | 25.6.0 | i18n core |
 | Recharts | 3.2.1 | Charts |
-| TipTap | 3.11.0 | Rich text editor |
+| TipTap | 3.17.1 | Rich text editor |
 | Lucide React | 0.542.0 | Icons |
 | Three.js | 0.181.1 | 3D graphics |
 | Radix UI | Latest | UI primitives |

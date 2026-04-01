@@ -28,3 +28,8 @@
 **Vulnerability:** The `/api/admin/roles/:userId` endpoint in `server.js` was using `isAdminFromRequest(req)` to check if the caller was an admin, but it failed to properly authenticate the request and return proper 401 Unauthorized responses for unauthenticated requests, unlike most other administrative endpoints that use `ensureAdmin(req, res)`. This caused inconsistent security enforcement and potential leakage of sensitive profile roles if the custom check logic were misconfigured.
 **Learning:** Checking for administrative privileges directly using boolean helpers like `isAdminFromRequest` skips standard authentication flow controls (e.g., yielding explicit 401 Unauthenticated instead of 403 Forbidden or continuing on error states). It also makes the code prone to authorization bypass if the helper assumes an authenticated context.
 **Prevention:** Consistently use the standard `ensureAdmin(req, res)` or similar encompassing middleware at the very beginning of administrative routes to strictly enforce both authentication and authorization, ensuring uniform and secure API behavior.
+
+## 2024-03-30 - Inconsistent Admin Endpoint Authorization
+**Vulnerability:** Several sensitive admin endpoints in server.js were using a manual boolean check `isAdminFromRequest(req)` and returning 403, rather than the standardized `ensureAdmin(req, res)`.
+**Learning:** Using the raw boolean check bypasses `ensureAdmin`'s centralized handling of authentication flows, standard 401/403 responses, and token/public-mode validation mechanisms, leading to potential IDOR and authentication bypass.
+**Prevention:** Always use `await ensureAdmin(req, res)` to enforce strict authentication and authorization in administrative endpoints.
