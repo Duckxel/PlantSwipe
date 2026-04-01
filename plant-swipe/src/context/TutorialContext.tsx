@@ -30,7 +30,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   { id: 'welcome' },
   { id: 'discovery_swipe', route: '/discovery' },
   { id: 'discovery_like', route: '/discovery' },
-  { id: 'discovery_info', route: '/discovery' },
+  { id: 'discovery_info', route: '/plants/__demo__' },
   { id: 'encyclopedia_nav', route: '/discovery' },
   { id: 'encyclopedia_categories', route: '/search/categories' },
   { id: 'scan_identify', route: '/scan' },

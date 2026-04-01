@@ -11,6 +11,7 @@ import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
 import { useLanguageNavigate } from '@/lib/i18nRouting'
 import { useTranslation } from 'react-i18next'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabaseClient'
 
 const STEP_ICONS: Partial<Record<TutorialStepId, React.ReactNode>> = {
   welcome: <Sparkles className="h-5 w-5 text-emerald-500" />,
@@ -54,12 +55,42 @@ export function TutorialOverlay() {
   const handleNext = React.useCallback(() => { setDir(1); next() }, [next])
   const handlePrev = React.useCallback(() => { setDir(-1); prev() }, [prev])
 
+  // Cache resolved demo plant ID so we only query once
+  const demoPlantIdRef = React.useRef<string | null>(null)
+
   // Navigate to the step's route
   React.useEffect(() => {
     if (!active || !currentStep?.route) return
-    if (lastRouteRef.current !== currentStep.route) {
-      lastRouteRef.current = currentStep.route
-      navigate(currentStep.route)
+
+    let route = currentStep.route
+    const needsDemoPlant = route.includes('__demo__')
+
+    const doNavigate = (resolvedRoute: string) => {
+      if (lastRouteRef.current !== resolvedRoute) {
+        lastRouteRef.current = resolvedRoute
+        navigate(resolvedRoute)
+      }
+    }
+
+    if (needsDemoPlant) {
+      if (demoPlantIdRef.current) {
+        doNavigate(route.replace('__demo__', demoPlantIdRef.current))
+      } else {
+        // Find a real plant with an image
+        supabase
+          .from('plants')
+          .select('id, plant_images!inner(link)')
+          .limit(1)
+          .then(({ data }) => {
+            const id = data?.[0]?.id
+            if (id) {
+              demoPlantIdRef.current = id
+              doNavigate(route.replace('__demo__', id))
+            }
+          })
+      }
+    } else {
+      doNavigate(route)
     }
   }, [active, currentStep?.route, currentStep?.id, navigate])
 
