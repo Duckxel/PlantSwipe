@@ -118,6 +118,21 @@ export const GardenDashboardPage: React.FC = () => {
   const { t } = useTranslation("common");
   const { active: tutorialActive } = useTutorial();
   const isDemoGarden = !!(id && id.startsWith('demo-'));
+  // Stable demo data — generated once, never changes across re-renders
+  const demoDataRef = React.useRef<{
+    dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>;
+  } | null>(null);
+  if (isDemoGarden && !demoDataRef.current) {
+    const seed = [4,5,3,5,4,3,5,4,3,5,4,5,3,4]; // deterministic "random"
+    demoDataRef.current = {
+      dailyStats: Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (13 - i));
+        const due = seed[i];
+        const completed = Math.min(due, due - (i % 3 === 0 ? 1 : 0));
+        return { date: d.toISOString().slice(0, 10), due, completed, success: completed >= due };
+      }),
+    };
+  }
   const currentLang = useLanguage();
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
@@ -452,6 +467,8 @@ export const GardenDashboardPage: React.FC = () => {
       if (!id) return;
       // Tutorial demo mode: inject fake garden data
       if (tutorialActive && id.startsWith('demo-')) {
+        // Already loaded — skip re-injection to prevent flicker
+        if (garden) { setLoading(false); return; }
         const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
         // Override garden type to seedling when showing the tray tab
         const pathWithoutLang = removeLanguagePrefix(location.pathname);
@@ -466,12 +483,7 @@ export const GardenDashboardPage: React.FC = () => {
         const today = new Date().toISOString().slice(0, 10);
         setServerToday(today);
         serverTodayRef.current = today;
-        setDailyStats(Array.from({ length: 14 }, (_, i) => {
-          const d = new Date(); d.setDate(d.getDate() - (13 - i));
-          const due = 3 + Math.floor(Math.random() * 3);
-          const completed = Math.min(due, Math.floor(Math.random() * (due + 1)));
-          return { date: d.toISOString().slice(0, 10), due, completed, success: completed >= due };
-        }));
+        setDailyStats(demoDataRef.current?.dailyStats ?? []);
         setTodayTaskOccurrences([
           { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
           { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
