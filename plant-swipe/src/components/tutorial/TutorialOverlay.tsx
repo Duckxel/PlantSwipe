@@ -167,9 +167,9 @@ export function TutorialOverlay() {
   // Cache resolved demo plant ID so we only query once
   const demoPlantIdRef = React.useRef<string | null>(null)
 
-  // Navigate to the step's route
+  // Navigate to the step's route (skip on excluded pages like /admin)
   React.useEffect(() => {
-    if (!active || !currentStep?.route) return
+    if (!active || !currentStep?.route || isExcludedPage) return
 
     let route = currentStep.route
     const needsDemoPlant = route.includes('__demo__')
