@@ -2347,7 +2347,7 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
 
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(v) => { if (!tutorialActive) setOpen(v); }}>
             <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
               <DialogHeader>
                 <DialogTitle>{t("garden.createGarden")}</DialogTitle>
