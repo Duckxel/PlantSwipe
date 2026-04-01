@@ -32,7 +32,7 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
   { id: 'welcome' },
   { id: 'discovery_swipe', route: '/discovery' },
   { id: 'discovery_like', route: '/discovery' },
-  { id: 'discovery_info', route: '/plants/__demo__' },
+  { id: 'discovery_info', route: '/plants/43cd0d55-e799-4f2b-99fd-8dd7c7940530' },
   { id: 'encyclopedia_categories', route: '/search/categories' },
   { id: 'encyclopedia_nav', route: '/search' },
   { id: 'scan_identify', route: '/scan' },

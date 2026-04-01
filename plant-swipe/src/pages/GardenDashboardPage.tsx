@@ -4,7 +4,7 @@ import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
 import { useTutorial } from "@/context/TutorialContext";
-import { DEMO_GARDENS } from "@/lib/tutorialDemoData";
+import { DEMO_GARDENS, DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -472,9 +472,9 @@ export const GardenDashboardPage: React.FC = () => {
     if (!demoLoadedRef.current) {
       setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
       setPlants([
-        { id: 'gp1', gardenId: id, plantId: 'p1', nickname: 'Monstera', plant: { id: 'p1', name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
-        { id: 'gp2', gardenId: id, plantId: 'p2', nickname: 'Snake Plant', plant: { id: 'p2', name: 'Snake Plant', scientificNameSpecies: 'Sansevieria trifasciata' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
-        { id: 'gp3', gardenId: id, plantId: 'p3', nickname: 'Basil', plant: { id: 'p3', name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
+        { id: 'gp1', gardenId: id, plantId: DEMO_PLANT_IDS.monstera, nickname: 'Monstera', plant: { id: DEMO_PLANT_IDS.monstera, name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
+        { id: 'gp2', gardenId: id, plantId: DEMO_PLANT_IDS.basil, nickname: 'Basil', plant: { id: DEMO_PLANT_IDS.basil, name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
+        { id: 'gp3', gardenId: id, plantId: DEMO_PLANT_IDS.lily, nickname: 'Lily', plant: { id: DEMO_PLANT_IDS.lily, name: 'Lily', scientificNameSpecies: 'Lilium' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
       ] as any);
       const today = new Date().toISOString().slice(0, 10);
       setServerToday(today);
@@ -490,7 +490,7 @@ export const GardenDashboardPage: React.FC = () => {
     if (isTrayTab) {
       setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
         id: `sc-${i}`, gardenId: id, position: i,
-        plantId: i < 4 ? 'p1' : i < 7 ? 'p2' : null,
+        plantId: i < 4 ? DEMO_PLANT_IDS.monstera : i < 7 ? DEMO_PLANT_IDS.basil : null,
         stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
         sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
         lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,

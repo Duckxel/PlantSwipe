@@ -46,7 +46,7 @@ import {
 import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { useTutorial } from '@/context/TutorialContext'
-import { DEMO_SCANS } from '@/lib/tutorialDemoData'
+import { DEMO_SCANS, DEMO_PLANT_IDS } from '@/lib/tutorialDemoData'
 import { supabase } from '@/lib/supabaseClient'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic scan API data */
@@ -96,25 +96,23 @@ export const ScanPage: React.FC = () => {
   // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
     if (tutorialActive) {
-      // Fetch real plant images from DB to enrich demo scans
-      const names = DEMO_SCANS.map(s => s.topMatchName).filter(Boolean) as string[]
+      // Fetch real plant images from DB using canonical IDs
+      const ids = Object.values(DEMO_PLANT_IDS)
       const { data: plantRows } = await supabase
         .from('plants')
         .select('id, name, plant_images(link, use)')
-        .in('name', names)
-        .limit(names.length)
-      const imageByName: Record<string, string> = {}
+        .in('id', ids)
+      const imageById: Record<string, string> = {}
       if (plantRows) {
         for (const p of plantRows) {
           const imgs = (p as any).plant_images as Array<{ link: string; use: string }> | undefined
           const img = imgs?.find((i: { use: string }) => i.use === 'primary') ?? imgs?.[0]
-          if (img?.link) imageByName[p.name] = img.link
+          if (img?.link) imageById[p.id] = img.link
         }
       }
       setScans(DEMO_SCANS.map(s => ({
         ...s,
-        imageUrl: (s.topMatchName && imageByName[s.topMatchName]) || s.imageUrl,
-        matchedPlantId: plantRows?.find(p => p.name === s.topMatchName)?.id || s.matchedPlantId,
+        imageUrl: (s.matchedPlantId && imageById[s.matchedPlantId]) || s.imageUrl,
       })))
       setLoading(false)
       return
