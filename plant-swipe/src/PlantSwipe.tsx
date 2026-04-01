@@ -941,7 +941,10 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    const prepared = plants.map((p) => {
+    // ⚡ Bolt: Optimize mapping of thousands of plants using pre-allocated array and single-pass for loop
+    const prepared = new Array(plants.length)
+    for (let index = 0; index < plants.length; index++) {
+      const p = plants[index] as Plant & Record<string, any>
       // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
       // This avoids computing regexes, Sets, and string manipulations for thousands of plants
       // unless they are actually needed by active filters.
@@ -1072,7 +1075,7 @@ export default function PlantSwipe() {
         return _cachedHabitats
       }
 
-      return {
+      prepared[index] = {
         ...p,
         get _searchString() {
           if (_cachedSearchString !== undefined) return _cachedSearchString
@@ -1179,7 +1182,7 @@ export default function PlantSwipe() {
         _isPromoted: isPromoted,
         _isInProgress: isInProgress
       } as PreparedPlant
-    })
+    }
 
     return {
       preparedPlants: prepared,
