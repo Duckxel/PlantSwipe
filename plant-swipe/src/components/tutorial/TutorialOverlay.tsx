@@ -163,6 +163,16 @@ export function TutorialOverlay() {
   const handleNext = React.useCallback(() => { setDir(1); next() }, [next])
   const handlePrev = React.useCallback(() => { setDir(-1); prev() }, [prev])
 
+  // Navigate to /discovery when tutorial ends (finish or skip)
+  const wasActiveRef = React.useRef(false)
+  React.useEffect(() => {
+    if (active) { wasActiveRef.current = true; return }
+    if (wasActiveRef.current) {
+      wasActiveRef.current = false
+      navigate('/discovery')
+    }
+  }, [active, navigate])
+
   // Navigate to the step's route (skip on excluded pages like /admin)
   React.useEffect(() => {
     if (!active || !currentStep?.route || isExcludedPage) return
