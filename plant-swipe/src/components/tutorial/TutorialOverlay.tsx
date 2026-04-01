@@ -185,10 +185,11 @@ export function TutorialOverlay() {
       if (demoPlantIdRef.current) {
         doNavigate(route.replace('__demo__', demoPlantIdRef.current))
       } else {
-        // Find a real plant with an image
+        // Find an approved plant with an image
         supabase
           .from('plants')
           .select('id, plant_images!inner(link)')
+          .eq('status', 'approved')
           .limit(1)
           .then(({ data }) => {
             const id = data?.[0]?.id
