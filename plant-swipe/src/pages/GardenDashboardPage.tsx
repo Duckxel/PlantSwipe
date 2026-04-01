@@ -471,11 +471,16 @@ export const GardenDashboardPage: React.FC = () => {
     setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
     if (!demoLoadedRef.current) {
       setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
-      setPlants([
-        { id: 'gp1', gardenId: id, plantId: DEMO_PLANT_IDS.monstera, nickname: 'Monstera', plant: { id: DEMO_PLANT_IDS.monstera, name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
-        { id: 'gp2', gardenId: id, plantId: DEMO_PLANT_IDS.basil, nickname: 'Basil', plant: { id: DEMO_PLANT_IDS.basil, name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
-        { id: 'gp3', gardenId: id, plantId: DEMO_PLANT_IDS.lily, nickname: 'Lily', plant: { id: DEMO_PLANT_IDS.lily, name: 'Lily', scientificNameSpecies: 'Lilium' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
-      ] as any);
+      const demoPlants = [
+        { gpId: 'gp1', pId: DEMO_PLANT_IDS.monstera, name: 'Monstera', sci: 'Monstera deliciosa', qty: 1 },
+        { gpId: 'gp2', pId: DEMO_PLANT_IDS.basil, name: 'Basil', sci: 'Ocimum basilicum', qty: 2 },
+        { gpId: 'gp3', pId: DEMO_PLANT_IDS.lily, name: 'Lily', sci: 'Lilium', qty: 3 },
+      ];
+      setPlants(demoPlants.map(dp => ({
+        id: dp.gpId, gardenId: id, plantId: dp.pId, nickname: dp.name,
+        plant: { id: dp.pId, name: dp.name, scientificNameSpecies: dp.sci },
+        plantsOnHand: dp.qty, plantedAt: new Date().toISOString(),
+      })) as any);
       const today = new Date().toISOString().slice(0, 10);
       setServerToday(today);
       serverTodayRef.current = today;
@@ -486,6 +491,25 @@ export const GardenDashboardPage: React.FC = () => {
         { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
       ] as any);
       demoLoadedRef.current = true;
+      // Async: fetch real plant images and update plants with image data
+      supabase
+        .from('plants')
+        .select('id, name, plant_images(link, use)')
+        .in('id', Object.values(DEMO_PLANT_IDS))
+        .then(({ data: rows }) => {
+          if (!rows) return;
+          const imgMap: Record<string, string> = {};
+          for (const r of rows) {
+            const imgs = (r as any).plant_images as Array<{ link: string; use: string }> | undefined;
+            const primary = imgs?.find((i: { use: string }) => i.use === 'primary');
+            const img = primary ?? imgs?.[0];
+            if (img?.link) imgMap[r.id] = img.link;
+          }
+          setPlants(prev => (prev as any[]).map((gp: any) => ({
+            ...gp,
+            plant: { ...gp.plant, image: imgMap[gp.plantId] || gp.plant?.image },
+          })) as any);
+        });
     }
     if (isTrayTab) {
       setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
