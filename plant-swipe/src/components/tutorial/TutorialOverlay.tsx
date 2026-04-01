@@ -5,6 +5,7 @@ import {
   ChevronRight, ChevronLeft, X, Sparkles, Sprout, Heart, Info,
   BarChart3, Plus, PartyPopper, Search, ScanLine, ListChecks,
   Grid3X3, GraduationCap, ArrowLeftRight, LayoutDashboard,
+  ArrowUp, ArrowDown, MoveLeft, Hand,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useTutorial, type TutorialStepId } from '@/context/TutorialContext'
@@ -30,6 +31,74 @@ const STEP_ICONS: Partial<Record<TutorialStepId, React.ReactNode>> = {
   gardens_seedling: <Grid3X3 className="h-5 w-5 text-emerald-500" />,
   gardens_tasks: <ListChecks className="h-5 w-5 text-orange-500" />,
   tutorial_complete: <PartyPopper className="h-5 w-5 text-emerald-500" />,
+}
+
+/** Animated gesture guide rendered on top of the discovery card during step 2 */
+function SwipeGestureHints({ isMobile }: { isMobile: boolean }) {
+  const { t } = useTranslation('common')
+  return (
+    <motion.div
+      className="fixed inset-0 pointer-events-none flex items-center justify-center"
+      style={{ zIndex: 9999 }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ delay: 0.3 }}
+    >
+      <div className={cn("relative", isMobile ? "w-[260px] h-[360px]" : "w-[320px] h-[420px]")}>
+        {/* Up arrow — next plant */}
+        <motion.div
+          className="absolute top-0 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
+          animate={{ y: [0, -8, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+        >
+          <ArrowUp className="h-7 w-7 text-emerald-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" />
+          <span className="text-[11px] font-semibold text-emerald-300 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-0.5 whitespace-nowrap">
+            {t('tutorial.gesture.nextPlant', { defaultValue: 'Next plant' })}
+          </span>
+        </motion.div>
+
+        {/* Down arrow — previous plant */}
+        <motion.div
+          className="absolute bottom-0 left-1/2 -translate-x-1/2 flex flex-col items-center gap-1"
+          animate={{ y: [0, 8, 0] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+        >
+          <span className="text-[11px] font-semibold text-emerald-300 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-0.5 whitespace-nowrap">
+            {t('tutorial.gesture.previousPlant', { defaultValue: 'Previous plant' })}
+          </span>
+          <ArrowDown className="h-7 w-7 text-emerald-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" />
+        </motion.div>
+
+        {/* Left arrow — view details */}
+        <motion.div
+          className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center gap-1"
+          animate={{ x: [-8, 0, -8] }}
+          transition={{ repeat: Infinity, duration: 1.5, ease: 'easeInOut' }}
+        >
+          <MoveLeft className="h-7 w-7 text-blue-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" />
+          <span className="text-[11px] font-semibold text-blue-300 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-0.5 whitespace-nowrap">
+            {t('tutorial.gesture.viewDetails', { defaultValue: 'View details' })}
+          </span>
+        </motion.div>
+
+        {/* Center — double tap to like */}
+        <motion.div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-2"
+          animate={{ scale: [1, 1.08, 1] }}
+          transition={{ repeat: Infinity, duration: 2, ease: 'easeInOut' }}
+        >
+          <div className="relative">
+            <Hand className="h-10 w-10 text-rose-400 drop-shadow-[0_2px_8px_rgba(0,0,0,0.5)]" />
+            <span className="absolute -top-1 -right-1 text-[10px] font-bold text-white bg-rose-500 rounded-full h-4 w-4 flex items-center justify-center">2</span>
+          </div>
+          <span className="text-[11px] font-semibold text-rose-300 bg-black/60 backdrop-blur-sm rounded-full px-2.5 py-0.5 whitespace-nowrap">
+            {t('tutorial.gesture.doubleTapLike', { defaultValue: 'Double-tap to like' })}
+          </span>
+        </motion.div>
+      </div>
+    </motion.div>
+  )
 }
 
 function useIsMobile() {
@@ -128,6 +197,9 @@ export function TutorialOverlay() {
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
       />
+
+      {/* Gesture hints on discovery card */}
+      {stepId === 'discovery_swipe' && <SwipeGestureHints isMobile={isMobile} />}
 
       {/* Floating tutorial card */}
       <AnimatePresence mode="wait" custom={dir}>

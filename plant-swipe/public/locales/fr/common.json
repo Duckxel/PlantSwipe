@@ -2705,6 +2705,12 @@
     "skipAll": "Passer le tutoriel",
     "next": "Suivant",
     "back": "Retour",
+    "gesture": {
+      "nextPlant": "Plante suivante",
+      "previousPlant": "Plante précédente",
+      "viewDetails": "Voir les détails",
+      "doubleTapLike": "Double-tap pour aimer"
+    },
     "start": "C'est parti !",
     "finish": "Commencer !",
     "demo": {
