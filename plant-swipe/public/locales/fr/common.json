@@ -2728,16 +2728,16 @@
         "description": "Voici un aperçu rapide de ce que vous pouvez faire avec l'application. Aucune action requise — faites simplement défiler pour voir les fonctionnalités. Vous pouvez passer à tout moment."
       },
       "discovery_swipe": {
-        "title": "Découverte — Balayez pour explorer",
-        "description": "La page Découverte vous montre un paquet de cartes de plantes. Glissez à droite pour aimer, à gauche pour passer. C'est comme une appli de rencontres — mais pour les plantes !"
+        "title": "Découverte — Parcourir les plantes",
+        "description": "La page Découverte vous montre des cartes de plantes une par une. Glissez vers le haut pour la plante suivante, vers le bas pour revenir. Appuyez deux fois sur la carte pour l'aimer instantanément !"
       },
       "discovery_like": {
         "title": "Découverte — Aimer et sauvegarder",
-        "description": "Vous aimez une plante ? Le bouton cœur la sauvegarde dans vos favoris. Appuyez deux fois sur la carte pour un like rapide. Retrouvez vos plantes sauvegardées dans votre profil."
+        "description": "Appuyez deux fois sur une carte pour l'aimer — une animation cœur apparaîtra. Vous pouvez aussi appuyer sur le bouton cœur dans le coin. Les plantes aimées sont sauvegardées dans vos favoris sur votre profil."
       },
       "discovery_info": {
         "title": "Découverte — Détails de la plante",
-        "description": "Chaque plante a une fiche détaillée avec les instructions d'entretien, le calendrier d'arrosage, les besoins en lumière, la toxicité, et plus encore."
+        "description": "Glissez une carte vers la gauche pour révéler les détails — instructions d'entretien, calendrier d'arrosage, besoins en lumière, et plus. Ou appuyez sur le bouton Info en bas de la carte."
       },
       "encyclopedia_nav": {
         "title": "Encyclopédie 📚",

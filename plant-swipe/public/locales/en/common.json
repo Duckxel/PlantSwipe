@@ -2728,16 +2728,16 @@
         "description": "Here's a quick overview of what you can do with the app. No actions required — just swipe through to see the highlights. You can skip at any time."
       },
       "discovery_swipe": {
-        "title": "Discovery — Swipe to Explore",
-        "description": "The Discovery page shows you a deck of plant cards. Swipe right to like a plant, left to pass. It's like a dating app — but for plants!"
+        "title": "Discovery — Browse Plants",
+        "description": "The Discovery page shows you plant cards one at a time. Swipe up to see the next plant, down to go back. Double-tap the card to like it instantly!"
       },
       "discovery_like": {
         "title": "Discovery — Like & Save",
-        "description": "See a plant you love? The heart button saves it to your bookmarks. Double-tap the card for a quick like. You'll find all your saved plants in your profile."
+        "description": "Double-tap any card to like it — you'll see a heart animation. You can also tap the heart button in the corner. Liked plants are saved to your bookmarks in your profile."
       },
       "discovery_info": {
         "title": "Discovery — Plant Details",
-        "description": "Every plant has a detail page with care instructions, watering schedule, sunlight needs, toxicity info, and more. Tap any card to learn everything about it."
+        "description": "Swipe a card to the left to reveal detailed info — care instructions, watering schedule, sunlight needs, and more. Or tap the Info button at the bottom of the card."
       },
       "encyclopedia_nav": {
         "title": "Encyclopedia 📚",
