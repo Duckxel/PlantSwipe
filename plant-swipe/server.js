@@ -18447,6 +18447,7 @@ app.get('/api/account/export', async (req, res) => {
       notifications: [],
       activityLogs: [],
       roadmapCompletions: [],
+      badges: [],
       bugReports: [],
       cookieConsent: null
     }
@@ -18680,10 +18681,26 @@ app.get('/api/account/export', async (req, res) => {
           return data || []
         }
       })(),
+      // 13. Badges
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT ub.badge_id, ub.earned_at, b.slug, b.icon, b.category
+            FROM public.user_badges ub
+            LEFT JOIN public.badges b ON b.id = ub.badge_id
+            WHERE ub.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('user_badges').select('badge_id, earned_at, badges(slug, icon, category)')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
     ])
 
-    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports']
-    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports']
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges']
     for (let i = 0; i < gdprParallelResults.length; i++) {
       const r = gdprParallelResults[i]
       if (r.status === 'fulfilled') {
@@ -18695,7 +18712,7 @@ app.get('/api/account/export', async (req, res) => {
     }
 
     try {
-      // 13. Cookie consent (if server-tracked)
+      // 14. Cookie consent (if server-tracked)
       if (sql) {
         const consent = await sql`
           SELECT * FROM public.user_cookie_consent 
