@@ -533,7 +533,7 @@ function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount
             >
               {label}
               {count > 0 && !isActive && (
-                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[9px] font-bold flex items-center justify-center">{count}</span>
+                <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-emerald-500 text-white text-[11px] font-bold flex items-center justify-center">{count}</span>
               )}
             </button>
           )
@@ -547,7 +547,7 @@ function YearlyPickerInline({ selected, onToggle, onRemove, disabledMore, amount
           <div className="grid grid-cols-[36px_repeat(7,minmax(0,1fr))] gap-1 items-center">
             <div />
             {dayLabels.map((l) => (
-              <div key={l} className="text-[9px] text-center font-medium text-stone-400">{l}</div>
+              <div key={l} className="text-[11px] text-center font-medium text-stone-400">{l}</div>
             ))}
           </div>
           {weekLabels.map((wn, rowIdx) => (
