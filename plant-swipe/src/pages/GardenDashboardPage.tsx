@@ -458,6 +458,44 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday]);
 
+  // Tutorial demo mode — inject all fake data via a single effect reacting to tab
+  const demoLoadedRef = React.useRef(false);
+  React.useEffect(() => {
+    if (!isDemoGarden || !id) return;
+    const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
+    const isTrayTab = tab === 'tray';
+    setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
+    if (!demoLoadedRef.current) {
+      setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
+      setPlants([
+        { id: 'gp1', gardenId: id, plantId: 'p1', nickname: 'Monstera', plant: { id: 'p1', name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
+        { id: 'gp2', gardenId: id, plantId: 'p2', nickname: 'Snake Plant', plant: { id: 'p2', name: 'Snake Plant', scientificNameSpecies: 'Sansevieria trifasciata' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
+        { id: 'gp3', gardenId: id, plantId: 'p3', nickname: 'Basil', plant: { id: 'p3', name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
+      ] as any);
+      const today = new Date().toISOString().slice(0, 10);
+      setServerToday(today);
+      serverTodayRef.current = today;
+      setDailyStats(demoDataRef.current?.dailyStats ?? []);
+      setTodayTaskOccurrences([
+        { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+      ] as any);
+      demoLoadedRef.current = true;
+    }
+    if (isTrayTab) {
+      setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
+        id: `sc-${i}`, gardenId: id, position: i,
+        plantId: i < 4 ? 'p1' : i < 7 ? 'p2' : null,
+        stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
+        sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
+        lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,
+        notes: '',
+      })) as any);
+    }
+    setLoading(false);
+  }, [isDemoGarden, id, tab]);
+
   const load = React.useCallback(
     async (opts?: {
       silent?: boolean;
@@ -465,43 +503,8 @@ export const GardenDashboardPage: React.FC = () => {
       suppressError?: boolean;
     }) => {
       if (!id) return;
-      // Tutorial demo mode: inject fake garden data
-      if (tutorialActive && id.startsWith('demo-')) {
-        // Already loaded — skip re-injection to prevent flicker
-        if (garden) { setLoading(false); return; }
-        const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
-        // Override garden type to seedling when showing the tray tab
-        const pathWithoutLang = removeLanguagePrefix(location.pathname);
-        const isTrayTab = pathWithoutLang.includes('/tray');
-        setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
-        setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
-        setPlants([
-          { id: 'gp1', gardenId: id, plantId: 'p1', nickname: 'Monstera', plant: { id: 'p1', name: 'Monstera', scientificNameSpecies: 'Monstera deliciosa' }, plantsOnHand: 1, plantedAt: new Date().toISOString() },
-          { id: 'gp2', gardenId: id, plantId: 'p2', nickname: 'Snake Plant', plant: { id: 'p2', name: 'Snake Plant', scientificNameSpecies: 'Sansevieria trifasciata' }, plantsOnHand: 2, plantedAt: new Date().toISOString() },
-          { id: 'gp3', gardenId: id, plantId: 'p3', nickname: 'Basil', plant: { id: 'p3', name: 'Basil', scientificNameSpecies: 'Ocimum basilicum' }, plantsOnHand: 3, plantedAt: new Date().toISOString() },
-        ] as any);
-        const today = new Date().toISOString().slice(0, 10);
-        setServerToday(today);
-        serverTodayRef.current = today;
-        setDailyStats(demoDataRef.current?.dailyStats ?? []);
-        setTodayTaskOccurrences([
-          { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
-          { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
-          { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
-        ] as any);
-        if (isTrayTab) {
-          setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
-            id: `sc-${i}`, gardenId: id, position: i,
-            plantId: i < 4 ? 'p1' : i < 7 ? 'p2' : null,
-            stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
-            sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
-            lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,
-            notes: '',
-          })) as any);
-        }
-        setLoading(false);
-        return;
-      }
+      // Demo gardens are loaded by the effect above
+      if (isDemoGarden) { setLoading(false); return; }
       // Keep UI visible on subsequent reloads to avoid blink
       const silent = opts?.silent ?? garden !== null;
       const suppressError = opts?.suppressError ?? false;
