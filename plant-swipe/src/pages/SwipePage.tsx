@@ -482,7 +482,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                 onTap={(e) => handleCardTap(e as unknown as React.MouseEvent)}
               >
                 {/* Card content with buttons INSIDE so they move together */}
-                <Card className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
+                <Card data-tutorial="swipe-card" className="relative h-full w-full overflow-hidden bg-black text-white shadow-2xl rounded-[24px] border border-white/20 dark:border-white/10">
                   {displayImage ? (
                     <img
                       src={displayImage}
@@ -542,6 +542,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                   {/* Like button - inside card so it moves with swipe */}
                   {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
                   <div
+                    data-tutorial="like-button"
                     className="absolute top-4 right-4 z-[100]"
                     onPointerDownCapture={(e) => {
                       e.stopPropagation()
@@ -607,6 +608,7 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     {/* Info button - inside card so it moves with swipe */}
                     {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
                     <div
+                      data-tutorial="info-button"
                       className="mt-5 flex justify-center"
                       onPointerDownCapture={(e) => {
                         e.stopPropagation()

@@ -475,7 +475,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Main categories grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
+      <div data-tutorial="category-grid" className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4">
         {mainCategories.map((cat) => (
           <CategoryCard key={cat.key} category={cat} previews={categoryPreviews[cat.key] || []} navigate={navigate} t={t} />
         ))}

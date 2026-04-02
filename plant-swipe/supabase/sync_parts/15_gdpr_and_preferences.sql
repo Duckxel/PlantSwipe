@@ -58,6 +58,11 @@ COMMENT ON COLUMN public.profiles.experience_level IS 'User gardening experience
 COMMENT ON COLUMN public.profiles.looking_for IS 'User gardening goal: eat (vegetables/fruits), ornamental (flowers), or various (diverse plants)';
 COMMENT ON COLUMN public.profiles.notification_time IS 'Preferred notification hour in local time (0-23), stored as text like "6h" or "18h"';
 
+-- Tutorial Completion Flag
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS tutorial_completed BOOLEAN DEFAULT FALSE;
+CREATE INDEX IF NOT EXISTS idx_profiles_tutorial_completed ON public.profiles(tutorial_completed);
+COMMENT ON COLUMN public.profiles.tutorial_completed IS 'Whether the user has completed the onboarding tutorial. When false, the tutorial is shown on every login. Skipping the tutorial also sets this to true.';
+
 -- Email Verification
 -- Add email_verified column to profiles table
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT FALSE;

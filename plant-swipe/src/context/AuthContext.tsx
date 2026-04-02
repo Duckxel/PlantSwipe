@@ -113,6 +113,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (!pwError && pwData && data) {
         ;(data as any).force_password_change = pwData.force_password_change ?? false
       }
+      // Try to fetch tutorial_completed separately (column may not exist yet)
+      const { data: tutData, error: tutError } = await supabase
+        .from('profiles')
+        .select('tutorial_completed')
+        .eq('id', currentId)
+        .maybeSingle()
+      if (!tutError && tutData && data) {
+        ;(data as any).tutorial_completed = tutData.tutorial_completed ?? false
+      }
       // Check if user is banned (threat_level === 3)
       // Instead of silently signing out, flag as banned so the UI can show a BannedModal
       if (data?.threat_level === 3) {

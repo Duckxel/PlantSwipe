@@ -52,6 +52,8 @@ import {
   type GardenRealtimeKind,
 } from "@/lib/realtime";
 import type { Garden } from "@/types/garden";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS, DEMO_GARDEN_PROGRESS, DEMO_GARDEN_MEMBER_COUNTS } from "@/lib/tutorialDemoData";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
@@ -64,6 +66,7 @@ export const GardenListPage: React.FC = () => {
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
+  const { active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -207,6 +210,14 @@ export const GardenListPage: React.FC = () => {
   );
 
   const load = React.useCallback(async () => {
+    if (tutorialActive) {
+      setGardens(DEMO_GARDENS);
+      gardensRef.current = DEMO_GARDENS;
+      setProgressByGarden(DEMO_GARDEN_PROGRESS);
+      setMemberCountsByGarden(DEMO_GARDEN_MEMBER_COUNTS);
+      setLoading(false);
+      return;
+    }
     if (!user?.id) {
       setGardens([]);
       gardensRef.current = [];
@@ -484,6 +495,24 @@ export const GardenListPage: React.FC = () => {
     load();
   }, [load]);
 
+  // Tutorial: auto-open create garden dialog for the beginner garden step
+  const prevTutorialStepRef = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    const stepId = tutorialStep?.id ?? null;
+    const prevId = prevTutorialStepRef.current;
+    prevTutorialStepRef.current = stepId;
+
+    if (tutorialActive && stepId === 'gardens_beginner') {
+      // Small delay so the page has rendered before opening the dialog
+      const t = setTimeout(() => { setOpen(true); setGardenType('beginners'); }, 150);
+      return () => clearTimeout(t);
+    }
+    // Only close when LEAVING the beginner step (not on every non-beginner render)
+    if (prevId === 'gardens_beginner' && stepId !== 'gardens_beginner') {
+      setOpen(false);
+    }
+  }, [tutorialActive, tutorialStep?.id]);
+
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(
     async (
@@ -491,6 +520,17 @@ export const GardenListPage: React.FC = () => {
       todayOverride?: string | null,
       skipResync = false,
     ) => {
+      if (tutorialActive) {
+        setTodayTaskOccurrences([
+          { id: 't1', taskId: 'dt1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't2', taskId: 'dt2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't3', taskId: 'dt3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+          { id: 't4', taskId: 'dt4', gardenPlantId: 'gp4', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'water' },
+          { id: 't5', taskId: 'dt5', gardenPlantId: 'gp5', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'cut' },
+        ]);
+        setLoadingTasks(false);
+        return;
+      }
       const today = todayOverride ?? serverTodayRef.current ?? serverToday;
       const gardensList = gardensOverride ?? gardensRef.current ?? gardens;
       if (!today) return;
@@ -2129,6 +2169,7 @@ export const GardenListPage: React.FC = () => {
             </h1>
             {user && (
               <Button
+                data-tutorial="create-garden"
                 className="rounded-2xl relative z-10 shadow-lg shadow-emerald-500/20"
                 onClick={() => setOpen(true)}
               >
@@ -2306,7 +2347,7 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
 
-          <Dialog open={open} onOpenChange={setOpen}>
+          <Dialog open={open} onOpenChange={(v) => { if (!tutorialActive) setOpen(v); }}>
             <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
               <DialogHeader>
                 <DialogTitle>{t("garden.createGarden")}</DialogTitle>
@@ -2336,6 +2377,7 @@ export const GardenListPage: React.FC = () => {
                       <button
                         key={opt.key}
                         type="button"
+                        data-tutorial={opt.key === 'beginners' ? 'garden-type-beginners' : undefined}
                         onClick={() => setGardenType(opt.key)}
                         className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
                           gardenType === opt.key
