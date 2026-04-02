@@ -272,7 +272,10 @@ export function TutorialOverlay() {
                 ? "bottom-6 left-1/2 w-full max-w-md rounded-2xl"
                 : "top-1/2 left-1/2 w-full max-w-md rounded-2xl"
           )}
-          style={{ zIndex: 10000 }}
+          style={isMobile
+            ? { zIndex: 10000, maxHeight: '70vh', overflowY: 'auto' }
+            : { zIndex: 10000 }
+          }
           initial={isMobile
             ? { y: 200, opacity: 0 }
             : hasRoute
@@ -298,7 +301,7 @@ export function TutorialOverlay() {
             </div>
           )}
 
-          <div className={cn("p-5", isMobile && "pb-[calc(1.25rem+env(safe-area-inset-bottom,0px))]")}>
+          <div className={cn("p-5", isMobile && "pb-[calc(1.25rem+72px+env(safe-area-inset-bottom,0px))]")}>
             {/* Header */}
             <div className="flex items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
