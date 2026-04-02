@@ -6170,9 +6170,11 @@ export const AdminPage: React.FC = () => {
           try {
             const { data: onb } = await supabase.from('profiles').select('setup_completed, email_verified, tutorial_completed').eq('id', data.user.id).maybeSingle();
             const actionIds = ['create_garden', 'add_plant', 'add_friend', 'complete_profile', 'add_bookmark'];
-            const { data: actionRows } = await supabase.from('user_action_status').select('action_id, completed_at').eq('user_id', data.user.id).in('action_id', actionIds);
-            const completedActions = actionRows ? actionRows.filter(r => r.completed_at != null).length : 0;
-            const allActionsComplete = completedActions >= actionIds.length;
+            const { data: actionRows } = await supabase.from('user_action_status').select('action_id, completed_at, skipped_at').eq('user_id', data.user.id).in('action_id', [...actionIds, '__all_done_dismissed']);
+            const doneActions = actionRows ? actionRows.filter(r => actionIds.includes(r.action_id) && (r.completed_at != null || r.skipped_at != null)).length : 0;
+            const allDoneDismissed = actionRows ? actionRows.some(r => r.action_id === '__all_done_dismissed' && r.completed_at != null) : false;
+            const allActionsComplete = allDoneDismissed || doneActions >= actionIds.length;
+            const completedActions = allActionsComplete ? actionIds.length : doneActions;
             if (onb) {
               setMemberData(prev => prev ? { ...prev, onboarding: { setupCompleted: onb.setup_completed ?? false, emailVerified: onb.email_verified ?? false, tutorialCompleted: onb.tutorial_completed ?? false, actionsCompleted: completedActions, actionsTotal: actionIds.length, allActionsComplete } } : prev);
             }
