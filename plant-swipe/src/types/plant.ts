@@ -190,6 +190,7 @@ export interface Plant {
   commonNames?: string[]
   presentation?: string
   origin?: string[]
+  originEnglish?: string[]
   allergens?: string[]
   poisoningSymptoms?: string
   // Non-translatable (from plants table)

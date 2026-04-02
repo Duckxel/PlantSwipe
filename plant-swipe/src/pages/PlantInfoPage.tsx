@@ -327,6 +327,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     commonNames: translation?.common_names || [],
     presentation: translation?.presentation || undefined,
     origin: translation?.origin || [],
+    originEnglish: Array.isArray(data.origin) ? data.origin : [],
     allergens: translation?.allergens || [],
     poisoningSymptoms: translation?.poisoning_symptoms || undefined,
 
@@ -1699,7 +1700,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               )}
             </div>
             {/* Right column: Origin with map — fills full height */}
-            <OriginCard origin={plant.origin} t={t} />
+            <OriginCard origin={plant.origin} originEnglish={plant.originEnglish} t={t} />
           </div>
         )}
 
@@ -2716,9 +2717,11 @@ const matchOriginToCoords = (origin: string): [number, number] | null => {
 
 const ORIGIN_MAP_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg'
 
-const OriginCard: React.FC<{ origin: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ origin, t }) => {
+const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ origin, originEnglish, t }) => {
   if (!origin || origin.length === 0) return null
 
+  // Always use English names for map coordinate matching
+  const mapOrigins = originEnglish && originEnglish.length > 0 ? originEnglish : origin
   const pinColor = '#10b981' // emerald-500
 
   return (
@@ -2765,8 +2768,8 @@ const OriginCard: React.FC<{ origin: string[] | undefined; t: (key: string, opti
               className="dark:opacity-30"
               style={{ filter: 'invert(1) brightness(0.6)' }}
             />
-            {/* Origin pins */}
-            {origin.map((o, i) => {
+            {/* Origin pins — always use English names for coordinate matching */}
+            {mapOrigins.map((o, i) => {
               const label = typeof o === 'string' ? o.trim() : ''
               if (!label) return null
               const coords = matchOriginToCoords(label)
