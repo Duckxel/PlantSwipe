@@ -11296,27 +11296,27 @@ export const AdminPage: React.FC = () => {
                                             ).toLocaleDateString()}
                                           </Badge>
                                         )}
-                                        {/* Onboarding status icons */}
-                                        {(memberData as any).onboarding && (() => {
-                                          const ob = (memberData as any).onboarding;
-                                          return (
-                                            <>
-                                              <span title={ob.setupCompleted ? "Setup completed" : "Setup not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.setupCompleted ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
-                                                <Settings className="h-3.5 w-3.5" />
-                                              </span>
-                                              <span title={ob.emailVerified ? "Email verified" : "Email not verified"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.emailVerified ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
-                                                <Mail className="h-3.5 w-3.5" />
-                                              </span>
-                                              <span title={ob.tutorialCompleted ? "Tutorial completed" : "Tutorial not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.tutorialCompleted ? "bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
-                                                <GraduationCap className="h-3.5 w-3.5" />
-                                              </span>
-                                              <span title={ob.allActionsComplete ? `Profile actions: ${ob.actionsCompleted}/${ob.actionsTotal} completed` : `Profile actions: ${ob.actionsCompleted ?? 0}/${ob.actionsTotal ?? 5} completed`} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.allActionsComplete ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
-                                                <ListChecks className="h-3.5 w-3.5" />
-                                              </span>
-                                            </>
-                                          );
-                                        })()}
                                       </div>
+                                      {/* Onboarding status icons — own row */}
+                                      {(memberData as any).onboarding && (() => {
+                                        const ob = (memberData as any).onboarding;
+                                        return (
+                                          <div className="flex items-center gap-1.5 mt-1.5">
+                                            <span title={ob.setupCompleted ? "Setup completed" : "Setup not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.setupCompleted ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <Settings className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.emailVerified ? "Email verified" : "Email not verified"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.emailVerified ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <Mail className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.tutorialCompleted ? "Tutorial completed" : "Tutorial not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.tutorialCompleted ? "bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <GraduationCap className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.allActionsComplete ? `Profile actions: ${ob.actionsCompleted}/${ob.actionsTotal} completed` : `Profile actions: ${ob.actionsCompleted ?? 0}/${ob.actionsTotal ?? 5} completed`} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.allActionsComplete ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <ListChecks className="h-3.5 w-3.5" />
+                                            </span>
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">
