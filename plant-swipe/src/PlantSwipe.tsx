@@ -1251,19 +1251,31 @@ export default function PlantSwipe() {
   }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
-  const normalizedFilters = useMemo(() => ({
-    query: debouncedQuery.toLowerCase(),
-    type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
-    maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
-    vegetable: vegetableFilter,
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
+  const normalizedFilters = useMemo(() => {
+    // ⚡ Bolt: Use a helper for Set creation with single-pass for loop to avoid
+    // new Set(array.map()) intermediate array allocations
+    const toLowerSet = (arr: string[]): Set<string> => {
+      const set = new Set<string>()
+      for (let i = 0; i < arr.length; i++) {
+        set.add(arr[i].toLowerCase())
+      }
+      return set
+    }
+
+    return {
+      query: debouncedQuery.toLowerCase(),
+      type: typeFilter?.toLowerCase() ?? null,
+      usageSet: toLowerSet(usageFilters),
+      habitatSet: toLowerSet(habitatFilters),
+      maintenance: maintenanceFilter?.toLowerCase() ?? null,
+      livingSpaceSet: toLowerSet(livingSpaceFilters),
+      lifeCycleSet: toLowerSet(lifeCycleFilters),
+      plantHabitSet: toLowerSet(plantHabitFilters),
+      ediblePartSet: toLowerSet(ediblePartFilters),
+      plantPartSet: toLowerSet(plantPartFilters),
+      vegetable: vegetableFilter,
+    }
+  }, [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
   // Reset index when search query changes
   React.useEffect(() => {
