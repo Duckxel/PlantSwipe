@@ -82,7 +82,7 @@ export const GardenLivingSpaceEditor: React.FC<{
               type="button"
               disabled={!canEdit}
               onClick={() => toggle(opt.value)}
-              className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
+              className={`flex items-center gap-3 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
                 active
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
                   : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"

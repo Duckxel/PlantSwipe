@@ -124,9 +124,13 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
               onTouchStart={() => setHoveredBadge(hoveredBadge === earned.id ? null : earned.id)}
             >
               {/* Badge icon */}
-              <motion.div
+              <motion.button
+                type="button"
+                tabIndex={0}
+                onFocus={() => setHoveredBadge(earned.id)}
+                onBlur={() => setHoveredBadge(null)}
                 whileHover={{ scale: 1.08 }}
-                className="flex items-center justify-center h-20 w-20 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md"
+                className="flex items-center justify-center h-20 w-20 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
               >
                 {earned.badge.icon_url ? (
                   <img
@@ -138,7 +142,7 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                 ) : (
                   <Trophy className="h-10 w-10 text-amber-400 dark:text-amber-300" />
                 )}
-              </motion.div>
+              </motion.button>
 
               {/* Tooltip */}
               <AnimatePresence>
