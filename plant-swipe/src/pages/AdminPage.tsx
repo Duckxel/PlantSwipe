@@ -131,7 +131,7 @@ import {
 import { processAllPlantRequests, aiFieldOrder as aiPrefillFieldOrder } from "@/lib/aiPrefillService";
 import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
-import { Languages, Settings, GraduationCap } from "lucide-react";
+import { Languages, Settings, GraduationCap, ListChecks } from "lucide-react";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -6169,8 +6169,12 @@ export const AdminPage: React.FC = () => {
         if (data?.user?.id) {
           try {
             const { data: onb } = await supabase.from('profiles').select('setup_completed, email_verified, tutorial_completed').eq('id', data.user.id).maybeSingle();
+            const actionIds = ['create_garden', 'add_plant', 'add_friend', 'complete_profile', 'add_bookmark'];
+            const { data: actionRows } = await supabase.from('user_action_status').select('action_id, completed_at').eq('user_id', data.user.id).in('action_id', actionIds);
+            const completedActions = actionRows ? actionRows.filter(r => r.completed_at != null).length : 0;
+            const allActionsComplete = completedActions >= actionIds.length;
             if (onb) {
-              setMemberData(prev => prev ? { ...prev, onboarding: { setupCompleted: onb.setup_completed ?? false, emailVerified: onb.email_verified ?? false, tutorialCompleted: onb.tutorial_completed ?? false } } : prev);
+              setMemberData(prev => prev ? { ...prev, onboarding: { setupCompleted: onb.setup_completed ?? false, emailVerified: onb.email_verified ?? false, tutorialCompleted: onb.tutorial_completed ?? false, actionsCompleted: completedActions, actionsTotal: actionIds.length, allActionsComplete } } : prev);
             }
           } catch {}
         }
@@ -11305,6 +11309,9 @@ export const AdminPage: React.FC = () => {
                                               </span>
                                               <span title={ob.tutorialCompleted ? "Tutorial completed" : "Tutorial not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.tutorialCompleted ? "bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
                                                 <GraduationCap className="h-3.5 w-3.5" />
+                                              </span>
+                                              <span title={ob.allActionsComplete ? `Profile actions: ${ob.actionsCompleted}/${ob.actionsTotal} completed` : `Profile actions: ${ob.actionsCompleted ?? 0}/${ob.actionsTotal ?? 5} completed`} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.allActionsComplete ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                                <ListChecks className="h-3.5 w-3.5" />
                                               </span>
                                             </>
                                           );
