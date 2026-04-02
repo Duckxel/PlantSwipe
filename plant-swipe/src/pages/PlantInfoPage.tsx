@@ -70,6 +70,16 @@ import {
   ExternalLink,
   Mail,
   Camera,
+  Globe2,
+  Snowflake,
+  Mountain,
+  CloudRain,
+  Flame,
+  Palmtree,
+  CloudLightning,
+  Waves,
+  TreePalm,
+  Anchor,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -1393,7 +1403,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     const palette = plant.colors?.length ? plant.colors : []
     const showPalette = palette.length > 0
     const hasLifeCycleData = (plant.lifeCycle?.length ?? 0) > 0 || (plant.averageLifespan?.length ?? 0) > 0 || (plant.foliagePersistence?.length ?? 0) > 0
-    const showRightColumn = showPalette || (plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false) || hasLifeCycleData
+    const showRightColumn = showPalette || (plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)
     const gridClass = showRightColumn
       ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
       : ''
@@ -1669,18 +1679,25 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
                   t={t}
                 />
               )}
-
-              {hasLifeCycleData && (
-                <LifeCycleCard
-                  lifeCycle={plant.lifeCycle}
-                  averageLifespan={plant.averageLifespan}
-                  foliagePersistence={plant.foliagePersistence}
-                  t={t}
-                />
-              )}
             </div>
           )}
         </div>
+
+        {/* Life Cycle + Climate + Origin row */}
+        {(hasLifeCycleData || (plant.climate?.length ?? 0) > 0 || (plant.origin?.length ?? 0) > 0) && (
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-3 items-start">
+            {hasLifeCycleData && (
+              <LifeCycleCard
+                lifeCycle={plant.lifeCycle}
+                averageLifespan={plant.averageLifespan}
+                foliagePersistence={plant.foliagePersistence}
+                t={t}
+              />
+            )}
+            <ClimateCard climate={plant.climate} t={t} />
+            <OriginCard origin={plant.origin} t={t} />
+          </div>
+        )}
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
@@ -2305,6 +2322,18 @@ const lifespanData: Record<string, { level: number; color: string; barColor: str
   over_50_years:    { level: 5, color: 'text-sky-700 dark:text-sky-300',         barColor: 'bg-sky-400',       desc: 'Very long-lived — can outlast generations.' },
 }
 
+// Map UI display values back to lifespanData keys (handles en-dashes, "+" etc.)
+const resolveLifespanKey = (uiValue: string): string | null => {
+  const dbVal = averageLifespanEnum.toDb(uiValue)
+  if (dbVal && lifespanData[dbVal]) return dbVal
+  // Fallback: normalize manually
+  const norm = uiValue.toLowerCase().replace(/[–—]/g, '_to_').replace(/\+/g, '').replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+  for (const key of Object.keys(lifespanData)) {
+    if (norm.includes(key) || key.includes(norm)) return key
+  }
+  return null
+}
+
 // Foliage: 4-season mini bar showing leaf state per season
 const foliageData: Record<string, {
   seasons: { label: string; state: 'full' | 'partial' | 'bare' | 'dormant' }[]
@@ -2415,7 +2444,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
             </span>
             <div className="space-y-1.5">
               {lifeCycle.map(cycle => {
-                const key = cycle.toLowerCase().replace(/ /g, '_')
+                const key = lifeCycleEnum.toDb(cycle) || cycle.toLowerCase().replace(/ /g, '_')
                 const data = lifeCycleData[key] || lifeCycleData.perennial
                 const isOpen = expanded === `lc-${key}`
                 return (
@@ -2455,8 +2484,8 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
 
         {/* ── Average Lifespan ── */}
         {hasLifespan && (() => {
-          const primary = averageLifespan[0].toLowerCase().replace(/ /g, '_')
-          const data = lifespanData[primary]
+          const primary = resolveLifespanKey(averageLifespan[0])
+          const data = primary ? lifespanData[primary] : null
           if (!data) return null
           const isOpen = expanded === `ls-${primary}`
           return (
@@ -2509,7 +2538,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
             </span>
             <div className="space-y-1.5">
               {foliagePersistence.map(foliage => {
-                const key = foliage.toLowerCase().replace(/ /g, '_').replace(/-/g, '_')
+                const key = foliagePersistenceEnum.toDb(foliage) || foliage.toLowerCase().replace(/ /g, '_').replace(/-/g, '_')
                 const data = foliageData[key] || foliageData.evergreen
                 const isOpen = expanded === `fp-${key}`
                 return (
@@ -2560,6 +2589,106 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
             </div>
           </div>
         )}
+      </div>
+    </section>
+  )
+}
+
+// ── Climate Card ──
+const climateIconMap: Record<string, React.ReactNode> = {
+  polar: <Snowflake className="h-4 w-4 sm:h-5 sm:w-5" />,
+  montane: <Mountain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  oceanic: <CloudRain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  degraded_oceanic: <Wind className="h-4 w-4 sm:h-5 sm:w-5" />,
+  temperate_continental: <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />,
+  mediterranean: <Sun className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_dry: <Flame className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_humid: <Palmtree className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_volcanic: <Mountain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_cyclonic: <CloudLightning className="h-4 w-4 sm:h-5 sm:w-5" />,
+  humid_insular: <Waves className="h-4 w-4 sm:h-5 sm:w-5" />,
+  subtropical_humid: <Droplets className="h-4 w-4 sm:h-5 sm:w-5" />,
+  equatorial: <TreePalm className="h-4 w-4 sm:h-5 sm:w-5" />,
+  windswept_coastal: <Anchor className="h-4 w-4 sm:h-5 sm:w-5" />,
+}
+
+const ClimateCard: React.FC<{ climate: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ climate, t }) => {
+  if (!climate || climate.length === 0) return null
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.10),_transparent_55%)]" />
+      <div className="relative space-y-2">
+        <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+          <Thermometer className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">
+            {t('plantInfo:climateCard.title', { defaultValue: 'Climate' })}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {climate.map(c => {
+            const dbKey = climateEnum.toDb(c) || c.toLowerCase().replace(/ /g, '_')
+            const icon = climateIconMap[dbKey]
+            return (
+              <div
+                key={c}
+                className="flex items-center gap-2 rounded-xl border border-sky-200/50 dark:border-sky-500/20 bg-sky-50/50 dark:bg-sky-500/5 px-2 py-1.5 sm:px-2.5 sm:py-2"
+              >
+                <div className="text-sky-500 dark:text-sky-400 shrink-0">
+                  {icon || <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />}
+                </div>
+                <span className="text-[10px] sm:text-xs font-semibold text-sky-800 dark:text-sky-200 leading-tight">
+                  {climateEnum.toUi(c) || c}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Origin Card (mini map with pin) ──
+const OriginCard: React.FC<{ origin: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ origin, t }) => {
+  if (!origin || origin.length === 0) return null
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] relative overflow-hidden">
+      {/* Mini world map background */}
+      <div className="relative h-20 sm:h-24 overflow-hidden rounded-t-2xl sm:rounded-t-3xl">
+        <img src={worldMapLight} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40 dark:hidden" />
+        <img src={worldMapDark} alt="" className="absolute inset-0 hidden h-full w-full object-cover opacity-30 dark:block" />
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-white dark:to-[#1f1f1f]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(16,185,129,0.15),_transparent_60%)]" />
+        {/* Header overlay */}
+        <div className="absolute top-2 left-2.5 sm:top-3 sm:left-3 flex items-center gap-1.5">
+          <span className="relative flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <Globe2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <MapPin className="absolute -bottom-0.5 -right-0.5 h-2 w-2 sm:h-2.5 sm:w-2.5" />
+          </span>
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest text-emerald-700 dark:text-emerald-300">
+            {t('plantInfo:originCard.title', { defaultValue: 'Origin' })}
+          </span>
+        </div>
+      </div>
+      {/* Origin tags */}
+      <div className="px-2.5 pb-2.5 sm:px-3 sm:pb-3 -mt-2">
+        <div className="flex flex-wrap gap-1.5">
+          {origin.map((o, i) => {
+            const label = typeof o === 'string' ? o.trim() : ''
+            if (!label) return null
+            return (
+              <div
+                key={`${label}-${i}`}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-300/50 dark:border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-500/10 px-2 py-1 sm:px-2.5 sm:py-1.5"
+              >
+                <MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                <span className="text-[10px] sm:text-xs font-semibold text-emerald-800 dark:text-emerald-200">{label}</span>
+              </div>
+            )
+          })}
+        </div>
       </div>
     </section>
   )
