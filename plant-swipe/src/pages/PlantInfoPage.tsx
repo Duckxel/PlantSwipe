@@ -2221,56 +2221,39 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
 }
 
 // ── Life Cycle & Foliage Card ──
+
+const lifeCycleStyles: Record<string, { bg: string; border: string; text: string; dot: string; desc: string }> = {
+  annual:              { bg: 'bg-lime-50 dark:bg-lime-500/10',    border: 'border-lime-300/60 dark:border-lime-500/30',    text: 'text-lime-800 dark:text-lime-200',    dot: 'bg-lime-400',    desc: 'Completes its entire life cycle in a single growing season.' },
+  biennial:            { bg: 'bg-sky-50 dark:bg-sky-500/10',      border: 'border-sky-300/60 dark:border-sky-500/30',      text: 'text-sky-800 dark:text-sky-200',      dot: 'bg-sky-400',     desc: 'Takes two years to complete its life cycle — grows first year, flowers and seeds the second.' },
+  perennial:           { bg: 'bg-emerald-50 dark:bg-emerald-500/10', border: 'border-emerald-300/60 dark:border-emerald-500/30', text: 'text-emerald-800 dark:text-emerald-200', dot: 'bg-emerald-400', desc: 'Lives for more than two years, regrowing each season.' },
+  succulent_perennial: { bg: 'bg-teal-50 dark:bg-teal-500/10',    border: 'border-teal-300/60 dark:border-teal-500/30',    text: 'text-teal-800 dark:text-teal-200',    dot: 'bg-teal-400',    desc: 'A long-lived succulent that stores water and persists for many years.' },
+  monocarpic:          { bg: 'bg-rose-50 dark:bg-rose-500/10',    border: 'border-rose-300/60 dark:border-rose-500/30',    text: 'text-rose-800 dark:text-rose-200',    dot: 'bg-rose-400',    desc: 'Flowers only once in its lifetime, then dies after setting seed.' },
+  short_cycle:         { bg: 'bg-amber-50 dark:bg-amber-500/10',  border: 'border-amber-300/60 dark:border-amber-500/30',  text: 'text-amber-800 dark:text-amber-200',  dot: 'bg-amber-400',   desc: 'Rapidly completes its growth cycle in a short period.' },
+  ephemeral:           { bg: 'bg-purple-50 dark:bg-purple-500/10', border: 'border-purple-300/60 dark:border-purple-500/30', text: 'text-purple-800 dark:text-purple-200', dot: 'bg-purple-400',  desc: 'A brief-lived plant that appears, flowers, and vanishes quickly.' },
+}
+
+const lifespanData: Record<string, { level: number; color: string; barColor: string; desc: string }> = {
+  less_than_1_year: { level: 1, color: 'text-amber-700 dark:text-amber-300',   barColor: 'bg-amber-400',   desc: 'Short-lived — completes its life in under 12 months.' },
+  '2_years':        { level: 2, color: 'text-lime-700 dark:text-lime-300',     barColor: 'bg-lime-400',     desc: 'Lives for approximately two growing seasons.' },
+  '3_to_10_years':  { level: 3, color: 'text-emerald-700 dark:text-emerald-300', barColor: 'bg-emerald-400', desc: 'Medium lifespan — establishes well and persists several years.' },
+  '10_to_50_years': { level: 4, color: 'text-teal-700 dark:text-teal-300',    barColor: 'bg-teal-400',     desc: 'Long-lived — becomes a lasting part of the landscape.' },
+  over_50_years:    { level: 5, color: 'text-sky-700 dark:text-sky-300',       barColor: 'bg-sky-400',       desc: 'Very long-lived — can outlast generations.' },
+}
+
+const foliageStyles: Record<string, { colors: string[]; text: string; desc: string }> = {
+  deciduous:             { colors: ['bg-amber-400', 'bg-orange-400', 'bg-red-400'],           text: 'text-amber-800 dark:text-amber-200',   desc: 'Sheds all its leaves seasonally, typically in autumn.' },
+  evergreen:             { colors: ['bg-emerald-400', 'bg-green-500', 'bg-emerald-600'],      text: 'text-emerald-800 dark:text-emerald-200', desc: 'Retains green foliage throughout the year.' },
+  semi_evergreen:        { colors: ['bg-emerald-400', 'bg-lime-400', 'bg-amber-300'],         text: 'text-lime-800 dark:text-lime-200',      desc: 'Keeps some leaves year-round but sheds partially in harsh conditions.' },
+  marcescent:            { colors: ['bg-yellow-700', 'bg-amber-600', 'bg-orange-700'],        text: 'text-amber-900 dark:text-amber-200',    desc: 'Dead leaves remain attached to the branch until new growth pushes them off.' },
+  winter_dormant:        { colors: ['bg-slate-300', 'bg-blue-300', 'bg-slate-400'],           text: 'text-slate-700 dark:text-slate-300',    desc: 'Enters dormancy during winter — leaves die back but the plant survives underground.' },
+  dry_season_deciduous:  { colors: ['bg-orange-300', 'bg-yellow-400', 'bg-amber-300'],        text: 'text-orange-800 dark:text-orange-200',  desc: 'Drops leaves during the dry season to conserve water.' },
+}
+
 type LifeCycleCardProps = {
   lifeCycle: string[] | undefined
   averageLifespan: string[] | undefined
   foliagePersistence: string[] | undefined
   t: (key: string, options?: Record<string, string>) => string
-}
-
-const lifeCycleIcons: Record<string, { icon: React.ReactNode; color: string }> = {
-  annual: { icon: <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-lime-500' },
-  biennial: { icon: <RefreshCw className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-sky-500' },
-  perennial: { icon: <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-emerald-500' },
-  succulent_perennial: { icon: <Flower className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-teal-500' },
-  monocarpic: { icon: <Flower2 className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-rose-400' },
-  short_cycle: { icon: <Clock className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-amber-500' },
-  ephemeral: { icon: <Wind className="h-4 w-4 sm:h-5 sm:w-5" />, color: 'text-purple-400' },
-}
-
-const lifespanRingData: Record<string, { percent: number; label: string; color: string }> = {
-  less_than_1_year: { percent: 10, label: '<1y', color: '#f59e0b' },
-  '2_years': { percent: 25, label: '2y', color: '#84cc16' },
-  '3_to_10_years': { percent: 45, label: '3–10y', color: '#22c55e' },
-  '10_to_50_years': { percent: 72, label: '10–50y', color: '#14b8a6' },
-  over_50_years: { percent: 95, label: '50+y', color: '#0ea5e9' },
-}
-
-const foliageVisuals: Record<string, { icon: React.ReactNode; gradient: string }> = {
-  deciduous: { icon: <Leaf className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-amber-400 to-orange-500' },
-  evergreen: { icon: <TreeDeciduous className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-emerald-400 to-green-600' },
-  semi_evergreen: { icon: <Leaf className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-emerald-300 to-amber-400' },
-  marcescent: { icon: <Leaf className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-yellow-600 to-amber-700' },
-  winter_dormant: { icon: <Sprout className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-slate-300 to-blue-400' },
-  dry_season_deciduous: { icon: <Sun className="h-4 w-4 sm:h-5 sm:w-5" />, gradient: 'from-orange-300 to-yellow-500' },
-}
-
-const LifespanRing: React.FC<{ percent: number; color: string; label: string }> = ({ percent, color, label }) => {
-  const radius = 28
-  const circumference = 2 * Math.PI * radius
-  const offset = circumference - (percent / 100) * circumference
-  return (
-    <div className="relative flex items-center justify-center">
-      <svg className="h-[72px] w-[72px] sm:h-[84px] sm:w-[84px] -rotate-90" viewBox="0 0 72 72">
-        <circle cx="36" cy="36" r={radius} fill="none" stroke="currentColor" strokeWidth="5"
-          className="text-stone-200/60 dark:text-stone-700/50" />
-        <circle cx="36" cy="36" r={radius} fill="none" stroke={color} strokeWidth="5"
-          strokeLinecap="round" strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-all duration-700 ease-out" />
-      </svg>
-      <span className="absolute text-xs sm:text-sm font-bold text-stone-700 dark:text-stone-200">{label}</span>
-    </div>
-  )
 }
 
 const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespan, foliagePersistence, t }) => {
@@ -2279,76 +2262,149 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
   const hasFoliage = foliagePersistence && foliagePersistence.length > 0
   if (!hasLifeCycle && !hasLifespan && !hasFoliage) return null
 
-  const primaryLifespan = hasLifespan ? averageLifespan[0].toLowerCase().replace(/ /g, '_') : null
-  const ring = primaryLifespan ? lifespanRingData[primaryLifespan] : null
+  const [expanded, setExpanded] = React.useState<string | null>(null)
+  const toggle = (key: string) => setExpanded(prev => prev === key ? null : key)
 
   return (
-    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_right,_rgba(16,_185,_129,_0.08),_transparent_60%)]" />
-      <div className="relative space-y-3 sm:space-y-4">
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] relative overflow-hidden">
+      {/* Decorative background */}
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(16,185,129,0.07),_transparent_50%),radial-gradient(ellipse_at_bottom_left,_rgba(139,92,246,0.05),_transparent_50%)]" />
+
+      <div className="relative p-3 sm:p-4 space-y-3">
         {/* Header */}
-        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
-          <RefreshCw className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:lifeCycleCard.title', { defaultValue: 'Life Cycle & Foliage' })}</span>
+        <div className="flex items-center gap-2">
+          <div className="h-1 w-1 rounded-full bg-emerald-400 animate-pulse" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-[0.2em] text-emerald-600 dark:text-emerald-400 font-semibold">
+            {t('plantInfo:lifeCycleCard.title', { defaultValue: 'Life Cycle & Foliage' })}
+          </span>
         </div>
 
-        {/* Life Cycle pills */}
+        {/* ── Life Cycle ── */}
         {hasLifeCycle && (
-          <div className="space-y-1">
-            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">{t('plantInfo:lifeCycleCard.lifeCycle', { defaultValue: 'Life Cycle' })}</span>
+          <div className="space-y-1.5">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+              {t('plantInfo:lifeCycleCard.lifeCycle', { defaultValue: 'Plant Life Cycle' })}
+            </span>
             <div className="flex flex-wrap gap-1.5">
               {lifeCycle.map(cycle => {
                 const key = cycle.toLowerCase().replace(/ /g, '_')
-                const vis = lifeCycleIcons[key]
+                const style = lifeCycleStyles[key] || lifeCycleStyles.perennial
+                const isOpen = expanded === `lc-${key}`
                 return (
-                  <div key={cycle} className="flex items-center gap-1.5 rounded-xl border border-emerald-400/40 bg-emerald-50/60 dark:border-emerald-500/30 dark:bg-emerald-500/10 px-2 py-1 sm:px-2.5 sm:py-1.5">
-                    <span className={vis?.color || 'text-emerald-500'}>{vis?.icon || <Leaf className="h-4 w-4 sm:h-5 sm:w-5" />}</span>
-                    <span className="text-[10px] sm:text-xs font-semibold text-stone-700 dark:text-stone-200">{lifeCycleEnum.toUi(cycle) || cycle}</span>
-                  </div>
+                  <button
+                    key={cycle}
+                    type="button"
+                    onClick={() => toggle(`lc-${key}`)}
+                    className={`group relative rounded-lg border px-2 py-1 sm:px-2.5 sm:py-1.5 transition-all duration-200 text-left ${style.bg} ${style.border} ${isOpen ? 'ring-1 ring-emerald-400/50 shadow-sm' : 'hover:shadow-sm'}`}
+                  >
+                    <div className="flex items-center gap-1.5">
+                      <div className={`h-2 w-2 rounded-full ${style.dot} shrink-0`} />
+                      <span className={`text-[10px] sm:text-xs font-semibold ${style.text}`}>
+                        {lifeCycleEnum.toUi(cycle) || cycle}
+                      </span>
+                    </div>
+                    {isOpen && (
+                      <p className="mt-1.5 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 max-w-[200px]">
+                        {t(`plantInfo:lifeCycleCard.desc.${key}`, { defaultValue: style.desc })}
+                      </p>
+                    )}
+                  </button>
                 )
               })}
             </div>
           </div>
         )}
 
-        {/* Average Lifespan ring */}
-        {hasLifespan && ring && (
-          <div className="space-y-1">
-            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">{t('plantInfo:lifeCycleCard.averageLifespan', { defaultValue: 'Average Lifespan' })}</span>
-            <div className="flex items-center gap-3">
-              <LifespanRing percent={ring.percent} color={ring.color} label={ring.label} />
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm sm:text-base font-bold text-stone-800 dark:text-stone-100">
-                  {averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0]}
-                </span>
-                <span className="text-[9px] sm:text-[10px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.lifespanHint', { defaultValue: 'Expected lifespan range' })}</span>
+        {/* ── Average Lifespan ── */}
+        {hasLifespan && (() => {
+          const primary = averageLifespan[0].toLowerCase().replace(/ /g, '_')
+          const data = lifespanData[primary]
+          if (!data) return null
+          const isOpen = expanded === `ls-${primary}`
+          return (
+            <button
+              type="button"
+              onClick={() => toggle(`ls-${primary}`)}
+              className="w-full text-left space-y-1.5"
+            >
+              <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+                {t('plantInfo:lifeCycleCard.averageLifespan', { defaultValue: 'Average Lifespan' })}
+              </span>
+              <div className={`rounded-lg border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/50 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/50 dark:bg-stone-800/20 hover:shadow-sm'}`}>
+                <div className="flex items-baseline justify-between mb-1.5">
+                  <span className={`text-sm sm:text-base font-bold ${data.color}`}>
+                    {averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0]}
+                  </span>
+                </div>
+                {/* Bar visualization */}
+                <div className="flex gap-1 items-end h-3">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div
+                      key={i}
+                      className={`flex-1 rounded-sm transition-all duration-300 ${
+                        i <= data.level
+                          ? `${data.barColor} opacity-${i <= data.level ? (40 + i * 12) : 20}`
+                          : 'bg-stone-200/60 dark:bg-stone-700/40'
+                      }`}
+                      style={{
+                        height: `${20 + i * 16}%`,
+                        opacity: i <= data.level ? 0.4 + i * 0.12 : 0.3,
+                      }}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-1">
+                  <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-600">&lt;1y</span>
+                  <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-600">50+y</span>
+                </div>
+                {isOpen && (
+                  <p className="mt-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 border-t border-stone-200/50 dark:border-stone-700/30 pt-1.5">
+                    {t(`plantInfo:lifeCycleCard.desc.lifespan_${primary}`, { defaultValue: data.desc })}
+                  </p>
+                )}
               </div>
-            </div>
-          </div>
-        )}
+            </button>
+          )
+        })()}
 
-        {/* Foliage Persistence */}
+        {/* ── Foliage Persistence ── */}
         {hasFoliage && (
-          <div className="space-y-1">
-            <span className="text-[8px] sm:text-[9px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">{t('plantInfo:lifeCycleCard.foliagePersistence', { defaultValue: 'Foliage Persistence' })}</span>
+          <div className="space-y-1.5">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+              {t('plantInfo:lifeCycleCard.foliagePersistence', { defaultValue: 'Foliage Persistence' })}
+            </span>
             <div className="flex flex-wrap gap-1.5">
               {foliagePersistence.map(foliage => {
                 const key = foliage.toLowerCase().replace(/ /g, '_').replace(/-/g, '_')
-                const vis = foliageVisuals[key]
-                const gradient = vis?.gradient || 'from-emerald-400 to-green-600'
+                const style = foliageStyles[key] || foliageStyles.evergreen
+                const isOpen = expanded === `fp-${key}`
                 return (
-                  <div key={foliage} className="flex items-center gap-1.5 rounded-xl border border-stone-200/60 dark:border-stone-700/40 bg-stone-50/60 dark:bg-stone-800/30 px-2 py-1 sm:px-2.5 sm:py-1.5">
-                    <div className={`rounded-md bg-gradient-to-br ${gradient} p-0.5 sm:p-1 text-white`}>
-                      {vis?.icon || <Leaf className="h-4 w-4 sm:h-5 sm:w-5" />}
+                  <button
+                    key={foliage}
+                    type="button"
+                    onClick={() => toggle(`fp-${key}`)}
+                    className={`group rounded-lg border border-stone-200/60 dark:border-stone-700/40 px-2 py-1.5 sm:px-2.5 sm:py-2 transition-all duration-200 text-left ${isOpen ? 'ring-1 ring-emerald-400/50 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/50 dark:bg-stone-800/20 hover:shadow-sm'}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {/* Color dots representing the foliage palette */}
+                      <div className="flex -space-x-0.5">
+                        {style.colors.map((c, i) => (
+                          <div key={i} className={`h-2.5 w-2.5 sm:h-3 sm:w-3 rounded-full ${c} ring-1 ring-white/80 dark:ring-stone-800/80`} />
+                        ))}
+                      </div>
+                      <span className={`text-[10px] sm:text-xs font-semibold ${style.text}`}>
+                        {foliagePersistenceEnum.toUi(foliage) || foliage}
+                      </span>
                     </div>
-                    <span className="text-[10px] sm:text-xs font-semibold text-stone-700 dark:text-stone-200">
-                      {foliagePersistenceEnum.toUi(foliage) || foliage}
-                    </span>
-                  </div>
+                    {isOpen && (
+                      <p className="mt-1.5 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 max-w-[220px]">
+                        {t(`plantInfo:lifeCycleCard.desc.foliage_${key}`, { defaultValue: style.desc })}
+                      </p>
+                    )}
+                  </button>
                 )
               })}
             </div>
-            <p className="text-[8px] sm:text-[9px] text-stone-400 dark:text-stone-500 italic">{t('plantInfo:lifeCycleCard.foliageHint', { defaultValue: 'How leaves behave across seasons' })}</p>
           </div>
         )}
       </div>
