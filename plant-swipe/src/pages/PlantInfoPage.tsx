@@ -2697,19 +2697,40 @@ const originCountryCoords: Record<string, [number, number]> = {
   Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
 }
 
-// Try to match origin strings (which might be regions like "China (northwest)") to country coords
+// Normalize a string for fuzzy country matching: lowercase, strip diacritics, remove extra punctuation
+const normalizeCountryName = (name: string): string =>
+  name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ô→o, etc.)
+    .toLowerCase()
+    .replace(/[_-]/g, ' ')           // underscores/hyphens → spaces
+    .replace(/\s+/g, ' ')            // collapse whitespace
+    .trim()
+
+// Pre-build a normalized lookup from the coordinates map
+const normalizedCoordsMap: Array<{ normalized: string; coords: [number, number] }> =
+  Object.entries(originCountryCoords).map(([country, coords]) => ({
+    normalized: normalizeCountryName(country),
+    coords,
+  }))
+
+// Try to match origin strings to country coords — handles formatting differences
 const matchOriginToCoords = (origin: string): [number, number] | null => {
   const trimmed = origin.trim()
-  // Direct match
+  // 1. Direct match (fast path)
   if (originCountryCoords[trimmed]) return originCountryCoords[trimmed]
-  // Try removing parenthetical region info: "China (northwest)" → "China"
+  // 2. Remove parenthetical region info: "China (northwest)" → "China"
   const base = trimmed.replace(/\s*\(.*?\)\s*$/, '').trim()
   if (originCountryCoords[base]) return originCountryCoords[base]
-  // Case-insensitive partial match
-  const lower = base.toLowerCase()
-  for (const [country, coords] of Object.entries(originCountryCoords)) {
-    if (country.toLowerCase() === lower || country.toLowerCase().includes(lower) || lower.includes(country.toLowerCase())) {
-      return coords
+  // 3. Normalized match (handles case, diacritics, hyphens, underscores)
+  const norm = normalizeCountryName(base)
+  for (const entry of normalizedCoordsMap) {
+    if (entry.normalized === norm) return entry.coords
+  }
+  // 4. Partial/contains match (e.g. "south africa" in "republic of south africa")
+  for (const entry of normalizedCoordsMap) {
+    if (entry.normalized.includes(norm) || norm.includes(entry.normalized)) {
+      return entry.coords
     }
   }
   return null
