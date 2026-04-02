@@ -17,7 +17,7 @@
   ],
   "identity": [
     "Populate the IDENTITY section for {{plantName}}. Return a JSON object with ALL these fields:",
-    "- `origin`: array of countries/regions (e.g. [\"South Africa\", \"Madagascar\"])",
+    "- `origin`: array of countries where this plant is native. Use ONLY recognized country names (e.g. [\"South Africa\", \"Madagascar\", \"China\", \"Brazil\"]). NEVER use regions, continents, or sub-regions like \"Southern Europe\", \"Central Asia\", \"China (northwest)\". If a plant is native to a region of a country, just use the country name. If native to a broad region like \"Mediterranean\", list the individual countries instead (e.g. [\"Spain\", \"Italy\", \"Greece\", \"Turkey\"]). Prefer the standard English country name.",
     "- `climate`: array from ONLY: [\"polar\",\"montane\",\"oceanic\",\"degraded_oceanic\",\"temperate_continental\",\"mediterranean\",\"tropical_dry\",\"tropical_humid\",\"tropical_volcanic\",\"tropical_cyclonic\",\"humid_insular\",\"subtropical_humid\",\"equatorial\",\"windswept_coastal\"]",
     "- `season`: array from [\"spring\",\"summer\",\"autumn\",\"winter\"]",
     "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\",\"infusion\"]. Use \"infusion\" if plant can be used for tea/tisane, \"aromatic\" also covers aromatherapy, \"fragrant\" for notable fragrance, \"medicinal\" for medicinal uses.",
