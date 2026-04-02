@@ -96,7 +96,7 @@ export const GardenClimateEditor: React.FC<{
               type="button"
               disabled={!canEdit}
               onClick={() => toggle(opt.value)}
-              className={`inline-flex items-center gap-2 rounded-full border-2 px-3 py-1.5 text-xs font-medium transition-all cursor-pointer ${
+              className={`inline-flex items-center gap-2 rounded-full border-2 px-3 py-1.5 text-xs font-medium transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                 active
                   ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
                   : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300 dark:hover:border-stone-600"
