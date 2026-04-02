@@ -152,7 +152,7 @@ const TUTORIAL_EXCLUDED_PATHS = ['/admin', '/setup', '/verify-email', '/forgot-p
 
 export function TutorialOverlay() {
   const { active, currentStep, currentStepIndex, totalSteps, next, prev, skip } = useTutorial()
-  const { t } = useTranslation('common')
+  const { t, ready: i18nReady } = useTranslation('common')
   const navigate = useLanguageNavigate()
   const pathWithoutLang = usePathWithoutLanguage()
   const isMobile = useIsMobile()
@@ -217,7 +217,7 @@ export function TutorialOverlay() {
     return () => { clearTimeout(t1); clearTimeout(t2); clearInterval(iv); window.removeEventListener('scroll', measure, true) }
   }, [active, currentStep?.highlight, currentStep?.id])
 
-  if (!active || !currentStep || isExcludedPage) return null
+  if (!active || !currentStep || isExcludedPage || !i18nReady) return null
 
   const stepId = currentStep.id
   const isWelcome = stepId === 'welcome'
