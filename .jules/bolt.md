@@ -22,3 +22,10 @@
 ## 2026-03-29 - Pre-allocate arrays in discovery scoring hot paths
 **Learning:** In `scoreDiscoveryPlants` (in `discoveryScoring.ts`), functional `.map()` operations on scoring arrays created intermediate allocations on every scoring pass. For large plant collections this compounds into measurable GC pauses.
 **Action:** Replace `.map()` with pre-allocated arrays and index-based `for` loops in scoring functions that run on every discovery feed refresh.
+## 2025-03-09 - Pitfalls of Overzealous Primitive Fast-Paths
+**Learning:** In deeply recursive data parsers like `sanitizeDeep` (handling translations/JSON payloads), adding an early return for primitives (`null`, `number`, `boolean`) actually creates a pessimization. Because the payload consists almost entirely of strings, objects, and arrays, these extra `typeof` checks evaluate true rarely, adding useless branch overhead to the hot paths.
+**Action:** Before adding fast-paths to hot loops, consider the shape of the data. Only add fast-paths if the targeted data type makes up a statistically significant portion of the inputs.
+
+## 2025-03-09 - Optimizing Set Initializations in Hooks
+**Learning:** Initializing Sets using array mappers inside frequently run `useMemo` hooks (e.g., `new Set(filters.map(f => f.toLowerCase()))`) creates intermediate arrays that trigger garbage collection spikes, especially when dealing with multiple sets simultaneously.
+**Action:** Replace `new Set(arr.map())` patterns with empty Set instantiation followed by a single-pass `for` loop calling `.add()`.
