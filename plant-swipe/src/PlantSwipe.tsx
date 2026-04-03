@@ -1251,19 +1251,44 @@ export default function PlantSwipe() {
   }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
-  const normalizedFilters = useMemo(() => ({
-    query: debouncedQuery.toLowerCase(),
-    type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
-    maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
-    vegetable: vegetableFilter,
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
+  const normalizedFilters = useMemo(() => {
+    // ⚡ Bolt: Init Sets using single-pass for loops to eliminate
+    // intermediate array allocations from .map() in hot filter path
+    const usageSet = new Set<string>()
+    for (let i = 0; i < usageFilters.length; i++) usageSet.add(usageFilters[i].toLowerCase())
+
+    const habitatSet = new Set<string>()
+    for (let i = 0; i < habitatFilters.length; i++) habitatSet.add(habitatFilters[i].toLowerCase())
+
+    const livingSpaceSet = new Set<string>()
+    for (let i = 0; i < livingSpaceFilters.length; i++) livingSpaceSet.add(livingSpaceFilters[i].toLowerCase())
+
+    const lifeCycleSet = new Set<string>()
+    for (let i = 0; i < lifeCycleFilters.length; i++) lifeCycleSet.add(lifeCycleFilters[i].toLowerCase())
+
+    const plantHabitSet = new Set<string>()
+    for (let i = 0; i < plantHabitFilters.length; i++) plantHabitSet.add(plantHabitFilters[i].toLowerCase())
+
+    const ediblePartSet = new Set<string>()
+    for (let i = 0; i < ediblePartFilters.length; i++) ediblePartSet.add(ediblePartFilters[i].toLowerCase())
+
+    const plantPartSet = new Set<string>()
+    for (let i = 0; i < plantPartFilters.length; i++) plantPartSet.add(plantPartFilters[i].toLowerCase())
+
+    return {
+      query: debouncedQuery.toLowerCase(),
+      type: typeFilter?.toLowerCase() ?? null,
+      usageSet,
+      habitatSet,
+      maintenance: maintenanceFilter?.toLowerCase() ?? null,
+      livingSpaceSet,
+      lifeCycleSet,
+      plantHabitSet,
+      ediblePartSet,
+      plantPartSet,
+      vegetable: vegetableFilter,
+    }
+  }, [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
   // Reset index when search query changes
   React.useEffect(() => {
