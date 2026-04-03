@@ -234,7 +234,7 @@ export function MobileNotificationSheet({
           <div className="mx-4 mt-3 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/30 text-sm text-red-700 dark:text-red-300 flex items-center gap-2">
             <X className="h-4 w-4 flex-shrink-0" />
             <span className="flex-1">{actionError}</span>
-            <button aria-label={t('common.dismiss', { defaultValue: 'Dismiss' })} title={t('common.dismiss', { defaultValue: 'Dismiss' })} onClick={() => setActionError(null)} className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-1">
+            <button aria-label={t('common.dismiss', { defaultValue: 'Dismiss' })} title={t('common.dismiss', { defaultValue: 'Dismiss' })} onClick={() => setActionError(null)} className="text-red-500 hover:text-red-700 dark:hover:text-red-200 p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500">
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -378,7 +378,7 @@ export function MobileNotificationSheet({
                               variant="outline"
                               size="sm"
                               aria-label={t('common.reject', { defaultValue: 'Reject' })} title={t('common.reject', { defaultValue: 'Reject' })}
-                              className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                               onClick={(e) => handleRejectFriendRequest(e, request.id)}
                               disabled={isProcessing}
                             >
@@ -390,7 +390,7 @@ export function MobileNotificationSheet({
                             </Button>
                             <Button
                               size="sm"
-                              className="h-10 rounded-xl text-sm bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-500/25 px-5"
+                              className="h-10 rounded-xl text-sm bg-blue-500 hover:bg-blue-600 text-white shadow-md shadow-blue-500/25 px-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
                               onClick={(e) => handleAcceptFriendRequest(e, request.id)}
                               disabled={isProcessing}
                             >
@@ -499,7 +499,7 @@ export function MobileNotificationSheet({
                               variant="outline"
                               size="sm"
                               aria-label={t('common.decline', { defaultValue: 'Decline' })} title={t('common.decline', { defaultValue: 'Decline' })}
-                              className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              className="h-10 w-10 p-0 rounded-xl border-red-200 dark:border-red-800/50 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
                               onClick={(e) => handleDeclineGardenInvite(e, invite.id)}
                               disabled={isProcessing}
                             >
@@ -511,7 +511,7 @@ export function MobileNotificationSheet({
                             </Button>
                             <Button
                               size="sm"
-                              className="h-10 rounded-xl text-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 px-5"
+                              className="h-10 rounded-xl text-sm bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25 px-5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                               onClick={(e) => handleAcceptGardenInvite(e, invite.id)}
                               disabled={isProcessing}
                             >
