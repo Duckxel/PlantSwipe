@@ -203,7 +203,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
             ? cur.filter((c) => c !== color.name)
             : [...cur, color.name]
         )}
-        className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+        className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition flex items-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
           isActive
             ? "bg-black dark:bg-white text-white dark:text-black"
             : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -271,7 +271,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                   key={option}
                   type="button"
                   onClick={() => setTypeFilter((current) => (current?.toLowerCase() === option.toLowerCase() ? null : option))}
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-black dark:bg-white text-white dark:text-black"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -312,7 +312,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                         isSelected ? current.filter((value) => value.toLowerCase() !== option.toLowerCase()) : [...current, option]
                       )
                     }
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                       isSelected
                         ? "bg-emerald-600 dark:bg-emerald-500 text-white"
                         : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -346,7 +346,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                 key={s}
                 type="button"
                 onClick={() => setSeasonFilter((cur) => (cur === s ? null : s))}
-                className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                   seasonFilter === s ? "bg-black dark:bg-white text-white dark:text-black" : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
                 }`}
                 aria-pressed={seasonFilter === s}
@@ -425,7 +425,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                       isSelected ? current.filter((h) => h !== habitat) : [...current, habitat]
                     )
                   }
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-teal-600 dark:bg-teal-500 text-white"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -457,7 +457,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                   key={level}
                   type="button"
                   onClick={() => setMaintenanceFilter((current) => (current === level ? null : level))}
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-violet-600 dark:bg-violet-500 text-white"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -558,7 +558,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                       isSelected ? current.filter((v) => v !== option) : [...current, option]
                     )
                   }
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-lime-600 dark:bg-lime-500 text-white"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -593,7 +593,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                       isSelected ? current.filter((v) => v !== option) : [...current, option]
                     )
                   }
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-amber-600 dark:bg-amber-500 text-white"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -628,7 +628,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                       isSelected ? current.filter((v) => v !== option) : [...current, option]
                     )
                   }
-                  className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                  className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                     isSelected
                       ? "bg-green-600 dark:bg-green-500 text-white"
                       : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
@@ -664,7 +664,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
                         isSelected ? current.filter((v) => v !== option) : [...current, option]
                       )
                     }
-                    className={`px-3 py-1 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                    className={`px-3 py-2 rounded-2xl text-sm shadow-sm border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
                       isSelected
                         ? "bg-orange-600 dark:bg-orange-500 text-white"
                         : "bg-white dark:bg-[#2d2d30] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"
