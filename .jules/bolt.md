@@ -22,3 +22,6 @@
 ## 2026-03-29 - Pre-allocate arrays in discovery scoring hot paths
 **Learning:** In `scoreDiscoveryPlants` (in `discoveryScoring.ts`), functional `.map()` operations on scoring arrays created intermediate allocations on every scoring pass. For large plant collections this compounds into measurable GC pauses.
 **Action:** Replace `.map()` with pre-allocated arrays and index-based `for` loops in scoring functions that run on every discovery feed refresh.
+## 2026-03-30 - Balance loop unrolling performance with React readability
+**Learning:** While replacing `.map()` with manual `for` loops inside components drastically reduces garbage collection pressure by preventing intermediate array allocations, indiscriminately copy-pasting the exact same 4-line `for` loop multiple times (e.g., inside a single `useMemo` block) damages code readability and violates the rule against micro-optimizing at the cost of maintainability.
+**Action:** When applying imperative performance optimizations multiple times in a single component, extract the repetitive loop logic into a reusable helper function defined outside the component. This balances performance gains with code readability and prevents PR rejection for "readability smells".
