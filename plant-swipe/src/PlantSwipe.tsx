@@ -28,6 +28,16 @@ import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
 import { AuthActionsProvider } from "@/context/AuthActionsContext";
 import { RequireEditor } from "@/pages/RequireAdmin";
+
+// ⚡ Bolt: Helper to create sets efficiently without chained .map() allocations
+// Defined outside component to prevent re-allocation on every render
+const createLowercasedSet = (arr: string[]) => {
+  const set = new Set<string>()
+  for (let i = 0; i < arr.length; i++) {
+    set.add(arr[i].toLowerCase())
+  }
+  return set
+}
 import { supabase } from "@/lib/supabaseClient";
 import { getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import { checkEditorAccess } from "@/constants/userRoles";
@@ -1251,19 +1261,21 @@ export default function PlantSwipe() {
   }, [colorFilter, colorLookups])
 
   // Pre-normalize filter values to avoid repeated lowercasing during filtering
-  const normalizedFilters = useMemo(() => ({
-    query: debouncedQuery.toLowerCase(),
-    type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
-    maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
-    vegetable: vegetableFilter,
-  }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
+  const normalizedFilters = useMemo(() => {
+    return {
+      query: debouncedQuery.toLowerCase(),
+      type: typeFilter?.toLowerCase() ?? null,
+      usageSet: createLowercasedSet(usageFilters),
+      habitatSet: createLowercasedSet(habitatFilters),
+      maintenance: maintenanceFilter?.toLowerCase() ?? null,
+      livingSpaceSet: createLowercasedSet(livingSpaceFilters),
+      lifeCycleSet: createLowercasedSet(lifeCycleFilters),
+      plantHabitSet: createLowercasedSet(plantHabitFilters),
+      ediblePartSet: createLowercasedSet(ediblePartFilters),
+      plantPartSet: createLowercasedSet(plantPartFilters),
+      vegetable: vegetableFilter,
+    }
+  }, [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
   // Reset index when search query changes
   React.useEffect(() => {
