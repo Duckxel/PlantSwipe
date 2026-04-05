@@ -291,7 +291,7 @@ import postgres from 'postgres'
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { exec as execCb, spawn as spawnChild } from 'child_process'
+import { exec as execCb, execFile as execFileCb, spawn as spawnChild } from 'child_process'
 import { promisify } from 'util'
 
 import zlib from 'zlib'
@@ -839,7 +839,7 @@ async function getRepoRoot() {
 // Helper: return top-level path if "dir" is a git repo, otherwise null.
 async function getTopLevelIfRepo(dir) {
   try {
-    const { stdout } = await exec(`git -c "safe.directory=${dir}" -C "${dir}" rev-parse --show-toplevel`)
+    const { stdout } = await execFile('git', ['-c', `safe.directory=${dir}`, '-C', dir, 'rev-parse', '--show-toplevel'])
     const root = (stdout || '').toString().trim()
     return root || null
   } catch {
@@ -848,6 +848,7 @@ async function getTopLevelIfRepo(dir) {
 }
 
 const exec = promisify(execCb)
+const execFile = promisify(execFileCb)
 
 function parseEmailTargets(raw, fallback) {
   const source = (typeof raw === 'string' && raw.trim().length > 0) ? raw : (fallback || '')
@@ -20134,15 +20135,14 @@ app.get('/api/users/:id/private', async (req, res) => {
   try {
     const targetId = String(req.params.id || '').trim()
     if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+
     const viewer = await getUserFromRequest(req)
-    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    let allowed = viewer.id === targetId
-    if (!allowed) {
-      try {
-        allowed = await isAdminFromRequest(req)
-      } catch { }
+    const isOwner = viewer?.id && viewer.id === targetId
+
+    if (!isOwner) {
+      const adminId = await ensureAdmin(req, res)
+      if (!adminId) return // ensureAdmin handles the 401/403 responses
     }
-    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
     if (sql) {
       const rows = await sql`

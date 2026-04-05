@@ -155,6 +155,15 @@ const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   }
 }
 
+// ⚡ Bolt: Init Map using single-pass for loop to eliminate intermediate array allocations
+const createLowercasedSet = (arr: string[]): Set<string> => {
+  const set = new Set<string>()
+  for (let i = 0; i < arr.length; i++) {
+    set.add(arr[i].toLowerCase())
+  }
+  return set
+}
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
@@ -945,7 +954,10 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    const prepared = plants.map((p) => {
+    // ⚡ Bolt: Optimize mapping of thousands of plants using pre-allocated array and single-pass for loop
+    const prepared = new Array(plants.length)
+    for (let index = 0; index < plants.length; index++) {
+      const p = plants[index] as Plant & Record<string, any>
       // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
       // This avoids computing regexes, Sets, and string manipulations for thousands of plants
       // unless they are actually needed by active filters.
@@ -1076,7 +1088,7 @@ export default function PlantSwipe() {
         return _cachedHabitats
       }
 
-      return {
+      prepared[index] = {
         ...p,
         get _searchString() {
           if (_cachedSearchString !== undefined) return _cachedSearchString
@@ -1183,7 +1195,7 @@ export default function PlantSwipe() {
         _isPromoted: isPromoted,
         _isInProgress: isInProgress
       } as PreparedPlant
-    })
+    }
 
     return {
       preparedPlants: prepared,
@@ -1258,14 +1270,14 @@ export default function PlantSwipe() {
   const normalizedFilters = useMemo(() => ({
     query: debouncedQuery.toLowerCase(),
     type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
+    usageSet: createLowercasedSet(usageFilters),
+    habitatSet: createLowercasedSet(habitatFilters),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+    livingSpaceSet: createLowercasedSet(livingSpaceFilters),
+    lifeCycleSet: createLowercasedSet(lifeCycleFilters),
+    plantHabitSet: createLowercasedSet(plantHabitFilters),
+    ediblePartSet: createLowercasedSet(ediblePartFilters),
+    plantPartSet: createLowercasedSet(plantPartFilters),
     vegetable: vegetableFilter,
   }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 

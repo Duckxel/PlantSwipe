@@ -188,7 +188,7 @@ export const GardenDashboardPage: React.FC = () => {
   const pendingSeedlingModalRef = React.useRef<typeof seedlingModal>(null);
   const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
   // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const seedlingPlantMap = React.useMemo(() => {
     const m: Record<string, any> = {};
     for (const p of plants) {
@@ -3051,14 +3051,14 @@ export const GardenDashboardPage: React.FC = () => {
         <>
           <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
             <div className="hidden md:block h-7 w-36 bg-stone-200 dark:bg-stone-700 rounded-lg animate-pulse" />
-            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+            <nav className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {Array.from({ length: 6 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl md:w-full"
+                  className="flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl md:w-full bg-stone-100/80 dark:bg-stone-800/60 md:bg-transparent md:dark:bg-transparent"
                 >
-                  <div className="w-5 h-5 md:w-4 md:h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse flex-shrink-0" />
-                  <div className="hidden md:block h-4 w-16 bg-stone-200 dark:bg-stone-700 rounded animate-pulse" />
+                  <div className="w-4 h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse flex-shrink-0" />
+                  <div className="h-3.5 w-12 md:w-16 bg-stone-200 dark:bg-stone-700 rounded animate-pulse" />
                 </div>
               ))}
             </nav>
@@ -3122,7 +3122,7 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav data-tutorial="garden-tabs" className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+            <nav data-tutorial="garden-tabs" className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {(
                 canViewFullGarden
                   ? [
@@ -3145,14 +3145,14 @@ export const GardenDashboardPage: React.FC = () => {
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
                     data-tutorial={tutorialId}
-                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
+                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl text-[13px] md:text-sm font-medium transition-colors no-underline md:w-full whitespace-nowrap ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"
-                        : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 md:bg-transparent md:dark:bg-transparent hover:bg-stone-200/80 dark:hover:bg-stone-700/60 md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
                     }`}
                   >
-                    <Icon className="w-5 h-5 md:w-4 md:h-4 flex-shrink-0" />
-                    <span className="hidden md:inline whitespace-nowrap">{label}</span>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{label}</span>
                   </NavLink>
                 );
               })}

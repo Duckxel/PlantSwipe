@@ -3732,6 +3732,7 @@ export const AdminPage: React.FC = () => {
       try {
         const ids = Array.from(selectedPlantIds);
         const dbStatus = normalizedStatusToDb[newStatus] ?? newStatus;
+        const failedIds: string[] = [];
         // Update in batches of 50 to avoid URL length issues
         const batchSize = 50;
         for (let i = 0; i < ids.length; i += batchSize) {
@@ -3740,16 +3741,35 @@ export const AdminPage: React.FC = () => {
             .from('plants')
             .update({ status: dbStatus })
             .in('id', batch);
-          if (error) throw new Error(error.message);
+          if (error) {
+            // Batch failed (likely due to constraint violations on some rows).
+            // Fall back to updating each plant individually so valid ones still succeed.
+            for (const id of batch) {
+              const { error: singleError } = await supabase
+                .from('plants')
+                .update({ status: dbStatus })
+                .eq('id', id);
+              if (singleError) {
+                failedIds.push(id);
+              }
+            }
+          }
         }
-        // Update local state
+        // Update local state for successfully updated plants
+        const failedSet = new Set(failedIds);
+        const successIds = new Set(ids.filter((id) => !failedSet.has(id)));
         setPlantDashboardRows((prev) =>
           prev.map((p) =>
-            selectedPlantIds.has(p.id) ? { ...p, status: newStatus } : p
+            successIds.has(p.id) ? { ...p, status: newStatus } : p
           )
         );
         setSelectedPlantIds(new Set());
         setBulkStatusDialogOpen(false);
+        if (failedIds.length > 0) {
+          setPlantDashboardError(
+            `${successIds.size} plant(s) updated. ${failedIds.length} plant(s) failed due to invalid data (check sowing_method values).`
+          );
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to update status';
         setPlantDashboardError(message);
