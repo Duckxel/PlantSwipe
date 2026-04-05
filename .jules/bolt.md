@@ -1,4 +1,3 @@
-
 ## 2024-11-20 - Fast Deep Object Sanitization in High-Volume Data Fetching
 **Learning:** The `sanitizeDeep` function in `plantTranslationLoader.ts` is a critical hot path because it runs on *every* plant object returned from the database before rendering. Using chained `.map().filter()` for arrays and `Object.keys(obj).length === 0` to check for empty plain objects creates significant memory pressure and GC overhead due to constant intermediate array allocations on large deeply nested JSON datasets.
 **Action:** Replace functional array chaining with single-pass `for` loops in recursive object sanitizers. Use a `for...in` loop that returns early (e.g. `isEmptyPlainObject`) instead of `Object.keys()` to check if an object is empty without allocating an array of keys.
@@ -22,3 +21,7 @@
 ## 2026-03-29 - Pre-allocate arrays in discovery scoring hot paths
 **Learning:** In `scoreDiscoveryPlants` (in `discoveryScoring.ts`), functional `.map()` operations on scoring arrays created intermediate allocations on every scoring pass. For large plant collections this compounds into measurable GC pauses.
 **Action:** Replace `.map()` with pre-allocated arrays and index-based `for` loops in scoring functions that run on every discovery feed refresh.
+
+## 2026-03-31 - Eliminate intermediate array allocations in Set initialization for filter normalization
+**Learning:** The `normalizedFilters` `useMemo` block in `PlantSwipe.tsx` initialized 8 separate `Set`s using `new Set(arr.map(x => x.toLowerCase()))`. In frequently triggered render paths, this generates unnecessary intermediate array allocations for each field on every filter interaction.
+**Action:** When creating a `Set` from a mapped array, define an external helper function (e.g., `createLowercasedSet`) that iterates through the input with a `for` loop and adds elements directly to an empty `Set`. This maintains readability while eliminating intermediate allocations.
