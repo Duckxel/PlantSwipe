@@ -1252,9 +1252,10 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
 
       if [[ "$ssl_repaired" != "true" ]]; then
         log "[WARN] Nginx config has SSL listeners but no certificates yet."
-        log "[INFO] Temporarily removing SSL directives so nginx can start for certificate validation…"
-        # Backup and temporarily remove ALL SSL directives so nginx can start
+        log "[INFO] Temporarily rewriting nginx config for HTTP-only so certbot can run…"
+        # Backup the full SSL config (will be restored after certbot obtains certs)
         $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
+        # Strip ALL SSL directives
         $SUDO sed -i \
           -e '/listen 443 ssl;/d' \
           -e '/listen \[::\]:443 ssl;/d' \
@@ -1264,9 +1265,36 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
           -e '/ssl_ciphers /d' \
           -e '/ssl_prefer_server_ciphers /d' \
           "$NGINX_SITE_AVAIL"
-        # Test again and reload nginx so it can start without SSL
+        # Remove the HTTP→HTTPS redirect — with no HTTPS server, it breaks everything.
+        # Certbot's --nginx plugin will re-add the redirect after installing certs.
+        $SUDO sed -i '/return 301 https:\/\/\$host\$request_uri;/d' "$NGINX_SITE_AVAIL"
+        # Ensure the main server block listens on port 80 (it may have only had 443)
+        # Check if main block (non-redirect) has a listen directive; if not, add one
+        if ! $SUDO grep -q "listen 80;" "$NGINX_SITE_AVAIL"; then
+          $SUDO sed -i '0,/server_name/{/server_name/i\    listen 80;\n    listen [::]:80;
+          }' "$NGINX_SITE_AVAIL"
+        fi
+        # Remove any empty server blocks left from the redirect block
+        # (server { listen 80; server_name ...; } with no content)
+        $SUDO python3 - "$NGINX_SITE_AVAIL" <<'PYFIX'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+# Remove empty server blocks (only contain listen/server_name, no location/return/root)
+content = re.sub(
+    r'server\s*\{[^}]*?\}',
+    lambda m: m.group(0) if re.search(r'(location|return|root|proxy_pass|try_files)', m.group(0)) else '',
+    content
+)
+# Clean up excessive blank lines
+content = re.sub(r'\n{3,}', '\n\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYFIX
+        # Test again and start nginx so it can serve HTTP-01 challenges
         if $SUDO nginx -t; then
-          log "Nginx config is valid without SSL directives (temporary — will be restored after certbot)"
+          log "Nginx config is valid (HTTP-only, temporary — will be restored after certbot)"
           $SUDO systemctl reload nginx 2>/dev/null || $SUDO systemctl start nginx 2>/dev/null || true
         else
           log "[ERROR] Nginx configuration still invalid after removing SSL directives"
@@ -1745,17 +1773,6 @@ PY
     done
   fi
   
-  # Pre-flight dry-run to catch issues before using real rate-limited requests
-  log "Running certbot dry-run to validate configuration…"
-  local dryrun_args=("${certbot_args[@]}" --dry-run)
-  if ! $SUDO certbot "${dryrun_args[@]}" 2>&1 | tee /tmp/certbot-dryrun.log; then
-    log "[WARN] Certbot dry-run failed. See /tmp/certbot-dryrun.log for details."
-    log "[INFO] Common causes: DNS not pointing to this server, port 80 blocked, nginx misconfigured."
-    log "[INFO] Proceeding anyway in case the dry-run failure is transient…"
-  else
-    log "Certbot dry-run succeeded — configuration is valid"
-  fi
-
   # Attempt certificate acquisition
   log "Requesting SSL certificates from Let's Encrypt…"
   if $SUDO certbot "${certbot_args[@]}" 2>&1 | tee /tmp/certbot.log; then
@@ -1927,15 +1944,7 @@ EOF
   fi
 }
 
-# Attempt SSL certificate setup (only if user wants SSL)
-if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-  log "Attempting SSL certificate setup…"
-  setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
-else
-  log "Skipping SSL certificate setup (user declined SSL)."
-fi
-
-# Configure firewall (UFW) to allow SSH and web traffic
+# Configure firewall (UFW) BEFORE certbot — ports 80/443 must be open for HTTP-01 validation
 log "Configuring firewall (ufw)…"
 if command -v ufw >/dev/null 2>&1; then
   # Always permit SSH to avoid lockout
@@ -1958,6 +1967,14 @@ if command -v ufw >/dev/null 2>&1; then
   fi
 else
   log "ufw not found; skipping firewall configuration."
+fi
+
+# Attempt SSL certificate setup (only if user wants SSL)
+if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+  log "Attempting SSL certificate setup…"
+  setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
+else
+  log "Skipping SSL certificate setup (user declined SSL)."
 fi
 
 # Admin API: install to /opt/admin with venv
