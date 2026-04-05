@@ -404,7 +404,9 @@
       "extinct_in_wild": "Éteinte à l'état sauvage",
       "extinct": "Éteinte",
       "data_deficient": "Données insuffisantes",
-      "not_evaluated": "Non évaluée"
+      "not_evaluated": "Non évaluée",
+      "protected": "Protégée",
+      "protected_in_some_regions": "Protégée dans certaines régions"
     },
     "ecologicalTolerance": {
       "drought": "Sécheresse",

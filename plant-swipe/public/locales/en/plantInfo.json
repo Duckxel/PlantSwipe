@@ -404,7 +404,9 @@
       "extinct_in_wild": "Extinct in Wild",
       "extinct": "Extinct",
       "data_deficient": "Data Deficient",
-      "not_evaluated": "Not Evaluated"
+      "not_evaluated": "Not Evaluated",
+      "protected": "Protected",
+      "protected_in_some_regions": "Protected in Some Regions"
     },
     "ecologicalTolerance": {
       "drought": "Drought",
