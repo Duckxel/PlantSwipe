@@ -20134,15 +20134,14 @@ app.get('/api/users/:id/private', async (req, res) => {
   try {
     const targetId = String(req.params.id || '').trim()
     if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+
     const viewer = await getUserFromRequest(req)
-    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    let allowed = viewer.id === targetId
-    if (!allowed) {
-      try {
-        allowed = await isAdminFromRequest(req)
-      } catch { }
+    const isOwner = viewer?.id && viewer.id === targetId
+
+    if (!isOwner) {
+      const adminId = await ensureAdmin(req, res)
+      if (!adminId) return // ensureAdmin handles the 401/403 responses
     }
-    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
     if (sql) {
       const rows = await sql`
