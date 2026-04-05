@@ -274,7 +274,8 @@
       "leaves": "Feuilles",
       "flowers": "Fleurs",
       "fruits": "Fruits",
-      "spores": "Spores"
+      "spores": "Spores",
+      "tubers": "Tubercules"
     },
     "toxicity": {
       "non_toxic": "Non toxique",

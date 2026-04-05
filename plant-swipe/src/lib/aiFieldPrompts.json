@@ -2,7 +2,7 @@
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
     "- `plantType`: EXACTLY one of: \"herb\", \"shrub\", \"tree\", \"climber\", \"succulent\", \"fern\", \"moss\", \"grass\"",
-    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\"]. The main anatomical parts of this plant.",
+    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"tubers\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\"]. The main anatomical parts of this plant. Use \"tubers\" for plants with tuberous storage organs (e.g. potatoes, dahlias, sweet potatoes).",
     "- `habitat`: array from ONLY: [\"aquatic\",\"hygrophytic\",\"terrestrial\",\"xerophytic\",\"halophytic\",\"epiphytic\",\"parasitic\"]. The natural habitat type(s).",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
     "- `variety`: ONLY the cultivar/variety name if applicable (e.g. \"Hidcote\", \"Iceberg\", \"Thai Constellation\"), or null if no specific variety. NEVER include the base species name here.",

@@ -9,7 +9,7 @@ export type PlantTypeValue =
   | "succulent" | "fern" | "moss" | "grass"
 
 export type PlantPartValue =
-  | "roots" | "rhizomes" | "bulbs" | "stems" | "leaves"
+  | "roots" | "rhizomes" | "bulbs" | "tubers" | "stems" | "leaves"
   | "flowers" | "fruits" | "spores"
 
 export type HabitatValue =
