@@ -1589,13 +1589,37 @@ PY
   fi
   local email="$cert_email"
   
+  # Respect agree_tos from cert-info.json
+  local agree_tos
+  agree_tos="$(python3 -c "import json; print(json.load(open('$cert_info_json')).get('agree_tos', True))" 2>/dev/null || echo "True")"
+  if [[ "$agree_tos" == "False" ]]; then
+    log "[ERROR] agree_tos is set to false in cert-info.json. Cannot proceed without agreeing to Let's Encrypt TOS."
+    log "[INFO] Set \"agree_tos\": true in cert-info.json to continue."
+    return 1
+  fi
+
   # Determine DNS plugin and credentials (priority: cert-info.json > env vars)
   local dns_plugin="${cert_dns_plugin:-${CERTBOT_DNS_PLUGIN:-}}"
   local dns_credentials="${cert_dns_credentials:-${CERTBOT_DNS_CREDENTIALS:-}}"
-  
-  # Determine if we should use wildcard (from cert-info.json or if DNS credentials provided)
+
+  # Install DNS plugin package if a DNS plugin is specified
+  if [[ -n "$dns_plugin" ]]; then
+    local dns_pkg="python3-certbot-dns-${dns_plugin}"
+    if ! dpkg -l "$dns_pkg" 2>/dev/null | grep -q '^ii'; then
+      log "Installing certbot DNS plugin package: $dns_pkg"
+      if ! $SUDO apt-get install -y "$dns_pkg" 2>&1; then
+        log "[ERROR] Failed to install DNS plugin package: $dns_pkg"
+        log "[INFO] You may need to install it manually: sudo apt-get install $dns_pkg"
+        return 1
+      fi
+    else
+      log "DNS plugin package already installed: $dns_pkg"
+    fi
+  fi
+
+  # Determine if we should use wildcard (only from cert-info.json use_wildcard flag)
   local use_wildcard=false
-  if [[ "$cert_use_wildcard" == "True" ]] || [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+  if [[ "$cert_use_wildcard" == "True" ]]; then
     use_wildcard=true
   fi
   
@@ -1657,7 +1681,16 @@ PY
   local certbot_args=()
   local use_dns=false
   
-  # If DNS credentials are provided (from cert-info.json or env), use DNS-01 challenge for wildcard
+  # Validate DNS credentials file exists if DNS-01 is requested
+  if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+    if [[ ! -f "$dns_credentials" ]]; then
+      log "[ERROR] DNS credentials file not found: $dns_credentials"
+      log "[INFO] Create the credentials file or clear dns_credentials in cert-info.json to use HTTP-01."
+      return 1
+    fi
+  fi
+
+  # If DNS credentials are provided (from cert-info.json or env), use DNS-01 challenge
   if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
     log "Using DNS-01 challenge with plugin: $dns_plugin"
     if [[ "$use_wildcard" == "true" ]]; then
@@ -1671,6 +1704,7 @@ PY
       --non-interactive
       --agree-tos
       --email "$email"
+      --cert-name "$first_domain"
       --dns-"$dns_plugin"
       --dns-"$dns_plugin"-credentials "$dns_credentials"
     )
@@ -1691,6 +1725,7 @@ PY
       --agree-tos
       --redirect
       --email "$email"
+      --cert-name "$first_domain"
     )
     [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
     # Add --expand flag if we need to expand an existing certificate
@@ -1700,6 +1735,17 @@ PY
     done
   fi
   
+  # Pre-flight dry-run to catch issues before using real rate-limited requests
+  log "Running certbot dry-run to validate configuration…"
+  local dryrun_args=("${certbot_args[@]}" --dry-run)
+  if ! $SUDO certbot "${dryrun_args[@]}" 2>&1 | tee /tmp/certbot-dryrun.log; then
+    log "[WARN] Certbot dry-run failed. See /tmp/certbot-dryrun.log for details."
+    log "[INFO] Common causes: DNS not pointing to this server, port 80 blocked, nginx misconfigured."
+    log "[INFO] Proceeding anyway in case the dry-run failure is transient…"
+  else
+    log "Certbot dry-run succeeded — configuration is valid"
+  fi
+
   # Attempt certificate acquisition
   log "Requesting SSL certificates from Let's Encrypt…"
   if $SUDO certbot "${certbot_args[@]}" 2>&1 | tee /tmp/certbot.log; then
