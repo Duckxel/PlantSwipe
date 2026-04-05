@@ -1227,8 +1227,8 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
     ensure_helper_functions_loaded=false
   fi
 
-  # Check if error is about missing SSL certificates
-  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
+  # Check if error is about missing SSL certificates (match multiple nginx error formats)
+  if grep -qE "(ssl_certificate.*is defined|cannot load certificate|no such file.*letsencrypt|SSL_CTX_use_certificate|BIO_new_file)" /tmp/nginx-test.log; then
     if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
       ssl_repaired=false
       if [[ "$ensure_helper_functions_loaded" == "true" ]]; then
@@ -1252,14 +1252,52 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
 
       if [[ "$ssl_repaired" != "true" ]]; then
         log "[WARN] Nginx config has SSL listeners but no certificates yet."
-        log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
-        # Temporarily remove SSL listeners so nginx can start
-        $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
-        # Test again
+        log "[INFO] Temporarily rewriting nginx config for HTTP-only so certbot can run…"
+        # Backup the full SSL config (will be restored after certbot obtains certs)
+        $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
+        # Strip ALL SSL directives
+        $SUDO sed -i \
+          -e '/listen 443 ssl;/d' \
+          -e '/listen \[::\]:443 ssl;/d' \
+          -e '/ssl_certificate /d' \
+          -e '/ssl_certificate_key /d' \
+          -e '/ssl_protocols /d' \
+          -e '/ssl_ciphers /d' \
+          -e '/ssl_prefer_server_ciphers /d' \
+          "$NGINX_SITE_AVAIL"
+        # Remove the HTTP→HTTPS redirect — with no HTTPS server, it breaks everything.
+        # Certbot's --nginx plugin will re-add the redirect after installing certs.
+        $SUDO sed -i '/return 301 https:\/\/\$host\$request_uri;/d' "$NGINX_SITE_AVAIL"
+        # Ensure the main server block listens on port 80 (it may have only had 443)
+        # Check if main block (non-redirect) has a listen directive; if not, add one
+        if ! $SUDO grep -q "listen 80;" "$NGINX_SITE_AVAIL"; then
+          $SUDO sed -i '0,/server_name/{/server_name/i\    listen 80;\n    listen [::]:80;
+          }' "$NGINX_SITE_AVAIL"
+        fi
+        # Remove any empty server blocks left from the redirect block
+        # (server { listen 80; server_name ...; } with no content)
+        $SUDO python3 - "$NGINX_SITE_AVAIL" <<'PYFIX'
+import sys, re
+path = sys.argv[1]
+with open(path, 'r') as f:
+    content = f.read()
+# Remove empty server blocks (only contain listen/server_name, no location/return/root)
+content = re.sub(
+    r'server\s*\{[^}]*?\}',
+    lambda m: m.group(0) if re.search(r'(location|return|root|proxy_pass|try_files)', m.group(0)) else '',
+    content
+)
+# Clean up excessive blank lines
+content = re.sub(r'\n{3,}', '\n\n', content)
+with open(path, 'w') as f:
+    f.write(content)
+PYFIX
+        # Test again and start nginx so it can serve HTTP-01 challenges
         if $SUDO nginx -t; then
-          log "Nginx config is valid without SSL listeners (temporary)"
+          log "Nginx config is valid (HTTP-only, temporary — will be restored after certbot)"
+          $SUDO systemctl reload nginx 2>/dev/null || $SUDO systemctl start nginx 2>/dev/null || true
         else
-          log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
+          log "[ERROR] Nginx configuration still invalid after removing SSL directives"
           $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
           exit 1
         fi
@@ -1589,13 +1627,37 @@ PY
   fi
   local email="$cert_email"
   
+  # Respect agree_tos from cert-info.json
+  local agree_tos
+  agree_tos="$(python3 -c "import json; print(json.load(open('$cert_info_json')).get('agree_tos', True))" 2>/dev/null || echo "True")"
+  if [[ "$agree_tos" == "False" ]]; then
+    log "[ERROR] agree_tos is set to false in cert-info.json. Cannot proceed without agreeing to Let's Encrypt TOS."
+    log "[INFO] Set \"agree_tos\": true in cert-info.json to continue."
+    return 1
+  fi
+
   # Determine DNS plugin and credentials (priority: cert-info.json > env vars)
   local dns_plugin="${cert_dns_plugin:-${CERTBOT_DNS_PLUGIN:-}}"
   local dns_credentials="${cert_dns_credentials:-${CERTBOT_DNS_CREDENTIALS:-}}"
-  
-  # Determine if we should use wildcard (from cert-info.json or if DNS credentials provided)
+
+  # Install DNS plugin package if a DNS plugin is specified
+  if [[ -n "$dns_plugin" ]]; then
+    local dns_pkg="python3-certbot-dns-${dns_plugin}"
+    if ! dpkg -l "$dns_pkg" 2>/dev/null | grep -q '^ii'; then
+      log "Installing certbot DNS plugin package: $dns_pkg"
+      if ! $SUDO apt-get install -y "$dns_pkg" 2>&1; then
+        log "[ERROR] Failed to install DNS plugin package: $dns_pkg"
+        log "[INFO] You may need to install it manually: sudo apt-get install $dns_pkg"
+        return 1
+      fi
+    else
+      log "DNS plugin package already installed: $dns_pkg"
+    fi
+  fi
+
+  # Determine if we should use wildcard (only from cert-info.json use_wildcard flag)
   local use_wildcard=false
-  if [[ "$cert_use_wildcard" == "True" ]] || [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+  if [[ "$cert_use_wildcard" == "True" ]]; then
     use_wildcard=true
   fi
   
@@ -1657,7 +1719,16 @@ PY
   local certbot_args=()
   local use_dns=false
   
-  # If DNS credentials are provided (from cert-info.json or env), use DNS-01 challenge for wildcard
+  # Validate DNS credentials file exists if DNS-01 is requested
+  if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
+    if [[ ! -f "$dns_credentials" ]]; then
+      log "[ERROR] DNS credentials file not found: $dns_credentials"
+      log "[INFO] Create the credentials file or clear dns_credentials in cert-info.json to use HTTP-01."
+      return 1
+    fi
+  fi
+
+  # If DNS credentials are provided (from cert-info.json or env), use DNS-01 challenge
   if [[ -n "$dns_plugin" && -n "$dns_credentials" ]]; then
     log "Using DNS-01 challenge with plugin: $dns_plugin"
     if [[ "$use_wildcard" == "true" ]]; then
@@ -1671,6 +1742,7 @@ PY
       --non-interactive
       --agree-tos
       --email "$email"
+      --cert-name "$first_domain"
       --dns-"$dns_plugin"
       --dns-"$dns_plugin"-credentials "$dns_credentials"
     )
@@ -1691,6 +1763,7 @@ PY
       --agree-tos
       --redirect
       --email "$email"
+      --cert-name "$first_domain"
     )
     [[ "$use_staging" == "true" ]] && certbot_args+=(--staging)
     # Add --expand flag if we need to expand an existing certificate
@@ -1871,15 +1944,7 @@ EOF
   fi
 }
 
-# Attempt SSL certificate setup (only if user wants SSL)
-if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
-  log "Attempting SSL certificate setup…"
-  setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
-else
-  log "Skipping SSL certificate setup (user declined SSL)."
-fi
-
-# Configure firewall (UFW) to allow SSH and web traffic
+# Configure firewall (UFW) BEFORE certbot — ports 80/443 must be open for HTTP-01 validation
 log "Configuring firewall (ufw)…"
 if command -v ufw >/dev/null 2>&1; then
   # Always permit SSH to avoid lockout
@@ -1902,6 +1967,14 @@ if command -v ufw >/dev/null 2>&1; then
   fi
 else
   log "ufw not found; skipping firewall configuration."
+fi
+
+# Attempt SSL certificate setup (only if user wants SSL)
+if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
+  log "Attempting SSL certificate setup…"
+  setup_ssl_certificates || log "[INFO] SSL certificate setup skipped or failed; continuing without SSL."
+else
+  log "Skipping SSL certificate setup (user declined SSL)."
 fi
 
 # Admin API: install to /opt/admin with venv

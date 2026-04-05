@@ -124,9 +124,14 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
               onTouchStart={() => setHoveredBadge(hoveredBadge === earned.id ? null : earned.id)}
             >
               {/* Badge icon */}
-              <motion.div
+              <motion.button
+                type="button"
+                onFocus={() => setHoveredBadge(earned.id)}
+                onBlur={() => setHoveredBadge(null)}
+                aria-label={earned.displayName}
+                aria-describedby={`badge-tooltip-${earned.id}`}
                 whileHover={{ scale: 1.08 }}
-                className="flex items-center justify-center h-20 w-20 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md"
+                className="flex items-center justify-center h-20 w-20 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50 dark:bg-[#1f1f1f] cursor-pointer transition-shadow hover:shadow-md focus-visible:outline-none focus-visible:ring-2"
               >
                 {earned.badge.icon_url ? (
                   <img
@@ -138,7 +143,7 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                 ) : (
                   <Trophy className="h-10 w-10 text-amber-400 dark:text-amber-300" />
                 )}
-              </motion.div>
+              </motion.button>
 
               {/* Tooltip */}
               <AnimatePresence>
@@ -150,7 +155,11 @@ export function ProfileBadges({ userId, className }: ProfileBadgesProps) {
                     transition={{ duration: 0.15 }}
                     className="absolute bottom-full left-0 mb-3 z-50 pointer-events-none w-max"
                   >
-                    <div className="relative rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3.5 py-2.5 shadow-lg min-w-[180px] max-w-[240px]">
+                    <div
+                      id={`badge-tooltip-${earned.id}`}
+                      role="tooltip"
+                      className="relative rounded-xl bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-3.5 py-2.5 shadow-lg min-w-[180px] max-w-[240px]"
+                    >
                       <p className="text-xs font-semibold leading-tight">
                         {earned.displayName}
                       </p>
