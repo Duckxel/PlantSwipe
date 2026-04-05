@@ -239,8 +239,8 @@ export const plantSchema = {
   // -- Section 6: Ecology -----------------------------------------------------
   conservationStatus: {
     type: 'enum[]',
-    options: ['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated'],
-    description: 'IUCN conservation status',
+    options: ['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated','protected','protected_in_some_regions'],
+    description: 'IUCN conservation status and legal protection status',
   },
   ecologicalStatus: {
     type: 'tag[]',

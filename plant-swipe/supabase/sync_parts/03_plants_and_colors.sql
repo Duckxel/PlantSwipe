@@ -204,7 +204,7 @@ create table if not exists public.plants (
   pruning_month text[] not null default '{}'::text[],
 
   -- Section 6: Ecology — Conservation & status
-  conservation_status text[] not null default '{}'::text[] check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']),
+  conservation_status text[] not null default '{}'::text[] check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated','protected','protected_in_some_regions']),
   ecological_status text[] not null default '{}'::text[] check (ecological_status <@ array[
     'indigenous','endemic','subendemic','introduced','naturalized',
     'subspontaneous','cultivated_only','ecologically_neutral',

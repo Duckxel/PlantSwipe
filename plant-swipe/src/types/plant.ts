@@ -89,6 +89,7 @@ export type ConservationStatus =
   | "least_concern" | "near_threatened" | "vulnerable" | "endangered"
   | "critically_endangered" | "extinct_in_wild" | "extinct"
   | "data_deficient" | "not_evaluated"
+  | "protected" | "protected_in_some_regions"
 
 export type EcologicalTolerance =
   | "drought" | "scorching_sun" | "permanent_shade"

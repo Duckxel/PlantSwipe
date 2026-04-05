@@ -783,7 +783,7 @@ pruning                   BOOLEAN DEFAULT false
 pruning_month             TEXT[]                 -- Multi-select months
 
 -- Section 6: Ecology — Conservation & status
-conservation_status       TEXT[]                 -- CHECK (IUCN): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated
+conservation_status       TEXT[]                 -- CHECK (IUCN + legal): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated, protected, protected_in_some_regions
 ecological_status         TEXT[]                 -- CHECK (28 values): indigenous, endemic, subendemic, introduced, naturalized, subspontaneous, cultivated_only, ecologically_neutral, biodiversity_favorable, potentially_invasive, exotic_invasive, locally_invasive, competitive_dominant, pioneer_species, climax_species, structuring_species, indicator_species, host_species, relict_species, heritage_species, common_species, nitrogen_fixer, hygrophile, heliophile, sciaphile, halophile, calcicole, acidophile
 
 -- Section 6: Ecology — Habitats

@@ -303,6 +303,8 @@ export const conservationStatusEnum = createEnumTools([
   { dbValue: 'extinct', uiValue: 'Extinct', aliases: ['ex'] },
   { dbValue: 'data_deficient', uiValue: 'Data Deficient', aliases: ['dd'] },
   { dbValue: 'not_evaluated', uiValue: 'Not Evaluated', aliases: ['ne'] },
+  { dbValue: 'protected', uiValue: 'Protected', aliases: ['legally protected'] },
+  { dbValue: 'protected_in_some_regions', uiValue: 'Protected in Some Regions', aliases: ['regionally protected', 'partially protected'] },
 ])
 
 export const ecologicalToleranceEnum = createEnumTools([
