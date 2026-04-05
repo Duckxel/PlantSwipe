@@ -152,6 +152,15 @@ const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   }
 }
 
+// ⚡ Bolt: Init Map using single-pass for loop to eliminate intermediate array allocations
+const createLowercasedSet = (arr: string[]): Set<string> => {
+  const set = new Set<string>()
+  for (let i = 0; i < arr.length; i++) {
+    set.add(arr[i].toLowerCase())
+  }
+  return set
+}
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
@@ -1254,14 +1263,14 @@ export default function PlantSwipe() {
   const normalizedFilters = useMemo(() => ({
     query: debouncedQuery.toLowerCase(),
     type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
+    usageSet: createLowercasedSet(usageFilters),
+    habitatSet: createLowercasedSet(habitatFilters),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+    livingSpaceSet: createLowercasedSet(livingSpaceFilters),
+    lifeCycleSet: createLowercasedSet(lifeCycleFilters),
+    plantHabitSet: createLowercasedSet(plantHabitFilters),
+    ediblePartSet: createLowercasedSet(ediblePartFilters),
+    plantPartSet: createLowercasedSet(plantPartFilters),
     vegetable: vegetableFilter,
   }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
