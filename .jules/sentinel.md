@@ -33,6 +33,10 @@
 **Vulnerability:** Several sensitive admin endpoints in server.js were using a manual boolean check `isAdminFromRequest(req)` and returning 403, rather than the standardized `ensureAdmin(req, res)`.
 **Learning:** Using the raw boolean check bypasses `ensureAdmin`'s centralized handling of authentication flows, standard 401/403 responses, and token/public-mode validation mechanisms, leading to potential IDOR and authentication bypass.
 **Prevention:** Always use `await ensureAdmin(req, res)` to enforce strict authentication and authorization in administrative endpoints.
+## 2024-03-24 - Command Injection in getTopLevelIfRepo
+**Vulnerability:** Node.js `child_process.exec` used with string interpolation for directory path (`git -c "safe.directory=${dir}"...`), allowing arbitrary command execution if the path is user-controlled (e.g. via environment variables).
+**Learning:** Even internal utility functions like `getTopLevelIfRepo` should avoid shell invocation when arguments are dynamic, as it creates systemic risk if inputs ever become tainted.
+**Prevention:** Always use `child_process.execFile` or `spawn` passing arguments as an array rather than a single interpolated string when invoking external binaries.
 
 ## 2026-04-05 - Fix Authorization Bypass in Private Info Endpoint
 **Vulnerability:** The `/api/users/:id/private` endpoint in `server.js` manually used the boolean helper `isAdminFromRequest(req)` instead of the standardized `ensureAdmin(req, res)` to check for administrative privileges. This bypassed the standard authentication flow controls, such as checking static admin tokens or returning consistent HTTP 401/403 responses.
