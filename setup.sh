@@ -1227,8 +1227,8 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
     ensure_helper_functions_loaded=false
   fi
 
-  # Check if error is about missing SSL certificates
-  if grep -q "ssl_certificate.*is defined" /tmp/nginx-test.log; then
+  # Check if error is about missing SSL certificates (match multiple nginx error formats)
+  if grep -qE "(ssl_certificate.*is defined|cannot load certificate|no such file.*letsencrypt|SSL_CTX_use_certificate|BIO_new_file)" /tmp/nginx-test.log; then
     if [[ "$WANT_SSL" =~ ^[Yy]$ ]]; then
       ssl_repaired=false
       if [[ "$ensure_helper_functions_loaded" == "true" ]]; then
@@ -1252,14 +1252,24 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
 
       if [[ "$ssl_repaired" != "true" ]]; then
         log "[WARN] Nginx config has SSL listeners but no certificates yet."
-        log "[INFO] Temporarily removing SSL listeners so nginx can start for certificate validation…"
-        # Temporarily remove SSL listeners so nginx can start
-        $SUDO sed -i.bak -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$NGINX_SITE_AVAIL"
-        # Test again
+        log "[INFO] Temporarily removing SSL directives so nginx can start for certificate validation…"
+        # Backup and temporarily remove ALL SSL directives so nginx can start
+        $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
+        $SUDO sed -i \
+          -e '/listen 443 ssl;/d' \
+          -e '/listen \[::\]:443 ssl;/d' \
+          -e '/ssl_certificate /d' \
+          -e '/ssl_certificate_key /d' \
+          -e '/ssl_protocols /d' \
+          -e '/ssl_ciphers /d' \
+          -e '/ssl_prefer_server_ciphers /d' \
+          "$NGINX_SITE_AVAIL"
+        # Test again and reload nginx so it can start without SSL
         if $SUDO nginx -t; then
-          log "Nginx config is valid without SSL listeners (temporary)"
+          log "Nginx config is valid without SSL directives (temporary — will be restored after certbot)"
+          $SUDO systemctl reload nginx 2>/dev/null || $SUDO systemctl start nginx 2>/dev/null || true
         else
-          log "[ERROR] Nginx configuration still invalid after removing SSL listeners"
+          log "[ERROR] Nginx configuration still invalid after removing SSL directives"
           $SUDO mv "$NGINX_SITE_AVAIL.bak" "$NGINX_SITE_AVAIL" || true
           exit 1
         fi
