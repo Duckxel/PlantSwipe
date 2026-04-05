@@ -652,7 +652,7 @@ export const GardenListPage: React.FC = () => {
           getEnrichedOccurrencesForGardens(gardenIds, startIso, endIso),
           getGardenPlantsMinimal(gardenIds),
         ]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const occsAugmented: Array<any> = enrichedOccs;
         setTodayTaskOccurrences(occsAugmented);
         // Fetch completions (depends on occurrence IDs)
