@@ -274,7 +274,7 @@ export const AdminBadgesPanel: React.FC = () => {
       await supabase.from('badge_translations').delete().eq('badge_id', badgeId)
 
       // Auto-translate if missing translations
-      let translationsToSave = [...formData.translations]
+      const translationsToSave = [...formData.translations]
       const hasAllTranslations = SUPPORTED_LANGUAGES
         .filter((lang) => lang !== DEFAULT_LANGUAGE)
         .every((lang) => translationsToSave.some((t) => t.language === lang && t.name.trim()))

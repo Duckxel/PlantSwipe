@@ -37,3 +37,8 @@
 **Vulnerability:** Node.js `child_process.exec` used with string interpolation for directory path (`git -c "safe.directory=${dir}"...`), allowing arbitrary command execution if the path is user-controlled (e.g. via environment variables).
 **Learning:** Even internal utility functions like `getTopLevelIfRepo` should avoid shell invocation when arguments are dynamic, as it creates systemic risk if inputs ever become tainted.
 **Prevention:** Always use `child_process.execFile` or `spawn` passing arguments as an array rather than a single interpolated string when invoking external binaries.
+
+## 2026-04-05 - Fix Authorization Bypass in Private Info Endpoint
+**Vulnerability:** The `/api/users/:id/private` endpoint in `server.js` manually used the boolean helper `isAdminFromRequest(req)` instead of the standardized `ensureAdmin(req, res)` to check for administrative privileges. This bypassed the standard authentication flow controls, such as checking static admin tokens or returning consistent HTTP 401/403 responses.
+**Learning:** When an endpoint needs to grant access to both the resource owner and an admin, it's unsafe to rely on low-level boolean helpers like `isAdminFromRequest` which don't correctly handle all authentication states (e.g. static CI tokens) and error reporting.
+**Prevention:** Implement dual-authorization routes by first validating resource ownership. If that check fails, delegate the fallback authorization directly to the robust `ensureAdmin(req, res)` middleware, allowing it to securely handle the unauthenticated/unauthorized responses.

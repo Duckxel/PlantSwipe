@@ -169,7 +169,7 @@ export const GardenDashboardPage: React.FC = () => {
   const pendingSeedlingModalRef = React.useRef<typeof seedlingModal>(null);
   const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
   // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const seedlingPlantMap = React.useMemo(() => {
     const m: Record<string, any> = {};
     for (const p of plants) {
