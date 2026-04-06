@@ -132,7 +132,7 @@ export const SeedlingCellModal: React.FC<SeedlingCellModalProps> = ({
       <DialogContent className="max-w-sm max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <div className="flex items-center gap-2.5">
-            <SeedlingStageIcon stage={stage} size={18} />
+            <SeedlingStageIcon stage={stage} size={32} />
             <div>
               <DialogTitle className="text-base">
                 {isMulti
@@ -240,7 +240,7 @@ export const SeedlingCellModal: React.FC<SeedlingCellModalProps> = ({
                         : "border-border text-muted-foreground hover:bg-muted"
                     }`}
                   >
-                    <SeedlingStageIcon stage={s.id} size={12} />
+                    <SeedlingStageIcon stage={s.id} size={24} />
                     {t(`seedlingTray.stages.${s.id}`, s.label)}
                   </button>
                 ))}

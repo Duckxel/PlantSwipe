@@ -153,7 +153,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                   </>
                 ) : (
                   <>
-                    <SeedlingStageIcon stage={cell.stage} size={16} />
+                    <SeedlingStageIcon stage={cell.stage} size={32} />
                     {plant && (
                       <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
                         {plant.name || plant.id}
@@ -177,7 +177,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
             {s.id === "empty" ? (
               <Plus className="h-2.5 w-2.5 text-stone-400" />
             ) : (
-              <SeedlingStageIcon stage={s.id} size={10} />
+              <SeedlingStageIcon stage={s.id} size={16} />
             )}
             <span className="text-xs text-muted-foreground">
               {s.id === "empty" ? t("seedlingTray.addNew", "Add") : s.label}
