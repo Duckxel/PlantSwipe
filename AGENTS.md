@@ -122,7 +122,7 @@ This document contains:
 
 ### Schema Files Location
 
-The database schema is split into 15 files in:
+The database schema is split into 20 files in:
 
 ```
 plant-swipe/supabase/sync_parts/
@@ -130,7 +130,9 @@ plant-swipe/supabase/sync_parts/
 ├── 02_profiles_and_purge.sql
 ├── 03_plants_and_colors.sql
 ├── ...
-└── 15_gdpr_and_preferences.sql
+├── 18_discovery_history.sql
+├── 19_badges.sql
+└── 20_events.sql
 ```
 
 ### Making Database Changes
@@ -142,6 +144,8 @@ Choose the appropriate file based on the feature area:
 - Garden-related → `06_core_tables_and_rls.sql`
 - Notifications → `11_notifications_and_tasks.sql`
 - GDPR/Security → `15_gdpr_and_preferences.sql`
+- Badges → `19_badges.sql`
+- Events → `20_events.sql`
 
 #### Step 2: Make Your Changes
 
@@ -449,7 +453,7 @@ await sendEmail(email);
 | `plant-swipe/src/REUSABLE_COMPONENTS.md` | Reusable UI components & hooks reference |
 | `EXTERNAL_APIS.md` | All external APIs and third-party services |
 | `plant-swipe/SECURITY_AUDIT_REPORT.md` | Security audit findings and remediations |
-| `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files (15 files) |
+| `plant-swipe/supabase/sync_parts/*.sql` | Schema definition files (20 files) |
 | `plant-swipe/server.js` | Backend Express API |
 | `plant-swipe/src/PlantSwipe.tsx` | Main app component |
 | `admin_api/app.py` | Admin API entrypoint (Flask) |

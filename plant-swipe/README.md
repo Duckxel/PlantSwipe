@@ -177,6 +177,7 @@ plant-swipe/
 │   ├── context/             # React context providers
 │   │   ├── AuthContext.tsx   # Authentication state
 │   │   ├── AuthActionsContext.tsx # Auth actions (login, signup, etc.)
+│   │   ├── EggHuntContext.tsx # Event system provider (active events, progress, badge awards)
 │   │   └── ThemeContext.tsx  # Theme (dark/light) state
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-*.ts         # Various utility hooks

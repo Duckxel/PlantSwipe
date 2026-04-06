@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Apr 6, 2026:** **Events & Badges schema files.** Added `19_badges.sql` (badge catalog, translations, user badges) and `20_events.sql` (events, items, translations, registrations, user progress) to `sync_parts/`. Added `conservation_status` values `protected` and `protected_in_some_regions`. Unified `plant_part` and `edible_part` to share 12 items (added `tubers`). Fixed Phase 3 sync constraints for `conservation_status` and `plant_part`. Schema files: `03_plants_and_colors.sql`, `19_badges.sql`, `20_events.sql`.
 - **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
 - **Mar 25, 2026:** **Seedling Tray Garden Type.** Added `seedling` to `garden_type` CHECK constraint and `living_space` values. Added `tray_rows` and `tray_cols` INTEGER columns to `gardens` table (used when `garden_type = 'seedling'`). New `seedling_tray_cells` table with per-cell tracking (position, plant, stage, sow date, watering, notes). Stages: `empty`, `sown`, `germinating`, `sprouted`, `ready`. RLS policies for garden member access. Schema file: `12_audit_and_analytics.sql`. Migration: `20260325000000_add_seedling_tray.sql`.
 - **Mar 16, 2026:** **Garden Living Space & Roadmap Persistence.** Added `living_space` text[] column to `gardens` table (values: indoor, outdoor, terrarium, greenhouse) — used for plant suggestions and beginner onboarding. New `garden_roadmap_completions` table tracks beginner roadmap step completions per garden (persistent, never reverted). RPC: `complete_roadmap_step(uuid, text)`. Schema file: `12_audit_and_analytics.sql`.
@@ -54,7 +55,7 @@ pg_net        -- HTTP requests from database (edge functions)
 
 ## Schema Files Structure
 
-The schema is split into 17 files in `supabase/sync_parts/` for easier management:
+The schema is split into 20 files in `supabase/sync_parts/` for easier management:
 
 | File | Description |
 |------|-------------|
@@ -76,6 +77,8 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `16_user_action_status.sql` | Profile action completion & skip sync across devices |
 | `17_admin_event_notifications.sql` | Admin event notification settings (per-event toggle, template, recipients) |
 | `18_discovery_history.sql` | Discovery seen-plants history for personalized scoring |
+| `19_badges.sql` | Badge catalog, translations, and user badge awards |
+| `20_events.sql` | Event system: events, items, translations, registrations, user progress |
 
 ---
 
@@ -208,6 +211,20 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `garden_task_audit_log` | Task change audit |
 | `gdpr_audit_log` | GDPR compliance audit |
 | `impressions` | Page view impressions for plants and blog posts (admin read-only) |
+
+### Events & Badges
+
+| Table | Purpose |
+|-------|---------|
+| `events` | Event catalog (egg hunts, seasonal campaigns, etc.) — permanent |
+| `event_translations` | Multilingual event name/description — permanent |
+| `event_items` | Collectible items per event — temporary, deleted on cleanup |
+| `event_item_translations` | Multilingual item descriptions — cascades on cleanup |
+| `event_registrations` | Users who completed an event — permanent |
+| `event_user_progress` | Per-user item discovery tracking — temporary, deleted on cleanup |
+| `badges` | Badge catalog (earned via event completion or manually) |
+| `badge_translations` | Multilingual badge name/description |
+| `user_badges` | Badges earned by users — permanent |
 
 ### Bug Catcher System
 
