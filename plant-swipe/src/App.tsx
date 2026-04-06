@@ -2,6 +2,7 @@ import React from 'react'
 const PlantSwipe = React.lazy(() => import("@/PlantSwipe"))
 import ServiceWorkerToast from '@/components/pwa/ServiceWorkerToast'
 import { AuthProvider } from '@/context/AuthContext'
+import { TutorialProvider } from '@/context/TutorialContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { EggHuntProvider } from '@/context/EggHuntContext'
 import { EggHuntCounter } from '@events/2026_EASTER'
@@ -145,12 +146,14 @@ export default function App() {
     <I18nextProvider i18n={i18n}>
       <ThemeProvider>
         <AuthProvider>
-          <EggHuntProvider>
-            <BrowserRouter basename={routerBase}>
-              <LanguageRoutes />
-            </BrowserRouter>
-            <EggHuntCounter />
-          </EggHuntProvider>
+          <TutorialProvider>
+            <EggHuntProvider>
+              <BrowserRouter basename={routerBase}>
+                <LanguageRoutes />
+              </BrowserRouter>
+              <EggHuntCounter />
+            </EggHuntProvider>
+          </TutorialProvider>
           <ServiceWorkerToast />
         </AuthProvider>
       </ThemeProvider>

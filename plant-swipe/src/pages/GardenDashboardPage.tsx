@@ -3,6 +3,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS, DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -114,6 +116,23 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation();
   const { user, profile, refreshProfile } = useAuth();
   const { t } = useTranslation("common");
+  const { active: tutorialActive } = useTutorial();
+  const isDemoGarden = !!(id && id.startsWith('demo-'));
+  // Stable demo data — generated once, never changes across re-renders
+  const demoDataRef = React.useRef<{
+    dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>;
+  } | null>(null);
+  if (isDemoGarden && !demoDataRef.current) {
+    const seed = [4,5,3,5,4,3,5,4,3,5,4,5,3,4]; // deterministic "random"
+    demoDataRef.current = {
+      dailyStats: Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (13 - i));
+        const due = seed[i];
+        const completed = Math.min(due, due - (i % 3 === 0 ? 1 : 0));
+        return { date: d.toISOString().slice(0, 10), due, completed, success: completed >= due };
+      }),
+    };
+  }
   const currentLang = useLanguage();
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
@@ -439,6 +458,72 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday]);
 
+  // Tutorial demo mode — inject all fake data synchronously before paint
+  // Uses useLayoutEffect + location.pathname (not tab state) to avoid
+  // the render-before-state-update race that causes tray → overview redirect
+  const demoLoadedRef = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (!isDemoGarden || !id) return;
+    const pathWithoutLang = removeLanguagePrefix(location.pathname);
+    const isTrayTab = pathWithoutLang.includes('/tray');
+    const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
+    // Always update garden type synchronously so the Route guard sees it
+    setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
+    if (!demoLoadedRef.current) {
+      setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
+      const demoPlants = [
+        { gpId: 'gp1', pId: DEMO_PLANT_IDS.monstera, name: 'Monstera', sci: 'Monstera deliciosa', qty: 1 },
+        { gpId: 'gp2', pId: DEMO_PLANT_IDS.basil, name: 'Basil', sci: 'Ocimum basilicum', qty: 2 },
+        { gpId: 'gp3', pId: DEMO_PLANT_IDS.lily, name: 'Lily', sci: 'Lilium', qty: 3 },
+      ];
+      setPlants(demoPlants.map(dp => ({
+        id: dp.gpId, gardenId: id, plantId: dp.pId, nickname: dp.name,
+        plant: { id: dp.pId, name: dp.name, scientificNameSpecies: dp.sci },
+        plantsOnHand: dp.qty, plantedAt: new Date().toISOString(),
+      })) as any);
+      const today = new Date().toISOString().slice(0, 10);
+      setServerToday(today);
+      serverTodayRef.current = today;
+      setDailyStats(demoDataRef.current?.dailyStats ?? []);
+      setTodayTaskOccurrences([
+        { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+      ] as any);
+      demoLoadedRef.current = true;
+      // Async: fetch real plant images and update plants with image data
+      supabase
+        .from('plants')
+        .select('id, name, plant_images(link, use)')
+        .in('id', Object.values(DEMO_PLANT_IDS))
+        .then(({ data: rows }) => {
+          if (!rows) return;
+          const imgMap: Record<string, string> = {};
+          for (const r of rows) {
+            const imgs = (r as any).plant_images as Array<{ link: string; use: string }> | undefined;
+            const primary = imgs?.find((i: { use: string }) => i.use === 'primary');
+            const img = primary ?? imgs?.[0];
+            if (img?.link) imgMap[r.id] = img.link;
+          }
+          setPlants(prev => (prev as any[]).map((gp: any) => ({
+            ...gp,
+            plant: { ...gp.plant, image: imgMap[gp.plantId] || gp.plant?.image },
+          })) as any);
+        });
+    }
+    if (isTrayTab) {
+      setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
+        id: `sc-${i}`, gardenId: id, position: i,
+        plantId: i < 4 ? DEMO_PLANT_IDS.monstera : i < 7 ? DEMO_PLANT_IDS.basil : null,
+        stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
+        sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
+        lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,
+        notes: '',
+      })) as any);
+    }
+    setLoading(false);
+  }, [isDemoGarden, id, location.pathname]);
+
   const load = React.useCallback(
     async (opts?: {
       silent?: boolean;
@@ -446,6 +531,8 @@ export const GardenDashboardPage: React.FC = () => {
       suppressError?: boolean;
     }) => {
       if (!id) return;
+      // Demo gardens are loaded by the effect above
+      if (isDemoGarden) { setLoading(false); return; }
       // Keep UI visible on subsequent reloads to avoid blink
       const silent = opts?.silent ?? garden !== null;
       const suppressError = opts?.suppressError ?? false;
@@ -1710,7 +1797,7 @@ export const GardenDashboardPage: React.FC = () => {
     >([]);
 
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !isMember) {
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !isMember) {
         setSuggestedPlants([]);
         return;
       }
@@ -1768,7 +1855,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Seedling tray: load cells when garden is seedling type
     const loadSeedlingCells = React.useCallback(async () => {
-      if (!id || garden?.gardenType !== 'seedling') return;
+      if (!id || garden?.gardenType !== 'seedling' || isDemoGarden) return;
       setSeedlingLoading(true);
       try {
         const cells = await getSeedlingTrayCells(id);
@@ -1787,7 +1874,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Seedling gardens: ensure ONE watering task exists for the whole garden
     const seedlingTaskSyncedRef = React.useRef(false);
     React.useEffect(() => {
-      if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      if (!id || isDemoGarden || garden?.gardenType !== 'seedling' || plants.length === 0) return;
       if (seedlingTaskSyncedRef.current) return;
       let cancelled = false;
       (async () => {
@@ -1811,7 +1898,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1828,7 +1915,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: load persistent completions from DB
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1848,7 +1935,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Detect when steps are completed live and persist them
     const syncRoadmapRef = React.useRef<Set<string>>(new Set());
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
       const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
       const liveSteps: Array<{ key: string; done: boolean }> = [
         { key: 'set_living_space', done: hasLivingSpace },
@@ -1900,7 +1987,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Check if viewer is a friend of any garden member (for friends_only privacy)
     React.useEffect(() => {
-      if (!user?.id || isMember || members.length === 0) {
+      if (isDemoGarden || !user?.id || isMember || members.length === 0) {
         setIsFriendOfMember(false);
         return;
       }
@@ -1919,7 +2006,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
-      if (loading || !id || !serverToday) return;
+      if (loading || !id || !serverToday || isDemoGarden) return;
       if (tab !== "overview" && tab !== "plants" && tab !== "tasks") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
@@ -1939,7 +2026,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
 
     const channel = supabase
       .channel(`rt-garden-${id}`)
@@ -2073,7 +2160,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, navigate, updateTargeted]);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
     let active = true;
     let teardown: (() => Promise<void>) | null = null;
 
@@ -3035,12 +3122,12 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <nav data-tutorial="garden-tabs" className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {(
                 canViewFullGarden
                   ? [
                       ["overview", t("gardenDashboard.overview")] as const,
-                      ...(garden?.gardenType === 'seedling' ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
+                      ...((garden?.gardenType === 'seedling' || isDemoGarden) ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
                       ["plants", t("gardenDashboard.plants")] as const,
                       ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
                       ["journal", t("gardenDashboard.journal", "Journal")] as const,
@@ -3051,11 +3138,13 @@ export const GardenDashboardPage: React.FC = () => {
               ).map(([k, label]) => {
                 const Icon = GARDEN_TAB_ICONS[k as TabKey];
                 const isActive = tab === k;
+                const tutorialId = k === 'plants' ? 'garden-plants-tab' : k === 'analytics' ? 'garden-analytics-tab' : undefined;
                 return (
                   <NavLink
                     key={k}
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
+                    data-tutorial={tutorialId}
                     className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl text-[13px] md:text-sm font-medium transition-colors no-underline md:w-full whitespace-nowrap ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"
@@ -3558,7 +3647,7 @@ export const GardenDashboardPage: React.FC = () => {
               <Route
                 path="tray"
                 element={
-                  canViewFullGarden && garden?.gardenType === 'seedling' ? (
+                  canViewFullGarden && (garden?.gardenType === 'seedling' || isDemoGarden) ? (
                     <div className="space-y-6">
                       {/* Tray Grid */}
                       <SeedlingTrayGrid

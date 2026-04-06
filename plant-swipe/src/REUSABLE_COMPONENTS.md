@@ -668,3 +668,34 @@ The `PlantProfileForm` component accepts an `onImageRemove?: (imageUrl: string) 
 | Max dimension | 1600px | — |
 | WebP quality | 80 | — |
 | Max fetch size | 10 MB | — |
+
+---
+
+## Onboarding Tutorial
+
+### `TutorialOverlay` — Guided onboarding tour
+
+**File:** `src/components/tutorial/TutorialOverlay.tsx`
+
+Renders a step-by-step tutorial overlay with spotlight highlighting, animated arrow pointers, progress dots, and tooltip cards. Uses `createPortal` to render at the document body level. Automatically navigates between routes when steps target different pages.
+
+**Features:**
+- SVG-based spotlight mask that highlights target elements (via `data-tutorial` attributes)
+- Animated arrow pointers pointing at highlighted elements
+- Centered modal cards for informational steps
+- Progress dots showing current position in tutorial
+- "Skip tutorial" and "Next" / "Let's go!" / "Get started!" buttons
+- Keyboard navigation (Enter/ArrowRight = next, Escape = skip)
+- Fallback to modal display when target element is not in DOM
+
+### `TutorialContext` — Tutorial state management
+
+**File:** `src/context/TutorialContext.tsx`
+
+Provides tutorial state (active, current step, navigation) via React context. Automatically activates after signup when `profile.tutorial_completed !== true`. Persists completion to the `profiles.tutorial_completed` DB column.
+
+**Exports:** `TutorialProvider`, `useTutorial()`
+
+**Usage:** Wrap app with `<TutorialProvider>` (done in `App.tsx`). Add `<TutorialOverlay />` where the tutorial should render (done in `PlantSwipe.tsx`).
+
+**Adding `data-tutorial` attributes:** To make an element targetable by a tutorial step, add `data-tutorial="step-id"` to the element's JSX. The step definition in `TUTORIAL_STEPS` references these via `targetSelector: '[data-tutorial="step-id"]'`.

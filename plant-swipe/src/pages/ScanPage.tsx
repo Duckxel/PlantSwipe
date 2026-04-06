@@ -45,12 +45,16 @@ import {
 } from '@/lib/plantScan'
 import type { PlantScan } from '@/types/scan'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { useTutorial } from '@/context/TutorialContext'
+import { DEMO_SCANS, DEMO_PLANT_IDS } from '@/lib/tutorialDemoData'
+import { supabase } from '@/lib/supabaseClient'
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic scan API data */
 export const ScanPage: React.FC = () => {
   const { t } = useTranslation('common')
   const { user } = useAuth()
   const navigate = useLanguageNavigate()
+  const { active: tutorialActive } = useTutorial()
   
   usePageMetadata({ 
     title: t('scan.pageTitle', { defaultValue: 'Plant Scanner' }),
@@ -91,6 +95,28 @@ export const ScanPage: React.FC = () => {
   
   // Load user's scans (initial load)
   const loadScans = React.useCallback(async () => {
+    if (tutorialActive) {
+      // Fetch real plant images from DB using canonical IDs
+      const ids = Object.values(DEMO_PLANT_IDS)
+      const { data: plantRows } = await supabase
+        .from('plants')
+        .select('id, name, plant_images(link, use)')
+        .in('id', ids)
+      const imageById: Record<string, string> = {}
+      if (plantRows) {
+        for (const p of plantRows) {
+          const imgs = (p as any).plant_images as Array<{ link: string; use: string }> | undefined
+          const img = imgs?.find((i: { use: string }) => i.use === 'primary') ?? imgs?.[0]
+          if (img?.link) imageById[p.id] = img.link
+        }
+      }
+      setScans(DEMO_SCANS.map(s => ({
+        ...s,
+        imageUrl: (s.matchedPlantId && imageById[s.matchedPlantId]) || s.imageUrl,
+      })))
+      setLoading(false)
+      return
+    }
     if (!user?.id) return
     try {
       setError(null)
@@ -103,7 +129,7 @@ export const ScanPage: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }, [user?.id, t])
+  }, [user?.id, t, tutorialActive])
   
   // Load more scans (pagination)
   // Note: recheckMatches is enabled (default) to ensure consistent UX across all pages
@@ -330,7 +356,7 @@ export const ScanPage: React.FC = () => {
     })
   }
   
-  if (!user) {
+  if (!user && !tutorialActive) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[60vh] px-4 text-center">
         <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-4">
@@ -359,7 +385,7 @@ export const ScanPage: React.FC = () => {
       </div>
       
       {/* New Scan Card */}
-      <Card className="mb-8 p-6 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10">
+      <Card data-tutorial="scan-card" className="mb-8 p-6 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10">
         {isIdentifying ? (
           // Loading state
           <div className="flex flex-col items-center justify-center py-8">
