@@ -45,7 +45,7 @@ export const SPRITE_DEFS = {
    * Growing_Plant_00 – 4 growth stages (state 0‑3).
    * Located in "Farming Plants.png" (80 × 240, i.e. 5 × 15 tiles).
    * Bottom row of the sheet is y = 0. The first plant column is x = 0.
-   * States go from (0,0) up to (0,3).
+   * States: 0 = seed, 1 = small sprout, 2 = growing, 3 = full plant.
    */
   Growing_Plant_00: {
     src: FarmingPlants,
@@ -53,10 +53,10 @@ export const SPRITE_DEFS = {
     sheetHeight: 240,
     tiles: [1, 1],
     states: [
-      [0, 0],
-      [0, 1],
-      [0, 2],
       [0, 3],
+      [0, 2],
+      [0, 1],
+      [0, 0],
     ],
   },
 } as const satisfies Record<string, SpriteDef>;
