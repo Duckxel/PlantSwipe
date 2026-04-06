@@ -9,7 +9,7 @@ export interface PixelSpriteProps {
   state?: number;
   /** Display scale multiplier. e.g. 4 → a 16 px tile renders at 64 px. Default 4. */
   scale?: number;
-  /** Additional CSS classes. Use w-*/h-* to override size (set scale to 0). */
+  /** Additional CSS classes. Use w/h utilities to override size (set scale to 0). */
   className?: string;
 }
 
