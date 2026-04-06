@@ -8,10 +8,6 @@ interface SeedlingStageIconProps {
   size?: number;
   /** When true, the icon expands to fill its parent container. */
   fill?: boolean;
-  /** Add a 1px outline around the visible sprite pixels. */
-  outline?: boolean;
-  /** Outline color. Defaults to white. */
-  outlineColor?: string;
   className?: string;
 }
 
@@ -23,7 +19,7 @@ const STAGE_TO_STATE: Record<Exclude<SeedlingStage, "empty">, number> = {
   ready: 3,
 };
 
-export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, size = 14, fill = false, outline = false, outlineColor, className = "" }) => {
+export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, size = 14, fill = false, className = "" }) => {
   if (stage === "empty") {
     if (fill) {
       return (
@@ -44,8 +40,6 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
         name="Growing_Plant_01"
         state={STAGE_TO_STATE[stage]}
         scale={0}
-        outline={outline}
-        outlineColor={outlineColor}
         className={`w-3/5 aspect-square ${className}`}
       />
     );
@@ -57,8 +51,6 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
       name="Growing_Plant_01"
       state={STAGE_TO_STATE[stage]}
       scale={scale}
-      outline={outline}
-      outlineColor={outlineColor}
       className={`flex-shrink-0 ${className}`}
     />
   );
