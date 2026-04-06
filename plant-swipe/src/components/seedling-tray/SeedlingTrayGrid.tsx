@@ -173,7 +173,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                       <SeedlingStageIcon stage={cell.stage} fill />
                     )}
                     {plant && (
-                      <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
+                      <div className="text-xs text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
                         {plant.name || plant.id}
                       </div>
                     )}
