@@ -256,13 +256,16 @@
       "spice": "Épice"
     },
     "ediblePart": {
+      "root": "Racine",
+      "rhizome": "Rhizome",
+      "bulb": "Bulbe",
+      "tuber": "Tubercule",
+      "stem": "Tige",
+      "leaf": "Feuille",
       "flower": "Fleur",
       "fruit": "Fruit",
+      "spore": "Spore",
       "seed": "Graine",
-      "leaf": "Feuille",
-      "stem": "Tige",
-      "bulb": "Bulbe",
-      "rhizome": "Rhizome",
       "bark": "Écorce",
       "wood": "Bois"
     },
@@ -274,7 +277,11 @@
       "leaves": "Feuilles",
       "flowers": "Fleurs",
       "fruits": "Fruits",
-      "spores": "Spores"
+      "spores": "Spores",
+      "tubers": "Tubercules",
+      "seeds": "Graines",
+      "bark": "Écorce",
+      "wood": "Bois"
     },
     "toxicity": {
       "non_toxic": "Non toxique",
@@ -404,7 +411,9 @@
       "extinct_in_wild": "Éteinte à l'état sauvage",
       "extinct": "Éteinte",
       "data_deficient": "Données insuffisantes",
-      "not_evaluated": "Non évaluée"
+      "not_evaluated": "Non évaluée",
+      "protected": "Protégée",
+      "protected_in_some_regions": "Protégée dans certaines régions"
     },
     "ecologicalTolerance": {
       "drought": "Sécheresse",

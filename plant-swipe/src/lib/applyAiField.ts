@@ -10,6 +10,7 @@ import type { EnumTools } from "@/lib/composition"
 import {
   utilityEnum,
   ediblePartEnum,
+  plantPartEnum,
   toxicityEnum,
   poisoningMethodEnum,
   lifeCycleEnum,
@@ -141,6 +142,7 @@ const IGNORED_FIELDS = new Set([
 const ENUM_FIELDS: Record<string, EnumTools> = {
   utility: utilityEnum as EnumTools,
   ediblePart: ediblePartEnum as EnumTools,
+  plantPart: plantPartEnum as EnumTools,
   poisoningMethod: poisoningMethodEnum as EnumTools,
   lifeCycle: lifeCycleEnum as EnumTools,
   averageLifespan: averageLifespanEnum as EnumTools,
@@ -286,14 +288,6 @@ function applySingleField(plant: Plant, fieldKey: string, data: unknown): Plant 
       const valid = ['herb', 'shrub', 'tree', 'climber', 'succulent', 'fern', 'moss', 'grass']
       if (valid.includes(lower)) next.plantType = lower as Plant['plantType']
     }
-    return next
-  }
-
-  // plantPart multi-select
-  if (fieldKey === 'plantPart') {
-    const valid = new Set(['roots', 'rhizomes', 'bulbs', 'stems', 'leaves', 'flowers', 'fruits', 'spores'])
-    const arr = Array.isArray(data) ? data : typeof data === 'string' ? data.split(',').map(s => s.trim()) : []
-    next.plantPart = arr.map((v: string) => v.toLowerCase().trim()).filter((v: string) => valid.has(v)) as Plant['plantPart']
     return next
   }
 

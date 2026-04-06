@@ -9,8 +9,8 @@ export type PlantTypeValue =
   | "succulent" | "fern" | "moss" | "grass"
 
 export type PlantPartValue =
-  | "roots" | "rhizomes" | "bulbs" | "stems" | "leaves"
-  | "flowers" | "fruits" | "spores"
+  | "roots" | "rhizomes" | "bulbs" | "tubers" | "stems" | "leaves"
+  | "flowers" | "fruits" | "spores" | "seeds" | "bark" | "wood"
 
 export type HabitatValue =
   | "aquatic" | "hygrophytic" | "terrestrial" | "xerophytic"
@@ -27,8 +27,8 @@ export type PlantUtility =
   | "fragrant" | "cereal" | "spice" | "infusion"
 
 export type EdiblePart =
-  | "flower" | "fruit" | "seed" | "leaf" | "stem"
-  | "bulb" | "rhizome" | "bark" | "wood"
+  | "root" | "rhizome" | "bulb" | "tuber" | "stem" | "leaf"
+  | "flower" | "fruit" | "spore" | "seed" | "bark" | "wood"
 
 export type ToxicityLevel =
   | "non_toxic" | "slightly_toxic" | "very_toxic" | "deadly" | "undetermined"
@@ -89,6 +89,7 @@ export type ConservationStatus =
   | "least_concern" | "near_threatened" | "vulnerable" | "endangered"
   | "critically_endangered" | "extinct_in_wild" | "extinct"
   | "data_deficient" | "not_evaluated"
+  | "protected" | "protected_in_some_regions"
 
 export type EcologicalTolerance =
   | "drought" | "scorching_sun" | "permanent_shade"

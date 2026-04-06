@@ -1007,14 +1007,14 @@ const baseFields: FieldConfig[] = [
 // Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
-  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Rhizomes","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
+  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Rhizomes","Bulbs","Tubers","Stems","Leaves","Flowers","Fruits","Spores","Seeds","Bark","Wood"] },
   { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Hygrophytic","Terrestrial","Xerophytic","Halophytic","Epiphytic","Parasitic"] },
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
   { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
   { key: "vegetable", label: "Vegetable?", description: "Is this plant a vegetable?", type: "boolean", gatedBy: "utility:edible" },
-  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"], gatedBy: "utility:edible" },
+  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Root","Rhizome","Bulb","Tuber","Stem","Leaf","Flower","Fruit","Spore","Seed","Bark","Wood"], gatedBy: "utility:edible" },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
   { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
@@ -1103,7 +1103,7 @@ const dangerFields: FieldConfig[] = [
 // Section 6: Ecology & Biodiversity
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
-  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated"] },
+  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
   { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
   { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
