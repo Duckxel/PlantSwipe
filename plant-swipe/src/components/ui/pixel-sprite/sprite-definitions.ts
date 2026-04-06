@@ -72,6 +72,19 @@ export const SPRITE_DEFS = {
       [3, 8],
     ],
   },
+
+  Growing_Plant_03: {
+    src: FarmingPlants,
+    sheetWidth: 80,
+    sheetHeight: 240,
+    tiles: [1, 1],
+    states: [
+      [0, 8],
+      [0, 13],
+      [1, 13],
+      [2, 13],
+    ],
+  },
 } as const satisfies Record<string, SpriteDef>;
 
 export type SpriteName = keyof typeof SPRITE_DEFS;
