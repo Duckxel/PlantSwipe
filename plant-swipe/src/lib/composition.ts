@@ -106,11 +106,15 @@ export const plantPartEnum = createEnumTools([
   { dbValue: 'roots', uiValue: 'Roots', aliases: ['root'] },
   { dbValue: 'rhizomes', uiValue: 'Rhizomes', aliases: ['rhizome'] },
   { dbValue: 'bulbs', uiValue: 'Bulbs', aliases: ['bulb'] },
+  { dbValue: 'tubers', uiValue: 'Tubers', aliases: ['tuber', 'tubercule', 'tubercules'] },
   { dbValue: 'stems', uiValue: 'Stems', aliases: ['stem'] },
   { dbValue: 'leaves', uiValue: 'Leaves', aliases: ['leaf', 'foliage'] },
   { dbValue: 'flowers', uiValue: 'Flowers', aliases: ['flower', 'blossom'] },
   { dbValue: 'fruits', uiValue: 'Fruits', aliases: ['fruit'] },
   { dbValue: 'spores', uiValue: 'Spores', aliases: ['spore'] },
+  { dbValue: 'seeds', uiValue: 'Seeds', aliases: ['seed'] },
+  { dbValue: 'bark', uiValue: 'Bark' },
+  { dbValue: 'wood', uiValue: 'Wood' },
 ])
 
 export const habitatEnum = createEnumTools([
@@ -137,13 +141,16 @@ export const utilityEnum = createEnumTools([
 ])
 
 export const ediblePartEnum = createEnumTools([
-  { dbValue: 'flower', uiValue: 'Flower', aliases: ['flowers'] },
-  { dbValue: 'fruit', uiValue: 'Fruit', aliases: ['fruits'] },
-  { dbValue: 'seed', uiValue: 'Seed', aliases: ['seeds'] },
-  { dbValue: 'leaf', uiValue: 'Leaf', aliases: ['leaves'] },
-  { dbValue: 'stem', uiValue: 'Stem', aliases: ['stems'] },
+  { dbValue: 'root', uiValue: 'Root', aliases: ['roots'] },
+  { dbValue: 'rhizome', uiValue: 'Rhizome', aliases: ['rhizomes'] },
   { dbValue: 'bulb', uiValue: 'Bulb', aliases: ['bulbs'] },
-  { dbValue: 'rhizome', uiValue: 'Rhizome', aliases: ['rhizomes', 'root', 'roots'] },
+  { dbValue: 'tuber', uiValue: 'Tuber', aliases: ['tubers', 'tubercule', 'tubercules'] },
+  { dbValue: 'stem', uiValue: 'Stem', aliases: ['stems'] },
+  { dbValue: 'leaf', uiValue: 'Leaf', aliases: ['leaves', 'foliage'] },
+  { dbValue: 'flower', uiValue: 'Flower', aliases: ['flowers', 'blossom'] },
+  { dbValue: 'fruit', uiValue: 'Fruit', aliases: ['fruits'] },
+  { dbValue: 'spore', uiValue: 'Spore', aliases: ['spores'] },
+  { dbValue: 'seed', uiValue: 'Seed', aliases: ['seeds'] },
   { dbValue: 'bark', uiValue: 'Bark' },
   { dbValue: 'wood', uiValue: 'Wood' },
 ])
@@ -303,6 +310,8 @@ export const conservationStatusEnum = createEnumTools([
   { dbValue: 'extinct', uiValue: 'Extinct', aliases: ['ex'] },
   { dbValue: 'data_deficient', uiValue: 'Data Deficient', aliases: ['dd'] },
   { dbValue: 'not_evaluated', uiValue: 'Not Evaluated', aliases: ['ne'] },
+  { dbValue: 'protected', uiValue: 'Protected', aliases: ['legally protected'] },
+  { dbValue: 'protected_in_some_regions', uiValue: 'Protected in Some Regions', aliases: ['regionally protected', 'partially protected'] },
 ])
 
 export const ecologicalToleranceEnum = createEnumTools([

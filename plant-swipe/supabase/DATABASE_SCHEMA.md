@@ -706,7 +706,7 @@ name                      TEXT NOT NULL           -- Canonical English name (non
 
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
-plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, stems, leaves, flowers, fruits, spores
+plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, tubers, stems, leaves, flowers, fruits, spores, seeds, bark, wood
 habitat                   TEXT[]                 -- CHECK: aquatic, hygrophytic, terrestrial, xerophytic, halophytic, epiphytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
@@ -719,7 +719,7 @@ season                    TEXT[]                 -- CHECK: spring, summer, autum
 -- Section 2: Identity — Utility & safety
 utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
 vegetable                 BOOLEAN DEFAULT false  -- Is it a vegetable?
-edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
+edible_part               TEXT[]                 -- CHECK: root, rhizome, bulb, tuber, stem, leaf, flower, fruit, spore, seed, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
 toxicity_pets             TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
@@ -784,7 +784,7 @@ pruning                   BOOLEAN DEFAULT false
 pruning_month             TEXT[]                 -- Multi-select months
 
 -- Section 6: Ecology — Conservation & status
-conservation_status       TEXT[]                 -- CHECK (IUCN): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated
+conservation_status       TEXT[]                 -- CHECK (IUCN + legal): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated, protected, protected_in_some_regions
 ecological_status         TEXT[]                 -- CHECK (28 values): indigenous, endemic, subendemic, introduced, naturalized, subspontaneous, cultivated_only, ecologically_neutral, biodiversity_favorable, potentially_invasive, exotic_invasive, locally_invasive, competitive_dominant, pioneer_species, climax_species, structuring_species, indicator_species, host_species, relict_species, heritage_species, common_species, nitrogen_fixer, hygrophile, heliophile, sciaphile, halophile, calcicole, acidophile
 
 -- Section 6: Ecology — Habitats

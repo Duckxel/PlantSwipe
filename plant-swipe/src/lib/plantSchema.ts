@@ -13,8 +13,8 @@ export const plantSchema = {
   },
   plantPart: {
     type: 'enum[]',
-    options: ['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores'],
-    description: 'Main anatomical parts of the plant',
+    options: ['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores','seeds','bark','wood'],
+    description: 'Main anatomical parts of the plant (same 12 parts as ediblePart, but in plural form)',
   },
   habitat: {
     type: 'enum[]',
@@ -73,8 +73,8 @@ export const plantSchema = {
   },
   ediblePart: {
     type: 'enum[]',
-    options: ['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood'],
-    description: 'Edible anatomical parts (empty array if not edible)',
+    options: ['root','rhizome','bulb','tuber','stem','leaf','flower','fruit','spore','seed','bark','wood'],
+    description: 'Edible anatomical parts in singular form (same 12 parts as plantPart). Empty array if not edible.',
   },
   thorny: { type: 'boolean', description: 'Whether plant has thorns or spines' },
   toxicityHuman: {
@@ -239,8 +239,8 @@ export const plantSchema = {
   // -- Section 6: Ecology -----------------------------------------------------
   conservationStatus: {
     type: 'enum[]',
-    options: ['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated'],
-    description: 'IUCN conservation status',
+    options: ['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated','protected','protected_in_some_regions'],
+    description: 'IUCN conservation status and legal protection status',
   },
   ecologicalStatus: {
     type: 'tag[]',
