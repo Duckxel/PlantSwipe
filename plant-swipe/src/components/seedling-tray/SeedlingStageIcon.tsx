@@ -48,7 +48,7 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
   const scale = size / 16;
   return (
     <PixelSprite
-      name="Growing_Plant_00"
+      name="Growing_Plant_01"
       state={STAGE_TO_STATE[stage]}
       scale={scale}
       className={`flex-shrink-0 ${className}`}
