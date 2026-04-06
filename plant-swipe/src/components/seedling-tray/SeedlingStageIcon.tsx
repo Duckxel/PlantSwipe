@@ -40,7 +40,7 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
         name="Growing_Plant_00"
         state={STAGE_TO_STATE[stage]}
         scale={0}
-        className={`w-full aspect-square ${className}`}
+        className={`w-3/5 aspect-square ${className}`}
       />
     );
   }
