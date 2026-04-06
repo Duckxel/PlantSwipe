@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigationType } from "react-router-dom";
 import type { Plant } from "@/types/plant";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,9 @@ import { isNewPlant, isPlantOfTheMonth, isPopularPlant, isDangerouslyToxic } fro
 import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { AddToBookmarkDialog } from "@/components/plant/AddToBookmarkDialog";
 import { ScrollingTitle } from "@/components/ui/scrolling-title";
+
+const SCROLL_Y_KEY = "plantswipe.search_scroll_y";
+const VISIBLE_COUNT_KEY = "plantswipe.search_visible_count";
 
 interface SearchPageProps {
   plants: Plant[];
@@ -36,7 +40,18 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   });
   usePageMetadata({ title: seoTitle, description: seoDescription });
 
-  const [visibleCount, setVisibleCount] = useState(20);
+  const navigationType = useNavigationType();
+  const isRestoringRef = useRef(navigationType === "POP");
+
+  const [visibleCount, setVisibleCount] = useState(() => {
+    if (navigationType === "POP") {
+      try {
+        const saved = sessionStorage.getItem(VISIBLE_COUNT_KEY);
+        if (saved) return Math.max(20, parseInt(saved, 10));
+      } catch { /* ignore */ }
+    }
+    return 20;
+  });
   const [showScrollTop, setShowScrollTop] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -45,15 +60,43 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   const [bookmarkPlantId, setBookmarkPlantId] = useState<string | null>(null);
 
   // Reset visible count when filters change (plants array changes)
+  // Skip the first reset on back navigation to preserve restored count
   useEffect(() => {
+    if (isRestoringRef.current) {
+      isRestoringRef.current = false;
+      return;
+    }
     setVisibleCount(20);
   }, [plants]);
 
-  // Show/hide scroll-to-top button based on scroll position
+  // Save visibleCount for scroll restoration
+  useEffect(() => {
+    try { sessionStorage.setItem(VISIBLE_COUNT_KEY, String(visibleCount)); } catch { /* ignore */ }
+  }, [visibleCount]);
+
+  // Restore scroll position on back navigation
+  useEffect(() => {
+    if (navigationType !== "POP") return;
+    try {
+      const savedY = sessionStorage.getItem(SCROLL_Y_KEY);
+      if (savedY) {
+        const y = parseInt(savedY, 10);
+        // Wait for items to render before scrolling
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            window.scrollTo({ top: y, left: 0 });
+          });
+        });
+      }
+    } catch { /* ignore */ }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Show/hide scroll-to-top button and save scroll position for restoration
   useEffect(() => {
     const handleScroll = () => {
-      // Show button after scrolling down 300px
       setShowScrollTop(window.scrollY > 300);
+      // Save scroll position for back navigation restoration
+      try { sessionStorage.setItem(SCROLL_Y_KEY, String(window.scrollY)); } catch { /* ignore */ }
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
