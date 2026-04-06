@@ -9,6 +9,10 @@ export interface PixelSpriteProps {
   state?: number;
   /** Display scale multiplier. e.g. 4 → a 16 px tile renders at 64 px. Default 4. */
   scale?: number;
+  /** Add a 1px (sprite-pixel) outline around the visible pixels. Scales with the sprite. */
+  outline?: boolean;
+  /** Outline color. Defaults to white. */
+  outlineColor?: string;
   /** Additional CSS classes. Use w/h utilities to override size (set scale to 0). */
   className?: string;
 }
@@ -28,6 +32,8 @@ export function PixelSprite({
   name,
   state = 0,
   scale = 4,
+  outline = false,
+  outlineColor = "white",
   className,
 }: PixelSpriteProps) {
   const def = SPRITE_DEFS[name];
@@ -70,8 +76,15 @@ export function PixelSprite({
       base.height = tilesH * TILE_SIZE * scale;
     }
 
+    // 1px outline around visible pixels using drop-shadow in 4 directions.
+    // The shadow is 1 sprite-pixel, so it scales proportionally with the sprite.
+    if (outline) {
+      const c = outlineColor;
+      base.filter = `drop-shadow(1px 0 0 ${c}) drop-shadow(-1px 0 0 ${c}) drop-shadow(0 1px 0 ${c}) drop-shadow(0 -1px 0 ${c})`;
+    }
+
     return base;
-  }, [name, state, scale, coord, def, tilesW, tilesH]);
+  }, [name, state, scale, coord, def, tilesW, tilesH, outline, outlineColor]);
 
   if (!coord) {
     console.warn(`PixelSprite: "${name}" has no state ${state}`);
