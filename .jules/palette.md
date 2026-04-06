@@ -37,3 +37,7 @@
 ## 2026-04-05 - Keyboard Accessibility for Badge Icons
 **Learning:** Interactive badge elements wrapped in `motion.div` lack keyboard accessibility because they don't receive focus and lack semantic roles, even when wrapped in a container with mouse events. This prevents keyboard users from viewing the tooltip and screen readers from reading the content.
 **Action:** Refactor these elements to use native buttons (e.g., `motion.button`), add `onFocus`/`onBlur` event handlers to trigger the tooltip state, assign descriptive `aria-label` attributes, link to the tooltip with `aria-describedby`, and ensure visible focus states using `focus-visible:ring-2`.
+
+## 2024-04-06 - Accessible Camera Overlay
+**Learning:** Icon-only buttons rendered over dark backgrounds (like the Camera Capture view) need both screen reader labels and specific `focus-visible` offset styling (`focus-visible:ring-offset-2 focus-visible:ring-offset-black`) so the focus ring remains visible against the black canvas.
+**Action:** Always include offset colors when adding focus rings to elements floating over dark modal backgrounds or camera views.
