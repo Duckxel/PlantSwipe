@@ -1795,7 +1795,7 @@ export const GardenDashboardPage: React.FC = () => {
           const existingTaskId = await getSeedlingWateringTaskId(id);
           if (existingTaskId || cancelled) return; // Already has a garden-level task
           seedlingTaskSyncedRef.current = true;
-          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id });
+          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id, customName: garden?.name ? `Water ${garden.name}` : undefined });
           if (!cancelled) {
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -2489,7 +2489,7 @@ export const GardenDashboardPage: React.FC = () => {
         try {
           const existing = await getSeedlingWateringTaskId(id);
           if (!existing) {
-            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
+            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id, customName: garden?.name ? `Water ${garden.name}` : undefined });
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
             try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
@@ -3264,11 +3264,11 @@ export const GardenDashboardPage: React.FC = () => {
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                         {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
                                       </span>
-                                    ) : (
+                                    ) : garden?.gardenType !== "seedling" ? (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
                                         ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                                       </span>
-                                    )}
+                                    ) : null}
                                     {(taskOccDueToday[gp.id] || 0) > 0 && (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
                                         📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
@@ -6144,7 +6144,7 @@ function OverviewSection({
               <div
                 key={plant.id}
                 className={`group relative aspect-[4/5] rounded-2xl overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] ${
-                  plant.taskCount === 0
+                  plant.taskCount === 0 && garden?.gardenType !== "seedling"
                     ? "ring-2 ring-orange-400/70 dark:ring-orange-500/50 shadow-[0_0_12px_-2px_rgba(251,146,60,0.35)] dark:shadow-[0_0_12px_-2px_rgba(251,146,60,0.2)] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20"
                     : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30"
                 }`}
@@ -6185,7 +6185,7 @@ function OverviewSection({
                     <span className="px-2 py-0.5 rounded-full bg-blue-500 text-xs font-semibold text-white shadow-sm">
                       {plant.tasksDueToday} 📋
                     </span>
-                  ) : plant.taskCount === 0 ? (
+                  ) : plant.taskCount === 0 && garden?.gardenType !== "seedling" ? (
                     <span className="px-2 py-0.5 rounded-full bg-orange-500 text-xs font-semibold text-white shadow-sm">
                       ⚠️
                     </span>
@@ -6207,11 +6207,11 @@ function OverviewSection({
                       <span className="text-white/80 text-xs">
                         {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
                       </span>
-                    ) : (
+                    ) : garden?.gardenType !== "seedling" ? (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/90 text-white font-medium flex items-center gap-1">
                         ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>
