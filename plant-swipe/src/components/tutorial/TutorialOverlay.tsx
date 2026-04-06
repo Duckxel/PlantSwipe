@@ -249,7 +249,7 @@ export function TutorialOverlay() {
       {/* Dark overlay — full for welcome/complete, partial for page steps */}
       <motion.div
         className="fixed inset-0"
-        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)' }}
+        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.7)' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
@@ -261,13 +261,13 @@ export function TutorialOverlay() {
           className="fixed pointer-events-none"
           style={{
             zIndex: 9999,
-            top: highlightRect.top - 6,
-            left: highlightRect.left - 6,
-            width: highlightRect.width + 12,
-            height: highlightRect.height + 12,
-            borderRadius: 16,
-            border: '2.5px solid rgb(16 185 129)',
-            boxShadow: '0 0 0 4000px rgba(0,0,0,0.35), 0 0 20px 4px rgba(16,185,129,0.4)',
+            top: highlightRect.top - 8,
+            left: highlightRect.left - 8,
+            width: highlightRect.width + 16,
+            height: highlightRect.height + 16,
+            borderRadius: 18,
+            border: '3px solid rgb(16 185 129)',
+            boxShadow: '0 0 0 4000px rgba(0,0,0,0.5), 0 0 30px 8px rgba(16,185,129,0.5), inset 0 0 12px 2px rgba(16,185,129,0.15)',
           }}
           initial={{ opacity: 0, scale: 0.95 }}
           animate={{ opacity: 1, scale: [1, 1.03, 1] }}
