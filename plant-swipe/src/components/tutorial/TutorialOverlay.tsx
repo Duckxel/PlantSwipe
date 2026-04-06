@@ -273,8 +273,8 @@ export function TutorialOverlay() {
                 : "top-1/2 left-1/2 w-full max-w-md rounded-2xl"
           )}
           style={isMobile
-            ? { zIndex: 10000, maxHeight: '70vh', overflowY: 'auto' }
-            : { zIndex: 10000 }
+            ? { zIndex: 10000, maxHeight: '70vh', overflowY: 'auto', pointerEvents: 'auto' as const }
+            : { zIndex: 10000, pointerEvents: 'auto' as const }
           }
           initial={isMobile
             ? { y: 200, opacity: 0 }
