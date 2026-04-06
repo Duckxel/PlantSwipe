@@ -495,23 +495,7 @@ export const GardenListPage: React.FC = () => {
     load();
   }, [load]);
 
-  // Tutorial: auto-open create garden dialog for the beginner garden step
-  const prevTutorialStepRef = React.useRef<string | null>(null);
-  React.useEffect(() => {
-    const stepId = tutorialStep?.id ?? null;
-    const prevId = prevTutorialStepRef.current;
-    prevTutorialStepRef.current = stepId;
-
-    if (tutorialActive && stepId === 'gardens_beginner') {
-      // Small delay so the page has rendered before opening the dialog
-      const t = setTimeout(() => { setOpen(true); setGardenType('beginners'); }, 150);
-      return () => clearTimeout(t);
-    }
-    // Only close when LEAVING the beginner step (not on every non-beginner render)
-    if (prevId === 'gardens_beginner' && stepId !== 'gardens_beginner') {
-      setOpen(false);
-    }
-  }, [tutorialActive, tutorialStep?.id]);
+  const showFakeBeginnerDialog = tutorialActive && tutorialStep?.id === 'gardens_beginner';
 
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(
@@ -2347,8 +2331,48 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
 
-          <Dialog open={open} onOpenChange={setOpen} modal={!tutorialActive}>
-            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur" overlayClassName={tutorialActive ? "pointer-events-none" : undefined}>
+          {/* Fake visual-only dialog for the tutorial beginner step — no inputs, no focus, no keyboard */}
+          {showFakeBeginnerDialog && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ pointerEvents: 'none' }}>
+              <div className="w-[calc(100vw-2rem)] max-w-lg rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-5 sm:p-6 shadow-lg" style={{ pointerEvents: 'none' }}>
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold">{t("garden.createGarden")}</h2>
+                </div>
+                <div className="space-y-3">
+                  <div className="grid gap-2">
+                    <span className="text-sm font-medium">{t("garden.name")}</span>
+                    <div className="h-10 rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 flex items-center text-sm text-muted-foreground">{t("garden.namePlaceholder")}</div>
+                  </div>
+                  <div className="grid gap-2">
+                    <span className="text-sm font-medium">{t("garden.gardenType", { defaultValue: "Garden Type" })}</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      {([
+                        { key: "default", icon: <Leaf className="h-6 w-6" />, label: t("garden.gardenTypeDefault", { defaultValue: "Default" }) },
+                        { key: "beginners", icon: <Sprout className="h-6 w-6" />, label: t("garden.gardenTypeBeginners", { defaultValue: "Beginners" }) },
+                        { key: "seedling", icon: <Grid3X3 className="h-6 w-6" />, label: t("garden.gardenTypeSeedling", { defaultValue: "Seedling" }) },
+                      ]).map((opt) => (
+                        <div
+                          key={opt.key}
+                          data-tutorial={opt.key === 'beginners' ? 'garden-type-beginners' : undefined}
+                          className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium ${
+                            opt.key === 'beginners'
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                              : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400"
+                          }`}
+                        >
+                          <div className={`rounded-xl p-2.5 ${opt.key === 'beginners' ? "bg-emerald-100 dark:bg-emerald-800/40" : "bg-stone-100 dark:bg-stone-800"}`}>{opt.icon}</div>
+                          {opt.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <Dialog open={open} onOpenChange={setOpen}>
+            <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
               <DialogHeader>
                 <DialogTitle>{t("garden.createGarden")}</DialogTitle>
               </DialogHeader>

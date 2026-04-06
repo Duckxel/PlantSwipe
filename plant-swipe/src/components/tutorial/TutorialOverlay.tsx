@@ -198,6 +198,19 @@ export function TutorialOverlay() {
     return () => window.removeEventListener('keydown', h)
   }, [active, handleNext, handlePrev, skip])
 
+  // Lock body scroll while tutorial is active
+  React.useEffect(() => {
+    if (!active) return
+    const prev = document.body.style.overflow
+    const prevTouch = document.body.style.touchAction
+    document.body.style.overflow = 'hidden'
+    document.body.style.touchAction = 'none'
+    return () => {
+      document.body.style.overflow = prev
+      document.body.style.touchAction = prevTouch
+    }
+  }, [active])
+
   // Track highlighted element position
   const [highlightRect, setHighlightRect] = React.useState<{ top: number; left: number; width: number; height: number } | null>(null)
   React.useEffect(() => {
@@ -230,10 +243,11 @@ export function TutorialOverlay() {
       {/* Dark overlay — full for welcome/complete, partial for page steps */}
       <motion.div
         className="fixed inset-0"
-        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)' }}
+        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)', touchAction: 'none' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Spotlight highlight ring on a specific element */}
