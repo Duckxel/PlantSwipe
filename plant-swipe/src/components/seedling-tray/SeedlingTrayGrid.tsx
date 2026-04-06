@@ -7,10 +7,10 @@ import { Plus, Image, Sprout } from "lucide-react";
 
 const STAGE_CELL_CLASSES: Record<string, string> = {
   empty: "bg-stone-100 dark:bg-stone-800 border-stone-300 dark:border-stone-600",
-  sown: "bg-amber-50 dark:bg-amber-950/30 border-amber-400 dark:border-amber-700",
-  germinating: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 dark:border-emerald-800",
-  sprouted: "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500 dark:border-emerald-700",
-  ready: "bg-emerald-200 dark:bg-emerald-800/30 border-emerald-500 dark:border-emerald-600",
+  sown: "bg-amber-900/10 dark:bg-amber-950/40 border-amber-800 dark:border-amber-900",
+  germinating: "bg-orange-100 dark:bg-orange-950/30 border-orange-400 dark:border-orange-700",
+  sprouted: "bg-yellow-100 dark:bg-yellow-950/30 border-yellow-400 dark:border-yellow-600",
+  ready: "bg-emerald-200 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400",
 };
 
 interface SeedlingTrayGridProps {
@@ -171,7 +171,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                           className="w-4/5 aspect-square object-cover rounded-lg"
                         />
                         <div className="absolute bottom-1 left-1">
-                          <SeedlingStageIcon stage={cell.stage} size={20} outline outlineColor="var(--pixel-outline)" />
+                          <SeedlingStageIcon stage={cell.stage} size={32} outline outlineColor="var(--pixel-outline)" />
                         </div>
                       </>
                     ) : (
