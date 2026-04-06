@@ -705,7 +705,7 @@ name                      TEXT NOT NULL           -- Canonical English name (non
 
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
-plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, tubers, stems, leaves, flowers, fruits, spores
+plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, tubers, stems, leaves, flowers, fruits, spores, seeds, bark, wood
 habitat                   TEXT[]                 -- CHECK: aquatic, hygrophytic, terrestrial, xerophytic, halophytic, epiphytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
@@ -718,7 +718,7 @@ season                    TEXT[]                 -- CHECK: spring, summer, autum
 -- Section 2: Identity — Utility & safety
 utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
 vegetable                 BOOLEAN DEFAULT false  -- Is it a vegetable?
-edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
+edible_part               TEXT[]                 -- CHECK: root, rhizome, bulb, tuber, stem, leaf, flower, fruit, spore, seed, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
 toxicity_pets             TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined

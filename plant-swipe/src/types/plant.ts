@@ -10,7 +10,7 @@ export type PlantTypeValue =
 
 export type PlantPartValue =
   | "roots" | "rhizomes" | "bulbs" | "tubers" | "stems" | "leaves"
-  | "flowers" | "fruits" | "spores"
+  | "flowers" | "fruits" | "spores" | "seeds" | "bark" | "wood"
 
 export type HabitatValue =
   | "aquatic" | "hygrophytic" | "terrestrial" | "xerophytic"
@@ -27,8 +27,8 @@ export type PlantUtility =
   | "fragrant" | "cereal" | "spice" | "infusion"
 
 export type EdiblePart =
-  | "flower" | "fruit" | "seed" | "leaf" | "stem"
-  | "bulb" | "rhizome" | "bark" | "wood"
+  | "root" | "rhizome" | "bulb" | "tuber" | "stem" | "leaf"
+  | "flower" | "fruit" | "spore" | "seed" | "bark" | "wood"
 
 export type ToxicityLevel =
   | "non_toxic" | "slightly_toxic" | "very_toxic" | "deadly" | "undetermined"

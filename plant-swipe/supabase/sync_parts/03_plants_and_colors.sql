@@ -59,7 +59,7 @@ create table if not exists public.plants (
 
   -- Section 1: Base — Identity & naming
   plant_type text check (plant_type is null or plant_type in ('herb','shrub','tree','climber','succulent','fern','moss','grass')),
-  plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores']),
+  plant_part text[] not null default '{}'::text[] check (plant_part <@ array['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores','seeds','bark','wood']),
   habitat text[] not null default '{}'::text[] check (habitat <@ array['aquatic','hygrophytic','terrestrial','xerophytic','halophytic','epiphytic','parasitic']),
   scientific_name_species text,
   family text,
@@ -77,7 +77,7 @@ create table if not exists public.plants (
   -- Section 2: Identity — Utility & safety
   utility text[] not null default '{}'::text[] check (utility <@ array['edible','ornamental','aromatic','medicinal','fragrant','cereal','spice','infusion']),
   vegetable boolean default false,
-  edible_part text[] not null default '{}'::text[] check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']),
+  edible_part text[] not null default '{}'::text[] check (edible_part <@ array['root','rhizome','bulb','tuber','stem','leaf','flower','fruit','spore','seed','bark','wood']),
   thorny boolean default false,
   toxicity_human text check (toxicity_human in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
   toxicity_pets text check (toxicity_pets in ('non_toxic','slightly_toxic','very_toxic','deadly','undetermined')),
@@ -1077,7 +1077,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores']) not valid;
+    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores','seeds','bark','wood']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1141,7 +1141,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_edible_part_check check (edible_part <@ array['flower','fruit','seed','leaf','stem','bulb','rhizome','bark','wood']) not valid;
+    alter table public.plants add constraint plants_edible_part_check check (edible_part <@ array['root','rhizome','bulb','tuber','stem','leaf','flower','fruit','spore','seed','bark','wood']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 

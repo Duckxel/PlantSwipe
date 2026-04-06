@@ -256,13 +256,16 @@
       "spice": "Épice"
     },
     "ediblePart": {
+      "root": "Racine",
+      "rhizome": "Rhizome",
+      "bulb": "Bulbe",
+      "tuber": "Tubercule",
+      "stem": "Tige",
+      "leaf": "Feuille",
       "flower": "Fleur",
       "fruit": "Fruit",
+      "spore": "Spore",
       "seed": "Graine",
-      "leaf": "Feuille",
-      "stem": "Tige",
-      "bulb": "Bulbe",
-      "rhizome": "Rhizome",
       "bark": "Écorce",
       "wood": "Bois"
     },
@@ -275,7 +278,10 @@
       "flowers": "Fleurs",
       "fruits": "Fruits",
       "spores": "Spores",
-      "tubers": "Tubercules"
+      "tubers": "Tubercules",
+      "seeds": "Graines",
+      "bark": "Écorce",
+      "wood": "Bois"
     },
     "toxicity": {
       "non_toxic": "Non toxique",

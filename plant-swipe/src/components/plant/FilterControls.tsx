@@ -617,7 +617,7 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
         />
         {plantPartSectionOpen && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {(["roots", "rhizomes", "bulbs", "tubers", "stems", "leaves", "flowers", "fruits", "spores"] as const).map((option) => {
+            {(["roots", "rhizomes", "bulbs", "tubers", "stems", "leaves", "flowers", "fruits", "spores", "seeds", "bark", "wood"] as const).map((option) => {
               const isSelected = plantPartFilters.includes(option)
               return (
                 <button
