@@ -11,7 +11,7 @@ interface SeedlingStageIconProps {
   className?: string;
 }
 
-/** Map each non-empty stage to a Growing_Plant_00 sprite state */
+/** Map each non-empty stage to a Growing_Plant_01 sprite state */
 const STAGE_TO_STATE: Record<Exclude<SeedlingStage, "empty">, number> = {
   sown: 0,
   germinating: 1,
@@ -37,7 +37,7 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
   if (fill) {
     return (
       <PixelSprite
-        name="Growing_Plant_00"
+        name="Growing_Plant_01"
         state={STAGE_TO_STATE[stage]}
         scale={0}
         className={`w-3/5 aspect-square ${className}`}
