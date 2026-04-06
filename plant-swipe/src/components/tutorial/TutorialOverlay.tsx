@@ -198,16 +198,22 @@ export function TutorialOverlay() {
     return () => window.removeEventListener('keydown', h)
   }, [active, handleNext, handlePrev, skip])
 
-  // Lock body scroll while tutorial is active
+  // Block all clicks/taps on the page behind the tutorial (prevent navigation)
+  // but allow scrolling so users can see the full page content
   React.useEffect(() => {
     if (!active) return
-    const prev = document.body.style.overflow
-    const prevTouch = document.body.style.touchAction
-    document.body.style.overflow = 'hidden'
-    document.body.style.touchAction = 'none'
+    const blockClick = (e: MouseEvent | TouchEvent) => {
+      // Allow clicks inside the tutorial overlay card itself
+      const target = e.target as HTMLElement
+      if (target.closest('.tutorial-card')) return
+      e.preventDefault()
+      e.stopPropagation()
+    }
+    document.addEventListener('click', blockClick, true)
+    document.addEventListener('touchend', blockClick, true)
     return () => {
-      document.body.style.overflow = prev
-      document.body.style.touchAction = prevTouch
+      document.removeEventListener('click', blockClick, true)
+      document.removeEventListener('touchend', blockClick, true)
     }
   }, [active])
 
@@ -243,11 +249,10 @@ export function TutorialOverlay() {
       {/* Dark overlay — full for welcome/complete, partial for page steps */}
       <motion.div
         className="fixed inset-0"
-        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)', touchAction: 'none' }}
+        style={{ zIndex: 9998, backgroundColor: hasRoute ? 'rgba(0,0,0,0.4)' : 'rgba(0,0,0,0.6)' }}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         onClick={(e) => e.stopPropagation()}
-        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Spotlight highlight ring on a specific element */}
@@ -279,7 +284,7 @@ export function TutorialOverlay() {
           key={stepId}
           custom={dir}
           className={cn(
-            "fixed border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] shadow-2xl overflow-hidden",
+            "tutorial-card fixed border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] shadow-2xl overflow-hidden",
             isMobile
               ? "bottom-0 left-0 right-0 rounded-t-3xl"
               : hasRoute
