@@ -1,5 +1,6 @@
 import React from "react";
 import type { SeedlingStage } from "@/types/garden";
+import { PixelSprite } from "@/components/ui/pixel-sprite";
 
 interface SeedlingStageIconProps {
   stage: SeedlingStage;
@@ -7,10 +8,15 @@ interface SeedlingStageIconProps {
   className?: string;
 }
 
-export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, size = 14, className = "" }) => {
-  const barW = Math.max(2, Math.round(size / 7));
-  const gap = 1;
+/** Map each non-empty stage to a Growing_Plant_00 sprite state */
+const STAGE_TO_STATE: Record<Exclude<SeedlingStage, "empty">, number> = {
+  sown: 0,
+  germinating: 1,
+  sprouted: 2,
+  ready: 3,
+};
 
+export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, size = 14, className = "" }) => {
   if (stage === "empty") {
     return (
       <div
@@ -20,51 +26,15 @@ export const SeedlingStageIcon: React.FC<SeedlingStageIconProps> = ({ stage, siz
     );
   }
 
-  if (stage === "sown") {
-    return (
-      <div
-        className={`rounded-full bg-amber-600 dark:bg-amber-500 flex-shrink-0 ${className}`}
-        style={{ width: size, height: size }}
-      />
-    );
-  }
+  // Scale factor: desired display size / 16px tile size
+  const scale = size / 16;
 
-  if (stage === "germinating") {
-    return (
-      <div
-        className={`flex items-end justify-center flex-shrink-0 ${className}`}
-        style={{ width: size, height: size }}
-      >
-        <div
-          className="bg-emerald-700 dark:bg-emerald-500 rounded-sm"
-          style={{ width: barW, height: size * 0.7 }}
-        />
-      </div>
-    );
-  }
-
-  if (stage === "sprouted") {
-    return (
-      <div
-        className={`flex items-end justify-center flex-shrink-0 ${className}`}
-        style={{ width: size, height: size, gap }}
-      >
-        <div className="bg-emerald-500 dark:bg-emerald-400 rounded-sm self-end" style={{ width: barW, height: size * 0.5 }} />
-        <div className="bg-emerald-500 dark:bg-emerald-400 rounded-sm self-end" style={{ width: barW, height: size * 0.85 }} />
-        <div className="bg-emerald-500 dark:bg-emerald-400 rounded-sm self-end" style={{ width: barW, height: size * 0.5 }} />
-      </div>
-    );
-  }
-
-  // ready
   return (
-    <div
-      className={`flex items-end justify-center flex-shrink-0 ${className}`}
-      style={{ width: size, height: size, gap }}
-    >
-      <div className="bg-emerald-400 dark:bg-emerald-300 rounded-sm self-end" style={{ width: barW, height: size * 0.6 }} />
-      <div className="bg-emerald-400 dark:bg-emerald-300 rounded-sm self-end" style={{ width: barW, height: size }} />
-      <div className="bg-emerald-400 dark:bg-emerald-300 rounded-sm self-end" style={{ width: barW, height: size * 0.6 }} />
-    </div>
+    <PixelSprite
+      name="Growing_Plant_00"
+      state={STAGE_TO_STATE[stage]}
+      scale={scale}
+      className={`flex-shrink-0 ${className}`}
+    />
   );
 };
