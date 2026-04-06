@@ -56,7 +56,7 @@ export const SeedlingCareList: React.FC<SeedlingCareListProps> = ({
                 needsWater ? "border-red-300 dark:border-red-800" : "border-border"
               }`}
             >
-              <SeedlingStageIcon stage={cell.stage} size={32} />
+              <SeedlingStageIcon stage={cell.stage} size={48} />
               <div className="flex-1 min-w-0">
                 <div className="font-semibold text-sm truncate">
                   {plant?.name || cell.plantId}{" "}

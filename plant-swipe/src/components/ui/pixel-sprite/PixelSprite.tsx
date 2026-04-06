@@ -9,7 +9,7 @@ export interface PixelSpriteProps {
   state?: number;
   /** Display scale multiplier. e.g. 4 → a 16 px tile renders at 64 px. Default 4. */
   scale?: number;
-  /** Additional CSS classes */
+  /** Additional CSS classes. Use w-*/h-* to override size (set scale to 0). */
   className?: string;
 }
 
@@ -19,6 +19,10 @@ export interface PixelSpriteProps {
  * - Crops the correct tile(s) via `background-position` + `background-size`.
  * - Uses `image-rendering: pixelated` so the art stays crisp at any scale.
  * - Coordinates use a bottom-left origin (y = 0 is the bottom row).
+ *
+ * For responsive sizing: pass `scale={0}` and control size via className
+ * (e.g. `className="w-full h-full"`). The background percentages will
+ * handle cropping at any container size.
  */
 export function PixelSprite({
   name,
@@ -35,32 +39,38 @@ export function PixelSprite({
 
     const [tileX, tileY] = coord;
 
+    // Number of tiles in the full sheet
+    const sheetTilesX = def.sheetWidth / (tilesW * TILE_SIZE);
+    const sheetTilesY = def.sheetHeight / (tilesH * TILE_SIZE);
+
     // Convert bottom-left origin Y to top-left origin Y used by CSS.
-    // Sheet is sheetHeight px tall. Each tile is TILE_SIZE px.
-    // The top-left pixel-Y of the tile = sheetHeight - (tileY + tilesH) * TILE_SIZE
-    const pxX = tileX * TILE_SIZE;
-    const pxY = def.sheetHeight - (tileY + tilesH) * TILE_SIZE;
+    const topLeftTileY = sheetTilesY - 1 - tileY;
 
-    const displayW = tilesW * TILE_SIZE * scale;
-    const displayH = tilesH * TILE_SIZE * scale;
+    // Background-size as percentage: the full sheet is sheetTilesX × sheetTilesY
+    // times the display size of one tile frame.
+    const bgSizeX = sheetTilesX * 100;
+    const bgSizeY = sheetTilesY * 100;
 
-    // background-size scales the full sheet proportionally.
-    const bgW = (def.sheetWidth / (tilesW * TILE_SIZE)) * displayW;
-    const bgH = (def.sheetHeight / (tilesH * TILE_SIZE)) * displayH;
+    // Background-position as percentage
+    const bgPosX = sheetTilesX > 1 ? (tileX / (sheetTilesX - 1)) * 100 : 0;
+    const bgPosY = sheetTilesY > 1 ? (topLeftTileY / (sheetTilesY - 1)) * 100 : 0;
 
-    // background-position offsets (scaled).
-    const bgX = -(pxX / (tilesW * TILE_SIZE)) * displayW;
-    const bgY = -(pxY / (tilesH * TILE_SIZE)) * displayH;
-
-    return {
-      width: displayW,
-      height: displayH,
+    const base: React.CSSProperties = {
       backgroundImage: `url(${def.src})`,
-      backgroundSize: `${bgW}px ${bgH}px`,
-      backgroundPosition: `${bgX}px ${bgY}px`,
+      backgroundSize: `${bgSizeX}% ${bgSizeY}%`,
+      backgroundPosition: `${bgPosX}% ${bgPosY}%`,
       backgroundRepeat: "no-repeat",
-      imageRendering: "pixelated" as const,
+      imageRendering: "pixelated",
     };
+
+    // When scale > 0, set explicit pixel dimensions.
+    // When scale === 0, let CSS classes control sizing.
+    if (scale > 0) {
+      base.width = tilesW * TILE_SIZE * scale;
+      base.height = tilesH * TILE_SIZE * scale;
+    }
+
+    return base;
   }, [name, state, scale, coord, def, tilesW, tilesH]);
 
   if (!coord) {
