@@ -53,10 +53,10 @@ export const SPRITE_DEFS = {
     sheetHeight: 240,
     tiles: [1, 1],
     states: [
-      [0, 3],
-      [0, 2],
-      [0, 1],
       [0, 0],
+      [1, 0],
+      [2, 0],
+      [3, 0],
     ],
   },
 } as const satisfies Record<string, SpriteDef>;
