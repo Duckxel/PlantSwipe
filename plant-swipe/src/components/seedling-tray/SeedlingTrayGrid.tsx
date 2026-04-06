@@ -164,11 +164,16 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                 ) : (
                   <>
                     {viewMode === "photo" && plant?.image ? (
-                      <img
-                        src={plant.image}
-                        alt={plant.name || ""}
-                        className="w-4/5 aspect-square object-cover rounded-lg"
-                      />
+                      <>
+                        <img
+                          src={plant.image}
+                          alt={plant.name || ""}
+                          className="w-4/5 aspect-square object-cover rounded-lg"
+                        />
+                        <div className="absolute bottom-1 left-1">
+                          <SeedlingStageIcon stage={cell.stage} size={20} />
+                        </div>
+                      </>
                     ) : (
                       <SeedlingStageIcon stage={cell.stage} fill />
                     )}
