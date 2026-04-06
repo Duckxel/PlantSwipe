@@ -1077,7 +1077,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','rhizomes','bulbs','stems','leaves','flowers','fruits','spores']) not valid;
+    alter table public.plants add constraint plants_plant_part_check check (plant_part <@ array['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
@@ -1276,7 +1276,7 @@ begin
     execute 'alter table public.plants drop constraint ' || quote_ident(r.conname);
   end loop;
   begin
-    alter table public.plants add constraint plants_conservation_status_check check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated']) not valid;
+    alter table public.plants add constraint plants_conservation_status_check check (conservation_status <@ array['least_concern','near_threatened','vulnerable','endangered','critically_endangered','extinct_in_wild','extinct','data_deficient','not_evaluated','protected','protected_in_some_regions']) not valid;
   exception when duplicate_object then null; when check_violation then null;
   end;
 
