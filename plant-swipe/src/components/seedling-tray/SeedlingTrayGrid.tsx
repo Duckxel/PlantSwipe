@@ -1,9 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SeedlingTrayCell } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import { SeedlingStageIcon } from "./SeedlingStageIcon";
-import { Plus } from "lucide-react";
+import { Plus, Image, Sprout } from "lucide-react";
 
 const STAGE_CELL_CLASSES: Record<string, string> = {
   empty: "bg-stone-100 dark:bg-stone-800 border-stone-300 dark:border-stone-600",
@@ -45,6 +45,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
   onExitSelectMode,
 }) => {
   const { t } = useTranslation("common");
+  const [viewMode, setViewMode] = useState<"sprite" | "photo">("sprite");
 
   const daysDiff = (d: string | null) => {
     if (!d) return null;
@@ -101,12 +102,21 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
               </button>
             </>
           ) : (
-            <button
-              onClick={onToggleSelectMode}
-              className="px-3.5 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              {t("seedlingTray.select", "Select")}
-            </button>
+            <>
+              <button
+                onClick={() => setViewMode(viewMode === "sprite" ? "photo" : "sprite")}
+                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                title={viewMode === "sprite" ? t("seedlingTray.showPhoto", "Show plant photo") : t("seedlingTray.showSprite", "Show growth stage")}
+              >
+                {viewMode === "sprite" ? <Image className="h-4 w-4" /> : <Sprout className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={onToggleSelectMode}
+                className="px-3.5 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                {t("seedlingTray.select", "Select")}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -153,7 +163,15 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                   </>
                 ) : (
                   <>
-                    <SeedlingStageIcon stage={cell.stage} fill />
+                    {viewMode === "photo" && plant?.image ? (
+                      <img
+                        src={plant.image}
+                        alt={plant.name || ""}
+                        className="w-3/5 aspect-square object-cover rounded-lg"
+                      />
+                    ) : (
+                      <SeedlingStageIcon stage={cell.stage} fill />
+                    )}
                     {plant && (
                       <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
                         {plant.name || plant.id}
