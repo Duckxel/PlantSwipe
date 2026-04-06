@@ -171,7 +171,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                           className="w-4/5 aspect-square object-cover rounded-lg"
                         />
                         <div className="absolute bottom-1 left-1">
-                          <SeedlingStageIcon stage={cell.stage} size={20} outline />
+                          <SeedlingStageIcon stage={cell.stage} size={20} outline outlineColor="var(--pixel-outline)" />
                         </div>
                       </>
                     ) : (
