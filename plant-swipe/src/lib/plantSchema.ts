@@ -14,7 +14,7 @@ export const plantSchema = {
   plantPart: {
     type: 'enum[]',
     options: ['roots','rhizomes','bulbs','tubers','stems','leaves','flowers','fruits','spores','seeds','bark','wood'],
-    description: 'Main anatomical parts of the plant',
+    description: 'Main anatomical parts of the plant (same 12 parts as ediblePart, but in plural form)',
   },
   habitat: {
     type: 'enum[]',
@@ -74,7 +74,7 @@ export const plantSchema = {
   ediblePart: {
     type: 'enum[]',
     options: ['root','rhizome','bulb','tuber','stem','leaf','flower','fruit','spore','seed','bark','wood'],
-    description: 'Edible anatomical parts (empty array if not edible)',
+    description: 'Edible anatomical parts in singular form (same 12 parts as plantPart). Empty array if not edible.',
   },
   thorny: { type: 'boolean', description: 'Whether plant has thorns or spines' },
   toxicityHuman: {

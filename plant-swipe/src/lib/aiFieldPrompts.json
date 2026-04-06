@@ -2,7 +2,7 @@
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
     "- `plantType`: EXACTLY one of: \"herb\", \"shrub\", \"tree\", \"climber\", \"succulent\", \"fern\", \"moss\", \"grass\"",
-    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"tubers\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\",\"seeds\",\"bark\",\"wood\"]. The main anatomical parts of this plant. Use \"tubers\" for plants with tuberous storage organs (e.g. potatoes, dahlias, sweet potatoes).",
+    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"tubers\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\",\"seeds\",\"bark\",\"wood\"]. The main anatomical parts of this plant. IMPORTANT: plantPart and ediblePart share the same 12 possible parts. Use \"tubers\" for tuberous storage organs (e.g. potatoes, dahlias). Use \"seeds\" for plants that produce notable seeds. Use \"bark\" for plants with significant bark (e.g. cinnamon). Use \"wood\" for woody plants where the wood itself is notable.",
     "- `habitat`: array from ONLY: [\"aquatic\",\"hygrophytic\",\"terrestrial\",\"xerophytic\",\"halophytic\",\"epiphytic\",\"parasitic\"]. The natural habitat type(s).",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
     "- `variety`: ONLY the cultivar/variety name if applicable (e.g. \"Hidcote\", \"Iceberg\", \"Thai Constellation\"), or null if no specific variety. NEVER include the base species name here.",
@@ -22,7 +22,7 @@
     "- `season`: array from [\"spring\",\"summer\",\"autumn\",\"winter\"]",
     "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\",\"infusion\"]. Use \"infusion\" if plant can be used for tea/tisane, \"aromatic\" also covers aromatherapy, \"fragrant\" for notable fragrance, \"medicinal\" for medicinal uses.",
     "- `vegetable`: boolean — true if the plant is a vegetable (only relevant when edible).",
-    "- `ediblePart`: array from ONLY: [\"root\",\"rhizome\",\"bulb\",\"tuber\",\"stem\",\"leaf\",\"flower\",\"fruit\",\"spore\",\"seed\",\"bark\",\"wood\"]. Empty array if not edible.",
+    "- `ediblePart`: array from ONLY: [\"root\",\"rhizome\",\"bulb\",\"tuber\",\"stem\",\"leaf\",\"flower\",\"fruit\",\"spore\",\"seed\",\"bark\",\"wood\"]. IMPORTANT: ediblePart uses singular form (same 12 parts as plantPart but singular). Only include parts that are safe to eat. Use \"tuber\" for edible tubers (e.g. potato, sweet potato). Use \"bark\" for edible bark (e.g. cinnamon). Empty array if not edible.",
     "- `thorny`: boolean",
     "- `toxicityHuman`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
     "- `toxicityPets`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
