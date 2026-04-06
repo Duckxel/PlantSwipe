@@ -17375,11 +17375,10 @@ async function handlePullCode(req, res) {
     // Pre-validate requested branch to fail fast on typos or deleted branches
     if (branch) {
       try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 30000 })
         const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 30000 }),
         ])
         const normalize = (s) => s.trim().replace(/^origin\//, '')
         const allowed = new Set(
@@ -17541,11 +17540,10 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     if (branch) {
       // Pre-validate requested branch and surface a clear error on failure
       try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 30000 })
         const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 30000 }),
         ])
         const normalize = (s) => s.trim().replace(/^origin\//, '')
         const allowed = new Set(
@@ -17634,18 +17632,17 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
-    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
     // Fetch remote branches with prune to remove deleted branches - this is the key operation for refreshing branches
     // Using git fetch --prune origin is more reliable than git remote update --prune
     let pruneWarning = null
     try {
-      await exec(`${gitBase} fetch --prune origin`, { timeout: 20000 })
+      await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'fetch', '--prune', 'origin'], { timeout: 20000 })
       console.log('[branches] Successfully fetched and pruned remote branches from origin')
     } catch (e) {
       console.warn('[branches] git fetch --prune origin failed:', e?.message || e)
       // Fallback: try git remote update --prune as secondary option
       try {
-        await exec(`${gitBase} remote update --prune`, { timeout: 15000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 15000 })
         console.log('[branches] Fallback: git remote update --prune succeeded')
       } catch (e2) {
         console.warn('[branches] Fallback git remote update --prune also failed:', e2?.message || e2)
@@ -17654,13 +17651,13 @@ app.get('/api/admin/branches', async (req, res) => {
     }
     // Extra safety: explicitly prune any stale remote-tracking refs that might remain
     try {
-      await exec(`${gitBase} remote prune origin`, { timeout: 5000 })
+      await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'prune', 'origin'], { timeout: 5000 })
     } catch (e) {
       // Non-fatal: fetch --prune should have already handled this
       console.warn('[branches] Extra prune command failed (non-fatal):', e?.message || e)
     }
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
-    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
+    const { stdout: branchesStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 5000 })
     let branches = branchesStdout
       .split('\n')
       .map(s => s.trim())
@@ -17672,7 +17669,7 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Fallback to local branches if remote list is empty (e.g., detached or offline)
     if (branches.length === 0) {
-      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
+      const { stdout: localStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 3000 })
       branches = localStdout
         .split('\n')
         .map(s => s.trim())
@@ -17680,7 +17677,7 @@ app.get('/api/admin/branches', async (req, res) => {
         .sort((a, b) => a.localeCompare(b))
     }
 
-    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
+    const { stdout: currentStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 3000 })
     const current = currentStdout.trim()
 
     // Read the last update time from TIME file if it exists
