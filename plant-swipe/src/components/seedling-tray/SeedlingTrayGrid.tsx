@@ -45,7 +45,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
   onExitSelectMode,
 }) => {
   const { t } = useTranslation("common");
-  const [viewMode, setViewMode] = useState<"sprite" | "photo">("sprite");
+  const [viewMode, setViewMode] = useState<"sprite" | "photo">("photo");
 
   const daysDiff = (d: string | null) => {
     if (!d) return null;
