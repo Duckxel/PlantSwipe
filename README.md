@@ -100,6 +100,7 @@ Made with care by **Neolite** & **Five**
 - **Friend System**: Send and accept friend requests
 - **Public Profiles**: Share your gardening journey with customizable visibility
 - **Profile Stats**: Plants owned, gardens count, streaks, and achievements
+- **Badge Showcase**: Earned badges displayed on public profiles
 - **Activity Heatmap**: GitHub-style contribution graph showing task completion
 - **Privacy Controls**: Private profiles, disable friend requests
 - **Profile Customization**: Display name, bio, country, avatar with accent colors
@@ -181,7 +182,9 @@ Made with care by **Neolite** & **Five**
 - **Schema Sync**: Safe database migration tools
 - **Member Management**: Search users, view profiles, manage roles
 - **Email Campaigns**: Create and send templated email campaigns
-- **Media Management**: Upload and organize media files
+- **Media Management**: Upload and organize media files with UTILITY bucket explorer
+- **Events Management**: Create and manage time-limited interactive events (egg hunts, campaigns)
+- **Badge Management**: Create and manage badges with multilingual support
 - **Analytics Dashboard**: Charts and statistics with Recharts
 - **Action Logging**: Track admin actions with audit trail
 - **Security**: Token-based authentication with role-based access
@@ -497,7 +500,7 @@ sudo systemctl reload nginx
 | ✅ | AI plant scanning & identification | Complete |
 | ✅ | Moderation & user safety tools | Complete |
 | ✅ | Bug reporting system | Complete |
-| ⏳ | Garden events with reminders | In Progress |
+| ✅ | Event system with badges (Easter Egg Hunt) | Complete |
 | ⏳ | Collaborative collections and sharing | Planned |
 | 🔬 | Plant disease identification | Future |
 | 🔬 | Advanced plant care AI assistant | Future |
@@ -606,6 +609,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | [**Cache Implementation**](./plant-swipe/CACHE_IMPLEMENTATION.md) | Database caching system details |
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |
 | [**Security Audit**](./plant-swipe/SECURITY_AUDIT_REPORT.md) | Security audit findings and remediations |
+| [**Event System**](./plant-swipe/docs/EVENTS.md) | Event framework and lifecycle documentation |
 | [**Database Schema**](./plant-swipe/supabase/DATABASE_SCHEMA.md) | Complete database documentation |
 | [**Reusable Components**](./plant-swipe/src/REUSABLE_COMPONENTS.md) | Shared UI components & hooks reference |
 | [**Admin API**](./admin_api/) | Admin endpoint documentation |
