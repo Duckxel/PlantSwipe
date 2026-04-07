@@ -6640,8 +6640,8 @@ function scheduleRestartAllServices(trigger = 'manual') {
   setTimeout(() => {
     console.log(`[restart] Scheduling service restart (trigger=${label})`)
       ; (async () => {
-        try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch { }
-        try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch { }
+        try { await execFile('sudo', ['-n', 'nginx', '-t'], { timeout: 15000 }) } catch { }
+        try { await execFile('sudo', ['-n', 'systemctl', 'reload', serviceNginx], { timeout: 20000 }) } catch { }
         try {
           const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
           try { admin.unref() } catch { }
