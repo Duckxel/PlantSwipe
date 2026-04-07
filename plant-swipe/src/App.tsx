@@ -6,7 +6,7 @@ import { TutorialProvider } from '@/context/TutorialContext'
 import { ThemeProvider } from '@/context/ThemeContext'
 import { EggHuntProvider } from '@/context/EggHuntContext'
 import { EggHuntCounter } from '@events/2026_EASTER'
-import { BrowserRouter, Routes, Route, useLocation, useNavigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, getDomainDefaultLanguage } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
@@ -37,13 +37,16 @@ function AppShell() {
     }
   }, [location.pathname])
   
-  // Scroll to top on route changes
+  // Scroll to top on route changes (but not on back/forward navigation)
+  const navigationType = useNavigationType()
   React.useEffect(() => {
     if (typeof window === 'undefined') return
+    // Let pages handle their own scroll restoration on back/forward navigation
+    if (navigationType === 'POP') return
     window.requestAnimationFrame(() => {
       window.scrollTo({ top: 0, left: 0, behavior: 'smooth' })
     })
-  }, [location.pathname, location.search, location.hash])
+  }, [location.pathname, location.search, location.hash, navigationType])
   
   // Handle initial redirect to preferred language
   // This runs on first load and when PWA users land on a URL in the wrong language.
