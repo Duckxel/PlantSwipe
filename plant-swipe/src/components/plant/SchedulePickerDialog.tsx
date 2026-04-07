@@ -4,6 +4,7 @@ import React from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Minus, Plus } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 
 type Period = 'week' | 'month' | 'year'
 
@@ -27,6 +28,7 @@ export function SchedulePickerDialog(props: {
   allowedPeriods?: Period[]
   modal?: boolean
 }) {
+  const { t } = useTranslation('common')
   const { open, onOpenChange, period, amount, onSave, initialSelection, onChangePeriod, onChangeAmount, lockToYear, allowedPeriods, modal = true } = props
 
   const [saving, setSaving] = React.useState(false)
@@ -268,7 +270,9 @@ export function SchedulePickerDialog(props: {
                 type="button"
                 onClick={() => handleAmountChange(amount - 1)}
                 disabled={amount <= 1 || !!lockToYear}
-                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors"
+                aria-label={t("Decrease amount")}
+                title={t("Decrease amount")}
+                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors focus-visible:ring-2"
               >
                 <Minus className="w-4 h-4" />
               </button>
@@ -277,7 +281,9 @@ export function SchedulePickerDialog(props: {
                 type="button"
                 onClick={() => handleAmountChange(amount + 1)}
                 disabled={amount >= maxForPeriod(lockToYear ? 'year' : period) || !!lockToYear}
-                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors"
+                aria-label={t("Increase amount")}
+                title={t("Increase amount")}
+                className="h-full w-9 flex items-center justify-center text-stone-500 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-30 transition-colors focus-visible:ring-2"
               >
                 <Plus className="w-4 h-4" />
               </button>
