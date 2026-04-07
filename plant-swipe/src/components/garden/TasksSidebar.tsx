@@ -85,8 +85,18 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
     return plants.filter((gp: GardenPlant) => (occsByPlant[gp.id] || []).length > 0)
   }, [plants, occsByPlant])
 
-  const totalTasks = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0), [todayTaskOccurrences])
-  const totalDone = React.useMemo(() => todayTaskOccurrences.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0), [todayTaskOccurrences])
+  const { totalTasks, totalDone } = React.useMemo(() => {
+    // ⚡ Bolt: Calculate totalTasks and totalDone in a single-pass loop instead of two .reduce() calls
+    let reqSum = 0;
+    let doneSum = 0;
+    for (let i = 0; i < todayTaskOccurrences.length; i++) {
+      const o = todayTaskOccurrences[i];
+      const req = Math.max(1, Number(o.requiredCount || 1));
+      reqSum += req;
+      doneSum += Math.min(req, Number(o.completedCount || 0));
+    }
+    return { totalTasks: reqSum, totalDone: doneSum };
+  }, [todayTaskOccurrences])
 
   const getTaskIcon = (taskType: string, emoji?: string | null) => {
     if (emoji && emoji !== '??' && emoji !== '???' && emoji.trim() !== '') {
@@ -140,8 +150,15 @@ export function TasksSidebar({ className = '', gardenName, plants, todayTaskOccu
           )}
           {plantsWithTasks.map((gp: GardenPlant) => {
             const occs = occsByPlant[gp.id] || []
-            const req = occs.reduce((a, o) => a + Math.max(1, Number(o.requiredCount || 1)), 0)
-            const done = occs.reduce((a, o) => a + Math.min(Math.max(1, Number(o.requiredCount || 1)), Number(o.completedCount || 0)), 0)
+            // ⚡ Bolt: Calculate req and done in a single-pass loop instead of two .reduce() calls
+            let req = 0;
+            let done = 0;
+            for (let i = 0; i < occs.length; i++) {
+              const o = occs[i];
+              const r = Math.max(1, Number(o.requiredCount || 1));
+              req += r;
+              done += Math.min(r, Number(o.completedCount || 0));
+            }
             const allDone = done >= req
             const isCompleting = completingPlantIds.has(gp.id)
             

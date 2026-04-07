@@ -28,3 +28,7 @@
 ## 2026-03-31 - Eliminate intermediate array allocations in Set initialization for filter normalization
 **Learning:** The `normalizedFilters` `useMemo` block in `PlantSwipe.tsx` initialized 8 separate `Set`s using `new Set(arr.map(x => x.toLowerCase()))`. In frequently triggered render paths, this generates unnecessary intermediate array allocations for each field on every filter interaction.
 **Action:** When creating a `Set` from a mapped array, define an external helper function (e.g., `createLowercasedSet`) that iterates through the input with a `for` loop and adds elements directly to an empty `Set`. This maintains readability while eliminating intermediate allocations.
+
+## 2026-04-03 - Combine multiple aggregations in single-pass loops
+**Learning:** Performing multiple `.reduce()` or chained `.filter().length` operations over the same array to calculate related metrics (e.g., total required tasks and total completed tasks) increases time complexity to O(2N) and adds unnecessary function call overhead.
+**Action:** Replace multiple `.reduce()` calls or `.filter().length` chains on the same array with a single-pass `for` loop that computes all required aggregates simultaneously, avoiding intermediate array allocations and reducing loop overhead.
