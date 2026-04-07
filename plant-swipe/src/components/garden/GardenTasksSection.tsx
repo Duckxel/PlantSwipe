@@ -188,15 +188,15 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
 
   // Get plants with today's tasks
   const plantsWithTasks = plants.filter((p) => occsByPlant[p.id]?.length > 0);
-  const totalTasks = todayTaskOccurrences.reduce(
-    (sum, o) => sum + Math.max(1, o.requiredCount || 1),
-    0
-  );
-  const completedTasks = todayTaskOccurrences.reduce(
-    (sum, o) =>
-      sum + Math.min(Math.max(1, o.requiredCount || 1), o.completedCount || 0),
-    0
-  );
+  // ⚡ Bolt: Calculate totalTasks and completedTasks in a single-pass loop instead of two .reduce() calls
+  let totalTasks = 0;
+  let completedTasks = 0;
+  for (let i = 0; i < todayTaskOccurrences.length; i++) {
+    const o = todayTaskOccurrences[i];
+    const req = Math.max(1, o.requiredCount || 1);
+    totalTasks += req;
+    completedTasks += Math.min(req, o.completedCount || 0);
+  }
   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
 
   // Day labels
@@ -405,19 +405,15 @@ export const GardenTasksSection: React.FC<GardenTasksSectionProps> = ({
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
             {plantsWithTasks.map((plant) => {
               const occs = occsByPlant[plant.id] || [];
-              const plantTotalReq = occs.reduce(
-                (a, o) => a + Math.max(1, o.requiredCount || 1),
-                0
-              );
-              const plantTotalDone = occs.reduce(
-                (a, o) =>
-                  a +
-                  Math.min(
-                    Math.max(1, o.requiredCount || 1),
-                    o.completedCount || 0
-                  ),
-                0
-              );
+              // ⚡ Bolt: Calculate plantTotalReq and plantTotalDone in a single-pass loop instead of two .reduce() calls
+              let plantTotalReq = 0;
+              let plantTotalDone = 0;
+              for (let i = 0; i < occs.length; i++) {
+                const o = occs[i];
+                const req = Math.max(1, o.requiredCount || 1);
+                plantTotalReq += req;
+                plantTotalDone += Math.min(req, o.completedCount || 0);
+              }
               const allDone = plantTotalDone >= plantTotalReq;
               const isCompleting = completingPlantIds.has(plant.id);
               const plantProgressPct = plantTotalReq > 0 ? Math.round((plantTotalDone / plantTotalReq) * 100) : 100;
