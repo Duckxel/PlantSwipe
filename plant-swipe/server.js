@@ -29188,7 +29188,7 @@ async function deliverPushNotifications(notifications, campaign) {
   const subscriptions = await sql`
     select id::text as id, user_id::text as user_id, endpoint, subscription
     from public.user_push_subscriptions
-    where user_id = any(${userIds})
+    where user_id = any(${userIds}::uuid[])
   `
   console.log(`[notifications] Found ${subscriptions?.length || 0} push subscription(s) for ${userIds.length} user(s)`)
   const subsByUser = new Map()
