@@ -153,7 +153,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
             <span className="text-xs md:text-sm text-muted-foreground">
               {completedTasks}/{totalTasks}
             </span>
-            <div className="w-16 md:w-20 h-1.5 md:h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
+            <div className="w-20 md:w-20 h-2 md:h-2 bg-stone-200 dark:bg-stone-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-300"
                 style={{ width: `${(completedTasks / totalTasks) * 100}%` }}
@@ -184,7 +184,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
               {/* Plant Header */}
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div className="min-w-0 flex-1">
-                  <div className="font-medium text-xs md:text-sm truncate">
+                  <div className="font-medium text-sm md:text-sm truncate">
                     {plant.nickname || plant.plant?.name || "Plant"}
                   </div>
                 </div>
@@ -192,16 +192,16 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-6 md:h-7 text-[10px] md:text-xs rounded-lg px-2 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all"
+                    className="h-11 md:h-8 text-sm md:text-xs rounded-xl px-4 md:px-2 border-2 border-emerald-400 dark:border-emerald-500 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 font-semibold transition-all"
                     onClick={() => completeAllTodayForPlant(plant.id)}
                     disabled={isCompleting}
                     aria-label={t("garden.completeAllFor", { defaultValue: "Complete all tasks for {{name}}", name: plant.nickname || plant.plant?.name || "Plant" })}
                   >
                     {isCompleting ? (
-                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <Loader2 className="w-4 h-4 md:w-3 md:h-3 animate-spin" />
                     ) : (
                       <>
-                        <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                        <CheckCircle2 className="w-4 h-4 md:w-3 md:h-3 mr-1 md:mr-0.5" />
                         {t("garden.completeAll", "Complete All")}
                       </>
                     )}
@@ -210,7 +210,7 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
               </div>
               
               {/* Task List */}
-              <div className="space-y-1.5">
+              <div className="space-y-2.5 md:space-y-1.5">
                 {occs.map((occ) => {
                   const taskType = occ.taskType || "custom";
                   const config = taskTypeConfig[taskType as keyof typeof taskTypeConfig] || taskTypeConfig.custom;
@@ -224,54 +224,54 @@ export const TodaysTasksWidget: React.FC<TodaysTasksWidgetProps> = ({
                   return (
                     <div
                       key={occ.id}
-                      className={`flex items-center gap-2 p-2 md:p-2.5 rounded-xl transition-all ${
+                      className={`flex items-center gap-3 md:gap-2 p-3 md:p-2.5 rounded-xl transition-all ${
                         isDone
                           ? "bg-white/50 dark:bg-stone-800/30 opacity-60"
                           : `${config.bg} ${config.border} border shadow-sm`
                       }`}
                     >
                       {/* Task Icon */}
-                      <div className={`w-7 h-7 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
+                      <div className={`w-10 h-10 md:w-8 md:h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
                         isDone ? "bg-stone-100 dark:bg-stone-700/30" : "bg-white dark:bg-stone-900/80 shadow-sm"
                       }`}>
-                        <span className="text-base md:text-lg" role="img" aria-hidden="true">
+                        <span className="text-lg md:text-lg" role="img" aria-hidden="true">
                           {getTaskIcon(taskType, occ.taskEmoji)}
                         </span>
                       </div>
-                      
+
                       {/* Task Info */}
                       <div className="flex-1 min-w-0">
-                        <span className={`text-xs md:text-sm font-medium ${isDone ? "line-through text-muted-foreground" : config.color}`}>
+                        <span className={`text-sm md:text-sm font-medium ${isDone ? "line-through text-muted-foreground" : config.color}`}>
                           {t(`garden.taskTypes.${taskType}`, taskType)}
                         </span>
                         {occ.requiredCount > 1 && !isDone && (
-                          <span className="text-[9px] md:text-[10px] opacity-70 ml-1">
+                          <span className="text-xs md:text-[10px] opacity-70 ml-1">
                             {occ.completedCount || 0}/{occ.requiredCount}
                           </span>
                         )}
                       </div>
-                      
+
                       {/* Complete Button - Secondary/Outline style */}
                       {!isDone ? (
                         <Button
                           size="sm"
                           variant="outline"
-                          className={`rounded-lg h-6 md:h-7 px-2 md:px-2.5 text-[10px] md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
+                          className={`rounded-xl h-11 md:h-8 px-4 md:px-2.5 text-sm md:text-xs font-semibold flex-shrink-0 border-2 transition-all ${config.buttonOutline}`}
                           onClick={() => onProgressOccurrence(occ.id, remaining)}
                           disabled={isProgressing}
                           aria-label={`${t("garden.complete", "Complete")} ${t(`garden.taskTypes.${taskType}`)} ${t("garden.activity.plant")} ${plant.nickname || plant.plant?.name || "Plant"}`}
                         >
                           {isProgressing ? (
-                            <Loader2 className="w-3 h-3 md:w-3.5 md:h-3.5 animate-spin" />
+                            <Loader2 className="w-4 h-4 md:w-3.5 md:h-3.5 animate-spin" />
                           ) : (
                             <>
-                              <CheckCircle2 className="w-3 h-3 md:w-3.5 md:h-3.5 mr-0.5" />
+                              <CheckCircle2 className="w-4 h-4 md:w-3.5 md:h-3.5 mr-1 md:mr-0.5" />
                               {t("garden.complete", "Complete")}
                             </>
                           )}
                         </Button>
                       ) : (
-                        <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-emerald-500 flex-shrink-0" />
+                        <CheckCircle2 className="w-5 h-5 md:w-5 md:h-5 text-emerald-500 flex-shrink-0" />
                       )}
                     </div>
                   );
