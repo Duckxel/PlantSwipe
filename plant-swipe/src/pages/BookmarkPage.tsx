@@ -7,7 +7,7 @@ import { getBookmarkDetails, deleteBookmark, removePlantFromBookmark } from '@/l
 import type { Bookmark } from '@/types/bookmark'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-import { ChevronLeft, Share2, Lock, Globe, Plus, Trash2, Edit2, X, Sparkles, Heart, Leaf } from 'lucide-react'
+import { ChevronLeft, Share2, Lock, Globe, Plus, Trash2, Edit2, X, Sparkles, Heart, Leaf, Calendar, User } from 'lucide-react'
 import { CreateBookmarkDialog } from '@/components/profile/CreateBookmarkDialog'
 import { AddPlantToBookmarkDialog } from '@/components/profile/AddPlantToBookmarkDialog'
 import { rarityTone } from '@/constants/badges'
@@ -188,93 +188,168 @@ export const BookmarkPage = () => {
           </motion.div>
           
           {/* Header Content */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              className="space-y-4"
-            >
-              {/* Title with Icon */}
-              <div className="flex items-center gap-3">
-                <div className={`flex items-center justify-center w-14 h-14 rounded-2xl shadow-lg ${
-                  bookmark.is_like
-                    ? 'bg-gradient-to-br from-rose-400 to-rose-600 shadow-rose-500/25'
-                    : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25'
-                }`}>
-                  {bookmark.is_like ? <Heart className="h-7 w-7 text-white" /> : <Sparkles className="h-7 w-7 text-white" />}
-                </div>
-                <div>
-                  <h1 className="text-3xl md:text-4xl font-bold text-stone-900 dark:text-white">
-                    {bookmark.name}
-                  </h1>
-                  <div className="flex items-center gap-2 mt-1">
-                    <Badge 
-                      variant="secondary" 
-                      className="rounded-full px-3 py-0.5 bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300"
-                    >
-                      {plantCount} {t('bookmarks.plants', { defaultValue: 'plants' })}
-                    </Badge>
-                    <Badge 
-                      variant="outline" 
-                      className={`rounded-full px-3 py-0.5 ${
-                        bookmark.visibility === 'private' 
-                          ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400' 
-                          : 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400'
-                      }`}
-                    >
-                      {bookmark.visibility === 'private' ? <Lock className="h-3 w-3 mr-1" /> : <Globe className="h-3 w-3 mr-1" />}
-                      {bookmark.visibility === 'private' ? t('bookmarks.private', { defaultValue: 'Private' }) : t('bookmarks.public', { defaultValue: 'Public' })}
-                    </Badge>
+          <div className="flex flex-col gap-6">
+            {/* Top row: Title + Actions */}
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-6">
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.2 }}
+                className="space-y-4"
+              >
+                {/* Title with Icon */}
+                <div className="flex items-center gap-3">
+                  <div className={`flex items-center justify-center w-14 h-14 rounded-2xl shadow-lg ${
+                    bookmark.is_like
+                      ? 'bg-gradient-to-br from-rose-400 to-rose-600 shadow-rose-500/25'
+                      : 'bg-gradient-to-br from-emerald-400 to-emerald-600 shadow-emerald-500/25'
+                  }`}>
+                    {bookmark.is_like ? <Heart className="h-7 w-7 text-white" /> : <Sparkles className="h-7 w-7 text-white" />}
+                  </div>
+                  <div>
+                    <h1 className="text-3xl md:text-4xl font-bold text-stone-900 dark:text-white">
+                      {bookmark.name}
+                    </h1>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge
+                        variant="outline"
+                        className={`rounded-full px-3 py-0.5 ${
+                          bookmark.visibility === 'private'
+                            ? 'border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-400'
+                            : 'border-emerald-300 dark:border-emerald-700 text-emerald-700 dark:text-emerald-400'
+                        }`}
+                      >
+                        {bookmark.visibility === 'private' ? <Lock className="h-3 w-3 mr-1" /> : <Globe className="h-3 w-3 mr-1" />}
+                        {bookmark.visibility === 'private' ? t('bookmarks.private', { defaultValue: 'Private' }) : t('bookmarks.public', { defaultValue: 'Public' })}
+                      </Badge>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </motion.div>
-            
-            {/* Actions */}
-            <motion.div 
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.3 }}
-              className="flex flex-wrap items-center gap-2"
-            >
-              {!bookmark.is_like && (
-                <Button
-                  variant="outline"
-                  onClick={handleShare}
-                  className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-800"
-                >
-                  <Share2 className="h-4 w-4 mr-2" /> {t('common.share', { defaultValue: 'Share' })}
-                </Button>
-              )}
-              {isOwner && (
-                <>
+              </motion.div>
+
+              {/* Actions */}
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.3 }}
+                className="flex flex-wrap items-center gap-2"
+              >
+                {!bookmark.is_like && (
                   <Button
-                    onClick={() => setAddPlantOpen(true)}
-                    className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25"
+                    variant="outline"
+                    onClick={handleShare}
+                    className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-800"
                   >
-                    <Plus className="h-4 w-4 mr-2" /> {t('bookmarks.addPlant', { defaultValue: 'Add Plant' })}
+                    <Share2 className="h-4 w-4 mr-2" /> {t('common.share', { defaultValue: 'Share' })}
                   </Button>
-                  {!bookmark.is_like && (
-                    <>
-                      <Button
-                        variant="outline"
-                        onClick={() => setEditOpen(true)}
-                        className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
-                      >
-                        <Edit2 className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        onClick={handleDelete}
-                        className="rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </>
-                  )}
-                </>
-              )}
+                )}
+                {isOwner && (
+                  <>
+                    <Button
+                      onClick={() => setAddPlantOpen(true)}
+                      className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25"
+                    >
+                      <Plus className="h-4 w-4 mr-2" /> {t('bookmarks.addPlant', { defaultValue: 'Add Plant' })}
+                    </Button>
+                    {!bookmark.is_like && (
+                      <>
+                        <Button
+                          variant="outline"
+                          onClick={() => setEditOpen(true)}
+                          className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          onClick={handleDelete}
+                          className="rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
+                    )}
+                  </>
+                )}
+              </motion.div>
+            </div>
+
+            {/* Stats row: Owner, Plant Count, Created Date */}
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.35 }}
+              className="grid grid-cols-1 sm:grid-cols-3 gap-3"
+            >
+              {/* Owner Card */}
+              <Link
+                to={`/profile/${bookmark.owner?.id || bookmark.user_id}`}
+                className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/60 dark:bg-stone-800/60 backdrop-blur border border-stone-200/60 dark:border-stone-700/60 hover:bg-white/80 dark:hover:bg-stone-800/80 transition-colors group"
+              >
+                {bookmark.owner?.avatar_url ? (
+                  <img
+                    src={bookmark.owner.avatar_url}
+                    alt={bookmark.owner.display_name}
+                    className="w-9 h-9 rounded-full object-cover ring-2 ring-emerald-200 dark:ring-emerald-800 group-hover:ring-emerald-400 dark:group-hover:ring-emerald-600 transition-all"
+                  />
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-800 dark:to-emerald-900 flex items-center justify-center ring-2 ring-emerald-200 dark:ring-emerald-800">
+                    <User className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                )}
+                <div className="min-w-0">
+                  <p className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">
+                    {t('bookmarks.createdBy', { defaultValue: 'Created by' })}
+                  </p>
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200 truncate group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                    {bookmark.owner?.display_name || t('common.unknownUser', { defaultValue: 'Unknown user' })}
+                  </p>
+                </div>
+              </Link>
+
+              {/* Plant Count Card */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/60 dark:bg-stone-800/60 backdrop-blur border border-stone-200/60 dark:border-stone-700/60">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center ${
+                  bookmark.is_like
+                    ? 'bg-gradient-to-br from-rose-100 to-rose-200 dark:from-rose-900/40 dark:to-rose-800/40'
+                    : 'bg-gradient-to-br from-emerald-100 to-emerald-200 dark:from-emerald-900/40 dark:to-emerald-800/40'
+                }`}>
+                  <Leaf className={`h-4 w-4 ${
+                    bookmark.is_like
+                      ? 'text-rose-600 dark:text-rose-400'
+                      : 'text-emerald-600 dark:text-emerald-400'
+                  }`} />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">
+                    {t('bookmarks.plantCount', { defaultValue: 'Plants' })}
+                  </p>
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                    {plantCount} {plantCount === 1
+                      ? t('bookmarks.plant', { defaultValue: 'plant' })
+                      : t('bookmarks.plants', { defaultValue: 'plants' })}
+                  </p>
+                </div>
+              </div>
+
+              {/* Created Date Card */}
+              <div className="flex items-center gap-3 px-4 py-3 rounded-2xl bg-white/60 dark:bg-stone-800/60 backdrop-blur border border-stone-200/60 dark:border-stone-700/60">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-700 dark:to-stone-800 flex items-center justify-center">
+                  <Calendar className="h-4 w-4 text-stone-600 dark:text-stone-400" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500 font-medium">
+                    {t('bookmarks.createdOn', { defaultValue: 'Created' })}
+                  </p>
+                  <p className="text-sm font-semibold text-stone-700 dark:text-stone-200">
+                    {new Date(bookmark.created_at).toLocaleDateString(undefined, {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric'
+                    })}
+                  </p>
+                </div>
+              </div>
             </motion.div>
           </div>
         </div>
