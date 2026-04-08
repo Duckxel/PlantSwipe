@@ -42,7 +42,7 @@ export function ReportUserDialog({
     setError(null)
     
     try {
-      await createUserReport({
+      const report = await createUserReport({
         reportedUserId: userId,
         reason: reason.trim()
       })
@@ -51,7 +51,7 @@ export function ReportUserDialog({
         reporter_name: profile?.display_name || 'A user',
         reported_user_name: displayName || 'Unknown',
         reason: reason.trim(),
-        report_id: '',
+        report_id: report?.id || '',
       }).catch(() => {})
       setSuccess(true)
       setTimeout(() => {

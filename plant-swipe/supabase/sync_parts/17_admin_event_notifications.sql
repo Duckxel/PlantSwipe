@@ -35,14 +35,31 @@ create trigger admin_event_notifications_set_updated_at
   for each row
   execute function public.update_admin_event_notifications_updated_at();
 
--- RLS: only admins can read/write
+-- RLS: admins can read/write; all authenticated users can read (needed for event triggers from non-admins)
 alter table public.admin_event_notifications enable row level security;
 
 do $$ begin
+  -- Drop old combined policy if it exists
   if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_event_notifications' and policyname='admin_event_notifications_admin_all') then
     drop policy admin_event_notifications_admin_all on public.admin_event_notifications;
   end if;
-  create policy admin_event_notifications_admin_all on public.admin_event_notifications for all to authenticated
+  -- Drop old select policy if it exists (idempotent re-run)
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_event_notifications' and policyname='admin_event_notifications_select_authenticated') then
+    drop policy admin_event_notifications_select_authenticated on public.admin_event_notifications;
+  end if;
+  -- Drop old write policy if it exists (idempotent re-run)
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='admin_event_notifications' and policyname='admin_event_notifications_admin_write') then
+    drop policy admin_event_notifications_admin_write on public.admin_event_notifications;
+  end if;
+
+  -- SELECT: all authenticated users can read (so non-admin event triggers can fetch config)
+  create policy admin_event_notifications_select_authenticated on public.admin_event_notifications
+    for select to authenticated
+    using (true);
+
+  -- INSERT/UPDATE/DELETE: admin-only
+  create policy admin_event_notifications_admin_write on public.admin_event_notifications
+    for all to authenticated
     using (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true))
     with check (exists (select 1 from public.profiles p where p.id = (select auth.uid()) and p.is_admin = true));
 end $$;

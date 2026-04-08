@@ -253,7 +253,18 @@ const CompanionSelector: React.FC<{
 
   // Fetch plant names (and images) for companion IDs - use translations for non-English
   // Batches queries to avoid Supabase URL length limits with large ID arrays
+  // Also auto-removes invalid/orphaned entries (non-UUID strings or IDs that don't exist in DB)
   React.useEffect(() => {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    // First: strip out non-UUID entries immediately (e.g. text names from old AI fills)
+    const invalidIds = value.filter((id) => !UUID_RE.test(id))
+    if (invalidIds.length > 0) {
+      console.warn('[CompanionSelector] Removing non-UUID entries:', invalidIds)
+      onChange(value.filter((id) => UUID_RE.test(id)))
+      return
+    }
+
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
     let cancelled = false
@@ -322,6 +333,14 @@ const CompanionSelector: React.FC<{
 
         if (cancelled) return
 
+        // Detect orphaned UUIDs — IDs that look like valid UUIDs but don't match any plant in DB
+        const resolvedIds = new Set(plantNames.map(p => p.id))
+        const orphanedIds = missing.filter(id => !resolvedIds.has(id))
+        if (orphanedIds.length > 0) {
+          console.warn('[CompanionSelector] Removing orphaned plant IDs (not found in DB):', orphanedIds)
+          onChange(value.filter(id => !orphanedIds.includes(id)))
+        }
+
         if (plantNames.length > 0) {
           // Batch image queries too
           const imageMap = new Map<string, string>()
@@ -332,8 +351,8 @@ const CompanionSelector: React.FC<{
             const { data: imagesData } = await supabase
               .from('plant_images')
               .select('plant_id, link')
-              .in('plant_id', batch)
               .eq('use', 'primary')
+              .in('plant_id', batch)
             if (imagesData) {
               imagesData.forEach((img) => {
                 if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)

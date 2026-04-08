@@ -2715,7 +2715,7 @@ export const AdminPage: React.FC = () => {
   );
 
   const completePlantRequest = React.useCallback(
-    async (id: string) => {
+    async (id: string, plantName: string) => {
       if (!id || completingRequestId) return;
       if (!user?.id) {
         setPlantRequestsError("You must be signed in to complete requests.");
@@ -2724,6 +2724,24 @@ export const AdminPage: React.FC = () => {
       setCompletingRequestId(id);
       setPlantRequestsError(null);
       try {
+        // Notify requesting users BEFORE deleting (delete cascades plant_request_users)
+        try {
+          const session = (await supabase.auth.getSession()).data.session
+          if (session?.access_token) {
+            await fetch('/api/admin/notify-plant-requesters', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              credentials: 'same-origin',
+              body: JSON.stringify({ requestId: id, plantName }),
+            })
+          }
+        } catch (notifyErr) {
+          console.warn('[completePlantRequest] Failed to notify requesters:', notifyErr)
+        }
+
         // Delete the request (cascade will also delete related plant_request_users entries)
         const { error } = await supabase
           .from("requested_plants")
@@ -2741,6 +2759,28 @@ export const AdminPage: React.FC = () => {
       }
     },
     [completingRequestId, loadPlantRequests, user?.id],
+  );
+
+  const dismissPlantRequest = React.useCallback(
+    async (id: string) => {
+      if (!id || completingRequestId) return;
+      setCompletingRequestId(id);
+      setPlantRequestsError(null);
+      try {
+        const { error } = await supabase
+          .from("requested_plants")
+          .delete()
+          .eq("id", id);
+        if (error) throw new Error(error.message);
+        await loadPlantRequests({ initial: false });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setPlantRequestsError(msg);
+      } finally {
+        setCompletingRequestId(null);
+      }
+    },
+    [completingRequestId, loadPlantRequests],
   );
 
   const handleOpenCreatePlantDialog = React.useCallback(
@@ -10405,7 +10445,7 @@ export const AdminPage: React.FC = () => {
                                           variant="outline"
                                           className="rounded-2xl"
                                           onClick={() =>
-                                            completePlantRequest(req.id)
+                                            completePlantRequest(req.id, req.plant_name)
                                           }
                                           disabled={
                                             completingRequestId === req.id
@@ -10414,6 +10454,16 @@ export const AdminPage: React.FC = () => {
                                           {completingRequestId === req.id
                                             ? "Completing..."
                                             : "Complete"}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                          onClick={() => dismissPlantRequest(req.id)}
+                                          disabled={completingRequestId === req.id}
+                                          title="Delete request without notifying"
+                                        >
+                                          <X className="h-4 w-4" />
                                         </Button>
                                       </div>
                                     </div>
