@@ -764,7 +764,7 @@ export const GardenDashboardPage: React.FC = () => {
         // Derive week counts exclusively from Tasks v2 occurrences (no legacy schedule)
         // Heavy task/occurrence computation deferred to when user opens Routine/Plants
         // Preserve heavy state on silent reloads (routine UI stability)
-        const computeHeavy = opts?.preserveHeavy ? false : false;
+        const computeHeavy = !opts?.preserveHeavy;
         if (computeHeavy) {
           const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
           const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`;

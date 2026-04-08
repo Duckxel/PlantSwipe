@@ -29622,6 +29622,31 @@ async function processDueAutomations() {
             limit 1000
           `
         } else if (automation.trigger_type === 'daily_task_reminder') {
+          // Ensure task occurrences exist for today before querying.
+          // Occurrences are normally generated client-side when users open the app,
+          // but users who haven't opened the app recently will have stale/missing
+          // occurrences, causing them to silently miss task reminder notifications.
+          try {
+            const today = new Date()
+            const startIso = new Date(today.getTime() - 1 * 24 * 3600 * 1000).toISOString()
+            const endIso = new Date(today.getTime() + 2 * 24 * 3600 * 1000).toISOString()
+            // Get all garden IDs that have tasks
+            const gardenRows = await sql`
+              select distinct t.garden_id
+              from public.garden_plant_tasks t
+              join public.garden_members gm on gm.garden_id = t.garden_id
+              join public.profiles p on p.id = gm.user_id
+              where (p.notify_push is null or p.notify_push = true)
+                and (p.push_task_reminders is null or p.push_task_reminders = true)
+            `
+            const gardenIds = (gardenRows || []).map(r => r.garden_id).filter(Boolean)
+            if (gardenIds.length > 0) {
+              await sql`select public.ensure_gardens_tasks_occurrences(${gardenIds}::uuid[], ${startIso}::timestamptz, ${endIso}::timestamptz)`
+            }
+          } catch (occErr) {
+            console.warn('[automations] Failed to ensure task occurrences (continuing with existing data):', occErr?.message)
+          }
+
           // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
           // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
           // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
