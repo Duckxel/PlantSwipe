@@ -18031,7 +18031,17 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       profileDeleted: false,
       gardensProcessed: 0,
       authUserDeleted: false,
-      storageObjectsDeleted: 0
+      storageObjectsDeleted: 0,
+      roadmapCompletionsDeleted: 0,
+      badgesDeleted: 0,
+      eventRegistrationsDeleted: 0,
+      eventProgressDeleted: 0,
+      actionStatusDeleted: 0,
+      gardenUserActivityDeleted: 0,
+      taskCompletionsDeleted: 0,
+      requestedPlantsDeleted: 0,
+      bugActionResponsesDeleted: 0,
+      bugPointsHistoryDeleted: 0
     }
 
     try {
@@ -18270,6 +18280,116 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
         await supabaseServiceClient.from('garden_invites').delete().eq('invitee_id', userId)
       }
     } catch (err) { console.warn('[gdpr] Garden invites deletion partial:', err?.message) }
+
+    try {
+      // 14c. Delete garden roadmap completions
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_roadmap_completions WHERE completed_by = ${userId}`
+        stats.roadmapCompletionsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_roadmap_completions').delete().eq('completed_by', userId)
+        stats.roadmapCompletionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Roadmap completions deletion partial:', err?.message) }
+
+    try {
+      // 14d. Delete user badges
+      if (sql) {
+        const result = await sql`DELETE FROM public.user_badges WHERE user_id = ${userId}`
+        stats.badgesDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_badges').delete().eq('user_id', userId)
+        stats.badgesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] User badges deletion partial:', err?.message) }
+
+    try {
+      // 14e. Delete event registrations
+      if (sql) {
+        const result = await sql`DELETE FROM public.event_registrations WHERE user_id = ${userId}`
+        stats.eventRegistrationsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('event_registrations').delete().eq('user_id', userId)
+        stats.eventRegistrationsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Event registrations deletion partial:', err?.message) }
+
+    try {
+      // 14f. Delete event user progress
+      if (sql) {
+        const result = await sql`DELETE FROM public.event_user_progress WHERE user_id = ${userId}`
+        stats.eventProgressDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('event_user_progress').delete().eq('user_id', userId)
+        stats.eventProgressDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Event user progress deletion partial:', err?.message) }
+
+    try {
+      // 14g. Delete user action status
+      if (sql) {
+        const result = await sql`DELETE FROM public.user_action_status WHERE user_id = ${userId}`
+        stats.actionStatusDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_action_status').delete().eq('user_id', userId)
+        stats.actionStatusDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] User action status deletion partial:', err?.message) }
+
+    try {
+      // 14h. Delete garden user activity
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_user_activity WHERE user_id = ${userId}`
+        stats.gardenUserActivityDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_user_activity').delete().eq('user_id', userId)
+        stats.gardenUserActivityDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Garden user activity deletion partial:', err?.message) }
+
+    try {
+      // 14i. Delete garden task user completions (covers shared gardens not handled by garden cascade)
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_task_user_completions WHERE user_id = ${userId}`
+        stats.taskCompletionsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_task_user_completions').delete().eq('user_id', userId)
+        stats.taskCompletionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Garden task user completions deletion partial:', err?.message) }
+
+    try {
+      // 14j. Delete requested plants
+      if (sql) {
+        const result = await sql`DELETE FROM public.requested_plants WHERE requested_by = ${userId}`
+        stats.requestedPlantsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('requested_plants').delete().eq('requested_by', userId)
+        stats.requestedPlantsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Requested plants deletion partial:', err?.message) }
+
+    try {
+      // 14k. Delete bug action responses
+      if (sql) {
+        const result = await sql`DELETE FROM public.bug_action_responses WHERE user_id = ${userId}`
+        stats.bugActionResponsesDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_action_responses').delete().eq('user_id', userId)
+        stats.bugActionResponsesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug action responses deletion partial:', err?.message) }
+
+    try {
+      // 14l. Delete bug points history
+      if (sql) {
+        const result = await sql`DELETE FROM public.bug_points_history WHERE user_id = ${userId}`
+        stats.bugPointsHistoryDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_points_history').delete().eq('user_id', userId)
+        stats.bugPointsHistoryDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug points history deletion partial:', err?.message) }
 
     try {
       // 15. Delete avatar image and profile
