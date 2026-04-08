@@ -99,6 +99,14 @@ const AI_EXCLUDED_FIELDS = new Set([
   // Plant link fields — AI is unaware of plants in our DB
   'companionPlants', 'biotopePlants', 'beneficialPlants', 'harmfulPlants',
 ])
+// UUID v4 pattern — used to filter out non-UUID entries from plant relation arrays
+// (companion_plants, biotope_plants, etc.) so bad data from legacy AI fills is cleaned on save
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const filterValidUuids = (arr: unknown): string[] => {
+  if (!Array.isArray(arr)) return []
+  return arr.filter((v): v is string => typeof v === 'string' && UUID_RE.test(v))
+}
+
 const IN_PROGRESS_STATUS = 'in_progress' as const
 const SECTION_LOG_LIMIT = 12
 const OPTIONAL_FIELD_EXCEPTIONS = new Set<string>()
@@ -1128,11 +1136,11 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.infusionMixes = infusionMix || undefined
   flat.recipes = plant.usage?.recipes || []
 
-  // Section 8: Misc
-  flat.companionPlants = data.companion_plants || plant.miscellaneous?.companions || []
-  flat.biotopePlants = data.biotope_plants || []
-  flat.beneficialPlants = data.beneficial_plants || []
-  flat.harmfulPlants = data.harmful_plants || []
+  // Section 8: Misc — filter to valid UUIDs on load to strip bad data from legacy AI fills
+  flat.companionPlants = filterValidUuids(data.companion_plants || plant.miscellaneous?.companions)
+  flat.biotopePlants = filterValidUuids(data.biotope_plants)
+  flat.beneficialPlants = filterValidUuids(data.beneficial_plants)
+  flat.harmfulPlants = filterValidUuids(data.harmful_plants)
   flat.plantTags = translation?.plant_tags || plant.miscellaneous?.tags || []
   flat.biodiversityTags = translation?.biodiversity_tags || []
   flat.sources = sourceList
@@ -1552,35 +1560,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     if (parsed.length) setColorSuggestions(parsed)
   }
 
-  const parsePlantNames = (data: unknown): string[] => {
-    if (!data) return []
-    const parsed: string[] = []
-    if (Array.isArray(data)) {
-      data.forEach((entry) => {
-        if (typeof entry === 'string' && entry.trim()) {
-          parsed.push(entry.trim())
-        }
-      })
-    }
-    return parsed
-  }
-
-  const captureCompanionSuggestions = (data: unknown) => {
-    const parsed = parsePlantNames(data)
-    if (parsed.length) setCompanionSuggestions(parsed)
-  }
-
-  const capturePlantRelationSuggestions = (aiData: unknown) => {
-    if (!aiData || typeof aiData !== 'object') return
-    const d = aiData as Record<string, unknown>
-    if (d.companionPlants) captureCompanionSuggestions(d.companionPlants)
-    const biotope = parsePlantNames(d.biotopePlants)
-    if (biotope.length) setBiotopeSuggestions(biotope)
-    const beneficial = parsePlantNames(d.beneficialPlants)
-    if (beneficial.length) setBeneficialSuggestions(beneficial)
-    const harmful = parsePlantNames(d.harmfulPlants)
-    if (harmful.length) setHarmfulSuggestions(harmful)
-  }
+  // Note: parsePlantNames / captureCompanionSuggestions / capturePlantRelationSuggestions
+  // removed — companion fields are in AI_EXCLUDED_FIELDS so AI never generates them
   const normalizePlantWatering = (candidate: Plant): Plant => ({
     ...candidate,
     wateringSchedules: normalizeSchedules(candidate.wateringSchedules),
@@ -1809,11 +1790,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
             edible_oil: p.edibleOil ?? false,
-            // Section 8: Misc
-            companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
-            biotope_plants: p.biotopePlants || [],
-            beneficial_plants: p.beneficialPlants || [],
-            harmful_plants: p.harmfulPlants || [],
+            // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
+            companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),
+            biotope_plants: filterValidUuids(p.biotopePlants),
+            beneficial_plants: filterValidUuids(p.beneficialPlants),
+            harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
@@ -1910,11 +1891,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             // Section 7: Consumption
             infusion_parts: p.infusionParts || [],
             edible_oil: p.edibleOil ?? false,
-            // Section 8: Misc
-            companion_plants: p.companionPlants || p.miscellaneous?.companions || [],
-            biotope_plants: p.biotopePlants || [],
-            beneficial_plants: p.beneficialPlants || [],
-            harmful_plants: p.harmfulPlants || [],
+            // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
+            companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),
+            biotope_plants: filterValidUuids(p.biotopePlants),
+            beneficial_plants: filterValidUuids(p.beneficialPlants),
+            harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
             admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
@@ -1944,9 +1925,9 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await upsertInfusionMixes(savedId, plantToSave.infusionMixes || plantToSave.usage?.infusionMix)
         await upsertRecipes(savedId, plantToSave.recipes || plantToSave.usage?.recipes, saveLanguage)
         
-        // Sync bidirectional companion relationships
-        const newCompanions = plantToSave.companionPlants || plantToSave.miscellaneous?.companions || []
-        await syncBidirectionalCompanions(savedId, newCompanions, oldCompanions)
+        // Sync bidirectional companion relationships (filter to valid UUIDs first)
+        const newCompanions = filterValidUuids(plantToSave.companionPlants || plantToSave.miscellaneous?.companions)
+        await syncBidirectionalCompanions(savedId, newCompanions, filterValidUuids(oldCompanions))
 
         // STEP 2: Save translatable fields to plant_translations (for ALL languages including English)
         // Note: enum fields (family, life_cycle, season, foliage_persistance, toxicity_*, living_space,
@@ -2366,8 +2347,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               if (field.toLowerCase().includes('color')) captureColorSuggestions(data)
               if (field === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
               if (field === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-              if (field === 'misc' || field === 'miscellaneous') capturePlantRelationSuggestions(data)
-              if (field === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
+              // Note: companion/biotope/beneficial/harmful plant suggestions removed —
+              // these fields are in AI_EXCLUDED_FIELDS and should never be AI-generated
               setPlant((prev) => {
                 const applied = applyAiFieldToPlant(prev, field, data)
                 const normalized = normalizePlantWatering(applied)
@@ -2402,8 +2383,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             if (fieldKey.toLowerCase().includes('color')) captureColorSuggestions(data)
             if (fieldKey === 'identity' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
             if (fieldKey === 'base' && (data as any)?.colors) captureColorSuggestions((data as any).colors)
-            if (fieldKey === 'misc' || fieldKey === 'miscellaneous') capturePlantRelationSuggestions(data)
-            if (fieldKey === 'miscellaneous' && (data as any)?.companions) captureCompanionSuggestions((data as any).companions)
             updated = applyAiFieldToPlant(updated, fieldKey, data)
           }
           const withId = { ...updated, id: updated.id || generateUUIDv4() }
