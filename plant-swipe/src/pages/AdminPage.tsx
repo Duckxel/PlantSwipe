@@ -2761,6 +2761,28 @@ export const AdminPage: React.FC = () => {
     [completingRequestId, loadPlantRequests, user?.id],
   );
 
+  const dismissPlantRequest = React.useCallback(
+    async (id: string) => {
+      if (!id || completingRequestId) return;
+      setCompletingRequestId(id);
+      setPlantRequestsError(null);
+      try {
+        const { error } = await supabase
+          .from("requested_plants")
+          .delete()
+          .eq("id", id);
+        if (error) throw new Error(error.message);
+        await loadPlantRequests({ initial: false });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setPlantRequestsError(msg);
+      } finally {
+        setCompletingRequestId(null);
+      }
+    },
+    [completingRequestId, loadPlantRequests],
+  );
+
   const handleOpenCreatePlantDialog = React.useCallback(
     (req: PlantRequestRow) => {
       // Navigate to the create plant page with the requested plant name as a query parameter
@@ -10432,6 +10454,16 @@ export const AdminPage: React.FC = () => {
                                           {completingRequestId === req.id
                                             ? "Completing..."
                                             : "Complete"}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                          onClick={() => dismissPlantRequest(req.id)}
+                                          disabled={completingRequestId === req.id}
+                                          title="Delete request without notifying"
+                                        >
+                                          <X className="h-4 w-4" />
                                         </Button>
                                       </div>
                                     </div>
