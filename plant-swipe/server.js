@@ -29238,7 +29238,7 @@ async function deliverPushNotifications(notifications, campaign) {
         )
         delivered = true
         usedSubscriptionIds.add(sub.id)
-        break // Successfully sent, no need to try other subscriptions
+        // Do NOT break — deliver to ALL of the user's devices (phone, desktop, etc.)
       } catch (err) {
         const statusCode = err?.statusCode || err?.statuscode
         if (statusCode === 404 || statusCode === 410) {
