@@ -1198,10 +1198,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [plantReports, setPlantReports] = React.useState<PlantReport[]>([])
   const [plantVarieties, setPlantVarieties] = React.useState<PlantVariety[]>([])
   const [colorSuggestions, setColorSuggestions] = React.useState<PlantColor[]>([])
-  const [companionSuggestions, setCompanionSuggestions] = React.useState<string[]>([])
-  const [biotopeSuggestions, setBiotopeSuggestions] = React.useState<string[]>([])
-  const [beneficialSuggestions, setBeneficialSuggestions] = React.useState<string[]>([])
-  const [harmfulSuggestions, setHarmfulSuggestions] = React.useState<string[]>([])
   const [fetchingExternalImages, setFetchingExternalImages] = React.useState(false)
   const [externalImageSources, setExternalImageSources] = React.useState<Record<ExternalImageSource, SourceResult>>(() => {
     const initial: Record<string, SourceResult> = {}
@@ -3034,10 +3030,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             value={plant}
             onChange={setPlant}
             colorSuggestions={colorSuggestions}
-            companionSuggestions={companionSuggestions}
-            biotopeSuggestions={biotopeSuggestions}
-            beneficialSuggestions={beneficialSuggestions}
-            harmfulSuggestions={harmfulSuggestions}
             categoryProgress={hasAiProgress ? aiProgress : undefined}
             language={language}
             onImageRemove={(imageUrl) => {
