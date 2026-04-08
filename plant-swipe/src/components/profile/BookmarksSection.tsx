@@ -130,8 +130,10 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
             {/* Empty State for Owner */}
             {isOwner && bookmarks.length === 0 && (
               <button 
+                type="button"
                 onClick={() => setCreateOpen(true)}
-                className="aspect-square rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] flex flex-col items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-300 dark:hover:text-emerald-400 dark:hover:border-emerald-700 transition-all bg-gradient-to-br from-stone-50 to-white dark:from-stone-900 dark:to-stone-800 group"
+                aria-label={t('bookmarks.createFirst', { defaultValue: 'Create Collection' })}
+                className="aspect-square rounded-2xl border-2 border-dashed border-stone-200 dark:border-[#3e3e42] flex flex-col items-center justify-center text-stone-400 hover:text-emerald-600 hover:border-emerald-300 dark:hover:text-emerald-400 dark:hover:border-emerald-700 transition-all bg-gradient-to-br from-stone-50 to-white dark:from-stone-900 dark:to-stone-800 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
               >
                 <div className="w-12 h-12 rounded-xl bg-stone-100 dark:bg-stone-800 flex items-center justify-center mb-2 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 transition-colors">
                   <Plus className="h-6 w-6" />
@@ -145,9 +147,11 @@ export const BookmarksSection: React.FC<BookmarksSectionProps> = ({ userId, isOw
           {hasMoreThanOneRow && (
             <div className="flex justify-center pt-2">
               <button
+                type="button"
                 onClick={() => setExpanded(!expanded)}
                 aria-expanded={expanded}
-                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20"
+                aria-label={expanded ? t('bookmarks.showLess', { defaultValue: 'Show less' }) : t('bookmarks.viewAll', { defaultValue: 'View all' })}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-amber-600 dark:text-amber-400 hover:text-amber-700 dark:hover:text-amber-300 transition-colors rounded-xl hover:bg-amber-50 dark:hover:bg-amber-900/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500"
               >
                 {expanded ? (
                   <>
