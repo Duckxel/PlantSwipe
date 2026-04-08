@@ -41,3 +41,7 @@
 ## 2024-04-06 - Accessible Camera Overlay
 **Learning:** Icon-only buttons rendered over dark backgrounds (like the Camera Capture view) need both screen reader labels and specific `focus-visible` offset styling (`focus-visible:ring-offset-2 focus-visible:ring-offset-black`) so the focus ring remains visible against the black canvas.
 **Action:** Always include offset colors when adding focus rings to elements floating over dark modal backgrounds or camera views.
+
+## 2024-04-08 - Accessible interactive elements on profile screens
+**Learning:** Empty states buttons and expanding toggles (like "Show Less" or "Create Collection") must always include `aria-label` attributes to ensure screen reader compatibility, and explicit `focus-visible` utility classes (e.g., `focus-visible:ring-2`) to guarantee keyboard navigation support.
+**Action:** Always verify that every interactive button, especially toggles or ones nested within empty state containers, has explicit focus styling and an aria-label if its visual text isn't fully self-explanatory or is missing.
