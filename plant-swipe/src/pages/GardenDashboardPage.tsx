@@ -3,6 +3,8 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS, DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
 import { NavLink } from "@/components/i18n/NavLink";
 import { Navigate } from "@/components/i18n/Navigate";
@@ -114,6 +116,23 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation();
   const { user, profile, refreshProfile } = useAuth();
   const { t } = useTranslation("common");
+  const { active: tutorialActive } = useTutorial();
+  const isDemoGarden = !!(id && id.startsWith('demo-'));
+  // Stable demo data — generated once, never changes across re-renders
+  const demoDataRef = React.useRef<{
+    dailyStats: Array<{ date: string; due: number; completed: number; success: boolean }>;
+  } | null>(null);
+  if (isDemoGarden && !demoDataRef.current) {
+    const seed = [4,5,3,5,4,3,5,4,3,5,4,5,3,4]; // deterministic "random"
+    demoDataRef.current = {
+      dailyStats: Array.from({ length: 14 }, (_, i) => {
+        const d = new Date(); d.setDate(d.getDate() - (13 - i));
+        const due = seed[i];
+        const completed = Math.min(due, due - (i % 3 === 0 ? 1 : 0));
+        return { date: d.toISOString().slice(0, 10), due, completed, success: completed >= due };
+      }),
+    };
+  }
   const currentLang = useLanguage();
   const [garden, setGarden] = React.useState<Garden | null>(null);
   const [tab, setTab] = React.useState<TabKey>("overview");
@@ -169,7 +188,7 @@ export const GardenDashboardPage: React.FC = () => {
   const pendingSeedlingModalRef = React.useRef<typeof seedlingModal>(null);
   const [transplantCell, setTransplantCell] = React.useState<SeedlingTrayCell | null>(null);
   // Build a plantId->Plant map for seedling tray (reuses the plants already loaded)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const seedlingPlantMap = React.useMemo(() => {
     const m: Record<string, any> = {};
     for (const p of plants) {
@@ -427,6 +446,72 @@ export const GardenDashboardPage: React.FC = () => {
     }
   }, [id, serverToday]);
 
+  // Tutorial demo mode — inject all fake data synchronously before paint
+  // Uses useLayoutEffect + location.pathname (not tab state) to avoid
+  // the render-before-state-update race that causes tray → overview redirect
+  const demoLoadedRef = React.useRef(false);
+  React.useLayoutEffect(() => {
+    if (!isDemoGarden || !id) return;
+    const pathWithoutLang = removeLanguagePrefix(location.pathname);
+    const isTrayTab = pathWithoutLang.includes('/tray');
+    const demoGarden = DEMO_GARDENS.find(g => g.id === id) || DEMO_GARDENS[0];
+    // Always update garden type synchronously so the Route guard sees it
+    setGarden({ ...demoGarden, gardenType: isTrayTab ? 'seedling' : demoGarden.gardenType, trayRows: 4, trayCols: 6 } as any);
+    if (!demoLoadedRef.current) {
+      setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
+      const demoPlants = [
+        { gpId: 'gp1', pId: DEMO_PLANT_IDS.monstera, name: 'Monstera', sci: 'Monstera deliciosa', qty: 1 },
+        { gpId: 'gp2', pId: DEMO_PLANT_IDS.basil, name: 'Basil', sci: 'Ocimum basilicum', qty: 2 },
+        { gpId: 'gp3', pId: DEMO_PLANT_IDS.lily, name: 'Lily', sci: 'Lilium', qty: 3 },
+      ];
+      setPlants(demoPlants.map(dp => ({
+        id: dp.gpId, gardenId: id, plantId: dp.pId, nickname: dp.name,
+        plant: { id: dp.pId, name: dp.name, scientificNameSpecies: dp.sci },
+        plantsOnHand: dp.qty, plantedAt: new Date().toISOString(),
+      })) as any);
+      const today = new Date().toISOString().slice(0, 10);
+      setServerToday(today);
+      serverTodayRef.current = today;
+      setDailyStats(demoDataRef.current?.dailyStats ?? []);
+      setTodayTaskOccurrences([
+        { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+      ] as any);
+      demoLoadedRef.current = true;
+      // Async: fetch real plant images and update plants with image data
+      supabase
+        .from('plants')
+        .select('id, name, plant_images(link, use)')
+        .in('id', Object.values(DEMO_PLANT_IDS))
+        .then(({ data: rows }) => {
+          if (!rows) return;
+          const imgMap: Record<string, string> = {};
+          for (const r of rows) {
+            const imgs = (r as any).plant_images as Array<{ link: string; use: string }> | undefined;
+            const primary = imgs?.find((i: { use: string }) => i.use === 'primary');
+            const img = primary ?? imgs?.[0];
+            if (img?.link) imgMap[r.id] = img.link;
+          }
+          setPlants(prev => (prev as any[]).map((gp: any) => ({
+            ...gp,
+            plant: { ...gp.plant, image: imgMap[gp.plantId] || gp.plant?.image },
+          })) as any);
+        });
+    }
+    if (isTrayTab) {
+      setSeedlingCells(Array.from({ length: 24 }, (_, i) => ({
+        id: `sc-${i}`, gardenId: id, position: i,
+        plantId: i < 4 ? DEMO_PLANT_IDS.monstera : i < 7 ? DEMO_PLANT_IDS.basil : null,
+        stage: i < 2 ? 'sprouted' : i < 4 ? 'germinating' : i < 7 ? 'sown' : 'empty',
+        sowDate: i < 7 ? new Date(Date.now() - 604800000).toISOString() : null,
+        lastWatered: i < 7 ? new Date(Date.now() - 86400000).toISOString() : null,
+        notes: '',
+      })) as any);
+    }
+    setLoading(false);
+  }, [isDemoGarden, id, location.pathname]);
+
   const load = React.useCallback(
     async (opts?: {
       silent?: boolean;
@@ -434,6 +519,8 @@ export const GardenDashboardPage: React.FC = () => {
       suppressError?: boolean;
     }) => {
       if (!id) return;
+      // Demo gardens are loaded by the effect above
+      if (isDemoGarden) { setLoading(false); return; }
       // Keep UI visible on subsequent reloads to avoid blink
       const silent = opts?.silent ?? garden !== null;
       const suppressError = opts?.suppressError ?? false;
@@ -665,7 +752,7 @@ export const GardenDashboardPage: React.FC = () => {
         // Derive week counts exclusively from Tasks v2 occurrences (no legacy schedule)
         // Heavy task/occurrence computation deferred to when user opens Routine/Plants
         // Preserve heavy state on silent reloads (routine UI stability)
-        const computeHeavy = opts?.preserveHeavy ? false : false;
+        const computeHeavy = !opts?.preserveHeavy;
         if (computeHeavy) {
           const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
           const weekEndIso = `${weekDaysIso[6]}T23:59:59.999Z`;
@@ -861,7 +948,12 @@ export const GardenDashboardPage: React.FC = () => {
             }
             setDailyStats((prev) => {
               if (!prev || prev.length === 0) return days;
-              const prevByDate = new Map(prev.map((entry) => [entry.date, entry]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [date, entry] array allocations which cause massive GC pressure
+              const prevByDate = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevByDate.set(prev[i].date, prev[i]);
+              }
               return days.map((day) => {
                 const cached = prevByDate.get(day.date);
                 if (!cached) return day;
@@ -1300,8 +1392,16 @@ export const GardenDashboardPage: React.FC = () => {
             // Update state using functional updates to preserve existing items
             setTodayTaskOccurrences((prev) => {
               // Replace with new data but preserve object references for unchanged items to avoid re-renders
-              const prevMap = new Map(prev.map((o) => [o.id, o]));
-              const _newMap = new Map(occsWithType.map((o) => [o.id, o]));
+              // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+              // [id, entry] array allocations which cause massive GC pressure
+              const prevMap = new Map();
+              for (let i = 0; i < prev.length; i++) {
+                prevMap.set(prev[i].id, prev[i]);
+              }
+              const _newMap = new Map();
+              for (let i = 0; i < occsWithType.length; i++) {
+                _newMap.set(occsWithType[i].id, occsWithType[i]);
+              }
               const result: typeof occsWithType = [];
 
               // Use new data order, but keep existing object references when data hasn't changed
@@ -1470,7 +1570,12 @@ export const GardenDashboardPage: React.FC = () => {
           const gpsRaw = await getGardenPlants(id, currentLang);
           setPlants((prev) => {
             // Merge: preserve order and existing items, update changed ones
-            const prevMap = new Map(prev.map((p: { id: string }) => [p.id, p]));
+            // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+            // [id, entry] array allocations which cause massive GC pressure
+            const prevMap = new Map();
+            for (let i = 0; i < prev.length; i++) {
+              prevMap.set(prev[i].id, prev[i]);
+            }
             const merged = [] as typeof gpsRaw;
             // Use new order but preserve existing objects where possible
             for (const newP of gpsRaw) {
@@ -1680,7 +1785,7 @@ export const GardenDashboardPage: React.FC = () => {
     >([]);
 
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !isMember) {
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !isMember) {
         setSuggestedPlants([]);
         return;
       }
@@ -1738,7 +1843,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Seedling tray: load cells when garden is seedling type
     const loadSeedlingCells = React.useCallback(async () => {
-      if (!id || garden?.gardenType !== 'seedling') return;
+      if (!id || garden?.gardenType !== 'seedling' || isDemoGarden) return;
       setSeedlingLoading(true);
       try {
         const cells = await getSeedlingTrayCells(id);
@@ -1757,7 +1862,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Seedling gardens: ensure ONE watering task exists for the whole garden
     const seedlingTaskSyncedRef = React.useRef(false);
     React.useEffect(() => {
-      if (!id || garden?.gardenType !== 'seedling' || plants.length === 0) return;
+      if (!id || isDemoGarden || garden?.gardenType !== 'seedling' || plants.length === 0) return;
       if (seedlingTaskSyncedRef.current) return;
       let cancelled = false;
       (async () => {
@@ -1765,7 +1870,7 @@ export const GardenDashboardPage: React.FC = () => {
           const existingTaskId = await getSeedlingWateringTaskId(id);
           if (existingTaskId || cancelled) return; // Already has a garden-level task
           seedlingTaskSyncedRef.current = true;
-          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id });
+          await createSeedlingWateringTask({ gardenId: id, gardenPlantId: plants[0].id, customName: garden?.name ? `Water ${garden.name}` : undefined });
           if (!cancelled) {
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -1781,7 +1886,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: check if garden has any journal entries
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1798,7 +1903,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Beginner roadmap: load persistent completions from DB
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember) return;
       let ignore = false;
       (async () => {
         try {
@@ -1818,7 +1923,7 @@ export const GardenDashboardPage: React.FC = () => {
     // Detect when steps are completed live and persist them
     const syncRoadmapRef = React.useRef<Set<string>>(new Set());
     React.useEffect(() => {
-      if (garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
+      if (isDemoGarden || garden?.gardenType !== 'beginners' || !id || !isMember || !user?.id) return;
       const hasLivingSpace = (garden?.livingSpace ?? []).length > 0;
       const liveSteps: Array<{ key: string; done: boolean }> = [
         { key: 'set_living_space', done: hasLivingSpace },
@@ -1870,7 +1975,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Check if viewer is a friend of any garden member (for friends_only privacy)
     React.useEffect(() => {
-      if (!user?.id || isMember || members.length === 0) {
+      if (isDemoGarden || !user?.id || isMember || members.length === 0) {
         setIsFriendOfMember(false);
         return;
       }
@@ -1889,7 +1994,7 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Load heavy data when tab changes or when garden loads - use requestIdleCallback for better performance
     React.useEffect(() => {
-      if (loading || !id || !serverToday) return;
+      if (loading || !id || !serverToday || isDemoGarden) return;
       if (tab !== "overview" && tab !== "plants" && tab !== "tasks") return;
       // Use requestIdleCallback to defer heavy loading until browser is idle
       const loadFn = () => {
@@ -1909,7 +2014,7 @@ export const GardenDashboardPage: React.FC = () => {
 
   // Realtime updates via Supabase (tables: gardens, garden_members, garden_plants, garden_plant_tasks, garden_plant_task_occurrences, plants)
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
 
     const channel = supabase
       .channel(`rt-garden-${id}`)
@@ -2043,7 +2148,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [id, navigate, updateTargeted]);
 
   React.useEffect(() => {
-    if (!id) return;
+    if (!id || isDemoGarden) return;
     let active = true;
     let teardown: (() => Promise<void>) | null = null;
 
@@ -2246,9 +2351,18 @@ export const GardenDashboardPage: React.FC = () => {
           }
         });
         const emails = await Promise.all(emailPromises);
-        const emailMap = new Map(emails.map((e) => [e.id, e.email]));
+        // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+        // [id, email] array allocations which cause massive GC pressure
+        const emailMap = new Map();
+        for (let i = 0; i < emails.length; i++) {
+          emailMap.set(emails[i].id, emails[i].email);
+        }
 
-        const profileMap = new Map((profiles || []).map((p) => [p.id, p]));
+        const profileMap = new Map();
+        const profilesList = profiles || [];
+        for (let i = 0; i < profilesList.length; i++) {
+          profileMap.set(profilesList[i].id, profilesList[i]);
+        }
         const friendsWithProfiles = (data || []).map((f) => {
           const profile = profileMap.get(f.friend_id);
           return {
@@ -2450,7 +2564,7 @@ export const GardenDashboardPage: React.FC = () => {
         try {
           const existing = await getSeedlingWateringTaskId(id);
           if (!existing) {
-            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id });
+            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id, customName: garden?.name ? `Water ${garden.name}` : undefined });
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
             try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
@@ -2925,14 +3039,14 @@ export const GardenDashboardPage: React.FC = () => {
         <>
           <aside className={`${sidebarPanelBase} space-y-3 md:space-y-4`}>
             <div className="hidden md:block h-7 w-36 bg-stone-200 dark:bg-stone-700 rounded-lg animate-pulse" />
-            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+            <nav className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {Array.from({ length: 6 }).map((_, idx) => (
                 <div
                   key={idx}
-                  className="flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl md:w-full"
+                  className="flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl md:w-full bg-stone-100/80 dark:bg-stone-800/60 md:bg-transparent md:dark:bg-transparent"
                 >
-                  <div className="w-5 h-5 md:w-4 md:h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse flex-shrink-0" />
-                  <div className="hidden md:block h-4 w-16 bg-stone-200 dark:bg-stone-700 rounded animate-pulse" />
+                  <div className="w-4 h-4 bg-stone-200 dark:bg-stone-700 rounded animate-pulse flex-shrink-0" />
+                  <div className="h-3.5 w-12 md:w-16 bg-stone-200 dark:bg-stone-700 rounded animate-pulse" />
                 </div>
               ))}
             </nav>
@@ -2996,12 +3110,12 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav className="flex justify-around md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0">
+            <nav data-tutorial="garden-tabs" className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
               {(
                 canViewFullGarden
                   ? [
                       ["overview", t("gardenDashboard.overview")] as const,
-                      ...(garden?.gardenType === 'seedling' ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
+                      ...((garden?.gardenType === 'seedling' || isDemoGarden) ? [["tray", t("gardenDashboard.tray", "Tray")] as const] : []),
                       ["plants", t("gardenDashboard.plants")] as const,
                       ["tasks", t("gardenDashboard.tasks", "Tasks")] as const,
                       ["journal", t("gardenDashboard.journal", "Journal")] as const,
@@ -3012,19 +3126,21 @@ export const GardenDashboardPage: React.FC = () => {
               ).map(([k, label]) => {
                 const Icon = GARDEN_TAB_ICONS[k as TabKey];
                 const isActive = tab === k;
+                const tutorialId = k === 'plants' ? 'garden-plants-tab' : k === 'analytics' ? 'garden-analytics-tab' : undefined;
                 return (
                   <NavLink
                     key={k}
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
-                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-2 p-2.5 md:px-4 md:py-2.5 rounded-xl md:rounded-2xl text-sm font-medium transition-colors no-underline md:w-full ${
+                    data-tutorial={tutorialId}
+                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl text-[13px] md:text-sm font-medium transition-colors no-underline md:w-full whitespace-nowrap ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"
-                        : "text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
+                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 md:bg-transparent md:dark:bg-transparent hover:bg-stone-200/80 dark:hover:bg-stone-700/60 md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
                     }`}
                   >
-                    <Icon className="w-5 h-5 md:w-4 md:h-4 flex-shrink-0" />
-                    <span className="hidden md:inline whitespace-nowrap">{label}</span>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="whitespace-nowrap">{label}</span>
                   </NavLink>
                 );
               })}
@@ -3225,11 +3341,11 @@ export const GardenDashboardPage: React.FC = () => {
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
                                         {taskCountsByPlant[gp.id]} {t("gardenDashboard.plantsSection.tasks")}
                                       </span>
-                                    ) : (
+                                    ) : garden?.gardenType !== "seedling" ? (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400 font-medium flex items-center gap-1">
                                         ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                                       </span>
-                                    )}
+                                    ) : null}
                                     {(taskOccDueToday[gp.id] || 0) > 0 && (
                                       <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 font-medium">
                                         📋 {taskOccDueToday[gp.id]} {t("gardenDashboard.plantsSection.dueToday")}
@@ -3519,7 +3635,7 @@ export const GardenDashboardPage: React.FC = () => {
               <Route
                 path="tray"
                 element={
-                  canViewFullGarden && garden?.gardenType === 'seedling' ? (
+                  canViewFullGarden && (garden?.gardenType === 'seedling' || isDemoGarden) ? (
                     <div className="space-y-6">
                       {/* Tray Grid */}
                       <SeedlingTrayGrid
@@ -6105,7 +6221,7 @@ function OverviewSection({
               <div
                 key={plant.id}
                 className={`group relative aspect-[4/5] rounded-2xl overflow-hidden cursor-pointer transition-all hover:shadow-lg hover:scale-[1.02] ${
-                  plant.taskCount === 0
+                  plant.taskCount === 0 && garden?.gardenType !== "seedling"
                     ? "ring-2 ring-orange-400/70 dark:ring-orange-500/50 shadow-[0_0_12px_-2px_rgba(251,146,60,0.35)] dark:shadow-[0_0_12px_-2px_rgba(251,146,60,0.2)] bg-gradient-to-br from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20"
                     : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30"
                 }`}
@@ -6146,7 +6262,7 @@ function OverviewSection({
                     <span className="px-2 py-0.5 rounded-full bg-blue-500 text-xs font-semibold text-white shadow-sm">
                       {plant.tasksDueToday} 📋
                     </span>
-                  ) : plant.taskCount === 0 ? (
+                  ) : plant.taskCount === 0 && garden?.gardenType !== "seedling" ? (
                     <span className="px-2 py-0.5 rounded-full bg-orange-500 text-xs font-semibold text-white shadow-sm">
                       ⚠️
                     </span>
@@ -6168,11 +6284,11 @@ function OverviewSection({
                       <span className="text-white/80 text-xs">
                         {plant.taskCount} {plant.taskCount === 1 ? t("gardenDashboard.plantsSection.task", "task") : t("gardenDashboard.plantsSection.tasks")}
                       </span>
-                    ) : (
+                    ) : garden?.gardenType !== "seedling" ? (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-orange-500/90 text-white font-medium flex items-center gap-1">
                         ⚠️ {t("gardenDashboard.plantsSection.noTasks", "No tasks")}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </div>

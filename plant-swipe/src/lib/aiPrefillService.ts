@@ -52,6 +52,13 @@ const AI_EXCLUDED_FIELDS = new Set([
 ])
 const IN_PROGRESS_STATUS = 'in_progress' as const
 
+// UUID v4 pattern — filter out non-UUID entries from plant relation arrays on save
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const filterValidUuids = (arr: unknown): string[] => {
+  if (!Array.isArray(arr)) return []
+  return arr.filter((v): v is string => typeof v === 'string' && UUID_RE.test(v))
+}
+
 // Helper to check if an error is a cancellation/abort error
 function isCancellationError(err: unknown): boolean {
   if (err instanceof DOMException && err.name === 'AbortError') return true
@@ -782,11 +789,11 @@ export async function processPlantRequest(
       // Section 7: Consumption
       infusion_parts: plant.infusionParts || [],
       edible_oil: plant.edibleOil ?? false,
-      // Section 8: Misc
-      companion_plants: plant.companionPlants || [],
-      biotope_plants: plant.biotopePlants || [],
-      beneficial_plants: plant.beneficialPlants || [],
-      harmful_plants: plant.harmfulPlants || [],
+      // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
+      companion_plants: filterValidUuids(plant.companionPlants),
+      biotope_plants: filterValidUuids(plant.biotopePlants),
+      beneficial_plants: filterValidUuids(plant.beneficialPlants),
+      harmful_plants: filterValidUuids(plant.harmfulPlants),
       // Section 9: Meta
       status: normalizedStatus,
       admin_commentary: plant.adminCommentary || null,

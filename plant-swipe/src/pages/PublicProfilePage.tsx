@@ -20,6 +20,7 @@ import { usePageMetadata } from "@/hooks/usePageMetadata"
 import { BookmarksSection } from "@/components/profile/BookmarksSection"
 import { ProfileActions } from "@/components/profile/ProfileActions"
 import { PublicGardensSection } from "@/components/profile/PublicGardensSection"
+import { ProfileBadges } from "@/components/profile/ProfileBadges"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
 import { Link } from "@/components/i18n/Link"
 import { ReportUserDialog } from "@/components/moderation/ReportUserDialog"
@@ -1517,6 +1518,8 @@ export default function PublicProfilePage() {
             </Card>
           </div>
           
+          <ProfileBadges userId={pp.id} className={glassCard} />
+
           <PublicGardensSection userId={pp.id} isOwner={isOwner} />
           
           <BookmarksSection userId={pp.id} isOwner={isOwner} isFriend={friendStatus === 'friends'} userIsPrivate={pp.is_private || false} />

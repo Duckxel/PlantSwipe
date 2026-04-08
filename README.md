@@ -100,6 +100,7 @@ Made with care by **Neolite** & **Five**
 - **Friend System**: Send and accept friend requests
 - **Public Profiles**: Share your gardening journey with customizable visibility
 - **Profile Stats**: Plants owned, gardens count, streaks, and achievements
+- **Badge Showcase**: Earned badges displayed on public profiles
 - **Activity Heatmap**: GitHub-style contribution graph showing task completion
 - **Privacy Controls**: Private profiles, disable friend requests
 - **Profile Customization**: Display name, bio, country, avatar with accent colors
@@ -181,7 +182,9 @@ Made with care by **Neolite** & **Five**
 - **Schema Sync**: Safe database migration tools
 - **Member Management**: Search users, view profiles, manage roles
 - **Email Campaigns**: Create and send templated email campaigns
-- **Media Management**: Upload and organize media files
+- **Media Management**: Upload and organize media files with UTILITY bucket explorer
+- **Events Management**: Create and manage time-limited interactive events (egg hunts, campaigns)
+- **Badge Management**: Create and manage badges with multilingual support
 - **Analytics Dashboard**: Charts and statistics with Recharts
 - **Action Logging**: Track admin actions with audit trail
 - **Security**: Token-based authentication with role-based access
@@ -262,7 +265,7 @@ flowchart TB
 | **Routing** | React Router 7.8.2 | Client-side routing with i18n |
 | **i18n** | react-i18next 16.2.4 + i18next 25.6.0 | Internationalization |
 | **Charts** | Recharts 3.2.1 | Data visualization |
-| **Rich Text** | TipTap 3.11.0 | Rich text editing |
+| **Rich Text** | TipTap 3.17.1 | Rich text editing |
 | **3D Graphics** | Three.js 0.181.1 | 3D visualizations |
 | **PWA** | vite-plugin-pwa + Workbox 7.3.0 | Progressive Web App support |
 
@@ -497,7 +500,7 @@ sudo systemctl reload nginx
 | ✅ | AI plant scanning & identification | Complete |
 | ✅ | Moderation & user safety tools | Complete |
 | ✅ | Bug reporting system | Complete |
-| ⏳ | Garden events with reminders | In Progress |
+| ✅ | Event system with badges (Easter Egg Hunt) | Complete |
 | ⏳ | Collaborative collections and sharing | Planned |
 | 🔬 | Plant disease identification | Future |
 | 🔬 | Advanced plant care AI assistant | Future |
@@ -520,7 +523,7 @@ sudo systemctl reload nginx
 | react-i18next | 16.2.4 | i18n |
 | i18next | 25.6.0 | i18n core |
 | Recharts | 3.2.1 | Charts |
-| TipTap | 3.11.0 | Rich text editor |
+| TipTap | 3.17.1 | Rich text editor |
 | Lucide React | 0.542.0 | Icons |
 | Three.js | 0.181.1 | 3D graphics |
 | Radix UI | Latest | UI primitives |
@@ -606,6 +609,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | [**Cache Implementation**](./plant-swipe/CACHE_IMPLEMENTATION.md) | Database caching system details |
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |
 | [**Security Audit**](./plant-swipe/SECURITY_AUDIT_REPORT.md) | Security audit findings and remediations |
+| [**Event System**](./plant-swipe/docs/EVENTS.md) | Event framework and lifecycle documentation |
 | [**Database Schema**](./plant-swipe/supabase/DATABASE_SCHEMA.md) | Complete database documentation |
 | [**Reusable Components**](./plant-swipe/src/REUSABLE_COMPONENTS.md) | Shared UI components & hooks reference |
 | [**Admin API**](./admin_api/) | Admin endpoint documentation |

@@ -1,7 +1,7 @@
 {
   "name": "aphylia",
   "private": true,
-  "version": "5.1.4",
+  "version": "5.5.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "serve": "bun server.js",
+    "postinstall": "node scripts/fix-wrap-ansi-string-width.mjs",
     "check-translations": "bun scripts/check-translations.js",
     "generate:sitemap": "bun scripts/generate-sitemap.js",
     "sync-email-template": "bash scripts/sync-email-template.sh",

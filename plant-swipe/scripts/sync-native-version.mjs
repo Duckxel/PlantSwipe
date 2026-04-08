@@ -148,6 +148,7 @@ function syncCapacitorConfigJson() {
     cap.server.allowNavigation = allowNav
   } else if (cap.server && typeof cap.server === 'object') {
     delete cap.server.url
+    delete cap.server.allowNavigation
     if (Object.keys(cap.server).length === 0) delete cap.server
   }
   const nextStr = `${JSON.stringify(cap, null, '\t')}\n`

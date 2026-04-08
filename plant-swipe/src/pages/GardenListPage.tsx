@@ -52,6 +52,8 @@ import {
   type GardenRealtimeKind,
 } from "@/lib/realtime";
 import type { Garden } from "@/types/garden";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_GARDENS, DEMO_GARDEN_PROGRESS, DEMO_GARDEN_MEMBER_COUNTS } from "@/lib/tutorialDemoData";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
@@ -64,6 +66,7 @@ export const GardenListPage: React.FC = () => {
   const { openLogin } = useAuthActions();
   const navigate = useLanguageNavigate();
   const { t } = useTranslation("common");
+  const { active: tutorialActive, currentStep: tutorialStep } = useTutorial();
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [dragIndex, setDragIndex] = React.useState<number | null>(null);
   const [loading, setLoading] = React.useState(true);
@@ -207,6 +210,14 @@ export const GardenListPage: React.FC = () => {
   );
 
   const load = React.useCallback(async () => {
+    if (tutorialActive) {
+      setGardens(DEMO_GARDENS);
+      gardensRef.current = DEMO_GARDENS;
+      setProgressByGarden(DEMO_GARDEN_PROGRESS);
+      setMemberCountsByGarden(DEMO_GARDEN_MEMBER_COUNTS);
+      setLoading(false);
+      return;
+    }
     if (!user?.id) {
       setGardens([]);
       gardensRef.current = [];
@@ -484,6 +495,8 @@ export const GardenListPage: React.FC = () => {
     load();
   }, [load]);
 
+  const showFakeBeginnerDialog = tutorialActive && tutorialStep?.id === 'gardens_beginner';
+
   // Load all gardens' tasks due today for the sidebar
   const loadAllTodayOccurrences = React.useCallback(
     async (
@@ -491,6 +504,17 @@ export const GardenListPage: React.FC = () => {
       todayOverride?: string | null,
       skipResync = false,
     ) => {
+      if (tutorialActive) {
+        setTodayTaskOccurrences([
+          { id: 't1', taskId: 'dt1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't2', taskId: 'dt2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+          { id: 't3', taskId: 'dt3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+          { id: 't4', taskId: 'dt4', gardenPlantId: 'gp4', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'water' },
+          { id: 't5', taskId: 'dt5', gardenPlantId: 'gp5', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'cut' },
+        ]);
+        setLoadingTasks(false);
+        return;
+      }
       const today = todayOverride ?? serverTodayRef.current ?? serverToday;
       const gardensList = gardensOverride ?? gardensRef.current ?? gardens;
       if (!today) return;
@@ -652,7 +676,7 @@ export const GardenListPage: React.FC = () => {
           getEnrichedOccurrencesForGardens(gardenIds, startIso, endIso),
           getGardenPlantsMinimal(gardenIds),
         ]);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         const occsAugmented: Array<any> = enrichedOccs;
         setTodayTaskOccurrences(occsAugmented);
         // Fetch completions (depends on occurrence IDs)
@@ -1383,7 +1407,12 @@ export const GardenListPage: React.FC = () => {
         (o) => o.gardenPlantId === gardenPlantId,
       );
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       const optimisticOccs = occs.map((o) => ({
         ...o,
@@ -1392,7 +1421,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
@@ -1522,7 +1556,12 @@ export const GardenListPage: React.FC = () => {
         : [];
 
       // Build lookup map for O(1) updates
-      const occsById = new Map(occs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const occsById = new Map();
+      for (let i = 0; i < occs.length; i++) {
+        occsById.set(occs[i].id, occs[i]);
+      }
 
       // Optimistic update - mark all as completed immediately
       const optimisticOccs = occs.map((o) => ({
@@ -1532,7 +1571,12 @@ export const GardenListPage: React.FC = () => {
           Number(o.completedCount || 0),
         ),
       }));
-      const optimisticById = new Map(optimisticOccs.map((o) => [o.id, o]));
+      // ⚡ Bolt: Init Map using single-pass for loop instead of .map to avoid intermediate
+      // [id, entry] array allocations which cause massive GC pressure
+      const optimisticById = new Map();
+      for (let i = 0; i < optimisticOccs.length; i++) {
+        optimisticById.set(optimisticOccs[i].id, optimisticOccs[i]);
+      }
       setTodayTaskOccurrences((prev) =>
         prev.map((x: any) => optimisticById.get(x.id) || x),
       );
@@ -2109,6 +2153,7 @@ export const GardenListPage: React.FC = () => {
             </h1>
             {user && (
               <Button
+                data-tutorial="create-garden"
                 className="rounded-2xl relative z-10 shadow-lg shadow-emerald-500/20"
                 onClick={() => setOpen(true)}
               >
@@ -2286,6 +2331,46 @@ export const GardenListPage: React.FC = () => {
             </div>
           )}
 
+          {/* Fake visual-only dialog for the tutorial beginner step — no inputs, no focus, no keyboard */}
+          {showFakeBeginnerDialog && (
+            <div className="fixed inset-0 z-[60] flex items-center justify-center" style={{ pointerEvents: 'none' }}>
+              <div className="w-[calc(100vw-2rem)] max-w-lg rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur p-5 sm:p-6 shadow-lg" style={{ pointerEvents: 'none' }}>
+                <div className="mb-4">
+                  <h2 className="text-lg font-semibold">{t("garden.createGarden")}</h2>
+                </div>
+                <div className="space-y-3">
+                  <div className="grid gap-2">
+                    <span className="text-sm font-medium">{t("garden.name")}</span>
+                    <div className="h-10 rounded-xl border border-input bg-white dark:bg-[#2d2d30] px-4 flex items-center text-sm text-muted-foreground">{t("garden.namePlaceholder")}</div>
+                  </div>
+                  <div className="grid gap-2">
+                    <span className="text-sm font-medium">{t("garden.gardenType", { defaultValue: "Garden Type" })}</span>
+                    <div className="grid grid-cols-3 gap-3">
+                      {([
+                        { key: "default", icon: <Leaf className="h-6 w-6" />, label: t("garden.gardenTypeDefault", { defaultValue: "Default" }) },
+                        { key: "beginners", icon: <Sprout className="h-6 w-6" />, label: t("garden.gardenTypeBeginners", { defaultValue: "Beginners" }) },
+                        { key: "seedling", icon: <Grid3X3 className="h-6 w-6" />, label: t("garden.gardenTypeSeedling", { defaultValue: "Seedling" }) },
+                      ]).map((opt) => (
+                        <div
+                          key={opt.key}
+                          data-tutorial={opt.key === 'beginners' ? 'garden-type-beginners' : undefined}
+                          className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium ${
+                            opt.key === 'beginners'
+                              ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
+                              : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400"
+                          }`}
+                        >
+                          <div className={`rounded-xl p-2.5 ${opt.key === 'beginners' ? "bg-emerald-100 dark:bg-emerald-800/40" : "bg-stone-100 dark:bg-stone-800"}`}>{opt.icon}</div>
+                          {opt.label}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
               <DialogHeader>
@@ -2316,6 +2401,7 @@ export const GardenListPage: React.FC = () => {
                       <button
                         key={opt.key}
                         type="button"
+                        data-tutorial={opt.key === 'beginners' ? 'garden-type-beginners' : undefined}
                         onClick={() => setGardenType(opt.key)}
                         className={`flex flex-col items-center gap-2 rounded-2xl border-2 p-4 text-sm font-medium transition-all cursor-pointer ${
                           gardenType === opt.key

@@ -142,6 +142,8 @@ export type ProfileRow = {
   notification_time?: string | null
   // Email verification status
   email_verified?: boolean | null
+  // Tutorial completion status
+  tutorial_completed?: boolean | null
   // Force password change (after forgot-password magic link login)
   force_password_change?: boolean | null
   // Parent mode: surfaces child-safety warnings more prominently

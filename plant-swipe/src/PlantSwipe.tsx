@@ -23,6 +23,9 @@ import { useMessageNotifications } from "@/hooks/useMessageNotifications";
 import { CookieConsent, getConsentLevel } from "@/components/CookieConsent";
 import { LegalUpdateModal, useNeedsLegalUpdate } from "@/components/LegalUpdateModal";
 import { BannedModal } from "@/components/moderation/BannedModal";
+import { TutorialOverlay } from "@/components/tutorial/TutorialOverlay";
+import { useTutorial } from "@/context/TutorialContext";
+import { DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 // GardenListPage and GardenDashboardPage are lazy loaded below
 import type { Plant } from "@/types/plant";
 import { useAuth } from "@/context/AuthContext";
@@ -152,11 +155,21 @@ const scheduleIdleTask = (task: () => void, timeout = 1500): (() => void) => {
   }
 }
 
+// ⚡ Bolt: Init Map using single-pass for loop to eliminate intermediate array allocations
+const createLowercasedSet = (arr: string[]): Set<string> => {
+  const set = new Set<string>()
+  for (let i = 0; i < arr.length; i++) {
+    set.add(arr[i].toLowerCase())
+  }
+  return set
+}
+
 // --- Main Component ---
 export default function PlantSwipe() {
   const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
+  const { active: tutorialActive } = useTutorial()
   
   // Track all navigation globally for back button functionality
   useGlobalNavigationTracker()
@@ -941,7 +954,10 @@ export default function PlantSwipe() {
       return tokens
     }
 
-    const prepared = plants.map((p) => {
+    // ⚡ Bolt: Optimize mapping of thousands of plants using pre-allocated array and single-pass for loop
+    const prepared = new Array(plants.length)
+    for (let index = 0; index < plants.length; index++) {
+      const p = plants[index] as Plant & Record<string, any>
       // ⚡ Bolt: Use lazy getters for expensive properties to optimize initial load time
       // This avoids computing regexes, Sets, and string manipulations for thousands of plants
       // unless they are actually needed by active filters.
@@ -1072,7 +1088,7 @@ export default function PlantSwipe() {
         return _cachedHabitats
       }
 
-      return {
+      prepared[index] = {
         ...p,
         get _searchString() {
           if (_cachedSearchString !== undefined) return _cachedSearchString
@@ -1129,27 +1145,48 @@ export default function PlantSwipe() {
              : Array.isArray(p.seasons) ? p.seasons
              : Array.isArray(p.identity?.season) ? p.identity.season
              : []
-           _cachedSeasonsSet = new Set(seasonArr.map(s => String(s).toLowerCase()))
+           // ⚡ Bolt: Use single-pass loop instead of new Set(arr.map())
+           // to eliminate intermediate array allocations in hot filter preparation path
+           _cachedSeasonsSet = new Set<string>()
+           for (let i = 0; i < seasonArr.length; i++) {
+             _cachedSeasonsSet.add(String(seasonArr[i]).toLowerCase())
+           }
            return _cachedSeasonsSet
         },
         get _lifeCycleSet() {
            if (_cachedLifeCycleSet) return _cachedLifeCycleSet
-           _cachedLifeCycleSet = new Set((p.lifeCycle || []).map((l: string) => l.toLowerCase()))
+           const arr = p.lifeCycle || []
+           _cachedLifeCycleSet = new Set<string>()
+           for (let i = 0; i < arr.length; i++) {
+             _cachedLifeCycleSet.add(String(arr[i]).toLowerCase())
+           }
            return _cachedLifeCycleSet
         },
         get _plantHabitSet() {
            if (_cachedPlantHabitSet) return _cachedPlantHabitSet
-           _cachedPlantHabitSet = new Set((p.plantHabit || []).map((h: string) => h.toLowerCase()))
+           const arr = p.plantHabit || []
+           _cachedPlantHabitSet = new Set<string>()
+           for (let i = 0; i < arr.length; i++) {
+             _cachedPlantHabitSet.add(String(arr[i]).toLowerCase())
+           }
            return _cachedPlantHabitSet
         },
         get _ediblePartSet() {
            if (_cachedEdiblePartSet) return _cachedEdiblePartSet
-           _cachedEdiblePartSet = new Set((p.ediblePart || []).map((e: string) => e.toLowerCase()))
+           const arr = p.ediblePart || []
+           _cachedEdiblePartSet = new Set<string>()
+           for (let i = 0; i < arr.length; i++) {
+             _cachedEdiblePartSet.add(String(arr[i]).toLowerCase())
+           }
            return _cachedEdiblePartSet
         },
         get _plantPartSet() {
            if (_cachedPlantPartSet) return _cachedPlantPartSet
-           _cachedPlantPartSet = new Set((p.plantPart || []).map((e: string) => e.toLowerCase()))
+           const arr = p.plantPart || []
+           _cachedPlantPartSet = new Set<string>()
+           for (let i = 0; i < arr.length; i++) {
+             _cachedPlantPartSet.add(String(arr[i]).toLowerCase())
+           }
            return _cachedPlantPartSet
         },
         _createdAtTs: createdAtTsFinal,
@@ -1158,7 +1195,7 @@ export default function PlantSwipe() {
         _isPromoted: isPromoted,
         _isInProgress: isInProgress
       } as PreparedPlant
-    })
+    }
 
     return {
       preparedPlants: prepared,
@@ -1233,14 +1270,14 @@ export default function PlantSwipe() {
   const normalizedFilters = useMemo(() => ({
     query: debouncedQuery.toLowerCase(),
     type: typeFilter?.toLowerCase() ?? null,
-    usageSet: new Set(usageFilters.map((u) => u.toLowerCase())),
-    habitatSet: new Set(habitatFilters.map((h) => h.toLowerCase())),
+    usageSet: createLowercasedSet(usageFilters),
+    habitatSet: createLowercasedSet(habitatFilters),
     maintenance: maintenanceFilter?.toLowerCase() ?? null,
-    livingSpaceSet: new Set(livingSpaceFilters.map(s => s.toLowerCase())),
-    lifeCycleSet: new Set(lifeCycleFilters.map(l => l.toLowerCase())),
-    plantHabitSet: new Set(plantHabitFilters.map(h => h.toLowerCase())),
-    ediblePartSet: new Set(ediblePartFilters.map(e => e.toLowerCase())),
-    plantPartSet: new Set(plantPartFilters.map(e => e.toLowerCase())),
+    livingSpaceSet: createLowercasedSet(livingSpaceFilters),
+    lifeCycleSet: createLowercasedSet(lifeCycleFilters),
+    plantHabitSet: createLowercasedSet(plantHabitFilters),
+    ediblePartSet: createLowercasedSet(ediblePartFilters),
+    plantPartSet: createLowercasedSet(plantPartFilters),
     vegetable: vegetableFilter,
   }), [debouncedQuery, typeFilter, usageFilters, habitatFilters, maintenanceFilter, livingSpaceFilters, lifeCycleFilters, plantHabitFilters, ediblePartFilters, plantPartFilters, vegetableFilter])
 
@@ -2823,10 +2860,10 @@ export default function PlantSwipe() {
             />
             <Route
               path="/discovery"
-              element={plants.length > 0 ? (
+              element={(plants.length > 0 || tutorialActive) ? (
                 <Suspense fallback={<SwipeCardSkeleton />}>
                   <SwipePage
-                    current={current}
+                    current={tutorialActive ? (plants.find(p => p.id === DEMO_PLANT_IDS.monstera) ?? current ?? plants.find(p => getDiscoveryPageImageUrl(p))) : current}
                     index={index}
                     setIndex={setIndex}
                     x={x}
@@ -3072,6 +3109,9 @@ export default function PlantSwipe() {
           }}
         />
       )}
+
+      {/* Onboarding Tutorial Overlay */}
+      <TutorialOverlay />
     </div>
     </AuthActionsProvider>
   )

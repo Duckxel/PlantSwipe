@@ -2,7 +2,7 @@
   "base": [
     "Populate the BASE section for {{plantName}}. Return a JSON object with these fields:",
     "- `plantType`: EXACTLY one of: \"herb\", \"shrub\", \"tree\", \"climber\", \"succulent\", \"fern\", \"moss\", \"grass\"",
-    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\"]. The main anatomical parts of this plant.",
+    "- `plantPart`: array from ONLY: [\"roots\",\"rhizomes\",\"bulbs\",\"tubers\",\"stems\",\"leaves\",\"flowers\",\"fruits\",\"spores\",\"seeds\",\"bark\",\"wood\"]. The main anatomical parts of this plant. IMPORTANT: plantPart and ediblePart share the same 12 possible parts. Use \"tubers\" for tuberous storage organs (e.g. potatoes, dahlias). Use \"seeds\" for plants that produce notable seeds. Use \"bark\" for plants with significant bark (e.g. cinnamon). Use \"wood\" for woody plants where the wood itself is notable.",
     "- `habitat`: array from ONLY: [\"aquatic\",\"hygrophytic\",\"terrestrial\",\"xerophytic\",\"halophytic\",\"epiphytic\",\"parasitic\"]. The natural habitat type(s).",
     "- `scientificNameSpecies`: botanical binomial (e.g. \"Monstera deliciosa\")",
     "- `variety`: ONLY the cultivar/variety name if applicable (e.g. \"Hidcote\", \"Iceberg\", \"Thai Constellation\"), or null if no specific variety. NEVER include the base species name here.",
@@ -17,12 +17,12 @@
   ],
   "identity": [
     "Populate the IDENTITY section for {{plantName}}. Return a JSON object with ALL these fields:",
-    "- `origin`: array of countries/regions (e.g. [\"South Africa\", \"Madagascar\"])",
+    "- `origin`: array of countries where this plant is native. Use ONLY recognized country names (e.g. [\"South Africa\", \"Madagascar\", \"China\", \"Brazil\"]). NEVER use regions, continents, or sub-regions like \"Southern Europe\", \"Central Asia\", \"China (northwest)\". If a plant is native to a region of a country, just use the country name. If native to a broad region like \"Mediterranean\", list the individual countries instead (e.g. [\"Spain\", \"Italy\", \"Greece\", \"Turkey\"]). Prefer the standard English country name.",
     "- `climate`: array from ONLY: [\"polar\",\"montane\",\"oceanic\",\"degraded_oceanic\",\"temperate_continental\",\"mediterranean\",\"tropical_dry\",\"tropical_humid\",\"tropical_volcanic\",\"tropical_cyclonic\",\"humid_insular\",\"subtropical_humid\",\"equatorial\",\"windswept_coastal\"]",
     "- `season`: array from [\"spring\",\"summer\",\"autumn\",\"winter\"]",
     "- `utility`: array from ONLY: [\"edible\",\"ornamental\",\"aromatic\",\"medicinal\",\"fragrant\",\"cereal\",\"spice\",\"infusion\"]. Use \"infusion\" if plant can be used for tea/tisane, \"aromatic\" also covers aromatherapy, \"fragrant\" for notable fragrance, \"medicinal\" for medicinal uses.",
     "- `vegetable`: boolean — true if the plant is a vegetable (only relevant when edible).",
-    "- `ediblePart`: array from ONLY: [\"flower\",\"fruit\",\"seed\",\"leaf\",\"stem\",\"bulb\",\"rhizome\",\"bark\",\"wood\"]. Empty array if not edible.",
+    "- `ediblePart`: array from ONLY: [\"root\",\"rhizome\",\"bulb\",\"tuber\",\"stem\",\"leaf\",\"flower\",\"fruit\",\"spore\",\"seed\",\"bark\",\"wood\"]. IMPORTANT: ediblePart uses singular form (same 12 parts as plantPart but singular). Only include parts that are safe to eat. Use \"tuber\" for edible tubers (e.g. potato, sweet potato). Use \"bark\" for edible bark (e.g. cinnamon). Empty array if not edible.",
     "- `thorny`: boolean",
     "- `toxicityHuman`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
     "- `toxicityPets`: EXACTLY one of: \"non_toxic\", \"slightly_toxic\", \"very_toxic\", \"deadly\", \"undetermined\"",
@@ -93,7 +93,7 @@
   ],
   "ecology": [
     "Populate the ECOLOGY section for {{plantName}}. Return a JSON object with ALL these fields:",
-    "- `conservationStatus`: array from ONLY: [\"least_concern\",\"near_threatened\",\"vulnerable\",\"endangered\",\"critically_endangered\",\"extinct_in_wild\",\"extinct\",\"data_deficient\",\"not_evaluated\"]",
+    "- `conservationStatus`: array from ONLY: [\"least_concern\",\"near_threatened\",\"vulnerable\",\"endangered\",\"critically_endangered\",\"extinct_in_wild\",\"extinct\",\"data_deficient\",\"not_evaluated\",\"protected\",\"protected_in_some_regions\"]. Use \"protected\" if the species has legal protection (e.g. CITES, national endangered species acts). Use \"protected_in_some_regions\" if protection applies only in certain countries or regions.",
     "- `ecologicalStatus`: array of status tags (e.g. [\"indigenous\",\"pioneer_species\",\"nitrogen_fixer\"])",
     "- `biotopes`: array of natural biotope keys (e.g. [\"temperate_deciduous_forest\",\"wet_meadow\"])",
     "- `urbanBiotopes`: array from [\"urban_garden\",\"periurban_garden\",\"park\",\"urban_wasteland\",\"green_wall\",\"green_roof\",\"balcony\",\"greenhouse\",\"agricultural_hedge\",\"cultivated_orchard\",\"vegetable_garden\",\"roadside\"]",

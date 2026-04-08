@@ -291,7 +291,7 @@ import postgres from 'postgres'
 import fs from 'fs/promises'
 import fsSync from 'fs'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
-import { exec as execCb, spawn as spawnChild } from 'child_process'
+import { exec as execCb, execFile as execFileCb, spawn as spawnChild } from 'child_process'
 import { promisify } from 'util'
 
 import zlib from 'zlib'
@@ -839,7 +839,7 @@ async function getRepoRoot() {
 // Helper: return top-level path if "dir" is a git repo, otherwise null.
 async function getTopLevelIfRepo(dir) {
   try {
-    const { stdout } = await exec(`git -c "safe.directory=${dir}" -C "${dir}" rev-parse --show-toplevel`)
+    const { stdout } = await execFile('git', ['-c', `safe.directory=${dir}`, '-C', dir, 'rev-parse', '--show-toplevel'])
     const root = (stdout || '').toString().trim()
     return root || null
   } catch {
@@ -848,6 +848,7 @@ async function getTopLevelIfRepo(dir) {
 }
 
 const exec = promisify(execCb)
+const execFile = promisify(execFileCb)
 
 function parseEmailTargets(raw, fallback) {
   const source = (typeof raw === 'string' && raw.trim().length > 0) ? raw : (fallback || '')
@@ -2180,6 +2181,45 @@ function sanitizeFolderInput(value) {
     .map((segment) => sanitizePathSegment(segment))
     .filter(Boolean)
     .join('/')
+}
+
+/**
+ * Full object path in UTILITY bucket for admin explorer.
+ * Relative path is from bucket root (empty string = list/create at bucket root).
+ */
+function adminUtilityExplorerObjectPath(relativePath) {
+  return sanitizeFolderInput(relativePath || '')
+}
+
+async function listAllStorageObjectPathsUnderPrefix(bucket, prefix) {
+  const paths = []
+  const queue = [String(prefix || '').replace(/^\/+|\/+$/g, '')].filter(Boolean)
+  while (queue.length) {
+    const current = queue.pop()
+    let offset = 0
+    const pageSize = 1000
+    for (;;) {
+      const { data, error } = await supabaseServiceClient.storage.from(bucket).list(current, {
+        limit: pageSize,
+        offset,
+        sortBy: { column: 'name', order: 'asc' },
+      })
+      if (error) throw new Error(error.message || 'Storage list failed')
+      const rows = Array.isArray(data) ? data : []
+      if (rows.length === 0) break
+      for (const row of rows) {
+        const name = row?.name
+        if (!name || name === '.emptyFolderPlaceholder') continue
+        const full = current ? `${current}/${name}` : name
+        const isSubfolder = row.id == null
+        if (isSubfolder) queue.push(full)
+        else paths.push(full)
+      }
+      if (rows.length < pageSize) break
+      offset += pageSize
+    }
+  }
+  return paths
 }
 
 function parseStoragePublicUrl(url) {
@@ -4213,11 +4253,8 @@ app.get('/api/csrf-token', (req, res) => {
 // Admin: System health stats (CPU, memory, disk, uptime, connections)
 app.get('/api/admin/system-health', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Get CPU usage (averaged over cores)
     const cpus = os.cpus()
@@ -4313,11 +4350,8 @@ app.get('/api/admin/system-health', async (req, res) => {
 // Admin: Get current maintenance mode status
 app.get('/api/admin/maintenance-mode', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const status = getMaintenanceMode()
     res.json({
       ok: true,
@@ -4332,11 +4366,8 @@ app.get('/api/admin/maintenance-mode', async (req, res) => {
 // Admin: Enable maintenance mode (suppresses 502/503/504 errors in Sentry)
 app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     // Duration in milliseconds (default: 5 minutes, max: 30 minutes)
     const durationMs = Math.min(
       Math.max(Number(req.body?.durationMs) || 300000, 60000), // At least 1 minute
@@ -4363,11 +4394,8 @@ app.post('/api/admin/maintenance-mode/enable', async (req, res) => {
 // Admin: Disable maintenance mode
 app.post('/api/admin/maintenance-mode/disable', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     
     const success = disableMaintenanceMode()
     if (success) {
@@ -4401,11 +4429,8 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Check multiple possible sitemap locations
     const sitemapPaths = [
@@ -4468,11 +4493,8 @@ app.get('/api/admin/sitemap-info', async (req, res) => {
 // Admin: fetch admin activity logs for the last N days (default 30)
 app.get('/api/admin/admin-logs', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const daysParam = Number(req.query.days || 30)
     const days = (Number.isFinite(daysParam) && daysParam > 0) ? Math.min(90, Math.floor(daysParam)) : 30
     if (!sql) {
@@ -5608,11 +5630,8 @@ app.post('/api/admin/ai/plant-fill/batch', async (req, res) => {
 // Admin: generic log endpoint to record an action from admin_api or UI
 app.post('/api/admin/log-action', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const body = req.body || {}
     const action = typeof body.action === 'string' ? body.action.trim() : ''
     if (!action) {
@@ -5622,11 +5641,9 @@ app.post('/api/admin/log-action', async (req, res) => {
     const target = (body.target == null || typeof body.target === 'string') ? body.target : String(body.target)
     const detail = (body.detail && typeof body.detail === 'object') ? body.detail : {}
 
-    let adminId = null
     let adminName = null
     try {
       const caller = await getUserFromRequest(req)
-      adminId = caller?.id || null
       // Resolve admin display name for clearer logs
       if (sql && adminId) {
         try {
@@ -6554,11 +6571,8 @@ async function insertWebVisit({ sessionId, userId, pagePath, referrer, userAgent
 // Admin: restart server via systemd; always exit so systemd restarts us
 async function handleRestartServer(req, res) {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -6626,8 +6640,8 @@ function scheduleRestartAllServices(trigger = 'manual') {
   setTimeout(() => {
     console.log(`[restart] Scheduling service restart (trigger=${label})`)
       ; (async () => {
-        try { await exec('sudo -n nginx -t', { timeout: 15000 }) } catch { }
-        try { await exec(`sudo -n systemctl reload ${serviceNginx}`, { timeout: 20000 }) } catch { }
+        try { await execFile('sudo', ['-n', 'nginx', '-t'], { timeout: 15000 }) } catch { }
+        try { await execFile('sudo', ['-n', 'systemctl', 'reload', serviceNginx], { timeout: 20000 }) } catch { }
         try {
           const admin = spawnChild('sudo', ['-n', 'systemctl', 'restart', serviceAdmin], { detached: true, stdio: 'ignore' })
           try { admin.unref() } catch { }
@@ -6647,11 +6661,8 @@ function scheduleRestartAllServices(trigger = 'manual') {
 // Admin: reload nginx and restart admin + node services in sequence, then exit self
 app.post('/api/admin/restart-all', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     try {
       const caller = await getUserFromRequest(req)
@@ -7300,6 +7311,15 @@ async function verifySchemaAfterSync() {
     'garden_watering_schedule',
     'web_visits',
     'requested_plants',
+    'badges',
+    'badge_translations',
+    'user_badges',
+    'events',
+    'event_translations',
+    'event_registrations',
+    'event_items',
+    'event_item_translations',
+    'event_user_progress',
   ]
   const requiredFunctions = [
     'get_profile_public_by_display_name',
@@ -7307,6 +7327,10 @@ async function verifySchemaAfterSync() {
     'get_user_profile_public_stats',
     'count_unique_ips_last_minutes',
     'count_unique_ips_last_days',
+    'award_badge',
+    'cleanup_event',
+    'reset_event_progress',
+    'delete_event_completely',
   ]
   const requiredExtensions = [
     'pgcrypto',
@@ -7349,11 +7373,8 @@ async function handleSyncSchema(req, res) {
   }
   try {
     // Require admin (robust detection; currently permissive via isAdminFromRequest)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // Read all SQL files from sync_parts folder and execute them in order
     const syncPartsDir = path.resolve(__dirname, 'supabase', 'sync_parts')
@@ -7650,13 +7671,203 @@ app.post('/api/admin/upload-image', async (req, res) => {
       name: adminDisplayName || null,
     },
     prefixBuilder: ({ req }) => {
-      const folder = sanitizeFolderInput(req.body?.folder || req.query?.folder)
+      const mode = String(req.body?.folderMode || req.query?.folderMode || '').toLowerCase()
+      if (mode === 'explorer') {
+        return sanitizeFolderInput(
+          req.body?.folderPath ?? req.query?.folderPath ?? '',
+        )
+      }
+      const raw =
+        req.body?.folderPath ??
+        req.body?.folder ??
+        req.query?.folderPath ??
+        req.query?.folder
+      const folder = sanitizeFolderInput(raw)
       return [adminUploadPrefix, folder].filter(Boolean).join('/')
     },
     // Admin uploads: UTILITY bucket, 90% quality (highest)
     bucket: 'UTILITY',
     webpQuality: 90,
   })
+})
+
+/**
+ * Admin UTILITY bucket explorer: list folders and files from bucket root.
+ * GET ?path= path relative to bucket root (optional; empty = root).
+ */
+app.get('/api/admin/upload-folder-contents', async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  try {
+    const relative = sanitizeFolderInput(req.query?.path || '')
+    const listPath = adminUtilityExplorerObjectPath(relative)
+    const { data, error } = await supabaseServiceClient.storage.from(adminUploadBucket).list(listPath, {
+      limit: 1000,
+      offset: 0,
+      sortBy: { column: 'name', order: 'asc' },
+    })
+    if (error) {
+      res.status(500).json({ error: error.message || 'Failed to list storage' })
+      return
+    }
+    const rows = Array.isArray(data) ? data : []
+    const folders = []
+    const files = []
+    for (const row of rows) {
+      const name = row?.name
+      if (!name || name === '.emptyFolderPlaceholder') continue
+      if (row.id == null) {
+        folders.push({ name })
+        continue
+      }
+      const meta = row.metadata && typeof row.metadata === 'object' ? row.metadata : {}
+      const size = Number(meta.size ?? meta.contentLength ?? 0) || 0
+      const mimeType =
+        typeof meta.mimetype === 'string' && meta.mimetype
+          ? meta.mimetype
+          : 'application/octet-stream'
+      files.push({
+        name,
+        id: row.id || name,
+        size,
+        mimeType,
+        updatedAt: row.updated_at || row.created_at || '',
+      })
+    }
+    res.json({ folders, files, path: relative, prefix: listPath })
+  } catch (err) {
+    console.error('[admin] upload-folder-contents failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to load folder contents' })
+  }
+})
+
+app.options('/api/admin/upload-folder-contents', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+/** Create a folder under the given path in UTILITY (Supabase: placeholder object). */
+app.post('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || '')
+  if (!folderPath) {
+    res.status(400).json({ error: 'folderPath is required' })
+    return
+  }
+
+  const fullPath = adminUtilityExplorerObjectPath(folderPath)
+  const placeholderPath = `${fullPath}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
+  try {
+    const empty = Buffer.alloc(0)
+    const { error: uploadError } = await supabaseServiceClient.storage
+      .from(adminUploadBucket)
+      .upload(placeholderPath, empty, {
+        cacheControl: '3600',
+        contentType: 'application/octet-stream',
+        upsert: false,
+      })
+    if (uploadError) {
+      res.status(400).json({ error: uploadError.message || 'Failed to create folder' })
+      return
+    }
+    res.json({ ok: true, folderPath: fullPath })
+  } catch (err) {
+    console.error('[admin] upload-folders POST failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to create folder' })
+  }
+})
+
+app.options('/api/admin/upload-folders', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+/** Delete a folder and all objects under it (path relative to UTILITY bucket root). */
+app.delete('/api/admin/upload-folders', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const folderPath = sanitizeFolderInput(req.body?.folderPath || '')
+  if (!folderPath) {
+    res.status(400).json({ error: 'folderPath is required' })
+    return
+  }
+
+  const fullPrefix = adminUtilityExplorerObjectPath(folderPath)
+  try {
+    const toRemove = await listAllStorageObjectPathsUnderPrefix(adminUploadBucket, fullPrefix)
+    const placeholder = `${fullPrefix}/.emptyFolderPlaceholder`.replace(/\/{2,}/g, '/')
+    const paths = [...new Set([...toRemove, placeholder])]
+    if (paths.length === 0) {
+      res.json({ ok: true, removed: 0 })
+      return
+    }
+    const batchSize = 100
+    for (let i = 0; i < paths.length; i += batchSize) {
+      const chunk = paths.slice(i, i + batchSize)
+      const { error: removeError } = await supabaseServiceClient.storage.from(adminUploadBucket).remove(chunk)
+      if (removeError) {
+        res.status(500).json({ error: removeError.message || 'Failed to delete folder contents' })
+        return
+      }
+    }
+    res.json({ ok: true, removed: paths.length })
+  } catch (err) {
+    console.error('[admin] upload-folders DELETE failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete folder' })
+  }
+})
+
+/** Delete a single object (path relative to UTILITY bucket root). */
+app.delete('/api/admin/upload-file', express.json({ limit: '32kb' }), async (req, res) => {
+  if (!supabaseServiceClient) {
+    res.status(500).json({ error: 'Supabase service role key not configured for uploads' })
+    return
+  }
+  const adminPrincipal = await ensureEditor(req, res)
+  if (!adminPrincipal) return
+
+  const relativeFile = sanitizeFolderInput(req.body?.filePath || '')
+  if (!relativeFile) {
+    res.status(400).json({ error: 'filePath is required' })
+    return
+  }
+
+  const objectPath = adminUtilityExplorerObjectPath(relativeFile)
+  try {
+    const { error: removeError } = await supabaseServiceClient.storage.from(adminUploadBucket).remove([objectPath])
+    if (removeError) {
+      res.status(400).json({ error: removeError.message || 'Failed to delete file' })
+      return
+    }
+    res.json({ ok: true, path: objectPath })
+  } catch (err) {
+    console.error('[admin] upload-file DELETE failed', err)
+    res.status(500).json({ error: err?.message || 'Failed to delete file' })
+  }
+})
+
+app.options('/api/admin/upload-file', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
 })
 
 // Mockups upload - for PWA screenshots and app mockup images
@@ -8676,7 +8887,7 @@ app.post('/api/admin/notifications', async (req, res) => {
         ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
         ${scheduleInterval},
         ${parsed.ctaUrl || null},
-        ${customIds.length ? sql.array(customIds) : sql.array([])},
+        ${customIds.length ? sql`${sql.array(customIds)}::uuid[]` : sql`'{}'::uuid[]`},
         ${templateId},
         0,
         ${adminUuid},
@@ -8833,7 +9044,7 @@ app.put('/api/admin/notifications/:id', async (req, res) => {
           schedule_start_at = ${deliveryMode === 'scheduled' ? (scheduleStartAt || nextRunAt) : null},
           schedule_interval = ${scheduleInterval},
           cta_url = ${parsed.ctaUrl || null},
-          custom_user_ids = ${customIds.length ? sql.array(customIds) : sql.array([])},
+          custom_user_ids = ${customIds.length ? sql`${sql.array(customIds)}::uuid[]` : sql`'{}'::uuid[]`},
           template_id = ${templateId},
           updated_by = ${adminUuid},
           next_run_at = ${nextRunAt},
@@ -14903,11 +15114,8 @@ app.delete('/api/admin/member-note/:id', async (req, res) => {
 // Admin: list users who have connected from a specific IP address
 app.get('/api/admin/members-by-ip', async (req, res) => {
   try {
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const raw = (req.query.ip || req.query.q || '').toString().trim()
     const ip = normalizeIp(raw)
     if (!ip) {
@@ -15761,11 +15969,8 @@ app.post('/api/admin/promote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15828,11 +16033,8 @@ app.post('/api/admin/demote-admin', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15895,11 +16097,8 @@ app.post('/api/admin/roles/add', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -15992,11 +16191,8 @@ app.post('/api/admin/roles/remove', async (req, res) => {
       res.status(500).json({ error: 'Database not configured' })
       return
     }
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, userId: rawUserId, role: rawRole } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const userIdParam = (rawUserId || '').toString().trim()
@@ -16372,11 +16568,8 @@ app.post('/api/admin/ban', async (req, res) => {
       return
     }
     // Require admin with robust detection
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
     const { email: rawEmail, reason: rawReason } = req.body || {}
     const emailParam = (rawEmail || '').toString().trim()
     const reason = (rawReason || '').toString().trim() || null
@@ -17182,11 +17375,10 @@ async function handlePullCode(req, res) {
     // Pre-validate requested branch to fail fast on typos or deleted branches
     if (branch) {
       try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 30000 })
         const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 30000 }),
         ])
         const normalize = (s) => s.trim().replace(/^origin\//, '')
         const allowed = new Set(
@@ -17275,11 +17467,8 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     if (!uid) return
 
     // Require admin (same policy as other admin endpoints)
-    const isAdmin = await isAdminFromRequest(req)
-    if (!isAdmin) {
-      res.status(403).json({ error: 'Admin privileges required' })
-      return
-    }
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
 
     // SSE headers
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
@@ -17351,11 +17540,10 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
     if (branch) {
       // Pre-validate requested branch and surface a clear error on failure
       try {
-        const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
-        await exec(`${gitBase} remote update --prune`, { timeout: 30000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 30000 })
         const [{ stdout: remoteOut }, { stdout: localOut }] = await Promise.all([
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 30000 }),
-          exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 30000 }),
+          execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 30000 }),
         ])
         const normalize = (s) => s.trim().replace(/^origin\//, '')
         const allowed = new Set(
@@ -17444,18 +17632,17 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Always operate from the repository root and mark it safe for this process
     const repoRoot = await getRepoRoot()
-    const gitBase = `git -c "safe.directory=${repoRoot}" -C "${repoRoot}"`
     // Fetch remote branches with prune to remove deleted branches - this is the key operation for refreshing branches
     // Using git fetch --prune origin is more reliable than git remote update --prune
     let pruneWarning = null
     try {
-      await exec(`${gitBase} fetch --prune origin`, { timeout: 20000 })
+      await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'fetch', '--prune', 'origin'], { timeout: 20000 })
       console.log('[branches] Successfully fetched and pruned remote branches from origin')
     } catch (e) {
       console.warn('[branches] git fetch --prune origin failed:', e?.message || e)
       // Fallback: try git remote update --prune as secondary option
       try {
-        await exec(`${gitBase} remote update --prune`, { timeout: 15000 })
+        await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'update', '--prune'], { timeout: 15000 })
         console.log('[branches] Fallback: git remote update --prune succeeded')
       } catch (e2) {
         console.warn('[branches] Fallback git remote update --prune also failed:', e2?.message || e2)
@@ -17464,13 +17651,13 @@ app.get('/api/admin/branches', async (req, res) => {
     }
     // Extra safety: explicitly prune any stale remote-tracking refs that might remain
     try {
-      await exec(`${gitBase} remote prune origin`, { timeout: 5000 })
+      await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'remote', 'prune', 'origin'], { timeout: 5000 })
     } catch (e) {
       // Non-fatal: fetch --prune should have already handled this
       console.warn('[branches] Extra prune command failed (non-fatal):', e?.message || e)
     }
     // Prefer for-each-ref over branch -r to avoid pointer lines and formatting quirks
-    const { stdout: branchesStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/remotes/origin`, { timeout: 5000 })
+    const { stdout: branchesStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/remotes/origin'], { timeout: 5000 })
     let branches = branchesStdout
       .split('\n')
       .map(s => s.trim())
@@ -17482,7 +17669,7 @@ app.get('/api/admin/branches', async (req, res) => {
 
     // Fallback to local branches if remote list is empty (e.g., detached or offline)
     if (branches.length === 0) {
-      const { stdout: localStdout } = await exec(`${gitBase} for-each-ref --format='%(refname:short)' refs/heads`, { timeout: 3000 })
+      const { stdout: localStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'for-each-ref', '--format=%(refname:short)', 'refs/heads'], { timeout: 3000 })
       branches = localStdout
         .split('\n')
         .map(s => s.trim())
@@ -17490,7 +17677,7 @@ app.get('/api/admin/branches', async (req, res) => {
         .sort((a, b) => a.localeCompare(b))
     }
 
-    const { stdout: currentStdout } = await exec(`${gitBase} rev-parse --abbrev-ref HEAD`, { timeout: 3000 })
+    const { stdout: currentStdout } = await execFile('git', ['-c', `safe.directory=${repoRoot}`, '-C', repoRoot, 'rev-parse', '--abbrev-ref', 'HEAD'], { timeout: 3000 })
     const current = currentStdout.trim()
 
     // Read the last update time from TIME file if it exists
@@ -17844,7 +18031,17 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       profileDeleted: false,
       gardensProcessed: 0,
       authUserDeleted: false,
-      storageObjectsDeleted: 0
+      storageObjectsDeleted: 0,
+      roadmapCompletionsDeleted: 0,
+      badgesDeleted: 0,
+      eventRegistrationsDeleted: 0,
+      eventProgressDeleted: 0,
+      actionStatusDeleted: 0,
+      gardenUserActivityDeleted: 0,
+      taskCompletionsDeleted: 0,
+      requestedPlantsDeleted: 0,
+      bugActionResponsesDeleted: 0,
+      bugPointsHistoryDeleted: 0
     }
 
     try {
@@ -18075,6 +18272,126 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Message reactions deletion partial:', err?.message) }
 
     try {
+      // 14b. Delete garden invites (sent or received)
+      if (sql) {
+        await sql`DELETE FROM public.garden_invites WHERE inviter_id = ${userId} OR invitee_id = ${userId}`
+      } else {
+        await supabaseServiceClient.from('garden_invites').delete().eq('inviter_id', userId)
+        await supabaseServiceClient.from('garden_invites').delete().eq('invitee_id', userId)
+      }
+    } catch (err) { console.warn('[gdpr] Garden invites deletion partial:', err?.message) }
+
+    try {
+      // 14c. Delete garden roadmap completions
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_roadmap_completions WHERE completed_by = ${userId}`
+        stats.roadmapCompletionsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_roadmap_completions').delete().eq('completed_by', userId)
+        stats.roadmapCompletionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Roadmap completions deletion partial:', err?.message) }
+
+    try {
+      // 14d. Delete user badges
+      if (sql) {
+        const result = await sql`DELETE FROM public.user_badges WHERE user_id = ${userId}`
+        stats.badgesDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_badges').delete().eq('user_id', userId)
+        stats.badgesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] User badges deletion partial:', err?.message) }
+
+    try {
+      // 14e. Delete event registrations
+      if (sql) {
+        const result = await sql`DELETE FROM public.event_registrations WHERE user_id = ${userId}`
+        stats.eventRegistrationsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('event_registrations').delete().eq('user_id', userId)
+        stats.eventRegistrationsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Event registrations deletion partial:', err?.message) }
+
+    try {
+      // 14f. Delete event user progress
+      if (sql) {
+        const result = await sql`DELETE FROM public.event_user_progress WHERE user_id = ${userId}`
+        stats.eventProgressDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('event_user_progress').delete().eq('user_id', userId)
+        stats.eventProgressDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Event user progress deletion partial:', err?.message) }
+
+    try {
+      // 14g. Delete user action status
+      if (sql) {
+        const result = await sql`DELETE FROM public.user_action_status WHERE user_id = ${userId}`
+        stats.actionStatusDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('user_action_status').delete().eq('user_id', userId)
+        stats.actionStatusDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] User action status deletion partial:', err?.message) }
+
+    try {
+      // 14h. Delete garden user activity
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_user_activity WHERE user_id = ${userId}`
+        stats.gardenUserActivityDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_user_activity').delete().eq('user_id', userId)
+        stats.gardenUserActivityDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Garden user activity deletion partial:', err?.message) }
+
+    try {
+      // 14i. Delete garden task user completions (covers shared gardens not handled by garden cascade)
+      if (sql) {
+        const result = await sql`DELETE FROM public.garden_task_user_completions WHERE user_id = ${userId}`
+        stats.taskCompletionsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('garden_task_user_completions').delete().eq('user_id', userId)
+        stats.taskCompletionsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Garden task user completions deletion partial:', err?.message) }
+
+    try {
+      // 14j. Delete requested plants
+      if (sql) {
+        const result = await sql`DELETE FROM public.requested_plants WHERE requested_by = ${userId}`
+        stats.requestedPlantsDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('requested_plants').delete().eq('requested_by', userId)
+        stats.requestedPlantsDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Requested plants deletion partial:', err?.message) }
+
+    try {
+      // 14k. Delete bug action responses
+      if (sql) {
+        const result = await sql`DELETE FROM public.bug_action_responses WHERE user_id = ${userId}`
+        stats.bugActionResponsesDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_action_responses').delete().eq('user_id', userId)
+        stats.bugActionResponsesDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug action responses deletion partial:', err?.message) }
+
+    try {
+      // 14l. Delete bug points history
+      if (sql) {
+        const result = await sql`DELETE FROM public.bug_points_history WHERE user_id = ${userId}`
+        stats.bugPointsHistoryDeleted = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient.from('bug_points_history').delete().eq('user_id', userId)
+        stats.bugPointsHistoryDeleted = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] Bug points history deletion partial:', err?.message) }
+
+    try {
       // 15. Delete avatar image and profile
       let profile = null
       if (sql) {
@@ -18257,7 +18574,21 @@ app.get('/api/account/export', async (req, res) => {
       scans: [],
       notifications: [],
       activityLogs: [],
+      roadmapCompletions: [],
+      badges: [],
       bugReports: [],
+      eventRegistrations: [],
+      eventProgress: [],
+      actionStatus: [],
+      gardenInvites: [],
+      gardenUserActivity: [],
+      taskCompletions: [],
+      requestedPlants: [],
+      bugActionResponses: [],
+      bugPointsHistory: [],
+      messageReactions: [],
+      discoverySeen: [],
+      pushSubscriptions: [],
       cookieConsent: null
     }
 
@@ -18305,14 +18636,18 @@ app.get('/api/account/export', async (req, res) => {
         `
         if (gardens && gardens.length > 0) {
           const gardenIds = gardens.map(g => g.id)
-          const [allPlants, allTasks] = await Promise.all([
+          const [allPlants, allTasks, allRoadmapCompletions] = await Promise.all([
             sql`SELECT gp.*, p.name as plant_name
                 FROM public.garden_plants gp
                 LEFT JOIN public.plants p ON p.id = gp.plant_id
                 WHERE gp.garden_id = ANY(${gardenIds})`,
             sql`SELECT * FROM public.garden_plant_tasks
-                WHERE garden_id = ANY(${gardenIds})`
+                WHERE garden_id = ANY(${gardenIds})`,
+            sql`SELECT garden_id, step_key, completed_at
+                FROM public.garden_roadmap_completions
+                WHERE completed_by = ${userId}`
           ])
+          exportData.roadmapCompletions = allRoadmapCompletions || []
           for (const garden of gardens) {
             exportData.gardens.push({
               ...garden,
@@ -18331,11 +18666,15 @@ app.get('/api/account/export', async (req, res) => {
           const gardenIds = memberships.map(m => m.garden_id)
           const roleMap = Object.fromEntries(memberships.map(m => [m.garden_id, m.role]))
           // Fetch gardens, plants, tasks in parallel instead of per-garden
-          const [gardensRes, plantsRes, tasksRes] = await Promise.all([
+          const [gardensRes, plantsRes, tasksRes, roadmapRes] = await Promise.all([
             supabaseServiceClient.from('gardens').select('*').in('id', gardenIds),
             supabaseServiceClient.from('garden_plants').select('*').in('garden_id', gardenIds),
             supabaseServiceClient.from('garden_plant_tasks').select('*').in('garden_id', gardenIds),
+            supabaseServiceClient.from('garden_roadmap_completions')
+              .select('garden_id, step_key, completed_at')
+              .eq('completed_by', userId),
           ])
+          exportData.roadmapCompletions = roadmapRes.data || []
           for (const garden of (gardensRes.data || [])) {
             exportData.gardens.push({
               ...garden,
@@ -18482,10 +18821,204 @@ app.get('/api/account/export', async (req, res) => {
           return data || []
         }
       })(),
+      // 13. Badges
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT ub.badge_id, ub.earned_at, b.slug, b.icon, b.category
+            FROM public.user_badges ub
+            LEFT JOIN public.badges b ON b.id = ub.badge_id
+            WHERE ub.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('user_badges').select('badge_id, earned_at, badges(slug, icon, category)')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 14. Event registrations
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT er.event_id, er.completed_at, e.title as event_title
+            FROM public.event_registrations er
+            LEFT JOIN public.events e ON e.id = er.event_id
+            WHERE er.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('event_registrations').select('event_id, completed_at, events(title)')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 15. Event user progress
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT eup.event_id, eup.item_id, eup.found_at
+            FROM public.event_user_progress eup
+            WHERE eup.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('event_user_progress').select('event_id, item_id, found_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 16. User action status (onboarding)
+      (async () => {
+        if (sql) {
+          return await sql`SELECT action_id, completed_at, skipped_at FROM public.user_action_status WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('user_action_status').select('action_id, completed_at, skipped_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 17. Garden invites (sent or received)
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT * FROM public.garden_invites
+            WHERE inviter_id = ${userId} OR invitee_id = ${userId}
+          `
+        } else {
+          const [{ data: i1 }, { data: i2 }] = await Promise.all([
+            supabaseServiceClient.from('garden_invites').select('*').eq('inviter_id', userId),
+            supabaseServiceClient.from('garden_invites').select('*').eq('invitee_id', userId),
+          ])
+          return [...(i1 || []), ...(i2 || [])]
+        }
+      })(),
+      // 18. Garden user activity
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT garden_id, activity_date, activity_type, activity_count, metadata
+            FROM public.garden_user_activity WHERE user_id = ${userId}
+            ORDER BY activity_date DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('garden_user_activity').select('garden_id, activity_date, activity_type, activity_count, metadata')
+            .eq('user_id', userId).order('activity_date', { ascending: false })
+          return data || []
+        }
+      })(),
+      // 19. Garden task user completions
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT gtuc.occurrence_id, gtuc.increment, gtuc.occurred_at
+            FROM public.garden_task_user_completions gtuc
+            WHERE gtuc.user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('garden_task_user_completions').select('occurrence_id, increment, occurred_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 20. Requested plants
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT plant_name, request_count, created_at, completed_at
+            FROM public.requested_plants WHERE requested_by = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('requested_plants').select('plant_name, request_count, created_at, completed_at')
+            .eq('requested_by', userId)
+          return data || []
+        }
+      })(),
+      // 21. Bug action responses
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT action_id, answers, points_earned, completed_at
+            FROM public.bug_action_responses WHERE user_id = ${userId}
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('bug_action_responses').select('action_id, answers, points_earned, completed_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 22. Bug points history
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT points, reason, reference_type, created_at
+            FROM public.bug_points_history WHERE user_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('bug_points_history').select('points, reason, reference_type, created_at')
+            .eq('user_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
+      // 23. Message reactions
+      (async () => {
+        if (sql) {
+          return await sql`SELECT message_id, emoji, created_at FROM public.message_reactions WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('message_reactions').select('message_id, emoji, created_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 24. Discovery seen plants
+      (async () => {
+        if (sql) {
+          return await sql`SELECT plant_id, seen_at, seen_count FROM public.discovery_seen_plants WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('discovery_seen_plants').select('plant_id, seen_at, seen_count')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 25. Push subscriptions
+      (async () => {
+        if (sql) {
+          return await sql`SELECT endpoint, created_at FROM public.user_push_subscriptions WHERE user_id = ${userId}`
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('user_push_subscriptions').select('endpoint, created_at')
+            .eq('user_id', userId)
+          return data || []
+        }
+      })(),
+      // 26. Garden activity logs
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT garden_id, kind, message, plant_name, task_name, occurred_at
+            FROM public.garden_activity_logs WHERE actor_id = ${userId}
+            ORDER BY occurred_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('garden_activity_logs').select('garden_id, kind, message, plant_name, task_name, occurred_at')
+            .eq('actor_id', userId).order('occurred_at', { ascending: false })
+          return data || []
+        }
+      })(),
     ])
 
-    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports']
-    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports']
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs']
     for (let i = 0; i < gdprParallelResults.length; i++) {
       const r = gdprParallelResults[i]
       if (r.status === 'fulfilled') {
@@ -18497,7 +19030,7 @@ app.get('/api/account/export', async (req, res) => {
     }
 
     try {
-      // 13. Cookie consent (if server-tracked)
+      // 27. Cookie consent (if server-tracked)
       if (sql) {
         const consent = await sql`
           SELECT * FROM public.user_cookie_consent 
@@ -19719,15 +20252,14 @@ app.get('/api/users/:id/private', async (req, res) => {
   try {
     const targetId = String(req.params.id || '').trim()
     if (!targetId) { res.status(400).json({ ok: false, error: 'user id required' }); return }
+
     const viewer = await getUserFromRequest(req)
-    if (!viewer?.id) { res.status(401).json({ ok: false, error: 'Unauthorized' }); return }
-    let allowed = viewer.id === targetId
-    if (!allowed) {
-      try {
-        allowed = await isAdminFromRequest(req)
-      } catch { }
+    const isOwner = viewer?.id && viewer.id === targetId
+
+    if (!isOwner) {
+      const adminId = await ensureAdmin(req, res)
+      if (!adminId) return // ensureAdmin handles the 401/403 responses
     }
-    if (!allowed) { res.status(403).json({ ok: false, error: 'Forbidden' }); return }
 
     if (sql) {
       const rows = await sql`
@@ -28776,7 +29308,7 @@ async function deliverPushNotifications(notifications, campaign) {
   const subscriptions = await sql`
     select id::text as id, user_id::text as user_id, endpoint, subscription
     from public.user_push_subscriptions
-    where user_id = any(${userIds})
+    where user_id = any(${userIds}::uuid[])
   `
   console.log(`[notifications] Found ${subscriptions?.length || 0} push subscription(s) for ${userIds.length} user(s)`)
   const subsByUser = new Map()
@@ -28826,7 +29358,7 @@ async function deliverPushNotifications(notifications, campaign) {
         )
         delivered = true
         usedSubscriptionIds.add(sub.id)
-        break // Successfully sent, no need to try other subscriptions
+        // Do NOT break — deliver to ALL of the user's devices (phone, desktop, etc.)
       } catch (err) {
         const statusCode = err?.statusCode || err?.statuscode
         if (statusCode === 404 || statusCode === 410) {
@@ -29210,6 +29742,31 @@ async function processDueAutomations() {
             limit 1000
           `
         } else if (automation.trigger_type === 'daily_task_reminder') {
+          // Ensure task occurrences exist for today before querying.
+          // Occurrences are normally generated client-side when users open the app,
+          // but users who haven't opened the app recently will have stale/missing
+          // occurrences, causing them to silently miss task reminder notifications.
+          try {
+            const today = new Date()
+            const startIso = new Date(today.getTime() - 1 * 24 * 3600 * 1000).toISOString()
+            const endIso = new Date(today.getTime() + 2 * 24 * 3600 * 1000).toISOString()
+            // Get all garden IDs that have tasks
+            const gardenRows = await sql`
+              select distinct t.garden_id
+              from public.garden_plant_tasks t
+              join public.garden_members gm on gm.garden_id = t.garden_id
+              join public.profiles p on p.id = gm.user_id
+              where (p.notify_push is null or p.notify_push = true)
+                and (p.push_task_reminders is null or p.push_task_reminders = true)
+            `
+            const gardenIds = (gardenRows || []).map(r => r.garden_id).filter(Boolean)
+            if (gardenIds.length > 0) {
+              await sql`select public.ensure_gardens_tasks_occurrences(${gardenIds}::uuid[], ${startIso}::timestamptz, ${endIso}::timestamptz)`
+            }
+          } catch (occErr) {
+            console.warn('[automations] Failed to ensure task occurrences (continuing with existing data):', occErr?.message)
+          }
+
           // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
           // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
           // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24

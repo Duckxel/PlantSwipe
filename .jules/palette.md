@@ -13,3 +13,35 @@
 ## 2024-03-22 - Add ARIA labels to AphyliaChatPanel remove buttons
 **Learning:** Icon-only remove buttons within nested UI components (like Context Chips and Image Attachments in `AphyliaChatPanel.tsx`) are often overlooked for accessibility. The `aria-label` attribute combined with a tooltip (`title`) is essential to prevent screen reader users from getting trapped or not understanding the button's purpose.
 **Action:** When creating new interactive elements like badges, chips, or preview cards, systematically verify that their remove/dismiss buttons have valid ARIA labels and tooltip text, using the `t()` translation function.
+
+## 2025-02-28 - Keyboard Accessibility for Hover-Revealed Actions
+**Learning:** Icon-only buttons within a container that reveals on hover (like `opacity-0 hover:opacity-100`) are invisible when focused by keyboard users. They receive focus but are visually hidden.
+**Action:** Always ensure to add `group-focus-within:opacity-100` to the container/button and `focus-visible:ring-2` to the button itself so it becomes visible and accessible for keyboard navigation.
+
+## 2026-03-26 - Accessible Color Picker Swatches
+**Learning:** Color picker swatches often rely entirely on a background color for their visual appearance, lacking any text. For screen reader users, without an `aria-label` (even if `title` is provided for visual tooltips), these interactive buttons are 'empty' and inaccessible.
+**Action:** Always provide an explicit `aria-label` alongside the `title` tooltip on interactive color swatches to ensure they are fully navigable and understandable via assistive technologies.
+
+## 2026-03-25 - Add aria-label to task completion buttons
+**Learning:** The "Complete" (checkmark) and "Complete All" buttons in `TasksSidebar.tsx` were icon-only without accessible labels. Screen reader users could not determine the purpose of these buttons, especially in a list of tasks where multiple identical-looking buttons appear.
+**Action:** Add `aria-label` attributes (using `t()` translations) to individual task complete buttons and bulk "Complete All" buttons in task management UIs.
+
+## 2026-03-30 - Add title attributes to chat panel icon buttons
+**Learning:** The Close, Minimize/Maximize, Stop, and Send buttons in `AphyliaChatPanel.tsx` had `aria-label` but lacked `title` attributes. Sighted mouse users on desktop had no tooltip to explain icon-only buttons.
+**Action:** Add explicit `title` attributes (mapped to existing `t()` translations) alongside `aria-label` on all icon-only buttons in chat/panel UIs to provide tooltip feedback for sighted users.
+
+## 2024-05-19 - [Adding Keyboard Focus to Icon-Only Action Buttons in MessageBubble]
+**Learning:** Icon-only action buttons (e.g., reaction popovers, edit controls, reply/more options buttons) in `MessageBubble.tsx` correctly included `aria-label` and `title` attributes for screen readers and tooltips. However, they lacked explicit focus indicators, which hindered keyboard accessibility for users navigating the chat interface. Adding `focus-visible` utility classes (e.g., `focus-visible:ring-2 focus-visible:ring-blue-500`) resolves this and aligns with existing accessibility requirements.
+**Action:** Always ensure that interactive icon-only elements feature visible focus states for keyboard users in addition to `aria-label` and `title` attributes. Use Tailwind's `focus-visible` pseudo-class (like `focus-visible:ring-2 focus-visible:outline-none`) to provide clear visual feedback without affecting pointer interactions.
+
+## 2026-04-05 - Keyboard Accessibility for Badge Icons
+**Learning:** Interactive badge elements wrapped in `motion.div` lack keyboard accessibility because they don't receive focus and lack semantic roles, even when wrapped in a container with mouse events. This prevents keyboard users from viewing the tooltip and screen readers from reading the content.
+**Action:** Refactor these elements to use native buttons (e.g., `motion.button`), add `onFocus`/`onBlur` event handlers to trigger the tooltip state, assign descriptive `aria-label` attributes, link to the tooltip with `aria-describedby`, and ensure visible focus states using `focus-visible:ring-2`.
+
+## 2024-04-06 - Accessible Camera Overlay
+**Learning:** Icon-only buttons rendered over dark backgrounds (like the Camera Capture view) need both screen reader labels and specific `focus-visible` offset styling (`focus-visible:ring-offset-2 focus-visible:ring-offset-black`) so the focus ring remains visible against the black canvas.
+**Action:** Always include offset colors when adding focus rings to elements floating over dark modal backgrounds or camera views.
+
+## 2024-04-08 - Accessible interactive elements on profile screens
+**Learning:** Empty states buttons and expanding toggles (like "Show Less" or "Create Collection") must always include `aria-label` attributes to ensure screen reader compatibility, and explicit `focus-visible` utility classes (e.g., `focus-visible:ring-2`) to guarantee keyboard navigation support.
+**Action:** Always verify that every interactive button, especially toggles or ones nested within empty state containers, has explicit focus styling and an aria-label if its visual text isn't fully self-explanatory or is missing.

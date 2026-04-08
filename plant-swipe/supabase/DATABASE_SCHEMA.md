@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 16, 2026
+> **Last Updated:** March 31, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,6 +28,9 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Apr 6, 2026:** **Events & Badges schema files.** Added `19_badges.sql` (badge catalog, translations, user badges) and `20_events.sql` (events, items, translations, registrations, user progress) to `sync_parts/`. Added `conservation_status` values `protected` and `protected_in_some_regions`. Unified `plant_part` and `edible_part` to share 12 items (added `tubers`). Fixed Phase 3 sync constraints for `conservation_status` and `plant_part`. Schema files: `03_plants_and_colors.sql`, `19_badges.sql`, `20_events.sql`.
+- **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
+- **Mar 25, 2026:** **Seedling Tray Garden Type.** Added `seedling` to `garden_type` CHECK constraint and `living_space` values. Added `tray_rows` and `tray_cols` INTEGER columns to `gardens` table (used when `garden_type = 'seedling'`). New `seedling_tray_cells` table with per-cell tracking (position, plant, stage, sow date, watering, notes). Stages: `empty`, `sown`, `germinating`, `sprouted`, `ready`. RLS policies for garden member access. Schema file: `12_audit_and_analytics.sql`. Migration: `20260325000000_add_seedling_tray.sql`.
 - **Mar 16, 2026:** **Garden Living Space & Roadmap Persistence.** Added `living_space` text[] column to `gardens` table (values: indoor, outdoor, terrarium, greenhouse) — used for plant suggestions and beginner onboarding. New `garden_roadmap_completions` table tracks beginner roadmap step completions per garden (persistent, never reverted). RPC: `complete_roadmap_step(uuid, text)`. Schema file: `12_audit_and_analytics.sql`.
 - **Mar 14, 2026:** **Admin Event Notifications.** Added `admin_event_notifications` table for configurable push notifications sent to selected admins when special events occur (user reports, bug reports, plant reports, plant requests). Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and selectable list of admin recipients. Schema file: `17_admin_event_notifications.sql`. New admin panel: "Event Alerts" tab.
 - **Mar 11, 2026:** **Email timezone bug fix.** Added `original_scheduled_for` column to `admin_email_campaigns` — stores the admin's intended send time immutably. The campaign runner edge function now uses this column for per-user timezone calculations instead of `scheduled_for`, which gets overwritten with cron wake-up times after partial sends, preventing timezone offset compounding. Added detailed column documentation for `admin_email_campaigns` and `admin_campaign_sends` tables.
@@ -52,7 +55,7 @@ pg_net        -- HTTP requests from database (edge functions)
 
 ## Schema Files Structure
 
-The schema is split into 17 files in `supabase/sync_parts/` for easier management:
+The schema is split into 20 files in `supabase/sync_parts/` for easier management:
 
 | File | Description |
 |------|-------------|
@@ -73,6 +76,9 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `15_gdpr_and_preferences.sql` | GDPR compliance, email verification, preferences |
 | `16_user_action_status.sql` | Profile action completion & skip sync across devices |
 | `17_admin_event_notifications.sql` | Admin event notification settings (per-event toggle, template, recipients) |
+| `18_discovery_history.sql` | Discovery seen-plants history for personalized scoring |
+| `19_badges.sql` | Badge catalog, translations, and user badge awards |
+| `20_events.sql` | Event system: events, items, translations, registrations, user progress |
 
 ---
 
@@ -121,6 +127,7 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `garden_inventory` | Garden-level inventory definitions |
 | `garden_instance_inventory` | Actual inventory items |
 | `garden_transactions` | Inventory transactions |
+| `seedling_tray_cells` | Individual cells in seedling tray grids |
 
 ### Tasks & Scheduling
 
@@ -205,6 +212,20 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `gdpr_audit_log` | GDPR compliance audit |
 | `impressions` | Page view impressions for plants and blog posts (admin read-only) |
 
+### Events & Badges
+
+| Table | Purpose |
+|-------|---------|
+| `events` | Event catalog (egg hunts, seasonal campaigns, etc.) — permanent |
+| `event_translations` | Multilingual event name/description — permanent |
+| `event_items` | Collectible items per event — temporary, deleted on cleanup |
+| `event_item_translations` | Multilingual item descriptions — cascades on cleanup |
+| `event_registrations` | Users who completed an event — permanent |
+| `event_user_progress` | Per-user item discovery tracking — temporary, deleted on cleanup |
+| `badges` | Badge catalog (earned via event completion or manually) |
+| `badge_translations` | Multilingual badge name/description |
+| `user_badges` | Badges earned by users — permanent |
+
 ### Bug Catcher System
 
 | Table | Purpose |
@@ -247,6 +268,7 @@ The schema is split into 17 files in `supabase/sync_parts/` for easier managemen
 | `email_verification_codes` | OTP codes for email verification |
 | `user_cookie_consent` | Cookie consent tracking |
 | `plant_scans` | Plant identification scans |
+| `discovery_seen_plants` | Tracks seen plants per user for personalized discovery scoring |
 
 ---
 
@@ -288,6 +310,7 @@ terms_version_accepted      TEXT DEFAULT '1.0.0'
 privacy_version_accepted    TEXT DEFAULT '1.0.0'
 -- Setup fields
 setup_completed             BOOLEAN DEFAULT false
+tutorial_completed          BOOLEAN DEFAULT false
 garden_type                 TEXT ('inside'|'outside'|'both')
 experience_level            TEXT ('novice'|'intermediate'|'expert')
 looking_for                 TEXT ('eat'|'ornamental'|'various')
@@ -334,8 +357,10 @@ soil_type           TEXT
 sunlight_exposure   TEXT
 preferred_language  TEXT
 hide_ai_chat        BOOLEAN DEFAULT false
-garden_type         TEXT NOT NULL DEFAULT 'default' -- CHECK: default, beginners
-living_space        TEXT[] NOT NULL DEFAULT '{}'    -- CHECK: values in (indoor, outdoor, terrarium, greenhouse)
+garden_type         TEXT NOT NULL DEFAULT 'default' -- CHECK: default, beginners, seedling
+living_space        TEXT[] NOT NULL DEFAULT '{}'    -- CHECK: values in (indoor, outdoor, terrarium, greenhouse, seedling)
+tray_rows           INTEGER                         -- Seedling tray dimensions (only for garden_type = 'seedling')
+tray_cols           INTEGER                         -- Seedling tray dimensions (only for garden_type = 'seedling')
 streak              INTEGER DEFAULT 0
 created_at          TIMESTAMPTZ DEFAULT now()
 updated_at          TIMESTAMPTZ DEFAULT now()
@@ -649,6 +674,45 @@ PRIMARY KEY (garden_id, step_key)
 
 **Schema file:** `12_audit_and_analytics.sql`
 
+### `seedling_tray_cells`
+
+Individual cells in a seedling tray grid. Each cell tracks a single seedling's growth stage and care history. Only used when `garden_type = 'seedling'`.
+
+```sql
+id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
+garden_id   UUID NOT NULL REFERENCES gardens(id) ON DELETE CASCADE
+position    INTEGER NOT NULL              -- Cell index in the tray grid (0-based)
+plant_id    TEXT REFERENCES plants(id) ON DELETE SET NULL
+stage       TEXT NOT NULL DEFAULT 'empty' -- CHECK: empty, sown, germinating, sprouted, ready
+sow_date    DATE
+last_watered DATE
+notes       TEXT DEFAULT ''
+created_at  TIMESTAMPTZ DEFAULT now()
+updated_at  TIMESTAMPTZ DEFAULT now()
+UNIQUE(garden_id, position)
+```
+
+**RLS:** Garden members can SELECT, INSERT, UPDATE, and DELETE cells for their garden.
+
+**Schema file:** `12_audit_and_analytics.sql`. Migration: `20260325000000_add_seedling_tray.sql`.
+
+### `discovery_seen_plants`
+
+Tracks which plants each user has seen in the discovery/swipe feed. Used by the personalized discovery scoring algorithm to deprioritize already-seen plants and surface fresh content.
+
+```sql
+id          UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+plant_id    TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+seen_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+seen_count  INTEGER NOT NULL DEFAULT 1
+UNIQUE(user_id, plant_id)
+```
+
+**RLS:** Users can only read/write their own seen history.
+
+**Schema file:** `18_discovery_history.sql`
+
 ### `plants` (Master Plant Catalog)
 
 Non-translatable base data for all plants. Organized into 9 sections matching the encyclopedia specification. All translatable content (names, descriptions, advice text) is stored in `plant_translations`.
@@ -659,7 +723,7 @@ name                      TEXT NOT NULL           -- Canonical English name (non
 
 -- Section 1: Base — Identity & naming
 plant_type                TEXT                   -- CHECK: herb, shrub, tree, climber, succulent, fern, moss, grass
-plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, stems, leaves, flowers, fruits, spores
+plant_part                TEXT[]                 -- CHECK: roots, rhizomes, bulbs, tubers, stems, leaves, flowers, fruits, spores, seeds, bark, wood
 habitat                   TEXT[]                 -- CHECK: aquatic, hygrophytic, terrestrial, xerophytic, halophytic, epiphytic, parasitic
 scientific_name_species   TEXT                   -- Latin species name
 family                    TEXT                   -- Botanical family (Latin)
@@ -672,7 +736,7 @@ season                    TEXT[]                 -- CHECK: spring, summer, autum
 -- Section 2: Identity — Utility & safety
 utility                   TEXT[]                 -- CHECK: edible, ornamental, aromatic, medicinal, fragrant, cereal, spice, infusion
 vegetable                 BOOLEAN DEFAULT false  -- Is it a vegetable?
-edible_part               TEXT[]                 -- CHECK: flower, fruit, seed, leaf, stem, bulb, rhizome, bark, wood
+edible_part               TEXT[]                 -- CHECK: root, rhizome, bulb, tuber, stem, leaf, flower, fruit, spore, seed, bark, wood
 thorny                    BOOLEAN DEFAULT false
 toxicity_human            TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
 toxicity_pets             TEXT                   -- CHECK: non_toxic, slightly_toxic, very_toxic, deadly, undetermined
@@ -737,7 +801,7 @@ pruning                   BOOLEAN DEFAULT false
 pruning_month             TEXT[]                 -- Multi-select months
 
 -- Section 6: Ecology — Conservation & status
-conservation_status       TEXT[]                 -- CHECK (IUCN): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated
+conservation_status       TEXT[]                 -- CHECK (IUCN + legal): least_concern, near_threatened, vulnerable, endangered, critically_endangered, extinct_in_wild, extinct, data_deficient, not_evaluated, protected, protected_in_some_regions
 ecological_status         TEXT[]                 -- CHECK (28 values): indigenous, endemic, subendemic, introduced, naturalized, subspontaneous, cultivated_only, ecologically_neutral, biodiversity_favorable, potentially_invasive, exotic_invasive, locally_invasive, competitive_dominant, pioneer_species, climax_species, structuring_species, indicator_species, host_species, relict_species, heritage_species, common_species, nitrogen_fixer, hygrophile, heliophile, sciaphile, halophile, calcicole, acidophile
 
 -- Section 6: Ecology — Habitats
@@ -1315,6 +1379,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `plant_scans` | Users can manage own scans |
 | `impressions` | Admin SELECT only; server writes via service role |
 | `plant_stocks` | Authenticated users can SELECT; only admins can INSERT/UPDATE/DELETE |
+| `events` | Anyone can SELECT; only admins can UPDATE (`events_update_admin` via `is_admin_user`) |
 
 ---
 

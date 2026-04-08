@@ -109,16 +109,23 @@ export const AddPlantToBookmarkDialog: React.FC<AddPlantToBookmarkDialogProps> =
                   </div>
                   
                   {isAdded ? (
-                    <Button size="sm" variant="ghost" disabled className="h-8 w-8 p-0 rounded-full text-emerald-600">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      disabled
+                      className="h-8 w-8 p-0 rounded-full text-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      aria-label={t('bookmarks.plantAdded', { defaultValue: 'Plant added' })}
+                    >
                       <Check className="h-4 w-4" />
                     </Button>
                   ) : (
                     <Button 
                       size="sm" 
                       variant="secondary" 
-                      className="h-8 w-8 p-0 rounded-full"
+                      className="h-8 w-8 p-0 rounded-full focus-visible:ring-2 focus-visible:ring-emerald-500"
                       onClick={() => handleAdd(p)}
                       disabled={addingId === p.id}
+                      aria-label={t('bookmarks.addThisPlant', { defaultValue: 'Add this plant' })}
                     >
                       {addingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
                     </Button>

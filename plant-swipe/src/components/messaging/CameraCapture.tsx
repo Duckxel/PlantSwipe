@@ -270,7 +270,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                 variant="outline"
                 size="sm"
                 onClick={startCamera}
-                className="border-white/20 text-white hover:bg-white/10"
+                className="border-white/20 text-white hover:bg-white/10 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 <RotateCcw className="h-4 w-4 mr-2" />
                 {t('messages.camera.retry', { defaultValue: 'Try Again' })}
@@ -288,14 +288,18 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                 variant="ghost"
                 size="lg"
                 onClick={handleRetake}
-                className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                aria-label={t('messages.camera.retake', { defaultValue: 'Retake photo' })}
+                title={t('messages.camera.retake', { defaultValue: 'Retake photo' })}
+                className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 <RotateCcw className="h-6 w-6" />
               </Button>
               <Button
                 size="lg"
                 onClick={handleConfirm}
-                className="h-16 w-16 rounded-full bg-green-500 hover:bg-green-600 text-white"
+                aria-label={t('messages.camera.confirm', { defaultValue: 'Confirm photo' })}
+                title={t('messages.camera.confirm', { defaultValue: 'Confirm photo' })}
+                className="h-16 w-16 rounded-full bg-green-500 hover:bg-green-600 text-white focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 <Check className="h-8 w-8" />
               </Button>
@@ -303,7 +307,9 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                 variant="ghost"
                 size="lg"
                 onClick={() => onOpenChange(false)}
-                className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white"
+                aria-label={t('common.cancel', { defaultValue: 'Cancel' })}
+                title={t('common.cancel', { defaultValue: 'Cancel' })}
+                className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 <X className="h-6 w-6" />
               </Button>
@@ -319,7 +325,9 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                 size="lg"
                 onClick={handleCapture}
                 disabled={isInitializing || !!error}
-                className="h-16 w-16 rounded-full bg-white hover:bg-white/90 text-black disabled:opacity-50"
+                aria-label={t('messages.camera.takePhoto', { defaultValue: 'Take photo' })}
+                title={t('messages.camera.takePhoto', { defaultValue: 'Take photo' })}
+                className="h-16 w-16 rounded-full bg-white hover:bg-white/90 text-black disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
               >
                 <Camera className="h-8 w-8" />
               </Button>
@@ -331,7 +339,9 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
                   size="lg"
                   onClick={handleSwitchCamera}
                   disabled={isInitializing || !!error}
-                  className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-50"
+                  aria-label={t('messages.camera.switchCamera', { defaultValue: 'Switch camera' })}
+                  title={t('messages.camera.switchCamera', { defaultValue: 'Switch camera' })}
+                  className="h-14 w-14 rounded-full bg-white/10 hover:bg-white/20 text-white disabled:opacity-50 focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black"
                 >
                   <SwitchCamera className="h-6 w-6" />
                 </Button>

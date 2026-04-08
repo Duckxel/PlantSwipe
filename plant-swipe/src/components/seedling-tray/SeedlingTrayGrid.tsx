@@ -1,16 +1,16 @@
-import React from "react";
+import React, { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { SeedlingTrayCell } from "@/types/garden";
 import type { Plant } from "@/types/plant";
 import { SeedlingStageIcon } from "./SeedlingStageIcon";
-import { Plus } from "lucide-react";
+import { Plus, Image, Sprout } from "lucide-react";
 
 const STAGE_CELL_CLASSES: Record<string, string> = {
   empty: "bg-stone-100 dark:bg-stone-800 border-stone-300 dark:border-stone-600",
-  sown: "bg-amber-50 dark:bg-amber-950/30 border-amber-400 dark:border-amber-700",
-  germinating: "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-500 dark:border-emerald-800",
-  sprouted: "bg-emerald-100 dark:bg-emerald-900/30 border-emerald-500 dark:border-emerald-700",
-  ready: "bg-emerald-200 dark:bg-emerald-800/30 border-emerald-500 dark:border-emerald-600",
+  sown: "bg-amber-900/10 dark:bg-amber-950/40 border-amber-800 dark:border-amber-900",
+  germinating: "bg-orange-100 dark:bg-orange-950/30 border-orange-400 dark:border-orange-700",
+  sprouted: "bg-yellow-100 dark:bg-yellow-950/30 border-yellow-400 dark:border-yellow-600",
+  ready: "bg-emerald-200 dark:bg-emerald-900/50 border-emerald-500 dark:border-emerald-400",
 };
 
 interface SeedlingTrayGridProps {
@@ -45,6 +45,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
   onExitSelectMode,
 }) => {
   const { t } = useTranslation("common");
+  const [viewMode, setViewMode] = useState<"sprite" | "photo">("photo");
 
   const daysDiff = (d: string | null) => {
     if (!d) return null;
@@ -101,12 +102,21 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
               </button>
             </>
           ) : (
-            <button
-              onClick={onToggleSelectMode}
-              className="px-3.5 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
-            >
-              {t("seedlingTray.select", "Select")}
-            </button>
+            <>
+              <button
+                onClick={() => setViewMode(viewMode === "sprite" ? "photo" : "sprite")}
+                className="p-1.5 rounded-lg border border-border text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+                title={viewMode === "sprite" ? t("seedlingTray.showPhoto", "Show plant photo") : t("seedlingTray.showSprite", "Show growth stage")}
+              >
+                {viewMode === "sprite" ? <Image className="h-4 w-4" /> : <Sprout className="h-4 w-4" />}
+              </button>
+              <button
+                onClick={onToggleSelectMode}
+                className="px-3.5 py-1.5 rounded-lg border border-border text-sm text-muted-foreground hover:bg-muted transition-colors cursor-pointer"
+              >
+                {t("seedlingTray.select", "Select")}
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -135,7 +145,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                 key={cell.id || i}
                 type="button"
                 onClick={() => onCellClick(i)}
-                className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-1 relative transition-all cursor-pointer ${stageClass} ${
+                className={`aspect-square rounded-xl border-2 flex flex-col items-center justify-center gap-0.5 p-2 relative transition-all cursor-pointer ${stageClass} ${
                   isSel ? "!border-emerald-500 ring-2 ring-emerald-500/30" : ""
                 }`}
               >
@@ -153,9 +163,22 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
                   </>
                 ) : (
                   <>
-                    <SeedlingStageIcon stage={cell.stage} size={16} />
+                    {viewMode === "photo" && plant?.image ? (
+                      <>
+                        <img
+                          src={plant.image}
+                          alt={plant.name || ""}
+                          className="w-4/5 aspect-square object-cover rounded-lg"
+                        />
+                        <div className="absolute bottom-1 left-1">
+                          <SeedlingStageIcon stage={cell.stage} size={32} />
+                        </div>
+                      </>
+                    ) : (
+                      <SeedlingStageIcon stage={cell.stage} fill />
+                    )}
                     {plant && (
-                      <div className="text-[9px] text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
+                      <div className="text-xs font-semibold text-muted-foreground text-center leading-tight overflow-hidden max-w-full truncate">
                         {plant.name || plant.id}
                       </div>
                     )}
@@ -177,7 +200,7 @@ export const SeedlingTrayGrid: React.FC<SeedlingTrayGridProps> = ({
             {s.id === "empty" ? (
               <Plus className="h-2.5 w-2.5 text-stone-400" />
             ) : (
-              <SeedlingStageIcon stage={s.id} size={10} />
+              <SeedlingStageIcon stage={s.id} size={20} />
             )}
             <span className="text-xs text-muted-foreground">
               {s.id === "empty" ? t("seedlingTray.addNew", "Add") : s.label}

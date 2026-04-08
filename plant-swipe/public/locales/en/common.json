@@ -1864,6 +1864,7 @@
       "bannedHint": "Banned • shadow-banned from platform"
     },
     "highlights": "Highlights",
+    "badges": "Badges",
     "plantsOwned": "Plants owned",
     "gardens": "Gardens",
     "currentStreak": "Current streak",
@@ -2599,6 +2600,15 @@
     "advanced": "Advanced",
     "browseAll": "Access our full encyclopedia"
   },
+  "eggHunt": {
+    "foundTitle": "You found an egg!",
+    "alreadyFoundTitle": "You already found this one!",
+    "continueButton": "Continue hunting",
+    "congratulations": "Congratulations! You found them all!",
+    "remaining": "{{count}} remaining",
+    "alreadyFound": "Already found!",
+    "clickMe": "Click me!"
+  },
   "seedlingTray": {
     "cellTitle": "Cell {{index}}",
     "cellsSelected": "{{count}} cells selected",
@@ -2688,6 +2698,101 @@
       "lastWateredDays": "Last watered {{days}}d ago",
       "wateredToday": "Watered Today",
       "done": "Done"
+    }
+  },
+  "tutorial": {
+    "skip": "Skip tutorial",
+    "skipAll": "Skip tutorial",
+    "next": "Next",
+    "back": "Back",
+    "gesture": {
+      "nextPlant": "Next plant",
+      "previousPlant": "Previous plant",
+      "viewDetails": "View details",
+      "doubleTapLike": "Double-tap to like"
+    },
+    "start": "Let's go!",
+    "finish": "Get started!",
+    "demo": {
+      "balconyGarden": "My Balcony Garden",
+      "indoorGarden": "Indoor Plants",
+      "herbGarden": "Herb Garden",
+      "wateringHistory": "Watering History",
+      "completionRate": "Completion Rate",
+      "dayStreak": "Day Streak",
+      "totalWaterings": "Total Waterings",
+      "activePlants": "Active Plants",
+      "waterMonstera": "Water Monstera",
+      "waterSnakePlant": "Water Snake Plant",
+      "fertilizeLavender": "Fertilize Lavender",
+      "pruneBasil": "Prune Basil",
+      "checkOrchid": "Check Orchid"
+    },
+    "steps": {
+      "welcome": {
+        "title": "Welcome to Aphylia! 🌱",
+        "description": "Here's a quick overview of what you can do with the app. No actions required — just swipe through to see the highlights. You can skip at any time."
+      },
+      "discovery_swipe": {
+        "title": "Discovery — Browse Plants",
+        "description": "The Discovery page shows you plant cards one at a time. Swipe up to see the next plant, down to go back. Double-tap the card to like it instantly!"
+      },
+      "discovery_like": {
+        "title": "Discovery — Like & Save",
+        "description": "Double-tap any card to like it — you'll see a heart animation. You can also tap the heart button in the corner. Liked plants are saved to your bookmarks in your profile."
+      },
+      "discovery_info": {
+        "title": "Discovery — Plant Details",
+        "description": "Swipe a card to the left to reveal detailed info — care instructions, watering schedule, sunlight needs, and more. Or tap the Info button at the bottom of the card."
+      },
+      "encyclopedia_nav": {
+        "title": "Encyclopedia 📚",
+        "description": "The Encyclopedia is your plant library. Search by name, filter by type, care level, or specific needs. It's the fastest way to find the perfect plant."
+      },
+      "encyclopedia_categories": {
+        "title": "Browse by Category",
+        "description": "Plants are organized into handy categories — succulents, flowering plants, vegetables, pet-safe options, and many more. A great way to discover something new!"
+      },
+      "scan_identify": {
+        "title": "Plant Scanner 📷",
+        "description": "Found a plant you can't identify? Snap a photo or upload an image and our AI will tell you what it is. Your scan history is saved so you can always look back."
+      },
+      "nav_gardens": {
+        "title": "Your Gardens",
+        "description": "Gardens are where you track your real-life plant collections. You can create multiple gardens — one for your balcony, one for indoors, one for the backyard."
+      },
+      "gardens_create": {
+        "title": "Creating a Garden",
+        "description": "You can create a garden in seconds — give it a name, pick indoor or outdoor, and you're done. You'll choose between Default, Beginner, or Seedling garden types."
+      },
+      "gardens_beginner": {
+        "title": "Beginner Garden 🎓",
+        "description": "New to gardening? The Beginner mode gives you a guided roadmap with step-by-step lessons: choosing your first plant, setting up watering, learning care habits, and more."
+      },
+      "gardens_overview": {
+        "title": "Garden Dashboard",
+        "description": "Each garden has its own dashboard with tabs: Overview, Plants, Tasks, Journal, Analytics, and Settings. Everything you need to manage your garden in one place."
+      },
+      "gardens_plants": {
+        "title": "Plants in Your Garden",
+        "description": "The Plants tab shows everything growing in your garden. You can track each plant's watering, pruning, fertilizing, and care history with a simple tap."
+      },
+      "gardens_analytics": {
+        "title": "Garden Analytics 📊",
+        "description": "The Analytics tab shows your garden's progress over time — watering streaks, growth patterns, care frequency, and task completion stats at a glance."
+      },
+      "gardens_seedling": {
+        "title": "Seedling Tray 🌱",
+        "description": "Starting from seeds? The Seedling Tray lets you track germination, growth stages, and watering for each cell. When they're ready, transplant them into your garden."
+      },
+      "gardens_tasks": {
+        "title": "Tasks & Journal 📝",
+        "description": "Tasks keep you on track with daily care — watering, fertilizing, pruning reminders. The Journal lets you write notes and build a timeline of your garden's story."
+      },
+      "tutorial_complete": {
+        "title": "You're All Set! 🎉",
+        "description": "That's the tour! Your profile has a checklist to guide you through your first real actions — creating a garden, adding a plant, and more. Enjoy Aphylia!"
+      }
     }
   }
 }

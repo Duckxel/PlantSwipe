@@ -415,7 +415,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   key={emoji}
                   onClick={() => onReaction(emoji)}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all active:scale-95 shadow-sm border',
+                    'flex items-center gap-1 px-2 py-0.5 rounded-full text-xs transition-all active:scale-95 shadow-sm border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1',
                     data.hasOwn 
                       ? 'bg-blue-100 dark:bg-blue-900/60 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-700'
                       : 'bg-white dark:bg-[#2a2a2d] text-stone-600 dark:text-stone-300 hover:bg-stone-50 dark:hover:bg-[#3a3a3d] border-stone-200 dark:border-[#3a3a3d]'
@@ -462,7 +462,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     onReaction(emoji)
                     setShowReactions(false)
                   }}
-                  className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-all active:scale-110 text-xl"
+                  className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-all active:scale-110 text-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   aria-label={t('messages.reactWith', { defaultValue: 'React with {{emoji}}', emoji })}
                   title={t('messages.reactWith', { defaultValue: 'React with {{emoji}}', emoji })}
                 >
@@ -478,7 +478,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                   onReply()
                   setShowReactions(false)
                 }}
-                className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors"
+                className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                 title={t('messages.reply', { defaultValue: 'Reply' })}
                 aria-label={t('messages.reply', { defaultValue: 'Reply' })}
               >
@@ -491,7 +491,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
                     setShowReactions(false)
                     setShowMenu(true)
                   }}
-                  className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors"
+                  className="p-2 hover:bg-stone-100 dark:hover:bg-[#3a3a3d] rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   aria-label={t('messages.moreOptions', { defaultValue: 'More options' })}
                   title={t('messages.moreOptions', { defaultValue: 'More options' })}
                 >

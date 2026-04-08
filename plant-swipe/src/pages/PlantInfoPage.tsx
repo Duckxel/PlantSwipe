@@ -20,6 +20,7 @@ import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark 
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { EasterEgg } from '@events/2026_EASTER'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -69,6 +70,16 @@ import {
   ExternalLink,
   Mail,
   Camera,
+  Globe2,
+  Snowflake,
+  Mountain,
+  CloudRain,
+  Flame,
+  Palmtree,
+  CloudLightning,
+  Waves,
+  TreePalm,
+  Anchor,
 } from 'lucide-react'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import {
@@ -316,6 +327,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     commonNames: translation?.common_names || [],
     presentation: translation?.presentation || undefined,
     origin: translation?.origin || [],
+    originEnglish: Array.isArray(data.origin) ? data.origin : [],
     allergens: translation?.allergens || [],
     poisoningSymptoms: translation?.poisoning_symptoms || undefined,
 
@@ -928,7 +940,10 @@ const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+      {/* Easter Egg Hunt */}
+      {id && <EasterEgg pagePath={`/plants/${id}`} />}
+
       <div className="flex items-center gap-2 justify-between">
         <Button
           type="button"
@@ -1381,6 +1396,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   }))
     const palette = plant.colors?.length ? plant.colors : []
     const showPalette = palette.length > 0
+    const hasLifeCycleData = (plant.lifeCycle?.length ?? 0) > 0 || (plant.averageLifespan?.length ?? 0) > 0 || (plant.foliagePersistence?.length ?? 0) > 0
     const showRightColumn = showPalette || (plant.livingSpace?.length ?? 0) > 0 || (plant.landscaping?.includes('pot') ?? false)
     const gridClass = showRightColumn
       ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
@@ -1660,6 +1676,26 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
             </div>
           )}
         </div>
+
+        {/* Climate + Life Cycle + Origin row */}
+        {(hasLifeCycleData || (plant.climate?.length ?? 0) > 0 || (plant.origin?.length ?? 0) > 0) && (
+          <div className="grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] items-stretch">
+            {/* Left column: Climate on top, Life Cycle below */}
+            <div className="flex flex-col gap-3 sm:gap-4">
+              <ClimateCard climate={plant.climate} t={t} />
+              {hasLifeCycleData && (
+                <LifeCycleCard
+                  lifeCycle={plant.lifeCycle}
+                  averageLifespan={plant.averageLifespan}
+                  foliagePersistence={plant.foliagePersistence}
+                  t={t}
+                />
+              )}
+            </div>
+            {/* Right column: Origin with map — fills full height */}
+            <OriginCard origin={plant.origin} originEnglish={plant.originEnglish} t={t} />
+          </div>
+        )}
 
         {/* Habitat Map */}
         {habitats.length > 0 && (
@@ -2193,6 +2229,597 @@ const LivingSpaceVisualizer: React.FC<LivingSpaceVisualizerProps> = ({ livingSpa
             icon={<Warehouse className={`h-7 w-7 sm:h-8 sm:w-8 ${isGreenhouse ? activeClass : inactiveClass}`} strokeWidth={1.5} />}
             label={t('plantInfo:enums.livingSpace.greenhouse', { defaultValue: 'Greenhouse' })}
           />
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Life Cycle & Foliage Card ──
+
+// Each life cycle type gets a mini-timeline: an array of stages where
+// each stage has a label, a color, and a width-weight (relative).
+// The plant's active stage is the filled portion; the rest is dimmed.
+const lifeCycleData: Record<string, {
+  stages: { label: string; color: string; flex: number }[]
+  accent: string; desc: string
+}> = {
+  annual: {
+    stages: [
+      { label: 'Seed', color: 'bg-lime-300 dark:bg-lime-600', flex: 1 },
+      { label: 'Grow', color: 'bg-lime-400 dark:bg-lime-500', flex: 2 },
+      { label: 'Bloom', color: 'bg-lime-500 dark:bg-lime-400', flex: 1 },
+      { label: 'Seed', color: 'bg-stone-300 dark:bg-stone-600', flex: 1 },
+    ],
+    accent: 'text-lime-700 dark:text-lime-300',
+    desc: 'Completes its entire life cycle — from seed to flower to seed — in a single growing season, then dies.',
+  },
+  biennial: {
+    stages: [
+      { label: 'Year 1', color: 'bg-sky-300 dark:bg-sky-600', flex: 2 },
+      { label: 'Rest', color: 'bg-sky-200 dark:bg-sky-700', flex: 1 },
+      { label: 'Year 2', color: 'bg-sky-400 dark:bg-sky-500', flex: 2 },
+      { label: 'Bloom', color: 'bg-sky-500 dark:bg-sky-400', flex: 1 },
+    ],
+    accent: 'text-sky-700 dark:text-sky-300',
+    desc: 'Grows foliage in its first year, overwinters, then flowers and sets seed in the second year before dying.',
+  },
+  perennial: {
+    stages: [
+      { label: 'Grow', color: 'bg-emerald-300 dark:bg-emerald-600', flex: 1 },
+      { label: 'Bloom', color: 'bg-emerald-400 dark:bg-emerald-500', flex: 1 },
+      { label: 'Rest', color: 'bg-emerald-200 dark:bg-emerald-700', flex: 1 },
+      { label: 'Regrow', color: 'bg-emerald-400 dark:bg-emerald-500', flex: 1 },
+      { label: '∞', color: 'bg-emerald-500 dark:bg-emerald-400', flex: 1 },
+    ],
+    accent: 'text-emerald-700 dark:text-emerald-300',
+    desc: 'Lives for more than two years, dying back in winter and regrowing each season from its root system.',
+  },
+  succulent_perennial: {
+    stages: [
+      { label: 'Store', color: 'bg-teal-300 dark:bg-teal-600', flex: 2 },
+      { label: 'Grow', color: 'bg-teal-400 dark:bg-teal-500', flex: 2 },
+      { label: '∞', color: 'bg-teal-500 dark:bg-teal-400', flex: 1 },
+    ],
+    accent: 'text-teal-700 dark:text-teal-300',
+    desc: 'A long-lived succulent that stores water in thick leaves or stems and persists for many years.',
+  },
+  monocarpic: {
+    stages: [
+      { label: 'Grow', color: 'bg-rose-200 dark:bg-rose-700', flex: 3 },
+      { label: 'Bloom', color: 'bg-rose-400 dark:bg-rose-400', flex: 1 },
+      { label: 'Die', color: 'bg-stone-300 dark:bg-stone-600', flex: 1 },
+    ],
+    accent: 'text-rose-700 dark:text-rose-300',
+    desc: 'May grow for years, but flowers only once in its lifetime — then dies after setting seed.',
+  },
+  short_cycle: {
+    stages: [
+      { label: 'Seed', color: 'bg-amber-300 dark:bg-amber-600', flex: 1 },
+      { label: 'Bloom', color: 'bg-amber-400 dark:bg-amber-400', flex: 1 },
+    ],
+    accent: 'text-amber-700 dark:text-amber-300',
+    desc: 'Rapidly completes its growth cycle — germinates, flowers, and sets seed in a very short period.',
+  },
+  ephemeral: {
+    stages: [
+      { label: 'Appear', color: 'bg-purple-300 dark:bg-purple-600', flex: 1 },
+      { label: 'Bloom', color: 'bg-purple-400 dark:bg-purple-400', flex: 1 },
+      { label: 'Gone', color: 'bg-stone-200 dark:bg-stone-700', flex: 1 },
+    ],
+    accent: 'text-purple-700 dark:text-purple-300',
+    desc: 'A brief-lived plant that appears after rain or favorable conditions, flowers quickly, then vanishes.',
+  },
+}
+
+const lifespanData: Record<string, { level: number; color: string; barColor: string; desc: string }> = {
+  less_than_1_year: { level: 1, color: 'text-amber-700 dark:text-amber-300',     barColor: 'bg-amber-400',   desc: 'Short-lived — completes its life in under 12 months.' },
+  '2_years':        { level: 2, color: 'text-lime-700 dark:text-lime-300',       barColor: 'bg-lime-400',     desc: 'Lives for approximately two growing seasons.' },
+  '3_to_10_years':  { level: 3, color: 'text-emerald-700 dark:text-emerald-300', barColor: 'bg-emerald-400', desc: 'Medium lifespan — establishes well and persists several years.' },
+  '10_to_50_years': { level: 4, color: 'text-teal-700 dark:text-teal-300',      barColor: 'bg-teal-400',     desc: 'Long-lived — becomes a lasting part of the landscape.' },
+  over_50_years:    { level: 5, color: 'text-sky-700 dark:text-sky-300',         barColor: 'bg-sky-400',       desc: 'Very long-lived — can outlast generations.' },
+}
+
+// Map UI display values back to lifespanData keys (handles en-dashes, "+" etc.)
+const resolveLifespanKey = (uiValue: string): string | null => {
+  const dbVal = averageLifespanEnum.toDb(uiValue)
+  if (dbVal && lifespanData[dbVal]) return dbVal
+  // Fallback: normalize manually
+  const norm = uiValue.toLowerCase().replace(/[–—]/g, '_to_').replace(/\+/g, '').replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '')
+  for (const key of Object.keys(lifespanData)) {
+    if (norm.includes(key) || key.includes(norm)) return key
+  }
+  return null
+}
+
+// Foliage: 4-season mini bar showing leaf state per season
+const foliageData: Record<string, {
+  seasons: { label: string; state: 'full' | 'partial' | 'bare' | 'dormant' }[]
+  accent: string; desc: string
+}> = {
+  deciduous: {
+    seasons: [
+      { label: 'Spr', state: 'full' },
+      { label: 'Sum', state: 'full' },
+      { label: 'Fall', state: 'partial' },
+      { label: 'Win', state: 'bare' },
+    ],
+    accent: 'text-amber-700 dark:text-amber-300',
+    desc: 'Sheds all its leaves seasonally, typically in autumn, and regrows them in spring.',
+  },
+  evergreen: {
+    seasons: [
+      { label: 'Spr', state: 'full' },
+      { label: 'Sum', state: 'full' },
+      { label: 'Fall', state: 'full' },
+      { label: 'Win', state: 'full' },
+    ],
+    accent: 'text-emerald-700 dark:text-emerald-300',
+    desc: 'Retains green foliage throughout the entire year — never fully bare.',
+  },
+  semi_evergreen: {
+    seasons: [
+      { label: 'Spr', state: 'full' },
+      { label: 'Sum', state: 'full' },
+      { label: 'Fall', state: 'partial' },
+      { label: 'Win', state: 'partial' },
+    ],
+    accent: 'text-lime-700 dark:text-lime-300',
+    desc: 'Keeps some leaves year-round but sheds partially during cold or dry stress.',
+  },
+  marcescent: {
+    seasons: [
+      { label: 'Spr', state: 'full' },
+      { label: 'Sum', state: 'full' },
+      { label: 'Fall', state: 'dormant' },
+      { label: 'Win', state: 'dormant' },
+    ],
+    accent: 'text-amber-800 dark:text-amber-300',
+    desc: 'Dead leaves cling to the branch through winter until new spring growth pushes them off.',
+  },
+  winter_dormant: {
+    seasons: [
+      { label: 'Spr', state: 'full' },
+      { label: 'Sum', state: 'full' },
+      { label: 'Fall', state: 'partial' },
+      { label: 'Win', state: 'bare' },
+    ],
+    accent: 'text-slate-600 dark:text-slate-300',
+    desc: 'Enters dormancy during winter — foliage dies back but the plant survives underground.',
+  },
+  dry_season_deciduous: {
+    seasons: [
+      { label: 'Wet', state: 'full' },
+      { label: 'Wet', state: 'full' },
+      { label: 'Dry', state: 'partial' },
+      { label: 'Dry', state: 'bare' },
+    ],
+    accent: 'text-orange-700 dark:text-orange-300',
+    desc: 'Drops its leaves during the dry season to conserve water, regrows when rains return.',
+  },
+}
+
+const seasonStateColors: Record<string, string> = {
+  full: 'bg-emerald-400 dark:bg-emerald-500',
+  partial: 'bg-amber-300 dark:bg-amber-500',
+  bare: 'bg-stone-200 dark:bg-stone-700',
+  dormant: 'bg-yellow-700/60 dark:bg-yellow-600/40',
+}
+
+type LifeCycleCardProps = {
+  lifeCycle: string[] | undefined
+  averageLifespan: string[] | undefined
+  foliagePersistence: string[] | undefined
+  t: (key: string, options?: Record<string, string>) => string
+}
+
+const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespan, foliagePersistence, t }) => {
+  const hasLifeCycle = lifeCycle && lifeCycle.length > 0
+  const hasLifespan = averageLifespan && averageLifespan.length > 0
+  const hasFoliage = foliagePersistence && foliagePersistence.length > 0
+  if (!hasLifeCycle && !hasLifespan && !hasFoliage) return null
+
+  const [expanded, setExpanded] = React.useState<string | null>(null)
+  const toggle = (key: string) => setExpanded(prev => prev === key ? null : key)
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+      <div className="relative space-y-3">
+        {/* Header — matching Living Space / Color Moodboard style */}
+        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+          <Leaf className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">
+            {t('plantInfo:lifeCycleCard.title', { defaultValue: 'Life Cycle & Foliage' })}
+          </span>
+        </div>
+
+        {/* ── Life Cycle — mini timeline per type ── */}
+        {hasLifeCycle && (
+          <div className="space-y-1.5">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+              {t('plantInfo:lifeCycleCard.lifeCycle', { defaultValue: 'Plant Life Cycle' })}
+            </span>
+            <div className="space-y-1.5">
+              {lifeCycle.map(cycle => {
+                const key = lifeCycleEnum.toDb(cycle) || cycle.toLowerCase().replace(/ /g, '_')
+                const data = lifeCycleData[key] || lifeCycleData.perennial
+                const isOpen = expanded === `lc-${key}`
+                return (
+                  <button
+                    key={cycle}
+                    type="button"
+                    onClick={() => toggle(`lc-${key}`)}
+                    className={`w-full text-left rounded-xl border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/40 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/40 dark:bg-stone-800/20 hover:bg-stone-50/70 dark:hover:bg-stone-800/30'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
+                        {lifeCycleEnum.toUi(cycle) || cycle}
+                      </span>
+                      <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    {/* Mini timeline bar */}
+                    <div className="flex gap-0.5 rounded-md overflow-hidden h-2 sm:h-2.5">
+                      {data.stages.map((stage, i) => (
+                        <div key={i} className={`${stage.color} relative group/stage`} style={{ flex: stage.flex }}>
+                          <span className="absolute inset-0 flex items-center justify-center text-[6px] sm:text-[7px] font-semibold text-white/90 leading-none truncate px-0.5">
+                            {stage.label}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    {isOpen && (
+                      <p className="mt-2 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400">
+                        {t(`plantInfo:lifeCycleCard.desc.${key}`, { defaultValue: data.desc })}
+                      </p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ── Average Lifespan ── */}
+        {hasLifespan && (() => {
+          const primary = resolveLifespanKey(averageLifespan[0])
+          const data = primary ? lifespanData[primary] : null
+          if (!data) return null
+          const isOpen = expanded === `ls-${primary}`
+          return (
+            <button
+              type="button"
+              onClick={() => toggle(`ls-${primary}`)}
+              className="w-full text-left space-y-1.5"
+            >
+              <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+                {t('plantInfo:lifeCycleCard.averageLifespan', { defaultValue: 'Average Lifespan' })}
+              </span>
+              <div className={`rounded-xl border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/40 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/40 dark:bg-stone-800/20 hover:bg-stone-50/70 dark:hover:bg-stone-800/30'}`}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className={`text-xs sm:text-sm font-bold ${data.color}`}>
+                    {averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0]}
+                  </span>
+                  <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                </div>
+                {/* Segmented bar */}
+                <div className="flex gap-0.5 h-1.5 rounded-full overflow-hidden">
+                  {[1, 2, 3, 4, 5].map(i => (
+                    <div
+                      key={i}
+                      className={`flex-1 rounded-full transition-colors duration-300 ${
+                        i <= data.level ? data.barColor : 'bg-stone-200/60 dark:bg-stone-700/40'
+                      }`}
+                      style={{ opacity: i <= data.level ? 0.5 + (i / data.level) * 0.5 : 0.4 }}
+                    />
+                  ))}
+                </div>
+                <div className="flex justify-between mt-0.5">
+                  <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-600">&lt;1y</span>
+                  <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-600">50+y</span>
+                </div>
+                {isOpen && (
+                  <p className="mt-1.5 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 border-t border-stone-200/40 dark:border-stone-700/30 pt-1.5">
+                    {t(`plantInfo:lifeCycleCard.desc.lifespan_${primary}`, { defaultValue: data.desc })}
+                  </p>
+                )}
+              </div>
+            </button>
+          )
+        })()}
+
+        {/* ── Foliage Persistence — 4-season state bar ── */}
+        {hasFoliage && (
+          <div className="space-y-1.5">
+            <span className="text-[8px] sm:text-[9px] uppercase tracking-[0.15em] text-stone-400 dark:text-stone-500 font-medium block">
+              {t('plantInfo:lifeCycleCard.foliagePersistence', { defaultValue: 'Foliage Persistence' })}
+            </span>
+            <div className="space-y-1.5">
+              {foliagePersistence.map(foliage => {
+                const key = foliagePersistenceEnum.toDb(foliage) || foliage.toLowerCase().replace(/ /g, '_').replace(/-/g, '_')
+                const data = foliageData[key] || foliageData.evergreen
+                const isOpen = expanded === `fp-${key}`
+                return (
+                  <button
+                    key={foliage}
+                    type="button"
+                    onClick={() => toggle(`fp-${key}`)}
+                    className={`w-full text-left rounded-xl border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/40 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/40 dark:bg-stone-800/20 hover:bg-stone-50/70 dark:hover:bg-stone-800/30'}`}
+                  >
+                    <div className="flex items-center justify-between mb-1.5">
+                      <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
+                        {foliagePersistenceEnum.toUi(foliage) || foliage}
+                      </span>
+                      <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                    </div>
+                    {/* Season state bar */}
+                    <div className="grid grid-cols-4 gap-0.5">
+                      {data.seasons.map((s, i) => (
+                        <div key={i} className="flex flex-col items-center gap-0.5">
+                          <div className={`w-full h-1.5 sm:h-2 rounded-full ${seasonStateColors[s.state]}`} />
+                          <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-500">{s.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {/* Legend */}
+                    <div className="flex gap-2 mt-1">
+                      <div className="flex items-center gap-1">
+                        <div className="h-1 w-1 rounded-full bg-emerald-400 dark:bg-emerald-500" />
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Leaves</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-1 w-1 rounded-full bg-amber-300 dark:bg-amber-500" />
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Partial</span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <div className="h-1 w-1 rounded-full bg-stone-200 dark:bg-stone-700" />
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Bare</span>
+                      </div>
+                    </div>
+                    {isOpen && (
+                      <p className="mt-1.5 text-[9px] sm:text-[10px] leading-relaxed text-stone-500 dark:text-stone-400 border-t border-stone-200/40 dark:border-stone-700/30 pt-1.5">
+                        {t(`plantInfo:lifeCycleCard.desc.foliage_${key}`, { defaultValue: data.desc })}
+                      </p>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+      </div>
+    </section>
+  )
+}
+
+// ── Climate Card ──
+const climateIconMap: Record<string, React.ReactNode> = {
+  polar: <Snowflake className="h-4 w-4 sm:h-5 sm:w-5" />,
+  montane: <Mountain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  oceanic: <CloudRain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  degraded_oceanic: <Wind className="h-4 w-4 sm:h-5 sm:w-5" />,
+  temperate_continental: <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />,
+  mediterranean: <Sun className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_dry: <Flame className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_humid: <Palmtree className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_volcanic: <Mountain className="h-4 w-4 sm:h-5 sm:w-5" />,
+  tropical_cyclonic: <CloudLightning className="h-4 w-4 sm:h-5 sm:w-5" />,
+  humid_insular: <Waves className="h-4 w-4 sm:h-5 sm:w-5" />,
+  subtropical_humid: <Droplets className="h-4 w-4 sm:h-5 sm:w-5" />,
+  equatorial: <TreePalm className="h-4 w-4 sm:h-5 sm:w-5" />,
+  windswept_coastal: <Anchor className="h-4 w-4 sm:h-5 sm:w-5" />,
+}
+
+const ClimateCard: React.FC<{ climate: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ climate, t }) => {
+  if (!climate || climate.length === 0) return null
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(14,165,233,0.10),_transparent_55%)]" />
+      <div className="relative space-y-2">
+        <div className="flex items-center gap-1.5 text-sky-600 dark:text-sky-400">
+          <Thermometer className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">
+            {t('plantInfo:climateCard.title', { defaultValue: 'Climate' })}
+          </span>
+        </div>
+        <div className="grid grid-cols-2 gap-1.5">
+          {climate.map(c => {
+            const dbKey = climateEnum.toDb(c) || c.toLowerCase().replace(/ /g, '_')
+            const icon = climateIconMap[dbKey]
+            return (
+              <div
+                key={c}
+                className="flex items-center gap-2 rounded-xl border border-sky-200/50 dark:border-sky-500/20 bg-sky-50/50 dark:bg-sky-500/5 px-2 py-1.5 sm:px-2.5 sm:py-2"
+              >
+                <div className="text-sky-500 dark:text-sky-400 shrink-0">
+                  {icon || <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />}
+                </div>
+                <span className="text-[10px] sm:text-xs font-semibold text-sky-800 dark:text-sky-200 leading-tight">
+                  {climateEnum.toUi(c) || c}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+// ── Origin Card (SVG world map with pins — same approach as admin dashboard) ──
+const originCountryCoords: Record<string, [number, number]> = {
+  "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
+  Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
+  Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
+  "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
+  Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
+  Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
+  Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
+  "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
+  Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
+  Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
+  "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
+  Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
+  Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
+  Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
+  Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
+  Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
+  Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
+  "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
+  Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
+  "Côte d'Ivoire": [464.0, 385.3], Cameroon: [504.0, 391.0], "Democratic Republic of the Congo": [542.0, 415.0],
+  Angola: [524.0, 446.0], Mozambique: [570.0, 470.0], Zimbabwe: [553.0, 468.0], Uganda: [570.3, 408.6],
+  Rwanda: [565.0, 415.0], "Ivory Coast": [464.0, 385.3], Mali: [475.0, 355.0], "Burkina Faso": [478.0, 368.0],
+  Niger: [500.0, 355.0], Chad: [520.0, 360.0], Sudan: [560.0, 355.0], Libya: [520.0, 320.0],
+  Venezuela: [298.0, 381.0], Ecuador: [265.0, 415.0], Bolivia: [304.0, 465.0], Paraguay: [318.0, 480.0],
+  Uruguay: [326.0, 508.0], "Costa Rica": [237.0, 370.0], Panama: [250.0, 375.0], Guatemala: [220.0, 350.0],
+  Honduras: [230.0, 354.0], "El Salvador": [223.0, 358.0], Nicaragua: [235.0, 362.0], Cuba: [252.0, 330.0],
+  "Dominican Republic": [278.0, 338.0], Jamaica: [261.0, 340.0], "Puerto Rico": [286.0, 338.0],
+  "Trinidad and Tobago": [298.0, 368.0], Haiti: [273.0, 338.0],
+  Iraq: [590.0, 305.0], Iran: [618.0, 308.0], Afghanistan: [644.0, 305.0], Myanmar: [733.0, 348.0],
+  Cambodia: [756.0, 370.0], Laos: [750.0, 348.0], "North Korea": [801.0, 280.0], Mongolia: [740.0, 264.0],
+  Kazakhstan: [645.0, 260.0], Uzbekistan: [635.0, 275.0], Turkmenistan: [625.0, 285.0],
+  Kyrgyzstan: [658.0, 275.0], Tajikistan: [650.0, 285.0], Georgia: [568.0, 275.0], Armenia: [575.0, 280.0],
+  Azerbaijan: [580.0, 278.0], Jordan: [568.0, 318.0], Lebanon: [565.0, 305.0], Syria: [573.0, 298.0],
+  Kuwait: [600.0, 320.0], Bahrain: [607.0, 325.0], Qatar: [610.0, 328.0], Oman: [620.0, 345.0],
+  Yemen: [600.0, 350.0], "Papua New Guinea": [868.0, 430.0], Fiji: [920.0, 465.0],
+  Madagascar: [585.0, 470.0], Mauritius: [605.0, 468.0], Réunion: [600.0, 472.0],
+  "Bosnia and Herzegovina": [521.0, 272.0], Slovenia: [513.0, 264.0], "North Macedonia": [533.0, 275.0],
+  Albania: [529.0, 278.0], Montenegro: [525.0, 274.0], Kosovo: [530.0, 273.0], Moldova: [545.0, 258.0],
+  Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
+}
+
+// Normalize a string for fuzzy country matching: lowercase, strip diacritics, remove extra punctuation
+const normalizeCountryName = (name: string): string =>
+  name
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ô→o, etc.)
+    .toLowerCase()
+    .replace(/[_-]/g, ' ')           // underscores/hyphens → spaces
+    .replace(/\s+/g, ' ')            // collapse whitespace
+    .trim()
+
+// Pre-build a normalized lookup from the coordinates map
+const normalizedCoordsMap: Array<{ normalized: string; coords: [number, number] }> =
+  Object.entries(originCountryCoords).map(([country, coords]) => ({
+    normalized: normalizeCountryName(country),
+    coords,
+  }))
+
+// Try to match origin strings to country coords — handles formatting differences
+const matchOriginToCoords = (origin: string): [number, number] | null => {
+  const trimmed = origin.trim()
+  // 1. Direct match (fast path)
+  if (originCountryCoords[trimmed]) return originCountryCoords[trimmed]
+  // 2. Remove parenthetical region info: "China (northwest)" → "China"
+  const base = trimmed.replace(/\s*\(.*?\)\s*$/, '').trim()
+  if (originCountryCoords[base]) return originCountryCoords[base]
+  // 3. Normalized match (handles case, diacritics, hyphens, underscores)
+  const norm = normalizeCountryName(base)
+  for (const entry of normalizedCoordsMap) {
+    if (entry.normalized === norm) return entry.coords
+  }
+  // 4. Partial/contains match (e.g. "south africa" in "republic of south africa")
+  for (const entry of normalizedCoordsMap) {
+    if (entry.normalized.includes(norm) || norm.includes(entry.normalized)) {
+      return entry.coords
+    }
+  }
+  return null
+}
+
+const ORIGIN_MAP_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg'
+
+const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ origin, originEnglish, t }) => {
+  if (!origin || origin.length === 0) return null
+
+  // Always use English names for map coordinate matching
+  const mapOrigins = originEnglish && originEnglish.length > 0 ? originEnglish : origin
+  const pinColor = '#10b981' // emerald-500
+
+  return (
+    <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex flex-col h-full">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
+      <div className="relative flex flex-col h-full gap-2">
+        {/* Header */}
+        <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+          <span className="relative flex items-center justify-center">
+            <Globe2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+            <MapPin className="absolute -bottom-0.5 -right-0.5 h-2 w-2 sm:h-2.5 sm:w-2.5" />
+          </span>
+          <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">
+            {t('plantInfo:originCard.title', { defaultValue: 'Origin' })}
+          </span>
+        </div>
+
+        {/* SVG World Map with origin pins */}
+        <div
+          className="relative w-full flex-1 min-h-[120px] rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-900/50 border border-stone-200/50 dark:border-stone-700/30"
+          style={{ aspectRatio: '820.44 / 501.3' }}
+        >
+          <svg
+            className="absolute inset-0 w-full h-full"
+            viewBox="103.51 165.78 820.44 501.3"
+            preserveAspectRatio="xMidYMid meet"
+            role="img"
+            aria-label="World map showing plant origins"
+          >
+            {/* World map background — light mode */}
+            <image
+              href={ORIGIN_MAP_URL}
+              x="103.51" y="165.78" width="820.44" height="501.3"
+              opacity={0.15}
+              preserveAspectRatio="xMidYMid meet"
+              className="dark:opacity-0"
+            />
+            {/* World map background — dark mode (inverted) */}
+            <image
+              href={ORIGIN_MAP_URL}
+              x="103.51" y="165.78" width="820.44" height="501.3"
+              opacity={0}
+              preserveAspectRatio="xMidYMid meet"
+              className="dark:opacity-30"
+              style={{ filter: 'invert(1) brightness(0.6)' }}
+            />
+            {/* Origin pins — always use English names for coordinate matching */}
+            {mapOrigins.map((o, i) => {
+              const label = typeof o === 'string' ? o.trim() : ''
+              if (!label) return null
+              const coords = matchOriginToCoords(label)
+              if (!coords) return null
+              return (
+                <g key={`${label}-${i}`}>
+                  {/* Pulse ring */}
+                  <circle cx={coords[0]} cy={coords[1]} r={12} fill={pinColor} opacity={0.15}>
+                    <animate attributeName="r" values="8;14;8" dur="3s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" values="0.2;0.05;0.2" dur="3s" repeatCount="indefinite" />
+                  </circle>
+                  {/* Glow */}
+                  <circle cx={coords[0]} cy={coords[1]} r={7} fill={pinColor} opacity={0.25} />
+                  {/* Pin dot */}
+                  <circle cx={coords[0]} cy={coords[1]} r={4} fill={pinColor} opacity={0.95} stroke="white" strokeWidth={1.5} />
+                </g>
+              )
+            })}
+          </svg>
+        </div>
+
+        {/* Origin tags below map */}
+        <div className="flex flex-wrap gap-1.5">
+          {origin.map((o, i) => {
+            const label = typeof o === 'string' ? o.trim() : ''
+            if (!label) return null
+            return (
+              <div
+                key={`tag-${label}-${i}`}
+                className="flex items-center gap-1.5 rounded-lg border border-emerald-300/50 dark:border-emerald-500/25 bg-emerald-50/70 dark:bg-emerald-500/10 px-2 py-1 sm:px-2.5 sm:py-1.5"
+              >
+                <MapPin className="h-2.5 w-2.5 sm:h-3 sm:w-3 text-emerald-500 dark:text-emerald-400 shrink-0" />
+                <span className="text-[10px] sm:text-xs font-semibold text-emerald-800 dark:text-emerald-200">{label}</span>
+              </div>
+            )
+          })}
         </div>
       </div>
     </section>

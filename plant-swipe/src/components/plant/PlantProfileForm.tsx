@@ -253,7 +253,18 @@ const CompanionSelector: React.FC<{
 
   // Fetch plant names (and images) for companion IDs - use translations for non-English
   // Batches queries to avoid Supabase URL length limits with large ID arrays
+  // Also auto-removes invalid/orphaned entries (non-UUID strings or IDs that don't exist in DB)
   React.useEffect(() => {
+    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+    // First: strip out non-UUID entries immediately (e.g. text names from old AI fills)
+    const invalidIds = value.filter((id) => !UUID_RE.test(id))
+    if (invalidIds.length > 0) {
+      console.warn('[CompanionSelector] Removing non-UUID entries:', invalidIds)
+      onChange(value.filter((id) => UUID_RE.test(id)))
+      return
+    }
+
     const missing = value.filter((id) => !companions.find((c) => c.id === id))
     if (!missing.length) return
     let cancelled = false
@@ -322,6 +333,14 @@ const CompanionSelector: React.FC<{
 
         if (cancelled) return
 
+        // Detect orphaned UUIDs — IDs that look like valid UUIDs but don't match any plant in DB
+        const resolvedIds = new Set(plantNames.map(p => p.id))
+        const orphanedIds = missing.filter(id => !resolvedIds.has(id))
+        if (orphanedIds.length > 0) {
+          console.warn('[CompanionSelector] Removing orphaned plant IDs (not found in DB):', orphanedIds)
+          onChange(value.filter(id => !orphanedIds.includes(id)))
+        }
+
         if (plantNames.length > 0) {
           // Batch image queries too
           const imageMap = new Map<string, string>()
@@ -332,8 +351,8 @@ const CompanionSelector: React.FC<{
             const { data: imagesData } = await supabase
               .from('plant_images')
               .select('plant_id, link')
-              .in('plant_id', batch)
               .eq('use', 'primary')
+              .in('plant_id', batch)
             if (imagesData) {
               imagesData.forEach((img) => {
                 if (img.plant_id && img.link) imageMap.set(img.plant_id, img.link)
@@ -1007,14 +1026,14 @@ const baseFields: FieldConfig[] = [
 // Section 2: Identity (15 items)
 // ============================================================================
 const identityFields: FieldConfig[] = [
-  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Rhizomes","Bulbs","Stems","Leaves","Flowers","Fruits","Spores"] },
+  { key: "plantPart", label: "Plant Part(s)", description: "Main anatomical parts of the plant", type: "multiselect", options: ["Roots","Rhizomes","Bulbs","Tubers","Stems","Leaves","Flowers","Fruits","Spores","Seeds","Bark","Wood"] },
   { key: "habitat", label: "Habitat", description: "Natural habitat type(s)", type: "multiselect", options: ["Aquatic","Hygrophytic","Terrestrial","Xerophytic","Halophytic","Epiphytic","Parasitic"] },
   { key: "origin", label: "Country of Origin", description: "Countries or regions of origin", type: "tags" },
   { key: "climate", label: "Climate", description: "Climate types where the plant naturally grows", type: "multiselect", options: ["Polar","Montane","Oceanic","Degraded Oceanic","Temperate Continental","Mediterranean","Tropical Dry","Tropical Humid","Tropical Volcanic","Tropical Cyclonic","Humid Insular","Subtropical Humid","Equatorial","Windswept Coastal"] },
   { key: "season", label: "Season", description: "Active/peak seasons", type: "multiselect", options: ["Spring","Summer","Autumn","Winter"] },
   { key: "utility", label: "Utility / Use", description: "Practical or ornamental roles", type: "multiselect", options: ["Edible","Ornamental","Aromatic","Medicinal","Fragrant","Cereal","Spice","Infusion"] },
   { key: "vegetable", label: "Vegetable?", description: "Is this plant a vegetable?", type: "boolean", gatedBy: "utility:edible" },
-  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Flower","Fruit","Seed","Leaf","Stem","Bulb","Rhizome","Bark","Wood"], gatedBy: "utility:edible" },
+  { key: "ediblePart", label: "Edible Part(s)", description: "Which parts are edible (if applicable)", type: "multiselect", options: ["Root","Rhizome","Bulb","Tuber","Stem","Leaf","Flower","Fruit","Spore","Seed","Bark","Wood"], gatedBy: "utility:edible" },
   { key: "thorny", label: "Thorny?", description: "Does the plant have thorns or spines?", type: "boolean" },
   { key: "lifeCycle", label: "Life Cycle", description: "Plant life cycle type(s)", type: "multiselect", options: ["Annual","Biennial","Perennial","Succulent Perennial","Monocarpic","Short Cycle","Ephemeral"] },
   { key: "averageLifespan", label: "Average Lifespan", description: "Expected lifespan range", type: "multiselect", options: ["Less than 1 year","2 years","3–10 years","10–50 years","50+ years"] },
@@ -1103,7 +1122,7 @@ const dangerFields: FieldConfig[] = [
 // Section 6: Ecology & Biodiversity
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
-  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated"] },
+  { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
   { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
   { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },

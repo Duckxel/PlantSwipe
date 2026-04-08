@@ -104,7 +104,10 @@ export default defineConfig({
     }),
   ],
   envPrefix: ['VITE_'],
-  resolve: { alias: { '@': path.resolve(__dirname, 'src') } },
+  resolve: { alias: {
+    '@': path.resolve(__dirname, 'src'),
+    '@events': path.resolve(__dirname, 'events'),
+  } },
   build: {
     // Disable modulepreload injection to avoid "preloaded but not used" warnings
     // for lazy-loaded route chunks that aren't needed on the current page

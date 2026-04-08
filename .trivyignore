@@ -1,0 +1,6 @@
+# path-to-regexp 0.1.12 (transitive dep of Express 4.x)
+# Express hardcodes ~0.1.12 and 0.1.13 does not exist.
+# The DoS only affects user-supplied route patterns, which Express
+# does not expose — routes are defined at build time by developers.
+# Real fix requires upgrading to Express 5.x (breaking change).
+CVE-2026-4867

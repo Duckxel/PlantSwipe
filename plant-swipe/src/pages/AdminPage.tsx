@@ -15,6 +15,7 @@ import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel"
 import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPanel";
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
+import { AdminEventsPanel } from "@/components/admin/AdminEventsPanel";
 import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
@@ -130,7 +131,7 @@ import {
 import { processAllPlantRequests, aiFieldOrder as aiPrefillFieldOrder } from "@/lib/aiPrefillService";
 import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
-import { Languages } from "lucide-react";
+import { Languages, Settings, GraduationCap, ListChecks } from "lucide-react";
 import { 
   buildCategoryProgress, 
   createEmptyCategoryProgress, 
@@ -260,6 +261,7 @@ type AdminTab =
   | "upload"
   | "notifications"
   | "emails"
+  | "events"
   | "admin_logs";
 
 type ListedMember = {
@@ -2713,7 +2715,7 @@ export const AdminPage: React.FC = () => {
   );
 
   const completePlantRequest = React.useCallback(
-    async (id: string) => {
+    async (id: string, plantName: string) => {
       if (!id || completingRequestId) return;
       if (!user?.id) {
         setPlantRequestsError("You must be signed in to complete requests.");
@@ -2722,6 +2724,24 @@ export const AdminPage: React.FC = () => {
       setCompletingRequestId(id);
       setPlantRequestsError(null);
       try {
+        // Notify requesting users BEFORE deleting (delete cascades plant_request_users)
+        try {
+          const session = (await supabase.auth.getSession()).data.session
+          if (session?.access_token) {
+            await fetch('/api/admin/notify-plant-requesters', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session.access_token}`,
+              },
+              credentials: 'same-origin',
+              body: JSON.stringify({ requestId: id, plantName }),
+            })
+          }
+        } catch (notifyErr) {
+          console.warn('[completePlantRequest] Failed to notify requesters:', notifyErr)
+        }
+
         // Delete the request (cascade will also delete related plant_request_users entries)
         const { error } = await supabase
           .from("requested_plants")
@@ -2739,6 +2759,28 @@ export const AdminPage: React.FC = () => {
       }
     },
     [completingRequestId, loadPlantRequests, user?.id],
+  );
+
+  const dismissPlantRequest = React.useCallback(
+    async (id: string) => {
+      if (!id || completingRequestId) return;
+      setCompletingRequestId(id);
+      setPlantRequestsError(null);
+      try {
+        const { error } = await supabase
+          .from("requested_plants")
+          .delete()
+          .eq("id", id);
+        if (error) throw new Error(error.message);
+        await loadPlantRequests({ initial: false });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        setPlantRequestsError(msg);
+      } finally {
+        setCompletingRequestId(null);
+      }
+    },
+    [completingRequestId, loadPlantRequests],
   );
 
   const handleOpenCreatePlantDialog = React.useCallback(
@@ -3730,6 +3772,7 @@ export const AdminPage: React.FC = () => {
       try {
         const ids = Array.from(selectedPlantIds);
         const dbStatus = normalizedStatusToDb[newStatus] ?? newStatus;
+        const failedIds: string[] = [];
         // Update in batches of 50 to avoid URL length issues
         const batchSize = 50;
         for (let i = 0; i < ids.length; i += batchSize) {
@@ -3738,16 +3781,35 @@ export const AdminPage: React.FC = () => {
             .from('plants')
             .update({ status: dbStatus })
             .in('id', batch);
-          if (error) throw new Error(error.message);
+          if (error) {
+            // Batch failed (likely due to constraint violations on some rows).
+            // Fall back to updating each plant individually so valid ones still succeed.
+            for (const id of batch) {
+              const { error: singleError } = await supabase
+                .from('plants')
+                .update({ status: dbStatus })
+                .eq('id', id);
+              if (singleError) {
+                failedIds.push(id);
+              }
+            }
+          }
         }
-        // Update local state
+        // Update local state for successfully updated plants
+        const failedSet = new Set(failedIds);
+        const successIds = new Set(ids.filter((id) => !failedSet.has(id)));
         setPlantDashboardRows((prev) =>
           prev.map((p) =>
-            selectedPlantIds.has(p.id) ? { ...p, status: newStatus } : p
+            successIds.has(p.id) ? { ...p, status: newStatus } : p
           )
         );
         setSelectedPlantIds(new Set());
         setBulkStatusDialogOpen(false);
+        if (failedIds.length > 0) {
+          setPlantDashboardError(
+            `${successIds.size} plant(s) updated. ${failedIds.length} plant(s) failed due to invalid data (check sowing_method values).`
+          );
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : 'Failed to update status';
         setPlantDashboardError(message);
@@ -5308,6 +5370,7 @@ export const AdminPage: React.FC = () => {
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
+    { key: "events", label: "Events", Icon: Calendar, path: "/admin/events", adminOnly: true },
     { key: "admin_logs", label: "Advanced", Icon: ScrollText, path: "/admin/advanced", adminOnly: true },
   ];
   
@@ -5326,6 +5389,7 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
+    if (currentPath.includes("/admin/events")) return "events";
     if (currentPath.includes("/admin/advanced")) return "admin_logs";
     return "overview";
   }, [currentPath]);
@@ -6161,6 +6225,21 @@ export const AdminPage: React.FC = () => {
           effectiveRoles.push(USER_ROLES.ADMIN);
         }
         setMemberRoles(effectiveRoles);
+        // Fetch onboarding status fields (may not exist yet — best effort)
+        if (data?.user?.id) {
+          try {
+            const { data: onb } = await supabase.from('profiles').select('setup_completed, email_verified, tutorial_completed').eq('id', data.user.id).maybeSingle();
+            const actionIds = ['create_garden', 'add_plant', 'add_friend', 'complete_profile', 'add_bookmark'];
+            const { data: actionRows } = await supabase.from('user_action_status').select('action_id, completed_at, skipped_at').eq('user_id', data.user.id).in('action_id', [...actionIds, '__all_done_dismissed']);
+            const doneActions = actionRows ? actionRows.filter(r => actionIds.includes(r.action_id) && (r.completed_at != null || r.skipped_at != null)).length : 0;
+            const allDoneDismissed = actionRows ? actionRows.some(r => r.action_id === '__all_done_dismissed' && r.completed_at != null) : false;
+            const allActionsComplete = allDoneDismissed || doneActions >= actionIds.length;
+            const completedActions = allActionsComplete ? actionIds.length : doneActions;
+            if (onb) {
+              setMemberData(prev => prev ? { ...prev, onboarding: { setupCompleted: onb.setup_completed ?? false, emailVerified: onb.email_verified ?? false, tutorialCompleted: onb.tutorial_completed ?? false, actionsCompleted: completedActions, actionsTotal: actionIds.length, allActionsComplete } } : prev);
+            }
+          } catch {}
+        }
         // Log lookup success (UI)
         try {
           const headers2: Record<string, string> = {
@@ -10366,7 +10445,7 @@ export const AdminPage: React.FC = () => {
                                           variant="outline"
                                           className="rounded-2xl"
                                           onClick={() =>
-                                            completePlantRequest(req.id)
+                                            completePlantRequest(req.id, req.plant_name)
                                           }
                                           disabled={
                                             completingRequestId === req.id
@@ -10375,6 +10454,16 @@ export const AdminPage: React.FC = () => {
                                           {completingRequestId === req.id
                                             ? "Completing..."
                                             : "Complete"}
+                                        </Button>
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-8 w-8 rounded-full text-stone-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-950/30"
+                                          onClick={() => dismissPlantRequest(req.id)}
+                                          disabled={completingRequestId === req.id}
+                                          title="Delete request without notifying"
+                                        >
+                                          <X className="h-4 w-4" />
                                         </Button>
                                       </div>
                                     </div>
@@ -10927,6 +11016,9 @@ export const AdminPage: React.FC = () => {
                     {/* Emails Tab */}
                     {activeTab === "emails" && <AdminEmailsPanel />}
 
+                    {/* Events Tab */}
+                    {activeTab === "events" && <AdminEventsPanel />}
+
                   {/* Advanced Tab */}
                   {activeTab === "admin_logs" && <AdminAdvancedPanel />}
 
@@ -11277,6 +11369,26 @@ export const AdminPage: React.FC = () => {
                                           </Badge>
                                         )}
                                       </div>
+                                      {/* Onboarding status icons — own row */}
+                                      {(memberData as any).onboarding && (() => {
+                                        const ob = (memberData as any).onboarding;
+                                        return (
+                                          <div className="flex items-center gap-1.5 mt-1.5">
+                                            <span title={ob.setupCompleted ? "Setup completed" : "Setup not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.setupCompleted ? "bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <Settings className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.emailVerified ? "Email verified" : "Email not verified"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.emailVerified ? "bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <Mail className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.tutorialCompleted ? "Tutorial completed" : "Tutorial not completed"} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.tutorialCompleted ? "bg-purple-100 dark:bg-purple-900/40 text-purple-600 dark:text-purple-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <GraduationCap className="h-3.5 w-3.5" />
+                                            </span>
+                                            <span title={ob.allActionsComplete ? `Profile actions: ${ob.actionsCompleted}/${ob.actionsTotal} completed` : `Profile actions: ${ob.actionsCompleted ?? 0}/${ob.actionsTotal ?? 5} completed`} className={cn("inline-flex items-center justify-center h-6 w-6 rounded-full text-xs cursor-default transition-colors", ob.allActionsComplete ? "bg-amber-100 dark:bg-amber-900/40 text-amber-600 dark:text-amber-400" : "bg-stone-100 dark:bg-stone-800 text-stone-400 dark:text-stone-600")}>
+                                              <ListChecks className="h-3.5 w-3.5" />
+                                            </span>
+                                          </div>
+                                        );
+                                      })()}
                                     </div>
                                   </div>
                                   <div className="flex items-center gap-2">

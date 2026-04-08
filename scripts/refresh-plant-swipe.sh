@@ -752,22 +752,8 @@ if [[ -n "$CURRENT_LOCK_HASH" && "$CURRENT_LOCK_HASH" == "$CACHED_LOCK_HASH" && 
 fi
 
 if [[ "$SKIP_BUN_INSTALL" != "true" ]]; then
-  # Remove stale nested node_modules that cause duplicate-type TS errors
-  # (e.g. @tiptap/starter-kit bundling its own @tiptap/core).
-  # Bun won't clean these up on its own if they already exist on disk.
-  if [[ -d "$NODE_DIR/node_modules" ]]; then
-    log "Cleaning nested node_modules to prevent duplicate packages…"
-    find "$NODE_DIR/node_modules" -mindepth 3 -maxdepth 4 -name node_modules -type d -exec rm -rf {} + 2>/dev/null || true
-  fi
-
-  # Update all @tiptap/* packages to their latest compatible versions so they
-  # all share the same @tiptap/core (prevents duplicate-type TS build errors).
-  TIPTAP_PKGS="$(cd "$NODE_DIR" && grep -oP '"@tiptap/[^"]+":' package.json | tr -d '":' | sort -u | tr '\n' ' ')"
-  if [[ -n "$TIPTAP_PKGS" ]]; then
-    log "Updating @tiptap packages to latest compatible versions…"
-    (cd "$NODE_DIR" && "$BUN_BIN" update $TIPTAP_PKGS 2>&1) || log "[WARN] bun update @tiptap/* returned non-zero (continuing anyway)"
-  fi
-
+  # NOTE: Aggressive cleanup (nested node_modules removal, @tiptap updates)
+  # lives in setup.sh only. The refresh script just does a plain install.
   log "Running bun install…"
   # Always run bun as the repo owner to keep ownership consistent
   if [[ "$REPO_OWNER" != "" ]]; then
