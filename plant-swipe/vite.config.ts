@@ -50,6 +50,10 @@ const appBase = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
 const _scope = appBase === '/' ? '/' : appBase
 const disablePwaFlag = String(process.env.VITE_DISABLE_PWA || process.env.DISABLE_PWA || process.env.PWA_DISABLED || '').trim().toLowerCase()
 const isPwaDisabled = disablePwaFlag === 'true' || disablePwaFlag === '1' || disablePwaFlag === 'yes' || disablePwaFlag === 'on' || disablePwaFlag === 'disable' || disablePwaFlag === 'disabled'
+/** Set by `build:web:native` / `build:cap` — store WebView loads bundled files; no service worker (avoids stale cross-release caches). */
+const nativeCapacitorWebBuildFlag = String(process.env.VITE_APP_NATIVE_BUILD || '').trim().toLowerCase()
+const isNativeCapacitorWebBuild =
+  nativeCapacitorWebBuildFlag === 'true' || nativeCapacitorWebBuildFlag === '1' || nativeCapacitorWebBuildFlag === 'yes'
 
 export default defineConfig({
   base: appBase,
@@ -57,11 +61,14 @@ export default defineConfig({
     // Inject build info for runtime logging
     'import.meta.env.VITE_APP_VERSION': JSON.stringify(getAppVersion()),
     'import.meta.env.VITE_COMMIT_SHA': JSON.stringify(getGitCommitSha()),
+    // "1" when built via build:web:native / build:cap — client skips SW maintenance and enables native recovery UX
+    'import.meta.env.VITE_APP_NATIVE_BUILD': JSON.stringify(isNativeCapacitorWebBuild ? '1' : ''),
   },
   plugins: [
     react(),
       VitePWA({
-        disable: isPwaDisabled,
+        // Browser PWA: full Workbox SW. Capacitor store builds: disable (assets are in the binary; SW risks stale caches and iOS WKWebView quirks).
+        disable: isPwaDisabled || isNativeCapacitorWebBuild,
         base: appBase,
         registerType: 'autoUpdate',
         injectRegister: null,

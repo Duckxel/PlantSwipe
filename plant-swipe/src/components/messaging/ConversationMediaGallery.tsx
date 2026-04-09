@@ -135,10 +135,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
       // Show success feedback
       setDownloadSuccess(image.id)
       
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
-      }
+      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(50))
       
       setTimeout(() => setDownloadSuccess(null), 2000)
     } catch (err) {
@@ -154,38 +151,25 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
     }
   }
   
-  // Share image (mobile native share)
+  // Share image (Web Share / native sheet via platform layer)
   const shareImage = async (image: ConversationImage) => {
-    if (!navigator.share) return
-    
+    const { platformShare, isPlatformShareSupported } = await import('@/platform/share')
+    if (!isPlatformShareSupported()) return
     try {
-      // Try to share the image directly
       const response = await fetch(image.imageUrl)
       const blob = await response.blob()
-      const file = new File([blob], 'shared-image.jpg', { type: 'image/jpeg' })
-      
-      await navigator.share({
-        files: [file],
-        title: image.caption || t('messages.sharedImage', { defaultValue: 'Shared image' })
-      })
-      
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
+      const file = new File([blob], 'shared-image.jpg', { type: blob.type || 'image/jpeg' })
+      const title = image.caption || t('messages.sharedImage', { defaultValue: 'Shared image' })
+      let result = await platformShare({ files: [file], title })
+      if (result === 'error' || result === 'unavailable') {
+        result = await platformShare({ url: image.imageUrl, title })
       }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } catch (err: any) {
-      // If file sharing fails, try URL sharing
-      if (err.name !== 'AbortError') {
-        try {
-          await navigator.share({
-            url: image.imageUrl,
-            title: image.caption || t('messages.sharedImage', { defaultValue: 'Shared image' })
-          })
-        } catch {
-          // User cancelled or share failed
-        }
+      if (result === 'shared') {
+        const { platformHapticTap } = await import('@/platform/haptics')
+        void platformHapticTap(50)
       }
+    } catch {
+      /* ignore */
     }
   }
   
@@ -236,10 +220,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
         goToNext()
       }
       
-      // Haptic feedback
-      if (navigator.vibrate) {
-        navigator.vibrate(10)
-      }
+      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(10))
     }
     
     touchStartRef.current = null
@@ -253,7 +234,16 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
   }
   
   const selectedImage = selectedIndex !== null ? images[selectedIndex] : null
-  const canShare = typeof navigator !== 'undefined' && !!navigator.share
+  const [canShare, setCanShare] = React.useState(false)
+  React.useEffect(() => {
+    let cancelled = false
+    void import('@/platform/share').then(({ isPlatformShareSupported }) => {
+      if (!cancelled) setCanShare(isPlatformShareSupported())
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
   
   return (
     <div className="fixed inset-0 z-50 flex flex-col bg-white dark:bg-[#0f0f10]">

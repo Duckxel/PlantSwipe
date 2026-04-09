@@ -5,6 +5,8 @@ import {
   removePushSubscription,
   requestNotificationPermission,
 } from '@/lib/pushNotifications'
+import { isPlatformWebPushSupported } from '@/platform/push'
+import { isNativeCapacitor } from '@/platform/runtime'
 
 // Track if we've already attempted auto-enable for this session
 const autoEnableAttempted = new Set<string>()
@@ -36,10 +38,7 @@ const setOptOut = (userId: string, value: boolean) => {
 }
 
 export function usePushSubscription(userId: string | null) {
-  const supported = React.useMemo(() => {
-    if (typeof window === 'undefined') return false
-    return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
-  }, [])
+  const supported = React.useMemo(() => isPlatformWebPushSupported(), [])
   const [permission, setPermission] = React.useState<NotificationPermission | 'unsupported'>(() => {
     if (typeof Notification === 'undefined') return 'unsupported'
     return Notification.permission
@@ -154,6 +153,7 @@ export function usePushSubscription(userId: string | null) {
 
   // Re-subscribe after a service worker update becomes active
   React.useEffect(() => {
+    if (isNativeCapacitor()) return
     if (!supported || !userId || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     let active = true
     let registration: ServiceWorkerRegistration | null = null

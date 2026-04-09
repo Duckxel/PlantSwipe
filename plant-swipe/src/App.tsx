@@ -10,6 +10,13 @@ import { BrowserRouter, Routes, Route, useLocation, useNavigate, useNavigationTy
 import { I18nextProvider } from 'react-i18next'
 import i18n, { DEFAULT_LANGUAGE, SUPPORTED_LANGUAGES, getDomainDefaultLanguage } from '@/lib/i18n'
 import { getLanguageFromPath, getSavedLanguagePreference, detectBrowserLanguage, addLanguagePrefix } from '@/lib/i18nRouting'
+import { registerCapacitorDeepLinks } from '@/lib/capDeepLinks'
+import {
+  patchIosInteractivePopGesture,
+  registerCapacitorAndroidBackButton,
+  registerCapacitorBackNavigation,
+  registerNativeOverlayBackHandler,
+} from '@/lib/capNativeBridge'
 
 function AppShell() {
   const location = useLocation()
@@ -114,6 +121,23 @@ function AppShell() {
 }
 
 // Language-aware route wrapper
+/** Registers universal-link / custom-scheme opens with Capacitor App (no UI). */
+function CapacitorLinkBridge() {
+  const navigate = useNavigate()
+  React.useEffect(() => {
+    registerCapacitorDeepLinks(navigate)
+    registerCapacitorAndroidBackButton()
+    const unNav = registerCapacitorBackNavigation(navigate)
+    const unOverlay = registerNativeOverlayBackHandler()
+    patchIosInteractivePopGesture()
+    return () => {
+      unNav()
+      unOverlay()
+    }
+  }, [navigate])
+  return null
+}
+
 function LanguageRoutes() {
   return (
     <Routes>
@@ -152,6 +176,7 @@ export default function App() {
           <TutorialProvider>
             <EggHuntProvider>
               <BrowserRouter basename={routerBase}>
+                <CapacitorLinkBridge />
                 <LanguageRoutes />
               </BrowserRouter>
               <EggHuntCounter />

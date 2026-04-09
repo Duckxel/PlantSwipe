@@ -1,0 +1,24 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "TEAMID.app.aphylia",
+        "paths": [
+          "/",
+          "/password-change",
+          "/verify-email",
+          "/setup",
+          "/forgot-password",
+          "/email-verification",
+          "/*"
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": [
+      "TEAMID.app.aphylia"
+    ]
+  }
+}

@@ -315,6 +315,33 @@ do $$ begin
     with check (user_id = (select auth.uid()));
 end $$;
 
+-- Native (Capacitor) FCM device tokens; optional server delivery via FCM_LEGACY_SERVER_KEY
+create table if not exists public.user_fcm_tokens (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  token text not null,
+  platform text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (token)
+);
+create unique index if not exists user_fcm_tokens_token_idx on public.user_fcm_tokens (token);
+create index if not exists user_fcm_tokens_user_idx on public.user_fcm_tokens (user_id);
+grant select, insert, update, delete on public.user_fcm_tokens to authenticated;
+alter table public.user_fcm_tokens enable row level security;
+do $$ begin
+  if exists (
+    select 1 from pg_policies
+    where schemaname='public' and tablename='user_fcm_tokens' and policyname='user_fcm_tokens_self'
+  ) then
+    drop policy user_fcm_tokens_self on public.user_fcm_tokens;
+  end if;
+  create policy user_fcm_tokens_self on public.user_fcm_tokens
+    for all to authenticated
+    using (user_id = (select auth.uid()))
+    with check (user_id = (select auth.uid()));
+end $$;
+
 -- Optimization: server-side task occurrence generation (fast path for dashboard)
 CREATE OR REPLACE FUNCTION public.ensure_gardens_tasks_occurrences(
   _garden_ids uuid[],

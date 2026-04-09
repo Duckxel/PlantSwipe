@@ -85,20 +85,10 @@ export const BookmarkPage = () => {
   }
 
   const handleShare = async () => {
-    const url = window.location.href
-    if (navigator.share) {
-      try { 
-        await navigator.share({ title: bookmark?.name, url }) 
-      } catch {
-        // User cancelled sharing
-      }
-    } else {
-      try { 
-        await navigator.clipboard.writeText(url)
-        alert('Link copied!') 
-      } catch {
-        // Clipboard access denied
-      }
+    const { platformShare } = await import('@/platform/share')
+    const result = await platformShare({ title: bookmark?.name, url: window.location.href })
+    if (result === 'copied') {
+      alert('Link copied!')
     }
   }
 

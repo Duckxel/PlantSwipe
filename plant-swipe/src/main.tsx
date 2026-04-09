@@ -9,6 +9,7 @@ import './lib/i18n' // Initialize i18n before App
 import './index.scss'
 import App from './App.tsx'
 import { initAccentFromStorage } from '@/lib/accent'
+import { Capacitor } from '@capacitor/core'
 
 // Apply Google Translate DOM conflict fix before React renders
 // This prevents crashes when users use browser translation extensions
@@ -71,8 +72,19 @@ try {
   /* ignore overlay init errors */
 }
 
+if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+  try {
+    document.documentElement.classList.add('capacitor-native')
+    document.body?.classList.add('capacitor-native')
+  } catch {
+    /* ignore */
+  }
+}
+
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
+    // Capacitor store builds omit the SW; probing registration is pointless and can touch stale state.
+    if (import.meta.env.VITE_APP_NATIVE_BUILD === '1') return
     navigator.serviceWorker
       .getRegistration()
       .then((registration) => registration?.update().catch(() => {}))

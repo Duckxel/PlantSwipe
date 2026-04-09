@@ -529,23 +529,14 @@ export default function PublicProfilePage() {
   const handleShare = React.useCallback(async () => {
     if (typeof window === 'undefined') return
     const shareUrl = window.location.href
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: preferredDisplayName || t('profile.member'),
-          url: shareUrl,
-        })
-        setShareStatus('copied')
-      } else if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(shareUrl)
-        setShareStatus('copied')
-      } else {
-        setShareStatus('error')
-      }
-    } catch {
-      // User cancelled or error
-      setShareStatus('error')
-    }
+    const { platformShare } = await import('@/platform/share')
+    const result = await platformShare({
+      title: preferredDisplayName || t('profile.member'),
+      url: shareUrl,
+    })
+    if (result === 'shared' || result === 'copied') setShareStatus('copied')
+    else if (result === 'cancelled') setShareStatus('idle')
+    else setShareStatus('error')
     if (shareTimeoutRef.current) clearTimeout(shareTimeoutRef.current)
     shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500)
   }, [preferredDisplayName, t])

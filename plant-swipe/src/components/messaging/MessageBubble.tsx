@@ -100,10 +100,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleTouchStart = () => {
     longPressTimer.current = setTimeout(() => {
       setShowReactions(true)
-      // Haptic feedback if available
-      if (navigator.vibrate) {
-        navigator.vibrate(50)
-      }
+      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(50))
     }, 500)
   }
   

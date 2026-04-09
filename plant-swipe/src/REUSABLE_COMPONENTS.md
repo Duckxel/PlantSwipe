@@ -14,6 +14,7 @@
 5. [Validation Utilities](#validation-utilities)
 6. [Layout Components](#layout-components)
 7. [Usage Patterns](#usage-patterns)
+8. [Platform layer (web + native)](#platform-layer-web--native)
 
 ---
 
@@ -22,6 +23,26 @@
 This document catalogues all reusable components, hooks, and utilities in the Aphylia codebase. Before building new UI, check here first to avoid duplication and maintain consistency.
 
 **Rule:** If you add, modify, or remove a reusable component, hook, or utility — **update this file**.
+
+---
+
+## Platform layer (web + native)
+
+**Directory:** `src/platform/`
+
+Use this layer from UI for device capabilities so shared web code stays the default path and Capacitor plugins are optional fallbacks.
+
+| Module | Use for | Behavior |
+|--------|---------|----------|
+| `platformShare` / `isPlatformShareSupported` | Share sheet | Web Share API → clipboard (no Capacitor Share plugin) |
+| `platformHapticTap` / `isHapticsAvailable` | Light haptics | `navigator.vibrate` → `@capacitor/haptics` on native |
+| `platformPickCameraPhoto` / `platformGetCameraStream` | Camera | Native: `@capacitor/camera`; web: getUserMedia / file input |
+| `platformGetCameraStream` / `platformEnumerateVideoDevices` | Camera | `getUserMedia` (same UI on web and typical WebViews) |
+| `isPlatformWebPushSupported` | Web push UI | Service worker + PushManager; `false` on Capacitor native until a native push path exists |
+| `platformStorage` | Key/value | `localStorage` / `sessionStorage` (swap for Preferences later if needed) |
+| `isNativeCapacitor` | Runtime check | `Capacitor.isNativePlatform()` |
+
+**Barrel:** `import { … } from '@/platform'` or `@/platform/index`.
 
 ---
 

@@ -1,5 +1,6 @@
 import React from 'react'
-import { supabase, type ProfileRow } from '@/lib/supabaseClient'
+import { supabase, processSupabaseAuthUrl, type ProfileRow } from '@/lib/supabaseClient'
+import { Capacitor } from '@capacitor/core'
 import { applyAccentByKey } from '@/lib/accent'
 import { validateUsername } from '@/lib/username'
 import { validateEmail } from '@/lib/emailValidation'
@@ -224,10 +225,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [profile?.threat_level])
 
   React.useEffect(() => {
+    if (!user?.id || loading || !Capacitor.isNativePlatform()) return
+    void import('@/lib/nativePushRegistration').then((m) => m.registerNativePushForCurrentUser())
+  }, [user?.id, loading])
+
+  React.useEffect(() => {
     ;(async () => {
-      // Before first paint: load session then profile (if any) and only then render
+      // PKCE / magic-link: exchange code from URL before reading session from storage
+      await supabase.auth.initialize().catch(() => {})
+      await processSupabaseAuthUrl()
       await loadSession()
-      // Profile in background to reduce chances of startup stalls
       refreshProfile().catch(() => {})
       setLoading(false)
     })()

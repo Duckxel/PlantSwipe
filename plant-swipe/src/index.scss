@@ -1,12 +1,31 @@
 @use "./styles/_variables.scss";
 @use "./styles/_keyframe-animations.scss";
 
+html.capacitor-native body button,
+html.capacitor-native body [role='button'],
+html.capacitor-native body a,
+html.capacitor-native body input,
+html.capacitor-native body textarea,
+html.capacitor-native body select {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @font-face {
   font-family: "Lavonte";
   src: url("./assets/fonts/Lavonte.ttf") format("truetype");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+}
+
+@layer utilities {
+  /* Used by full-screen sheets (messaging, media) — pad for notch / Dynamic Island */
+  .safe-area-top {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+  .safe-area-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }
 
 @layer base {
@@ -16,6 +35,9 @@
       overflow-y: auto;
       overflow-x: hidden;
       overscroll-behavior-y: auto;
+    /* Remove mobile WebView tap flash (iOS/Android) */
+    -webkit-tap-highlight-color: transparent;
+    tap-highlight-color: transparent;
     font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
     line-height: 1.5;
     font-weight: 400;
@@ -32,11 +54,20 @@
       margin: 0;
       min-width: 320px;
       overscroll-behavior-y: inherit;
+    -webkit-tap-highlight-color: transparent;
+    tap-highlight-color: transparent;
     -webkit-user-select: none;
     -ms-user-select: none;
     user-select: none;
     padding-top: var(--window-controls-overlay-height, 0px);
   }
+
+    /* Mobile: reserve space above fixed bottom nav (nav bar + home indicator) */
+    @media (max-width: 1023px) {
+      body.mobile-nav-mounted {
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+      }
+    }
 
     @media (min-width: 1024px) {
       body.mobile-nav-mounted {

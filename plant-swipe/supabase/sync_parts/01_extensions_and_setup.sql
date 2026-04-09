@@ -152,6 +152,7 @@ do $$ declare
     'notification_automations',
     'user_notifications',
     'user_push_subscriptions',
+    'user_fcm_tokens',
     -- Analytics & AI Advice
     'garden_ai_advice',
     'garden_analytics_snapshots',

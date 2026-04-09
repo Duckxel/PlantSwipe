@@ -14,12 +14,51 @@ const supabaseAnonKey = getEnvAny([
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
 ])
 
+/** Only treat URL as Supabase auth callback (avoids false positives with other #fragments). */
+function isSupabaseAuthCallbackUrl(url: URL, params: Record<string, string>): boolean {
+  if (params.code) return true
+  if (params.access_token && params.refresh_token) return true
+  if (params.error && (params.error_description || params.error_code)) return true
+  if (params.type === 'recovery' || params.type === 'signup') return true
+  const h = url.hash
+  if (h && (h.includes('access_token=') || h.includes('error=') || h.includes('type=recovery'))) {
+    return true
+  }
+  return false
+}
+
+/**
+ * After Supabase consumes auth params from the URL, strip them so refresh/back does not re-run.
+ */
+export async function processSupabaseAuthUrl(): Promise<void> {
+  if (typeof window === 'undefined') return
+  const url = new URL(window.location.href)
+  const hasQueryAuth =
+    url.searchParams.has('code') ||
+    url.searchParams.has('error') ||
+    url.searchParams.has('error_description')
+  const hasHashAuth = url.hash && /access_token=|type=recovery|error=/.test(url.hash)
+  if (!hasQueryAuth && !hasHashAuth) return
+
+  if (hasQueryAuth) {
+    url.searchParams.delete('code')
+    url.searchParams.delete('state')
+    url.searchParams.delete('error')
+    url.searchParams.delete('error_description')
+    url.searchParams.delete('error_code')
+  }
+  if (hasHashAuth) {
+    url.hash = ''
+  }
+  window.history.replaceState(window.history.state, '', url.toString())
+}
+
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,
-    // Enable URL session detection for magic link (forgot password) flows
-    detectSessionInUrl: true,
+    // Email magic links / recovery often use hash fragments; OAuth may use PKCE ?code= — both supported.
+    detectSessionInUrl: (url, params) => isSupabaseAuthCallbackUrl(url, params),
     storageKey: 'plantswipe.auth',
   },
   realtime: {

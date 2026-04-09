@@ -1,0 +1,29 @@
+{
+	"appId": "app.aphylia",
+	"appName": "Aphylia",
+	"webDir": "dist",
+	"version": "5.5.9",
+	"backgroundColor": "#052e16",
+	"android": {
+		"allowMixedContent": false,
+		"backgroundColor": "#052e16"
+	},
+	"ios": {
+		"contentInset": "always",
+		"allowsLinkPreview": false,
+		"backgroundColor": "#052e16",
+		"preferredContentMode": "mobile"
+	},
+	"plugins": {
+		"StatusBar": {
+			"style": "DEFAULT",
+			"backgroundColor": "#052e16"
+		},
+		"Camera": {
+			"presentationStyle": "fullscreen"
+		},
+		"PushNotifications": {
+			"presentationOptions": ["badge", "sound", "alert"]
+		}
+	}
+}

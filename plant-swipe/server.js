@@ -306,6 +306,7 @@ import { zodResponseFormat } from 'openai/helpers/zod'
 import multer from 'multer'
 import sharp from 'sharp'
 import webpush from 'web-push'
+import jwt from 'jsonwebtoken'
 import cron from 'node-cron'
 import helmet from 'helmet'
 import { BetaAnalyticsDataClient } from '@google-analytics/data'
@@ -1395,6 +1396,100 @@ if (vapidPublicKey && vapidPrivateKey) {
   console.warn('[notifications] ✗ VAPID keys not configured — push notifications DISABLED')
   if (!vapidPublicKey) console.warn('[notifications]   Missing: VAPID_PUBLIC_KEY')
   if (!vapidPrivateKey) console.warn('[notifications]   Missing: VAPID_PRIVATE_KEY')
+}
+
+/** FCM legacy HTTP API (server key) for Capacitor native tokens; optional. See https://firebase.google.com/docs/cloud-messaging/http-server-ref */
+const fcmLegacyServerKey =
+  process.env.FCM_LEGACY_SERVER_KEY || process.env.FIREBASE_SERVER_KEY || process.env.GCM_API_KEY || ''
+let fcmNativePushEnabled = Boolean(fcmLegacyServerKey)
+if (fcmNativePushEnabled) {
+  console.log('[notifications] ✓ FCM legacy server key present — native (Capacitor) push delivery ENABLED')
+} else {
+  console.warn('[notifications] FCM_LEGACY_SERVER_KEY not set — native app tokens stored but server will not send FCM until configured')
+}
+
+async function sendFcmLegacyToToken(token, { title, body, data }) {
+  if (!fcmLegacyServerKey || !token) return { ok: false }
+  const dataStrings = {}
+  if (data && typeof data === 'object') {
+    for (const [k, v] of Object.entries(data)) {
+      dataStrings[k] = v === undefined || v === null ? '' : String(v)
+    }
+  }
+  const res = await fetch('https://fcm.googleapis.com/fcm/send', {
+    method: 'POST',
+    headers: {
+      Authorization: `key=${fcmLegacyServerKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      to: token,
+      priority: 'high',
+      notification: { title, body },
+      data: dataStrings,
+    }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.failure === 1 || json.failure === '1') {
+    return { ok: false, error: json?.results?.[0]?.error || json?.error || res.statusText }
+  }
+  return { ok: true }
+}
+
+const apnsKeyId = process.env.APNS_KEY_ID || ''
+const apnsTeamId = process.env.APNS_TEAM_ID || ''
+const apnsBundleId = process.env.APNS_BUNDLE_ID || 'app.aphylia'
+/** .p8 key contents (PEM), or base64 of PEM — use multiline secret in CI */
+const apnsKeyP8Raw = process.env.APNS_KEY_P8 || process.env.APNS_PRIVATE_KEY || ''
+let apnsJwtCache = { token: '', exp: 0 }
+
+async function getApnsJwt() {
+  const now = Math.floor(Date.now() / 1000)
+  if (apnsJwtCache.token && apnsJwtCache.exp > now + 60) return apnsJwtCache.token
+  if (!apnsKeyId || !apnsTeamId || !apnsKeyP8Raw) return null
+  let pem = apnsKeyP8Raw.trim()
+  if (!pem.includes('BEGIN PRIVATE KEY')) {
+    try {
+      pem = Buffer.from(pem, 'base64').toString('utf8')
+    } catch {
+      return null
+    }
+  }
+  const token = jwt.sign(
+    { iss: apnsTeamId, iat: now },
+    pem.replace(/\\n/g, '\n'),
+    { algorithm: 'ES256', header: { alg: 'ES256', kid: apnsKeyId } },
+  )
+  apnsJwtCache = { token, exp: now + 50 * 60 }
+  return token
+}
+
+async function sendApnsToDevice(deviceToken, { title, body, data }) {
+  const auth = await getApnsJwt()
+  if (!auth || !deviceToken) return { ok: false, error: 'apns_not_configured' }
+  const host = process.env.APNS_USE_SANDBOX === '1' ? 'api.sandbox.push.apple.com' : 'api.push.apple.com'
+  const payload = { aps: { alert: { title, body }, sound: 'default' } }
+  if (data && typeof data === 'object') {
+    for (const [k, v] of Object.entries(data)) {
+      if (k === 'aps') continue
+      payload[k] = String(v === undefined || v === null ? '' : v)
+    }
+  }
+  const res = await fetch(`https://${host}/3/device/${deviceToken}`, {
+    method: 'POST',
+    headers: {
+      authorization: `bearer ${auth}`,
+      'apns-topic': apnsBundleId,
+      'apns-push-type': 'alert',
+      'content-type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => '')
+    return { ok: false, error: `${res.status} ${errBody.slice(0, 200)}` }
+  }
+  return { ok: true }
 }
 
 // Admin bypass configuration
@@ -6949,6 +7044,20 @@ async function ensureNotificationTables() {
     `
     await sql`create unique index if not exists user_push_subscriptions_endpoint_idx on public.user_push_subscriptions (endpoint);`
     await sql`create index if not exists user_push_subscriptions_user_idx on public.user_push_subscriptions (user_id);`
+
+    await sql`
+      create table if not exists public.user_fcm_tokens (
+        id uuid primary key default gen_random_uuid(),
+        user_id uuid not null references auth.users(id) on delete cascade,
+        token text not null,
+        platform text,
+        created_at timestamptz not null default now(),
+        updated_at timestamptz not null default now(),
+        unique (token)
+      );
+    `
+    await sql`create unique index if not exists user_fcm_tokens_token_idx on public.user_fcm_tokens (token);`
+    await sql`create index if not exists user_fcm_tokens_user_idx on public.user_fcm_tokens (user_id);`
     notificationTablesEnsured = true
     console.log('[ensureNotificationTables] All tables created successfully')
   } catch (err) {
@@ -25702,6 +25811,67 @@ app.delete('/api/push/subscribe', async (req, res) => {
   }
 })
 
+app.post('/api/push/fcm-token', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const token = (req.body?.token || '').toString().trim()
+  const platform = (req.body?.platform || '').toString().trim() || null
+  if (!token || token.length < 10) {
+    res.status(400).json({ error: 'Invalid token' })
+    return
+  }
+  try {
+    await sql`
+      insert into public.user_fcm_tokens (user_id, token, platform, updated_at)
+      values (${user.id}, ${token}, ${platform}, now())
+      on conflict (token) do update
+      set user_id = excluded.user_id,
+          platform = excluded.platform,
+          updated_at = now()
+    `
+    res.json({ ok: true, fcmConfigured: fcmNativePushEnabled })
+  } catch (err) {
+    console.error('[push/fcm-token]', err?.message || err)
+    res.status(500).json({ error: err?.message || 'Failed to store token' })
+  }
+})
+
+app.delete('/api/push/fcm-token', async (req, res) => {
+  const user = await getUserFromRequestOrToken(req)
+  if (!user?.id) {
+    res.status(401).json({ error: 'Unauthorized' })
+    return
+  }
+  if (!sql) {
+    res.status(500).json({ error: 'Database not configured' })
+    return
+  }
+  await ensureNotificationTables()
+  const token = (req.body?.token || req.query?.token || '').toString().trim()
+  if (!token) {
+    res.status(400).json({ error: 'Missing token' })
+    return
+  }
+  try {
+    await sql`
+      delete from public.user_fcm_tokens
+      where token = ${token} and user_id = ${user.id}
+    `
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[push/fcm-token] delete', err)
+    res.status(500).json({ error: err?.message || 'Failed to remove token' })
+  }
+})
+
 // ========== Instant Push Notification API ==========
 // Sends an immediate push notification for social events (friend requests, garden invites, messages)
 // This is called internally when creating these events
@@ -25737,13 +25907,13 @@ app.post('/api/push/instant', async (req, res) => {
   }
   
   try {
-    // Check if push notifications are enabled
-    if (!pushNotificationsEnabled) {
-      console.warn('[push/instant] Push notifications disabled (VAPID keys not configured)')
+    const nativePushConfigured = fcmNativePushEnabled || (apnsKeyId && apnsTeamId && apnsKeyP8Raw)
+    if (!pushNotificationsEnabled && !nativePushConfigured) {
+      console.warn('[push/instant] Push disabled (no VAPID and no FCM / APNS env)')
       res.json({ ok: true, sent: false, reason: 'PUSH_DISABLED' })
       return
     }
-    
+
     // For message notifications, check if conversation is muted
     if (type === 'new_message' && data?.conversationId) {
       try {
@@ -25770,26 +25940,9 @@ app.post('/api/push/instant', async (req, res) => {
         console.warn('[push/instant] Failed to check conversation mute status:', muteCheckErr?.message)
       }
     }
-    
-    // Get recipient's push subscriptions
-    const subscriptions = await sql`
-      select id::text as id, user_id::text as user_id, endpoint, subscription
-      from public.user_push_subscriptions
-      where user_id = ${recipientId}::uuid
-    `
-    
-    if (!subscriptions || subscriptions.length === 0) {
-      console.log(`[push/instant] No push subscriptions found for user ${recipientId}`)
-      res.json({ ok: true, sent: false, reason: 'NO_SUBSCRIPTION' })
-      return
-    }
-    
-    console.log(`[push/instant] Found ${subscriptions.length} subscription(s) for user ${recipientId}, sending ${type} notification`)
-    
-    // Use client-provided tag if available, otherwise generate one
+
     const notificationTag = clientTag || `${type}-${user.id}`
-    
-    // Determine the target URL based on notification type
+
     let targetUrl = '/'
     switch (type) {
       case 'friend_request':
@@ -25808,13 +25961,46 @@ app.post('/api/push/instant', async (req, res) => {
         }
         break
     }
-    
-    // Send notification to all of recipient's subscriptions
+
+    const pushData = {
+      type,
+      senderId: user.id,
+      url: targetUrl,
+      ...(data && typeof data === 'object' ? data : {}),
+    }
+
+    const subscriptions = pushNotificationsEnabled
+      ? await sql`
+          select id::text as id, user_id::text as user_id, endpoint, subscription
+          from public.user_push_subscriptions
+          where user_id = ${recipientId}::uuid
+        `
+      : []
+
+    const fcmRows =
+      fcmNativePushEnabled || (apnsKeyId && apnsTeamId && apnsKeyP8Raw)
+        ? await sql`
+            select token::text as token, platform::text as platform
+            from public.user_fcm_tokens
+            where user_id = ${recipientId}::uuid
+          `
+        : []
+
+    if ((!subscriptions || subscriptions.length === 0) && (!fcmRows || fcmRows.length === 0)) {
+      console.log(`[push/instant] No web or FCM tokens for user ${recipientId}`)
+      res.json({ ok: true, sent: false, reason: 'NO_SUBSCRIPTION' })
+      return
+    }
+
+    console.log(
+      `[push/instant] user ${recipientId}: ${subscriptions?.length || 0} web sub(s), ${fcmRows?.length || 0} FCM token(s)`,
+    )
+
     let sent = false
     let successCount = 0
     const staleSubscriptionIds = []
-    
-    for (const sub of subscriptions) {
+
+    for (const sub of subscriptions || []) {
       try {
         const payload = sub.subscription && typeof sub.subscription === 'string'
           ? JSON.parse(sub.subscription)
@@ -25826,12 +26012,7 @@ app.post('/api/push/instant', async (req, res) => {
           body,
           tag: notificationTag,
           renotify: renotify === true, // Ensure it's a boolean
-          data: {
-            type,
-            senderId: user.id,
-            url: targetUrl,
-            ...data,
-          },
+          data: { ...pushData },
         }
         
         // Add vibration pattern for message notifications
@@ -25863,7 +26044,48 @@ app.post('/api/push/instant', async (req, res) => {
         }
       }
     }
-    
+
+    const staleFcmTokens = []
+    for (const row of fcmRows || []) {
+      const token = row?.token
+      if (!token) continue
+      const plat = (row?.platform || '').toLowerCase()
+      let ok = false
+      let errMsg = ''
+      if (plat === 'ios') {
+        const r = await sendApnsToDevice(token, {
+          title,
+          body,
+          data: { ...pushData, tag: notificationTag },
+        })
+        ok = r.ok
+        errMsg = String(r.error || '')
+      } else {
+        const r = await sendFcmLegacyToToken(token, {
+          title,
+          body,
+          data: { ...pushData, tag: notificationTag },
+        })
+        ok = r.ok
+        errMsg = String(r.error || '')
+      }
+      if (ok) {
+        sent = true
+        successCount += 1
+      } else {
+        if (/NotRegistered|InvalidRegistration|MismatchSenderId|BadDeviceToken|Unregistered/i.test(errMsg)) {
+          staleFcmTokens.push(token)
+        }
+        console.warn(`[push/instant] native push failed …${token.slice(-8)} (${plat}):`, errMsg)
+      }
+    }
+    if (staleFcmTokens.length > 0) {
+      await sql`
+        delete from public.user_fcm_tokens
+        where token = any(${staleFcmTokens}::text[])
+      `
+    }
+
     // Clean up stale subscriptions
     if (staleSubscriptionIds.length > 0) {
       await sql`
@@ -25872,9 +26094,12 @@ app.post('/api/push/instant', async (req, res) => {
       `
       console.log(`[push/instant] Cleaned up ${staleSubscriptionIds.length} expired subscription(s)`)
     }
-    
+
+    const totalTargets = (subscriptions?.length || 0) + (fcmRows?.length || 0)
     if (sent) {
-      console.log(`[push/instant] Successfully sent ${type} notification to user ${recipientId} (${successCount}/${subscriptions.length} devices)`)
+      console.log(
+        `[push/instant] Successfully sent ${type} to user ${recipientId} (${successCount}/${totalTargets} targets)`,
+      )
     } else {
       console.warn(`[push/instant] Failed to deliver ${type} notification to any device for user ${recipientId}`)
     }
