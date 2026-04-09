@@ -181,6 +181,7 @@ The schema is split into 20 files in `supabase/sync_parts/` for easier managemen
 | `admin_event_notifications` | Per-event admin notification settings (toggle, template, recipients) |
 | `user_notifications` | User notification inbox |
 | `user_push_subscriptions` | Push notification subscriptions |
+| `user_fcm_tokens` | Native (Capacitor) FCM/APNs device tokens for server push |
 
 ### Admin & Email
 

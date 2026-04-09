@@ -25,7 +25,8 @@ import {
   AlertCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { platformEnumerateVideoDevices, platformGetCameraStream } from '@/platform/camera'
+import { isNativeCapacitor } from '@/platform/runtime'
+import { platformEnumerateVideoDevices, platformGetCameraStream, platformPickCameraPhoto } from '@/platform/camera'
 
 interface CameraCaptureProps {
   open: boolean
@@ -49,7 +50,43 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
   const [capturedImage, setCapturedImage] = React.useState<string | null>(null)
   const [facingMode, setFacingMode] = React.useState<'user' | 'environment'>('environment')
   const [hasMultipleCameras, setHasMultipleCameras] = React.useState(false)
-  
+  const [nativeCaptureMode, setNativeCaptureMode] = React.useState(false)
+
+  React.useEffect(() => {
+    if (!open || !isNativeCapacitor()) return
+    let cancelled = false
+    ;(async () => {
+      setNativeCaptureMode(true)
+      setIsInitializing(true)
+      setError(null)
+      try {
+        const result = await platformPickCameraPhoto()
+        if (cancelled) return
+        if (result?.file) {
+          onCapture(result.file)
+          onOpenChange(false)
+        } else {
+          onOpenChange(false)
+        }
+      } catch {
+        if (!cancelled) {
+          setError(
+            t('messages.camera.error', { defaultValue: 'Failed to access camera. Please try again.' }),
+          )
+        }
+      } finally {
+        if (!cancelled) {
+          setIsInitializing(false)
+          setNativeCaptureMode(false)
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- parent callbacks; re-run only when dialog opens
+  }, [open])
+
   // Check for multiple cameras
   React.useEffect(() => {
     const checkCameras = async () => {
@@ -131,8 +168,9 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
     }
   }, [facingMode, stopCamera, t])
   
-  // Start camera when dialog opens
+  // Start camera when dialog opens (web / in-WebView getUserMedia path)
   React.useEffect(() => {
+    if (nativeCaptureMode || isNativeCapacitor()) return
     if (!open) {
       stopCamera()
       setCapturedImage(null)
@@ -146,7 +184,7 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
     return () => {
       stopCamera()
     }
-  }, [open, facingMode, startCamera, stopCamera])
+  }, [open, facingMode, startCamera, stopCamera, nativeCaptureMode])
   
   const handleCapture = () => {
     const video = videoRef.current
@@ -205,6 +243,32 @@ export const CameraCapture: React.FC<CameraCaptureProps> = ({
     setCapturedImage(null)
   }
   
+  if (isNativeCapacitor()) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="sm:max-w-[360px] p-6" aria-describedby="camera-native-desc">
+          <DialogHeader>
+            <DialogTitle>{t('messages.camera.title', { defaultValue: 'Take Photo' })}</DialogTitle>
+            <DialogDescription id="camera-native-desc">
+              {isInitializing
+                ? t('messages.camera.initializing', { defaultValue: 'Starting camera...' })
+                : error || t('messages.camera.openingNative', { defaultValue: 'Opening camera…' })}
+            </DialogDescription>
+          </DialogHeader>
+          {error ? (
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="w-full">
+              {t('common.close', { defaultValue: 'Close' })}
+            </Button>
+          ) : (
+            <div className="flex justify-center py-6">
+              <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+    )
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent 

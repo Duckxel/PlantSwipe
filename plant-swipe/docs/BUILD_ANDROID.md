@@ -2,6 +2,8 @@
 
 Prerequisites: **JDK 17** (match `android/` Gradle config), **Android SDK**, **`ANDROID_HOME`** or **`ANDROID_SDK_ROOT`** pointing at the SDK root, **Bun**, **Node** (for `npx cap`).
 
+**Push (FCM):** Place **`google-services.json`** from the Firebase console in **`android/app/`** (gitignored) so Gradle applies the Google Services plugin. The server needs **`FCM_LEGACY_SERVER_KEY`** (or equivalent) to deliver to Android tokens stored in **`user_fcm_tokens`**.
+
 ## One-time / occasional
 
 1. **Install dependencies**

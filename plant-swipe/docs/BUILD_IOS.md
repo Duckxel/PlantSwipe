@@ -1,6 +1,8 @@
 # Building the iOS app (Capacitor)
 
-**macOS + Xcode are required.** iOS projects cannot be built on Linux. CI uses a macOS runner for iOS steps (see `.github/workflows/capacitor-mobile.yml`).
+**macOS + Xcode are required.** iOS projects cannot be built on Linux. CI builds the **Simulator** target with **`ios/App/App.xcodeproj`** (see `.github/workflows/capacitor-mobile.yml`).
+
+**Push (APNs):** Configure push in Apple Developer + Xcode signing; set server env **`APNS_KEY_ID`**, **`APNS_TEAM_ID`**, **`APNS_KEY_P8`** (`.p8` PEM or base64), **`APNS_BUNDLE_ID`** (default `app.aphylia`), and **`APNS_USE_SANDBOX=1`** for dev builds if needed.
 
 ## Prerequisites
 

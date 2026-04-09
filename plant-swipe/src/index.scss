@@ -1,6 +1,15 @@
 @use "./styles/_variables.scss";
 @use "./styles/_keyframe-animations.scss";
 
+html.capacitor-native body button,
+html.capacitor-native body [role='button'],
+html.capacitor-native body a,
+html.capacitor-native body input,
+html.capacitor-native body textarea,
+html.capacitor-native body select {
+  -webkit-tap-highlight-color: transparent;
+}
+
 @font-face {
   font-family: "Lavonte";
   src: url("./assets/fonts/Lavonte.ttf") format("truetype");
@@ -26,6 +35,9 @@
       overflow-y: auto;
       overflow-x: hidden;
       overscroll-behavior-y: auto;
+    /* Remove mobile WebView tap flash (iOS/Android) */
+    -webkit-tap-highlight-color: transparent;
+    tap-highlight-color: transparent;
     font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
     line-height: 1.5;
     font-weight: 400;
@@ -42,6 +54,8 @@
       margin: 0;
       min-width: 320px;
       overscroll-behavior-y: inherit;
+    -webkit-tap-highlight-color: transparent;
+    tap-highlight-color: transparent;
     -webkit-user-select: none;
     -ms-user-select: none;
     user-select: none;

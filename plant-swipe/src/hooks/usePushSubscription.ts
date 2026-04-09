@@ -6,6 +6,7 @@ import {
   requestNotificationPermission,
 } from '@/lib/pushNotifications'
 import { isPlatformWebPushSupported } from '@/platform/push'
+import { isNativeCapacitor } from '@/platform/runtime'
 
 // Track if we've already attempted auto-enable for this session
 const autoEnableAttempted = new Set<string>()
@@ -152,6 +153,7 @@ export function usePushSubscription(userId: string | null) {
 
   // Re-subscribe after a service worker update becomes active
   React.useEffect(() => {
+    if (isNativeCapacitor()) return
     if (!supported || !userId || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     let active = true
     let registration: ServiceWorkerRegistration | null = null

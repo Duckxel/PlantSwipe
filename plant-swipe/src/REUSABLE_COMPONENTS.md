@@ -35,7 +35,8 @@ Use this layer from UI for device capabilities so shared web code stays the defa
 | Module | Use for | Behavior |
 |--------|---------|----------|
 | `platformShare` / `isPlatformShareSupported` | Share sheet | Web Share API → clipboard (no Capacitor Share plugin) |
-| `platformHapticTap` / `isHapticsAvailable` | Light haptics | `navigator.vibrate` only (no Capacitor Haptics plugin) |
+| `platformHapticTap` / `isHapticsAvailable` | Light haptics | `navigator.vibrate` → `@capacitor/haptics` on native |
+| `platformPickCameraPhoto` / `platformGetCameraStream` | Camera | Native: `@capacitor/camera`; web: getUserMedia / file input |
 | `platformGetCameraStream` / `platformEnumerateVideoDevices` | Camera | `getUserMedia` (same UI on web and typical WebViews) |
 | `isPlatformWebPushSupported` | Web push UI | Service worker + PushManager; `false` on Capacitor native until a native push path exists |
 | `platformStorage` | Key/value | `localStorage` / `sessionStorage` (swap for Preferences later if needed) |

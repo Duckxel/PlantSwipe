@@ -18,6 +18,12 @@
 		"StatusBar": {
 			"style": "DEFAULT",
 			"backgroundColor": "#052e16"
+		},
+		"Camera": {
+			"presentationStyle": "fullscreen"
+		},
+		"PushNotifications": {
+			"presentationOptions": ["badge", "sound", "alert"]
 		}
 	}
 }

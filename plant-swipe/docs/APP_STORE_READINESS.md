@@ -41,7 +41,7 @@ Document in App Store Connect (and your privacy policy) data linked to the user,
 | **Sentry** | Diagnostics, possibly device/usage (configure scrubbing; disclose) |
 | **Google Analytics** (if enabled after consent) | Usage, identifiers (disclose; ATT if applicable) |
 | **Google reCAPTCHA** | Fraud prevention, device signals |
-| **@capacitor/app, @capacitor/status-bar** | No personal data by themselves |
+| **@capacitor/app, @capacitor/status-bar, @capacitor/camera, @capacitor/haptics, @capacitor/push-notifications** | Disclose camera/mic/notifications usage strings; push needs Firebase/APNs setup server-side |
 
 Re-run this table whenever you add an SDK.
 

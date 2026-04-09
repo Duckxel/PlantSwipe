@@ -45,5 +45,13 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Aphylia uses the camera to capture plant photos and messages.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Aphylia may access your photo library when you choose an existing image.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>remote-notification</string>
+	</array>
 </dict>
 </plist>

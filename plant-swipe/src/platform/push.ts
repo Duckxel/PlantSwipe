@@ -1,11 +1,12 @@
 import { isNativeCapacitor } from '@/platform/runtime'
 
 /**
- * Web push (service worker + PushManager) capability. Native push will use a different path later;
- * until then, feature detection treats native as "no web push" so UI degrades gracefully.
+ * Web push (SW + PushManager) on browser PWA; native uses @capacitor/push-notifications + minimal SW + FCM/APNs on server.
  */
 export function isPlatformWebPushSupported(): boolean {
   if (typeof window === 'undefined') return false
-  if (isNativeCapacitor()) return false
+  if (isNativeCapacitor()) {
+    return typeof Notification !== 'undefined'
+  }
   return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window
 }

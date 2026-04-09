@@ -1,3 +1,4 @@
+import { Capacitor } from '@capacitor/core'
 import { supabase } from '@/lib/supabaseClient'
 import { isPlatformWebPushSupported } from '@/platform/push'
 
@@ -66,6 +67,11 @@ async function syncSubscriptionWithServer(subscription: PushSubscription): Promi
 }
 
 export async function registerPushSubscription(force = false): Promise<PushSubscription> {
+  if (Capacitor.isNativePlatform()) {
+    const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
+    await registerNativePushForCurrentUser()
+    return null as unknown as PushSubscription
+  }
   if (typeof window === 'undefined' || !isPlatformWebPushSupported()) {
     throw new Error('Push notifications are not supported in this browser')
   }
@@ -98,6 +104,29 @@ export async function registerPushSubscription(force = false): Promise<PushSubsc
 }
 
 export async function removePushSubscription(): Promise<void> {
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { lastNativePushToken } = await import('@/lib/nativePushRegistration')
+      const tok = lastNativePushToken
+      const session = (await supabase.auth.getSession()).data.session
+      const auth = session?.access_token
+      if (tok && auth) {
+        await fetch('/api/push/fcm-token', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth}` },
+          credentials: 'same-origin',
+          body: JSON.stringify({ token: tok }),
+        })
+      }
+      const { PushNotifications } = await import('@capacitor/push-notifications')
+      await PushNotifications.unregister()
+      const mod = await import('@/lib/nativePushRegistration')
+      mod.lastNativePushToken = null
+    } catch {
+      /* ignore */
+    }
+    return
+  }
   if (typeof window === 'undefined' || !isPlatformWebPushSupported()) return
   const registration = await navigator.serviceWorker.ready
   const subscription = await registration.pushManager.getSubscription()
@@ -120,6 +149,10 @@ export async function removePushSubscription(): Promise<void> {
 }
 
 export async function getExistingSubscription(): Promise<PushSubscription | null> {
+  if (Capacitor.isNativePlatform()) {
+    const { lastNativePushToken } = await import('@/lib/nativePushRegistration')
+    return lastNativePushToken ? ({ endpoint: lastNativePushToken } as unknown as PushSubscription) : null
+  }
   if (typeof window === 'undefined' || !isPlatformWebPushSupported()) return null
   try {
     const registration = await navigator.serviceWorker.ready
