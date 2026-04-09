@@ -56,6 +56,21 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
     }
   })
 
+  // Validate which plant IDs actually exist in the plants table
+  const existingPlantIds = new Set<string>()
+  if (allPlantIds.size > 0) {
+    const plantIdsArray = Array.from(allPlantIds).filter(id => id && id.trim())
+    if (plantIdsArray.length > 0) {
+      const { data: existingPlants } = await supabase
+        .from('plants')
+        .select('id')
+        .in('id', plantIdsArray)
+      if (existingPlants) {
+        existingPlants.forEach((p: any) => existingPlantIds.add(String(p.id)))
+      }
+    }
+  }
+
   // If there are plants, fetch their images
   const plantImagesMap: Record<string, string | null> = {}
   if (allPlantIds.size > 0) {
@@ -125,11 +140,11 @@ export async function getUserBookmarks(userId: string): Promise<Bookmark[]> {
   }
 
   return (data || []).map((b: any) => {
-    // Filter out items with null/invalid plant_ids for counting
+    // Filter out items with null/invalid plant_ids and count only plants that exist in DB
     const validItemsForCount = (b.items || []).filter((i: any) => {
       if (!i || i.plant_id == null || i.plant_id === '') return false
       const plantId = String(i.plant_id).trim()
-      return plantId && plantId !== 'null' && plantId !== 'undefined' && isValidPlantId(plantId)
+      return plantId && plantId !== 'null' && plantId !== 'undefined' && isValidPlantId(plantId) && existingPlantIds.has(plantId)
     })
     const originalCount = validItemsForCount.length
     
@@ -391,6 +406,9 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
     plant: plantsMap[i.plant_id]
   }))
 
+  // Count only items whose plants still exist in the database
+  const validPlantCount = items.filter((i: BookmarkItem) => !!i.plant).length
+
   const preview_images = items
       .map((i: BookmarkItem) => i.plant?.image)
       .filter((url: string | undefined) => !!url)
@@ -405,7 +423,7 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
     created_at: data.created_at,
     updated_at: data.updated_at,
     items,
-    plant_count: items.length,
+    plant_count: validPlantCount,
     preview_images,
     owner: ownerProfile ? {
       id: ownerProfile.id,
