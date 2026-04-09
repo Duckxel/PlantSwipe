@@ -384,37 +384,47 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       custom: Math.round(currentWeekCompleted * 0.1),
     };
 
-    // Calculate extended stats
-    const totalTasksCompleted = dailyStats.reduce((sum, d) => sum + (d.completed || 0), 0);
-    const totalDaysActive = dailyStats.filter(d => d.completed > 0).length;
-    const perfectDays = dailyStats.filter(d => d.success && d.due > 0).length;
-    const averageTasksPerDay = totalDaysActive > 0 ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10 : 0;
-
-    // Find most active day of week
-    const dayOfWeekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-    dailyStats.forEach(d => {
-      const dayOfWeek = new Date(d.date).getDay();
-      dayOfWeekCounts[dayOfWeek] += d.completed || 0;
-    });
-    const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
-    // Return the day number for translation in the render phase
-    const mostActiveDay = parseInt(mostActiveDayNum);
-
-    // Monthly comparison
+    // Monthly comparison calculation (moved up for single-pass loop)
     const thisMonthStart = new Date(today);
     thisMonthStart.setDate(1);
     const lastMonthStart = new Date(thisMonthStart);
     lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+
+    // ⚡ Bolt: Calculate multiple aggregations in a single-pass loop to avoid multiple iterations and intermediate arrays
+    let totalTasksCompleted = 0;
+    let totalDaysActive = 0;
+    let perfectDays = 0;
+    let thisMonthTasks = 0;
+    let lastMonthTasks = 0;
+    const dayOfWeekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+
+    for (let i = 0; i < dailyStats.length; i++) {
+      const d = dailyStats[i];
+      const completed = d.completed || 0;
+
+      // Extended stats
+      totalTasksCompleted += completed;
+      if (completed > 0) totalDaysActive++;
+      if (d.success && d.due > 0) perfectDays++;
+
+      // Day of week counts
+      const date = new Date(d.date);
+      const dayOfWeek = date.getDay();
+      dayOfWeekCounts[dayOfWeek] += completed;
+
+      // Monthly comparison
+      if (date >= thisMonthStart) {
+        thisMonthTasks += completed;
+      } else if (date >= lastMonthStart && date < thisMonthStart) {
+        lastMonthTasks += completed;
+      }
+    }
+
+    const averageTasksPerDay = totalDaysActive > 0 ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10 : 0;
+    const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
+    // Return the day number for translation in the render phase
+    const mostActiveDay = parseInt(mostActiveDayNum);
     
-    const thisMonthTasks = dailyStats
-      .filter(d => new Date(d.date) >= thisMonthStart)
-      .reduce((sum, d) => sum + (d.completed || 0), 0);
-    const lastMonthTasks = dailyStats
-      .filter(d => {
-        const date = new Date(d.date);
-        return date >= lastMonthStart && date < thisMonthStart;
-      })
-      .reduce((sum, d) => sum + (d.completed || 0), 0);
     const monthlyChange = lastMonthTasks > 0 
       ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
       : 0;
@@ -738,25 +748,44 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     // --- Recompute allTimeStats from bestDailyStats ----------------------
     const todayIso = serverToday || new Date().toISOString().slice(0, 10);
 
-    const totalTasksCompleted = bestDailyStats.reduce(
-      (sum, d) => sum + (d.completed || 0), 0,
-    );
-    const totalDaysActive = bestDailyStats.filter(
-      (d) => (d.completed || 0) > 0,
-    ).length;
-    const perfectDays = bestDailyStats.filter(
-      (d) => d.success && (d.due || 0) > 0,
-    ).length;
+    // Monthly comparison
+    const thisMonthStart = new Date(todayIso);
+    thisMonthStart.setDate(1);
+    const lastMonthStart = new Date(thisMonthStart);
+    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+
+    // ⚡ Bolt: Calculate multiple aggregations for recomputed stats in a single-pass loop
+    let totalTasksCompleted = 0;
+    let totalDaysActive = 0;
+    let perfectDays = 0;
+    let thisMonthTasks = 0;
+    let lastMonthTasks = 0;
+    const dowCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
+
+    for (let i = 0; i < bestDailyStats.length; i++) {
+      const d = bestDailyStats[i];
+      const completed = d.completed || 0;
+
+      totalTasksCompleted += completed;
+      if (completed > 0) totalDaysActive++;
+      if (d.success && (d.due || 0) > 0) perfectDays++;
+
+      const date = new Date(d.date);
+      const dayOfWeek = date.getDay();
+      dowCounts[dayOfWeek] += completed;
+
+      if (date >= thisMonthStart) {
+        thisMonthTasks += completed;
+      } else if (date >= lastMonthStart && date < thisMonthStart) {
+        lastMonthTasks += completed;
+      }
+    }
+
     const averageTasksPerDay =
       totalDaysActive > 0
         ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10
         : 0;
 
-    // Most active day of week
-    const dowCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
-    bestDailyStats.forEach((d) => {
-      dowCounts[new Date(d.date).getDay()] += d.completed || 0;
-    });
     const mostActiveDay = parseInt(
       Object.entries(dowCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "0",
     );
@@ -765,7 +794,8 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     let bestStreak = 0;
     let runStreak = 0;
     const sorted = [...bestDailyStats].sort((a, b) => a.date.localeCompare(b.date));
-    for (const stat of sorted) {
+    for (let i = 0; i < sorted.length; i++) {
+      const stat = sorted[i];
       if (stat.success) {
         runStreak++;
         bestStreak = Math.max(bestStreak, runStreak);
@@ -773,24 +803,15 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
         runStreak = 0;
       }
     }
-    const lastMissed =
-      sorted.filter((d) => !d.success && (d.due || 0) > 0).pop()?.date || null;
 
-    // Monthly comparison
-    const thisMonthStart = new Date(todayIso);
-    thisMonthStart.setDate(1);
-    const lastMonthStart = new Date(thisMonthStart);
-    lastMonthStart.setMonth(lastMonthStart.getMonth() - 1);
+    let lastMissed = null;
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      if (!sorted[i].success && (sorted[i].due || 0) > 0) {
+        lastMissed = sorted[i].date;
+        break;
+      }
+    }
 
-    const thisMonthTasks = bestDailyStats
-      .filter((d) => new Date(d.date) >= thisMonthStart)
-      .reduce((sum, d) => sum + (d.completed || 0), 0);
-    const lastMonthTasks = bestDailyStats
-      .filter((d) => {
-        const dt = new Date(d.date);
-        return dt >= lastMonthStart && dt < thisMonthStart;
-      })
-      .reduce((sum, d) => sum + (d.completed || 0), 0);
     const monthlyChange =
       lastMonthTasks > 0
         ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
