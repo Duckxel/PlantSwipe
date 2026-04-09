@@ -25,9 +25,13 @@ After `npx cap add ios`, edit **`ios/App/App/Info.plist`** (or target build sett
 | `NSPhotoLibraryAddUsageDescription` | Saving images to library |
 | `NSMicrophoneUsageDescription` | Only if you enable microphone (e.g. video) |
 | `NSUserTrackingUsageDescription` | Only if you use App Tracking Transparency (IDFA) |
-| `NSLocationWhenInUseUsageDescription` | If you use geolocation (e.g. city picker) |
+| `NSLocationWhenInUseUsageDescription` | GPS city detection in setup (see `city-country-selector.tsx`) — **present in `Info.plist`** |
 
 **Push:** system permission prompt uses text you configure for notifications; ensure copy matches actual use (task reminders, messages, etc.).
+
+**Privacy manifest:** `ios/App/App/PrivacyInfo.xcprivacy` declares **UserDefaults** (required-reason API) for typical Capacitor usage. Re-validate in Xcode after dependency upgrades; add entries if Apple flags additional API categories.
+
+**Export compliance:** `ITSAppUsesNonExemptEncryption` is set to `false` for standard TLS/HTTPS. Update if you ship custom cryptography.
 
 **Tracking:** If you use **Google Analytics** or other cross-app tracking on iOS 14+, follow ATT rules and App Privacy disclosures. The web app gates GA behind cookie consent; mirror that behavior in the native shell and disclose collected data types in App Store Connect.
 
