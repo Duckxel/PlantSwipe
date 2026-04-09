@@ -20,6 +20,8 @@ Internal pre-submission list for **Aphylia** (Capacitor + shared web app). Not l
 ## Permissions & plist / manifest
 
 - [ ] **iOS `Info.plist`:** every runtime permission has a clear **usage description** (camera, photos, location, mic, tracking, etc.—only keys you actually use).
+- [ ] **`PrivacyInfo.xcprivacy`** bundled in the app target; **required-reason APIs** declared (expand if App Store Connect reports missing types).
+- [ ] **`ITSAppUsesNonExemptEncryption`:** set correctly for your crypto story (HTTPS-only → `false` unless counsel says otherwise).
 - [ ] **Android:** dangerous permissions declared only if used; **runtime** requests match copy shown to users.
 - [ ] **Push:** if implemented, notification copy matches actual behavior; native push may require FCM/APNs beyond web push.
 
@@ -63,6 +65,7 @@ bun run build:cap          # native bundle + sync
 
 ## Related docs
 
+- `docs/APPLE_APP_STORE_REJECTION_RISKS.md` — themed list of common rejection reasons + repo mitigations
 - `docs/APP_STORE_READINESS.md` — deeper UX/SDK notes (update plugin names there if they drift)
 - `docs/LIVE_UPDATES_STORE_POLICY.md`
 - `docs/MOBILE_ARCHITECTURE.md`
