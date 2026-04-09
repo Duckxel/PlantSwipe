@@ -2,6 +2,12 @@ import type { Plant } from './plant'
 
 export type BookmarkVisibility = 'public' | 'private'
 
+export interface BookmarkOwner {
+  id: string
+  display_name: string
+  avatar_url: string | null
+}
+
 export interface Bookmark {
   id: string
   user_id: string
@@ -14,6 +20,7 @@ export interface Bookmark {
   items?: BookmarkItem[]
   plant_count?: number
   preview_images?: string[]
+  owner?: BookmarkOwner
 }
 
 export interface BookmarkItem {

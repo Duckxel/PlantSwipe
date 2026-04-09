@@ -333,6 +333,13 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Bookmark not found')
 
+  // Fetch owner profile
+  const { data: ownerProfile } = await supabase
+    .from('profiles')
+    .select('id, display_name, avatar_url')
+    .eq('id', data.user_id)
+    .maybeSingle()
+
   // Fetch full plant details for items
   const plantIds = (data.items || []).map((i: any) => i.plant_id)
   const plantsMap: Record<string, Plant> = {}
@@ -399,6 +406,11 @@ export async function getBookmarkDetails(bookmarkId: string, language: string = 
     updated_at: data.updated_at,
     items,
     plant_count: items.length,
-    preview_images
+    preview_images,
+    owner: ownerProfile ? {
+      id: ownerProfile.id,
+      display_name: ownerProfile.display_name,
+      avatar_url: ownerProfile.avatar_url
+    } : undefined
   }
 }
