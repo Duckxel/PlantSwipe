@@ -90,44 +90,44 @@ export const AddPlantToBookmarkDialog: React.FC<AddPlantToBookmarkDialogProps> =
           />
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-2 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 pt-2 space-y-1">
           {loading ? (
             <div className="flex justify-center py-8"><Loader2 className="animate-spin h-6 w-6 text-stone-400" /></div>
           ) : (
             filtered.map(p => {
               const isAdded = existingPlantIds.includes(p.id)
               return (
-                <div key={p.id} className="flex items-center justify-between p-2 rounded-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] transition-colors">
+                <div key={p.id} className="flex items-center justify-between p-3 rounded-xl hover:bg-stone-50 dark:hover:bg-[#2d2d30] active:bg-stone-100 dark:active:bg-[#353538] transition-colors">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="h-10 w-10 rounded-lg bg-stone-200 dark:bg-[#3e3e42] overflow-hidden flex-shrink-0">
+                    <div className="h-12 w-12 rounded-lg bg-stone-200 dark:bg-[#3e3e42] overflow-hidden flex-shrink-0">
                       {p.image ? <img src={p.image} alt="" className="h-full w-full object-cover" /> : null}
                     </div>
                     <div className="min-w-0">
                       <div className="font-medium truncate">{p.name}</div>
-                      <div className="text-xs text-stone-500 truncate">{p.scientificName}</div>
+                      <div className="text-sm text-stone-500 truncate">{p.scientificName}</div>
                     </div>
                   </div>
-                  
+
                   {isAdded ? (
                     <Button
                       size="sm"
                       variant="ghost"
                       disabled
-                      className="h-8 w-8 p-0 rounded-full text-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      className="h-11 w-11 p-0 rounded-full text-emerald-600 focus-visible:ring-2 focus-visible:ring-emerald-500"
                       aria-label={t('bookmarks.plantAdded', { defaultValue: 'Plant added' })}
                     >
-                      <Check className="h-4 w-4" />
+                      <Check className="h-5 w-5" />
                     </Button>
                   ) : (
-                    <Button 
-                      size="sm" 
-                      variant="secondary" 
-                      className="h-8 w-8 p-0 rounded-full focus-visible:ring-2 focus-visible:ring-emerald-500"
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-11 w-11 p-0 rounded-full focus-visible:ring-2 focus-visible:ring-emerald-500"
                       onClick={() => handleAdd(p)}
                       disabled={addingId === p.id}
                       aria-label={t('bookmarks.addThisPlant', { defaultValue: 'Add this plant' })}
                     >
-                      {addingId === p.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+                      {addingId === p.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <Plus className="h-5 w-5" />}
                     </Button>
                   )}
                 </div>
