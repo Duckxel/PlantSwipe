@@ -30232,6 +30232,7 @@ ${alternateLinks(path)}
       // ALL bookmarks (public and private) with different priorities
       // Public bookmarks: priority 0.5, Private bookmarks: priority 0.3
       // Exclude is_like bookmarks (always private, not SEO-relevant)
+      // Exclude empty public bookmarks (no plants = no SEO value)
       // Fetch in batches to get all bookmarks
       const allBookmarks = []
       const bookmarkBatchSize = 1000
@@ -30241,7 +30242,7 @@ ${alternateLinks(path)}
       while (allBookmarks.length < maxBookmarks) {
         const { data: bookmarkBatch, error: bookmarkError } = await sitemapDb
           .from('bookmarks')
-          .select('id, created_at, visibility, is_like')
+          .select('id, created_at, visibility, is_like, bookmark_items(count)')
           .eq('is_like', false)
           .order('created_at', { ascending: false })
           .range(bookmarkOffset, bookmarkOffset + bookmarkBatchSize - 1)
@@ -30259,8 +30260,15 @@ ${alternateLinks(path)}
       }
 
       if (allBookmarks.length) {
+        // Filter out empty public bookmarks — they have no SEO value
+        const nonEmptyBookmarks = allBookmarks.filter(bookmark => {
+          const itemCount = bookmark.bookmark_items?.[0]?.count ?? 0
+          if (bookmark.visibility === 'public' && itemCount === 0) return false
+          return true
+        })
+
         for (const lang of languages) {
-          urls += allBookmarks.map(bookmark => {
+          urls += nonEmptyBookmarks.map(bookmark => {
             // Use created_at for lastmod
             const lastmodStr = bookmark.created_at ? `\n    <lastmod>${new Date(bookmark.created_at).toISOString().split('T')[0]}</lastmod>` : ''
 
@@ -33231,21 +33239,26 @@ async function generateCrawlerHtml(req, pagePath) {
 
         // Get owner and plant count
         let ownerName = null
+        let ownerAvatarUrl = null
         let plantCount = 0
         let listImage = null
         let bookmarkPlantDetails = []
+        const bookmarkCreatedAt = bookmarkList.created_at
 
         try {
           if (bookmarkList.user_id) {
             const { data: owner } = await ssrQuery(
               supabaseServer
                 .from('profiles')
-                .select('display_name')
+                .select('display_name, avatar_url')
                 .eq('id', bookmarkList.user_id)
                 .maybeSingle(),
               'bookmark_owner'
             )
-            if (owner) ownerName = owner.display_name
+            if (owner) {
+              ownerName = owner.display_name
+              ownerAvatarUrl = owner.avatar_url
+            }
           }
 
           // Get all bookmark plants with details (column is created_at, not added_at)
@@ -33261,7 +33274,7 @@ async function generateCrawlerHtml(req, pagePath) {
           if (bookmarkPlants?.length) {
             plantCount = bookmarkPlants.length
             const plantIds = bookmarkPlants.map(bp => bp.plant_id).filter(Boolean)
-            
+
             // Get plant details (name from plants table, scientific_name from translations)
             if (plantIds.length > 0) {
               const { data: plantDetails } = await ssrQuery(
@@ -33272,42 +33285,81 @@ async function generateCrawlerHtml(req, pagePath) {
                 'bookmark_plant_details'
               )
               if (plantDetails) {
-                // Fetch scientific names from plant_translations (English) since
-                // scientific_name is a translatable field stored primarily there
+                // Fetch translations for detected language (name + scientific_name)
                 const { data: plantTranslations } = await ssrQuery(
                   supabaseServer
                     .from('plant_translations')
-                    .select('plant_id, scientific_name')
+                    .select('plant_id, name, scientific_name')
                     .in('plant_id', plantIds)
-                    .eq('language', 'en'),
-                  'bookmark_plant_sci_names'
+                    .eq('language', detectedLang),
+                  'bookmark_plant_translations'
                 )
-                const sciNameMap = {}
+                const translationMap = {}
                 if (plantTranslations) {
                   plantTranslations.forEach(pt => {
-                    if (pt.scientific_name) sciNameMap[pt.plant_id] = pt.scientific_name
+                    translationMap[pt.plant_id] = pt
                   })
                 }
-                bookmarkPlantDetails = plantDetails.map(p => ({
-                  ...p,
-                  scientific_name: sciNameMap[p.id] || null
-                }))
-                
-                // Get first plant image for bookmark cover
-                const { data: plantImg } = await ssrQuery(
+                // If not English, also fetch English scientific names as fallback
+                let enSciNameMap = {}
+                if (detectedLang !== 'en') {
+                  const { data: enTranslations } = await ssrQuery(
+                    supabaseServer
+                      .from('plant_translations')
+                      .select('plant_id, scientific_name')
+                      .in('plant_id', plantIds)
+                      .eq('language', 'en'),
+                    'bookmark_plant_sci_names_en'
+                  )
+                  if (enTranslations) {
+                    enTranslations.forEach(pt => {
+                      if (pt.scientific_name) enSciNameMap[pt.plant_id] = pt.scientific_name
+                    })
+                  }
+                }
+
+                // Fetch plant images for all plants in the bookmark
+                const { data: allPlantImages } = await ssrQuery(
                   supabaseServer
                     .from('plant_images')
-                    .select('link')
-                    .eq('plant_id', plantDetails[0].id)
-                    .eq('use', 'primary')
-                    .maybeSingle(),
-                  'bookmark_plant_img'
+                    .select('plant_id, link, use')
+                    .in('plant_id', plantIds),
+                  'bookmark_plant_images'
                 )
-                if (plantImg?.link) listImage = ensureAbsoluteUrl(plantImg.link)
+                const plantImageMap = {}
+                if (allPlantImages) {
+                  allPlantImages.forEach(img => {
+                    if (!img?.plant_id || !img?.link) return
+                    if (!plantImageMap[img.plant_id]) plantImageMap[img.plant_id] = []
+                    plantImageMap[img.plant_id].push(img)
+                  })
+                }
+
+                bookmarkPlantDetails = plantDetails.map(p => {
+                  const trans = translationMap[p.id] || {}
+                  const images = plantImageMap[p.id] || []
+                  const primaryImg = images.find(i => i.use === 'primary')
+                  const imgUrl = primaryImg?.link || images[0]?.link || null
+                  return {
+                    ...p,
+                    name: trans.name || p.name,
+                    scientific_name: trans.scientific_name || enSciNameMap[p.id] || null,
+                    image_url: imgUrl ? ensureAbsoluteUrl(imgUrl) : null
+                  }
+                })
+
+                // Use first plant's image as bookmark cover
+                const firstWithImage = bookmarkPlantDetails.find(p => p.image_url)
+                if (firstWithImage) listImage = firstWithImage.image_url
               }
             }
           }
         } catch { }
+
+        // Store metadata for JSON-LD schema generation
+        req._ssrDebug.bookmarkOwnerName = ownerName
+        req._ssrDebug.bookmarkCreatedAt = bookmarkCreatedAt
+        req._ssrDebug.bookmarkPlantCount = plantCount
 
         // Title includes owner name for SEO uniqueness: "🔖 FAV_MTP by Username - Plant Bookmark | Aphylia"
         const bookmarkName = bookmarkList.name || tr.bookmarksCollection
@@ -33348,39 +33400,66 @@ async function generateCrawlerHtml(req, pagePath) {
           'bulb': '🌷', 'palm': '🌴', 'bamboo': '🎋'
         }
         
+        // Format creation date for display
+        const createdDate = bookmarkCreatedAt ? new Date(bookmarkCreatedAt).toLocaleDateString(detectedLang === 'fr' ? 'fr-FR' : 'en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : null
+
         pageContent = `
-          <article itemscope itemtype="https://schema.org/Collection">
+          <article itemscope itemtype="https://schema.org/CollectionPage">
             <h1 itemprop="name">🔖 ${escapeHtml(bookmarkName)}</h1>
-            <div class="plant-meta">
-              🌿 ${plantCount} ${plantWord} ${tr.bookmarkSaved}
-              ${ownerName ? ` · 👤 ${tr.bookmarkMadeBy} <a href="/u/${encodeURIComponent(ownerName)}">${escapeHtml(ownerName)}</a>` : ''}
+
+            <!-- Collection metadata -->
+            <div style="display: flex; flex-wrap: wrap; gap: 16px; margin: 16px 0 24px; padding: 16px; background: #f0fdf4; border-radius: 12px;">
+              ${ownerName ? `
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 180px;">
+                ${ownerAvatarUrl ? `<img src="${escapeHtml(ensureAbsoluteUrl(ownerAvatarUrl))}" alt="${escapeHtml(ownerName)}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #a7f3d0;" />` : `<span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #d1fae5; font-size: 16px;">👤</span>`}
+                <div>
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280;">${detectedLang === 'fr' ? 'Créé par' : 'Created by'}</div>
+                  <a href="/u/${encodeURIComponent(ownerName)}" style="color: #065f46; font-weight: 600; text-decoration: none;" itemprop="author">${escapeHtml(ownerName)}</a>
+                </div>
+              </div>` : ''}
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 120px;">
+                <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #d1fae5; font-size: 16px;">🌿</span>
+                <div>
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280;">${detectedLang === 'fr' ? 'Plantes' : 'Plants'}</div>
+                  <strong style="color: #065f46;">${plantCount} ${plantWord}</strong>
+                </div>
+              </div>
+              ${createdDate ? `
+              <div style="display: flex; align-items: center; gap: 10px; min-width: 150px;">
+                <span style="display: inline-flex; align-items: center; justify-content: center; width: 36px; height: 36px; border-radius: 50%; background: #e5e7eb; font-size: 16px;">📅</span>
+                <div>
+                  <div style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; color: #6b7280;">${detectedLang === 'fr' ? 'Créé le' : 'Created'}</div>
+                  <time datetime="${new Date(bookmarkCreatedAt).toISOString()}" itemprop="dateCreated" style="color: #374151; font-weight: 600;">${createdDate}</time>
+                </div>
+              </div>` : ''}
             </div>
-            
+
             ${bookmarkImageTag ? `<figure itemprop="image" itemscope itemtype="https://schema.org/ImageObject">
               ${bookmarkImageTag}
               <figcaption style="font-size: 12px; color: #6b7280; text-align: center;">${escapeHtml(bookmarkName)}</figcaption>
             </figure>` : ''}
-            
+
             <p itemprop="description">${tr.bookmarksCarefully} 🌱</p>
-            
+
             ${bookmarkPlantDetails.length > 0 ? `
               <h2>🌿 ${detectedLang === 'fr' ? 'Plantes dans cette collection' : 'Plants in this Collection'} (${plantCount})</h2>
-              <ul style="list-style: none; padding: 0; margin: 20px 0;">
+              <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; margin: 20px 0;">
                 ${bookmarkPlantDetails.map(plant => {
                   const emoji = plantTypeEmojis[plant.plant_type?.toLowerCase()] || '🌱'
+                  const plantImageTag = plant.image_url ? generateImageTag(plant.image_url, plant.name) : null
                   return `
-                    <li style="padding: 12px; margin-bottom: 8px; background: #f9fafb; border-radius: 8px; border-left: 4px solid #10b981;">
-                      <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; color: #065f46; font-weight: 600; display: flex; align-items: center; gap: 8px;">
-                        <span style="font-size: 20px;">${emoji}</span>
-                        <div>
-                          <div>${escapeHtml(plant.name)}</div>
-                          ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; font-weight: normal;">${escapeHtml(plant.scientific_name)}</div>` : ''}
+                    <a href="/plants/${encodeURIComponent(plant.id)}" style="text-decoration: none; display: block; background: #f9fafb; border-radius: 12px; overflow: hidden; border: 1px solid #e5e7eb; transition: box-shadow 0.2s;">
+                      ${plantImageTag ? `<div style="width: 100%; height: 160px; overflow: hidden; background: #e5e7eb;">${plantImageTag}</div>` : `<div style="width: 100%; height: 160px; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ecfdf5, #f0fdf4); font-size: 48px;">${emoji}</div>`}
+                      <div style="padding: 12px;">
+                        <div style="color: #065f46; font-weight: 600; font-size: 15px; display: flex; align-items: center; gap: 6px;">
+                          <span>${emoji}</span> ${escapeHtml(plant.name)}
                         </div>
-                      </a>
-                    </li>
+                        ${plant.scientific_name ? `<div style="font-size: 12px; color: #6b7280; font-style: italic; margin-top: 2px;">${escapeHtml(plant.scientific_name)}</div>` : ''}
+                      </div>
+                    </a>
                   `
                 }).join('')}
-              </ul>
+              </div>
             ` : `
               <div style="padding: 24px; background: #fafafa; border-radius: 12px; text-align: center; margin: 20px 0;">
                 <p style="color: #6b7280; margin-bottom: 8px;">${detectedLang === 'fr' ? 'Cette collection est vide pour le moment.' : 'This collection is empty for now.'}</p>
@@ -33388,13 +33467,13 @@ async function generateCrawlerHtml(req, pagePath) {
                 <p style="color: #9ca3af; font-size: 13px;">${detectedLang === 'fr' ? 'Découvrez des plantes et créez vos propres collections sur Aphylia' : 'Discover plants and create your own collections on Aphylia'}</p>
               </div>
             `}
-            
+
             <div style="margin: 32px 0; padding: 20px; background: #f0fdf4; border-radius: 8px; border-left: 4px solid #10b981;">
               <strong>🔖 ${detectedLang === 'fr' ? 'Voir la collection complète' : 'View Full Collection'}</strong><br>
               ${detectedLang === 'fr' ? 'Pour créer vos propres collections et sauvegarder vos plantes préférées' : 'To create your own collections and save your favorite plants'}:<br>
               <a href="${escapeHtml(canonicalUrl)}" style="color: #059669; font-weight: 600;">${detectedLang === 'fr' ? 'Visiter Aphylia →' : 'Visit Aphylia →'}</a>
             </div>
-            
+
             <h2>🔗 ${detectedLang === 'fr' ? 'Explorer' : 'Explore'}</h2>
             <nav style="display: flex; flex-wrap: wrap; gap: 12px;">
               ${ownerName ? `<a href="/u/${encodeURIComponent(ownerName)}">👤 ${escapeHtml(ownerName)}</a>` : ''}
@@ -33821,7 +33900,19 @@ async function generateCrawlerHtml(req, pagePath) {
       name: title.replace(/🔖\s*/, '').split('-')[0].trim(),
       description: description,
       image: image || undefined,
-      url: canonicalUrl
+      url: canonicalUrl,
+      ...(req._ssrDebug?.bookmarkOwnerName ? {
+        author: {
+          '@type': 'Person',
+          name: req._ssrDebug.bookmarkOwnerName
+        }
+      } : {}),
+      ...(req._ssrDebug?.bookmarkCreatedAt ? {
+        dateCreated: new Date(req._ssrDebug.bookmarkCreatedAt).toISOString()
+      } : {}),
+      ...(req._ssrDebug?.bookmarkPlantCount != null ? {
+        numberOfItems: req._ssrDebug.bookmarkPlantCount
+      } : {})
     }
   } else {
     // Generic website schema
