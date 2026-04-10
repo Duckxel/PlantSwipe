@@ -512,67 +512,6 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     </div>
                   )}
 
-                  {/* Next chevron - top center */}
-                  <div
-                    className="absolute top-3 left-0 right-0 z-[100] flex justify-center"
-                    onPointerDownCapture={(e) => {
-                      e.stopPropagation()
-                      blockTapProcessing()
-                    }}
-                    onPointerMoveCapture={(e) => e.stopPropagation()}
-                    onPointerUpCapture={(e) => e.stopPropagation()}
-                    onTouchStartCapture={(e) => {
-                      e.stopPropagation()
-                      blockTapProcessing()
-                    }}
-                    onTouchMoveCapture={(e) => e.stopPropagation()}
-                    onTouchEndCapture={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => { e.stopPropagation(); handlePass() }}
-                      className="text-white/70 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
-                      aria-label={t("plant.next")}
-                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-                    >
-                      <ChevronUp className="h-7 w-7" />
-                    </button>
-                  </div>
-
-                  {/* Like button - inside card so it moves with swipe */}
-                  {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
-                  <div
-                    className="absolute top-4 right-4 z-[100]"
-                    onPointerDownCapture={(e) => {
-                      e.stopPropagation()
-                      blockTapProcessing()
-                    }}
-                    onPointerMoveCapture={(e) => e.stopPropagation()}
-                    onPointerUpCapture={(e) => e.stopPropagation()}
-                    onTouchStartCapture={(e) => {
-                      e.stopPropagation()
-                      blockTapProcessing()
-                    }}
-                    onTouchMoveCapture={(e) => e.stopPropagation()}
-                    onTouchEndCapture={(e) => e.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        blockTapProcessing()
-                        if (onToggleLike) onToggleLike()
-                      }}
-                      aria-pressed={liked}
-                      aria-label={liked ? "Unlike" : "Like"}
-                      className={`h-14 w-14 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${
-                        liked ? "bg-rose-600 text-white border-rose-500" : "bg-white text-black border-white"
-                      }`}
-                      style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
-                    >
-                      <Heart className={`h-7 w-7 ${liked ? "fill-current" : ""}`} />
-                    </button>
-                  </div>
                   
                   {current && (
                     <PlantMetaRail
@@ -604,10 +543,9 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     </h2>
                     {(current.scientificNameSpecies || current.scientificName) && <p className="opacity-90 text-sm italic">{current.scientificNameSpecies || current.scientificName}</p>}
                     
-                    {/* Info button - inside card so it moves with swipe */}
-                    {/* Wrapper uses capture phase to stop pointer events BEFORE they reach drag system */}
+                    {/* Action bar — all primary actions in the thumb zone */}
                     <div
-                      className="mt-5 flex justify-center"
+                      className="mt-5 flex items-center justify-center gap-3"
                       onPointerDownCapture={(e) => {
                         e.stopPropagation()
                         blockTapProcessing()
@@ -623,11 +561,38 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     >
                       <button
                         type="button"
-                        className="rounded-2xl h-11 px-12 bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        className="h-12 flex-1 max-w-[130px] rounded-2xl bg-white/95 text-black active:scale-95 flex items-center justify-center gap-1.5 shadow-lg text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
                         onClick={(e) => { e.stopPropagation(); handleInfo() }}
+                        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                       >
-                        <ChevronLeft className="h-4 w-4" />
+                        <Info className="h-4 w-4" />
                         {t("plant.info")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          blockTapProcessing()
+                          if (onToggleLike) onToggleLike()
+                        }}
+                        aria-pressed={liked}
+                        aria-label={liked ? "Unlike" : "Like"}
+                        className={`h-14 w-14 shrink-0 rounded-full flex items-center justify-center shadow-lg border-2 transition-all duration-150 active:scale-90 select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 ${
+                          liked ? "bg-rose-600 text-white border-rose-500" : "bg-white/95 text-black border-white/80"
+                        }`}
+                        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                      >
+                        <Heart className={`h-7 w-7 ${liked ? "fill-current" : ""}`} />
+                      </button>
+                      <button
+                        type="button"
+                        className="h-12 flex-1 max-w-[130px] rounded-2xl bg-white/15 text-white backdrop-blur-sm active:scale-95 flex items-center justify-center gap-1.5 shadow-lg border border-white/20 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2"
+                        onClick={(e) => { e.stopPropagation(); handlePass() }}
+                        aria-label={t("plant.next")}
+                        style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
+                      >
+                        {t("plant.next")}
+                        <ChevronUp className="h-4 w-4" />
                       </button>
                     </div>
                   </div>
