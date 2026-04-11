@@ -217,51 +217,7 @@ export const BookmarkPage = () => {
                 </div>
               </motion.div>
 
-              {/* Actions */}
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                className="flex flex-wrap items-center gap-2"
-              >
-                {!bookmark.is_like && (
-                  <Button
-                    variant="outline"
-                    onClick={handleShare}
-                    className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-800"
-                  >
-                    <Share2 className="h-4 w-4 mr-2" /> {t('common.share', { defaultValue: 'Share' })}
-                  </Button>
-                )}
-                {isOwner && (
-                  <>
-                    <Button
-                      onClick={() => setAddPlantOpen(true)}
-                      className="rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25"
-                    >
-                      <Plus className="h-4 w-4 mr-2" /> {t('bookmarks.addPlant', { defaultValue: 'Add Plant' })}
-                    </Button>
-                    {!bookmark.is_like && (
-                      <>
-                        <Button
-                          variant="outline"
-                          onClick={() => setEditOpen(true)}
-                          className="rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          onClick={handleDelete}
-                          className="rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </>
-                    )}
-                  </>
-                )}
-              </motion.div>
+              {/* Actions moved to sticky bottom bar for mobile thumb reach */}
             </div>
 
             {/* Stats row: Owner, Plant Count, Created Date */}
@@ -346,7 +302,7 @@ export const BookmarkPage = () => {
       </motion.section>
 
       {/* Plant Grid */}
-      <section className="max-w-6xl mx-auto px-4 py-8">
+      <section className="max-w-6xl mx-auto px-4 py-8 pb-28">
         <AnimatePresence mode="popLayout">
           {bookmark.items && bookmark.items.length > 0 ? (
             <motion.div 
@@ -492,6 +448,57 @@ export const BookmarkPage = () => {
           )}
         </AnimatePresence>
       </section>
+
+      {/* Sticky Bottom Action Bar — thumb-reachable on mobile */}
+      {(isOwner || !bookmark.is_like) && (
+        <motion.div
+          initial={{ y: 80, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ delay: 0.5, type: 'spring', stiffness: 300, damping: 30 }}
+          className="fixed bottom-0 left-0 right-0 z-50 bg-white/90 dark:bg-[#1e1e1e]/90 backdrop-blur-xl border-t border-stone-200/60 dark:border-stone-700/60"
+          style={{ paddingBottom: 'max(env(safe-area-inset-bottom, 0px), 8px)' }}
+        >
+          <div className="max-w-6xl mx-auto px-4 pt-3 pb-2 flex items-center gap-2">
+            {!bookmark.is_like && (
+              <Button
+                variant="outline"
+                onClick={handleShare}
+                className="h-12 min-w-[48px] flex-1 rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700 hover:bg-white dark:hover:bg-stone-800 text-base"
+              >
+                <Share2 className="h-5 w-5 mr-2" /> {t('common.share', { defaultValue: 'Share' })}
+              </Button>
+            )}
+            {isOwner && (
+              <>
+                <Button
+                  onClick={() => setAddPlantOpen(true)}
+                  className="h-12 min-w-[48px] flex-1 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-500/25 text-base"
+                >
+                  <Plus className="h-5 w-5 mr-2" /> {t('bookmarks.addPlant', { defaultValue: 'Add Plant' })}
+                </Button>
+                {!bookmark.is_like && (
+                  <>
+                    <Button
+                      variant="outline"
+                      onClick={() => setEditOpen(true)}
+                      className="h-12 w-12 min-w-[48px] rounded-2xl bg-white/80 dark:bg-stone-800/80 backdrop-blur border-stone-200 dark:border-stone-700"
+                    >
+                      <Edit2 className="h-5 w-5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      onClick={handleDelete}
+                      className="h-12 w-12 min-w-[48px] rounded-2xl text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+          </div>
+        </motion.div>
+      )}
 
       {/* Dialogs */}
       {isOwner && user && (
