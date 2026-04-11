@@ -208,11 +208,12 @@ const ContextChipBadge: React.FC<{
       <span className="truncate max-w-[100px]">{chip.label}</span>
       {onRemove && (
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation()
             onRemove()
           }}
-          className="ml-0.5 hover:bg-black/10 rounded-full p-0.5"
+          className="ml-0.5 hover:bg-black/10 rounded-full p-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
           aria-label={t('common.remove', { defaultValue: 'Remove' })}
           title={t('common.remove', { defaultValue: 'Remove' })}
         >
@@ -588,8 +589,9 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                           </div>
                         )}
                         <button
+                          type="button"
                           onClick={() => onRemoveAttachment(att.id)}
-                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 transition-opacity"
+                          className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/60 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 transition-opacity"
                           aria-label={t('common.remove', { defaultValue: 'Remove' })}
                           title={t('common.remove', { defaultValue: 'Remove' })}
                         >
@@ -616,8 +618,9 @@ export const AphyliaChatPanel: React.FC<AphyliaChatPanelProps> = ({
                       return (
                         <button
                           key={cmd}
+                          type="button"
                           onClick={() => handleSlashCommand(actionId)}
-                          className="w-full px-3 py-2 flex items-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left"
+                          className="w-full px-3 py-2 flex items-center gap-3 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:-outline-offset-2"
                         >
                           <span className="text-lg">{action.icon}</span>
                           <div>

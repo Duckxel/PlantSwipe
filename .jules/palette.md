@@ -45,3 +45,6 @@
 ## 2024-04-08 - Accessible interactive elements on profile screens
 **Learning:** Empty states buttons and expanding toggles (like "Show Less" or "Create Collection") must always include `aria-label` attributes to ensure screen reader compatibility, and explicit `focus-visible` utility classes (e.g., `focus-visible:ring-2`) to guarantee keyboard navigation support.
 **Action:** Always verify that every interactive button, especially toggles or ones nested within empty state containers, has explicit focus styling and an aria-label if its visual text isn't fully self-explanatory or is missing.
+## 2024-05-20 - Adding Keyboard Focus and Button Types to Action Buttons
+**Learning:** Adding semantic `type="button"` and `focus-visible` utility classes to interactive components ensures they behave consistently, especially within complex UIs, preventing form submission issues and enabling proper keyboard navigation.
+**Action:** Consistently set `type="button"` and `focus-visible` utility classes (e.g. `focus-visible:ring-2`) on custom buttons inside UIs.
