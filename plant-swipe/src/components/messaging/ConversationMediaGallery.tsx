@@ -313,10 +313,11 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
               {images.map((image, index) => (
                 <div key={image.id} className="relative group">
                   <button
+                    type="button"
                     onClick={() => setSelectedIndex(index)}
                     aria-label={t('common.viewImage', { defaultValue: 'View image' })}
                     title={t('common.viewImage', { defaultValue: 'View image' })}
-                    className="relative aspect-square w-full overflow-hidden rounded-md bg-stone-100 dark:bg-[#2a2a2d] focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="relative aspect-square w-full overflow-hidden rounded-md bg-stone-100 dark:bg-[#2a2a2d] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     <img
                       src={image.imageUrl}
@@ -337,6 +338,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                   
                   {/* Quick download button (visible on hover/touch) */}
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       downloadImage(image, index)
@@ -349,6 +351,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                       "opacity-0 group-hover:opacity-100 group-focus-within:opacity-100",
                       "md:opacity-100 md:bg-black/40 md:hover:bg-black/60",
                       "active:scale-95",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 focus-visible:ring-offset-black",
                       downloadSuccess === image.id && "bg-green-500"
                     )}
                     disabled={downloadingId === image.id}
@@ -444,13 +447,14 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 {/* Share button (if supported) */}
                 {canShare && (
                   <button
+                    type="button"
                     onClick={(e) => {
                       e.stopPropagation()
                       shareImage(selectedImage)
                     }}
                     aria-label={t('common.shareImage', { defaultValue: 'Share image' })}
                     title={t('common.shareImage', { defaultValue: 'Share image' })}
-                    className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-white/10 active:bg-white/20 transition-colors"
+                    className="flex flex-col items-center gap-1 p-3 rounded-xl hover:bg-white/10 active:bg-white/20 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
                   >
                     <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center">
                       <Share2 className="h-6 w-6 text-white" />
@@ -461,6 +465,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                 
                 {/* Download button - prominent */}
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation()
                     downloadImage(selectedImage, selectedIndex || 0)
@@ -470,7 +475,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
                   title={t('common.downloadImage', { defaultValue: 'Download image' })}
                   className={cn(
                     "flex flex-col items-center gap-1 p-3 rounded-xl transition-colors",
-                    "hover:bg-white/10 active:bg-white/20",
+                    "hover:bg-white/10 active:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500",
                     downloadSuccess === selectedImage.id && "bg-green-500/20"
                   )}
                 >
@@ -502,9 +507,11 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
           {/* Navigation arrows - larger touch targets for mobile */}
           {selectedIndex !== null && selectedIndex > 0 && (
             <button
+              type="button"
               className={cn(
                 "absolute left-0 top-1/2 -translate-y-1/2 p-4 transition-opacity duration-200",
                 "text-white active:scale-95",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset",
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
               aria-label={t('common.previousImage', { defaultValue: 'Previous image' })}
@@ -521,9 +528,11 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
           )}
           {selectedIndex !== null && selectedIndex < images.length - 1 && (
             <button
+              type="button"
               className={cn(
                 "absolute right-0 top-1/2 -translate-y-1/2 p-4 transition-opacity duration-200",
                 "text-white active:scale-95",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-inset",
                 showControls ? "opacity-100" : "opacity-0 pointer-events-none"
               )}
               aria-label={t('common.nextImage', { defaultValue: 'Next image' })}
