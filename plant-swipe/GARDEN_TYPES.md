@@ -38,7 +38,7 @@ type GardenType = 'default' | 'beginners' | 'seedling'
 The creation dialog (`GardenListPage.tsx`) presents:
 
 - **Garden name** input
-- **Garden type** selector — two buttons: Default / Beginners
+- **Garden type** selector — three buttons: Default / Beginners / Seedling
 - Default selection is **Default**
 
 No cover image selection (removed). Cover images can still be set later in garden settings.
