@@ -836,6 +836,7 @@ export const AdminBugsPanel: React.FC = () => {
                           className="rounded-lg h-8 w-8"
                           onClick={() => handleViewResponses(action)}
                           title="View Responses"
+                          aria-label="View Responses"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
@@ -845,6 +846,7 @@ export const AdminBugsPanel: React.FC = () => {
                           className="rounded-lg h-8 w-8"
                           onClick={() => handleEditAction(action)}
                           title="Edit"
+                          aria-label="Edit"
                         >
                           <Edit2 className="h-4 w-4" />
                         </Button>
@@ -855,6 +857,7 @@ export const AdminBugsPanel: React.FC = () => {
                             className="rounded-lg h-8 w-8 text-emerald-600"
                             onClick={() => handleChangeActionStatus(action.id, 'active')}
                             title="Activate"
+                            aria-label="Activate"
                           >
                             <Play className="h-4 w-4" />
                           </Button>
@@ -866,6 +869,7 @@ export const AdminBugsPanel: React.FC = () => {
                             className="rounded-lg h-8 w-8 text-orange-600"
                             onClick={() => handleChangeActionStatus(action.id, 'closed')}
                             title="Close"
+                            aria-label="Close"
                           >
                             <Archive className="h-4 w-4" />
                           </Button>
@@ -876,6 +880,7 @@ export const AdminBugsPanel: React.FC = () => {
                           className="rounded-lg h-8 w-8 text-red-600"
                           onClick={() => handleDeleteAction(action.id)}
                           title="Delete"
+                          aria-label="Delete"
                         >
                           <Trash2 className="h-4 w-4" />
                         </Button>
