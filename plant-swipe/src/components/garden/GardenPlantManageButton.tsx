@@ -565,79 +565,90 @@ export function GardenPlantManageButton({
             <div className="flex min-h-0 flex-col">
               <div className="p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 <div className="space-y-5 sm:space-y-6">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                      {t("gardenDashboard.plantsSection.plantName", "Plant name")}
-                    </label>
-                    <Input
-                      value={nickname}
-                      maxLength={30}
-                      onChange={(event) => setNickname(event.target.value)}
-                      placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
-                      className="h-11 rounded-2xl border-stone-200 dark:border-stone-700"
-                    />
+                <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/75 p-4 shadow-inner sm:space-y-5 sm:rounded-[26px] sm:p-5 dark:border-stone-700 dark:bg-stone-900/20">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-semibold text-stone-900 dark:text-white">
+                      {t("gardenDashboard.plantsSection.detailsTitle", "Plant details")}
+                    </h3>
+                    <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
+                      {t("gardenDashboard.plantsSection.detailsDescription", "Update the core info for this plant without leaving the modal.")}
+                    </p>
                   </div>
 
-                  {gardenType !== "seedling" && (
-                    <div className="space-y-2">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2.5">
                       <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                        {t("gardenDashboard.plantsSection.numberOfPlants", "Number of plants")}
+                        {t("gardenDashboard.plantsSection.plantName", "Plant name")}
                       </label>
-                      <NumberStepper
-                        value={Math.max(0, Number(count || 0))}
-                        onChange={setCount}
-                        min={0}
-                        className="h-11 rounded-2xl border-stone-200 dark:border-stone-700"
+                      <Input
+                        value={nickname}
+                        maxLength={30}
+                        onChange={(event) => setNickname(event.target.value)}
+                        placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
+                        className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
                       />
                     </div>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                      {t("gardenDashboard.plantsSection.healthStatus", "Plant health")}
-                    </label>
-                    {selectedHealthStatus ? (
-                      <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}>
-                        <span>{selectedHealthStatus.emoji}</span>
-                        <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
-                      </span>
-                    ) : null}
+                    {gardenType !== "seedling" && (
+                      <div className="space-y-2.5">
+                        <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                          {t("gardenDashboard.plantsSection.numberOfPlants", "Number of plants")}
+                        </label>
+                        <NumberStepper
+                          value={Math.max(0, Number(count || 0))}
+                          onChange={setCount}
+                          min={0}
+                          className="h-12 rounded-2xl border-stone-200 bg-white dark:border-stone-700"
+                        />
+                      </div>
+                    )}
                   </div>
-                  <Select
-                    value={healthStatus}
-                    onChange={(event) => setHealthStatus(event.target.value)}
-                    className="h-11 rounded-2xl border-stone-200 dark:border-stone-700"
-                  >
-                    <option value="">{t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}</option>
-                    {HEALTH_STATUSES.map((status) => (
-                      <option key={status.key} value={status.key}>
-                        {status.emoji} {t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}
-                      </option>
-                    ))}
-                  </Select>
-                  {lastHealthUpdatedLabel && (
-                    <p className="text-xs text-stone-500 dark:text-stone-400">
-                      {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
-                    </p>
-                  )}
-                </div>
 
-                <div className="space-y-2">
-                  <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                    {t("gardenDashboard.plantsSection.notes", "Notes")}
-                  </label>
-                  <textarea
-                    value={notes}
-                    onChange={(event) => setNotes(event.target.value)}
-                    rows={4}
-                    maxLength={500}
-                    placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
-                    className="min-h-[120px] w-full rounded-[22px] border border-stone-200 bg-white px-4 py-3 text-sm shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-stone-700 dark:bg-[#2d2d30] dark:text-white"
-                  />
-                </div>
+                  <div className="space-y-2.5">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                      <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                        {t("gardenDashboard.plantsSection.healthStatus", "Plant health")}
+                      </label>
+                      {selectedHealthStatus ? (
+                        <span className={`inline-flex items-center gap-1 self-start rounded-full px-2.5 py-1 text-xs font-medium ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}>
+                          <span>{selectedHealthStatus.emoji}</span>
+                          <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
+                        </span>
+                      ) : null}
+                    </div>
+                    <Select
+                      value={healthStatus}
+                      onChange={(event) => setHealthStatus(event.target.value)}
+                      className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
+                    >
+                      <option value="">{t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}</option>
+                      {HEALTH_STATUSES.map((status) => (
+                        <option key={status.key} value={status.key}>
+                          {status.emoji} {t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}
+                        </option>
+                      ))}
+                    </Select>
+                    {lastHealthUpdatedLabel && (
+                      <p className="px-1 text-xs leading-5 text-stone-500 dark:text-stone-400">
+                        {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                      {t("gardenDashboard.plantsSection.notes", "Notes")}
+                    </label>
+                    <textarea
+                      value={notes}
+                      onChange={(event) => setNotes(event.target.value)}
+                      rows={4}
+                      maxLength={500}
+                      placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
+                      className="min-h-[132px] w-full rounded-[22px] border border-stone-200 bg-white px-4 py-3.5 text-sm leading-6 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-stone-700 dark:bg-[#2d2d30] dark:text-white"
+                    />
+                  </div>
+                </section>
 
                 <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-inner sm:rounded-[26px] sm:p-4 dark:border-stone-700 dark:bg-stone-900/30">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
