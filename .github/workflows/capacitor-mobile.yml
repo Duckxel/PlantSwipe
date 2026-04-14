@@ -254,7 +254,7 @@ jobs:
 
   ios-simulator:
     name: iOS Simulator build (macOS)
-    runs-on: macos-14
+    runs-on: macos-15
     needs: cap-sync-and-web
     if: needs.cap-sync-and-web.outputs.has-ios == 'true'
     defaults:
@@ -262,6 +262,16 @@ jobs:
         working-directory: plant-swipe
     steps:
       - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          if [ -d "/Applications/Xcode_26.app" ]; then
+            sudo xcode-select -s /Applications/Xcode_26.app/Contents/Developer
+          else
+            LATEST=$(ls -d /Applications/Xcode*.app 2>/dev/null | sort -V | tail -1)
+            [ -n "$LATEST" ] && sudo xcode-select -s "$LATEST/Contents/Developer"
+          fi
+          xcodebuild -version
 
       - uses: oven-sh/setup-bun@v2
         with:
