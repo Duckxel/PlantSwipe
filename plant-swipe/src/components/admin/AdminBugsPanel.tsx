@@ -447,12 +447,26 @@ export const AdminBugsPanel: React.FC = () => {
 
   // Computed: action counts by status
   const actionStatusCounts = React.useMemo(() => {
+    // ⚡ Bolt: Calculate multiple status counts using a single-pass loop instead of chained .filter().length calls
+    let draft = 0;
+    let planned = 0;
+    let active = 0;
+    let closed = 0;
+
+    for (let i = 0; i < actions.length; i++) {
+      const status = actions[i].status;
+      if (status === 'draft') draft++;
+      else if (status === 'planned') planned++;
+      else if (status === 'active') active++;
+      else if (status === 'closed') closed++;
+    }
+
     return {
       all: actions.length,
-      draft: actions.filter(a => a.status === 'draft').length,
-      planned: actions.filter(a => a.status === 'planned').length,
-      active: actions.filter(a => a.status === 'active').length,
-      closed: actions.filter(a => a.status === 'closed').length,
+      draft,
+      planned,
+      active,
+      closed,
     }
   }, [actions])
 
