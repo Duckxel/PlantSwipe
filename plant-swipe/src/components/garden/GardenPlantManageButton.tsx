@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
-import { Camera, Loader2, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
+import { Camera, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
