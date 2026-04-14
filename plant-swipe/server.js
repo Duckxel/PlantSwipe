@@ -22881,11 +22881,10 @@ app.get('/api/garden/:id/advice', async (req, res) => {
     }
 
     // Garden must have at least one plant with tasks configured
-    const taskCountRows = await sql`
-      select count(*)::int as count from public.garden_plant_tasks where garden_id = ${gardenId}
+    const taskExistsRows = await sql`
+      select 1 from public.garden_plant_tasks where garden_id = ${gardenId} limit 1
     `
-    const taskCount = Number(taskCountRows[0]?.count || 0)
-    if (taskCount < 1) {
+    if (taskExistsRows.length < 1) {
       res.json({ ok: true, message: 'Add tasks to your plants to receive personalized advice.', advice: null })
       return
     }
