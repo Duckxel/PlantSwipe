@@ -4943,6 +4943,7 @@ function OverviewSection({
         variety: gp.plant?.variety || null,
         imageUrl: primaryImageUrl,
         plantId: gp.plant?.id,
+        gp,
         plantsOnHand: Number(gp.plantsOnHand || 0),
         healthStatus: gp.healthStatus || null,
         taskCount: taskInfo.total,
@@ -6055,7 +6056,8 @@ function OverviewSection({
                     : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30"
                 }`}
                 onClick={() => {
-                  if (plant.plantId) navigate(`/plants/${plant.plantId}`);
+                  const manageButton = document.querySelector<HTMLButtonElement>(`[data-garden-manage-id="overview-${plant.id}"]`);
+                  manageButton?.click();
                 }}
                 style={{
                   animationDelay: `${idx * 40}ms`,
@@ -6086,16 +6088,17 @@ function OverviewSection({
                     </span>
                   )}
                   {plant.plantsOnHand <= 1 && <span />}
-                  {/* Tasks due today badge (blue) or no-tasks warning (orange) */}
-                  {plant.tasksDueToday > 0 ? (
-                    <span className="px-2 py-0.5 rounded-full bg-blue-500 text-xs font-semibold text-white shadow-sm">
-                      {plant.tasksDueToday} 📋
-                    </span>
-                  ) : plant.taskCount === 0 && garden?.gardenType !== "seedling" ? (
-                    <span className="px-2 py-0.5 rounded-full bg-orange-500 text-xs font-semibold text-white shadow-sm">
-                      ⚠️
-                    </span>
-                  ) : null}
+                  <GardenPlantManageButton
+                    dataGardenManageId={`overview-${plant.id}`}
+                    iconOnly
+                    gp={plant.gp}
+                    gardenId={gardenId}
+                    onChanged={load}
+                    actorColorCss={null}
+                    gardenType={garden?.gardenType}
+                    taskCount={plant.taskCount}
+                    dueTodayCount={plant.tasksDueToday}
+                  />
                 </div>
                 
                 {/* Bottom info: name and task count */}

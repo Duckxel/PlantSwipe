@@ -60,6 +60,8 @@ export function GardenPlantManageButton({
   gardenType,
   taskCount = 0,
   dueTodayCount = 0,
+  iconOnly = false,
+  dataGardenManageId,
 }: {
   gp: any;
   gardenId: string;
@@ -68,6 +70,8 @@ export function GardenPlantManageButton({
   gardenType?: string;
   taskCount?: number;
   dueTodayCount?: number;
+  iconOnly?: boolean;
+  dataGardenManageId?: string;
 }) {
   const { t } = useTranslation("common");
   const { user } = useAuth();
@@ -498,9 +502,24 @@ export function GardenPlantManageButton({
 
   return (
     <>
-      <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>
-        {t("gardenDashboard.plantsSection.managePlant", "Manage")}
-      </Button>
+      {iconOnly ? (
+        <button
+          type="button"
+          data-garden-manage-id={dataGardenManageId}
+          onClick={(event) => {
+            event.stopPropagation();
+            setOpen(true);
+          }}
+          className="flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white/90 text-stone-500 shadow-sm transition hover:border-emerald-200 hover:bg-emerald-50 hover:text-emerald-600 dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-300 dark:hover:border-emerald-900/50 dark:hover:bg-emerald-900/20 dark:hover:text-emerald-300"
+          aria-label={t("gardenDashboard.plantsSection.managePlant", "Manage")}
+        >
+          <Pencil className="h-4 w-4" />
+        </button>
+      ) : (
+        <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>
+          {t("gardenDashboard.plantsSection.managePlant", "Manage")}
+        </Button>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
