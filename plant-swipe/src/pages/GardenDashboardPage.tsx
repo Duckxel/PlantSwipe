@@ -1760,10 +1760,11 @@ export const GardenDashboardPage: React.FC = () => {
 
     // Can view garden content (member, admin, or public garden)
     const canViewFullGarden = React.useMemo(() => {
+      if (isDemoGarden) return true;
       if (profile?.is_admin) return true;
       if (isMember) return true;
       return false;
-    }, [isMember, profile?.is_admin]);
+    }, [isDemoGarden, isMember, profile?.is_admin]);
 
     // Can view at least the overview (based on privacy setting)
     const canViewOverview = React.useMemo(() => {
