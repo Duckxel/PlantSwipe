@@ -11,7 +11,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
-      - 'plant-swipe/**'
+      - 'plant-swipe/android/**'
+      - 'plant-swipe/ios/**'
+      - 'plant-swipe/capacitor.config.*'
+      - 'plant-swipe/package.json'
+      - 'plant-swipe/bun.lock'
+      - 'plant-swipe/scripts/sync-native-version.mjs'
+      - 'plant-swipe/scripts/cap-ci-sync.mjs'
+      - 'plant-swipe/scripts/assert-capacitor-store-bundle.mjs'
       - '.github/workflows/capacitor-mobile.yml'
 
 concurrency:
