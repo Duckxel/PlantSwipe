@@ -475,7 +475,7 @@ export function GardenPlantManageButton({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="max-w-5xl rounded-[30px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="sr-only">
@@ -483,8 +483,8 @@ export function GardenPlantManageButton({
             <DialogDescription>{t("gardenDashboard.plantsSection.managePlantDescription", "Edit your plant details, photo, and routine in one place.")}</DialogDescription>
           </DialogHeader>
 
-          <div className="grid max-h-[85vh] overflow-hidden lg:grid-cols-[320px_1fr]">
-            <div className="relative min-h-[280px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500">
+          <div className="flex max-h-[92dvh] min-h-0 flex-col overflow-hidden lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)]">
+            <div className="relative min-h-[220px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[260px] lg:min-h-[280px]">
               {currentImageUrl ? (
                 <img
                   src={currentImageUrl}
@@ -495,25 +495,27 @@ export function GardenPlantManageButton({
                 <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
-              <div className="absolute inset-x-0 top-0 flex items-center justify-end gap-2 p-4">
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={uploadingImage}
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-white/90 px-4 text-sm font-medium text-stone-900 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                  <span>{t("gardenDashboard.plantsSection.uploadImage", "Upload")}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTakePhoto}
-                  disabled={uploadingImage}
-                  className="inline-flex h-10 items-center gap-2 rounded-full bg-white/15 px-4 text-sm font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <Camera className="h-4 w-4" />
-                  <span>{t("gardenDashboard.plantsSection.takePhoto", "Take photo")}</span>
-                </button>
+              <div className="absolute inset-x-0 top-0 p-3 sm:p-4">
+                <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingImage}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/90 px-3 text-xs font-medium text-stone-900 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
+                  >
+                    {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
+                    <span>{t("gardenDashboard.plantsSection.uploadImage", "Upload")}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleTakePhoto}
+                    disabled={uploadingImage}
+                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/15 px-3 text-xs font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
+                  >
+                    <Camera className="h-4 w-4" />
+                    <span>{t("gardenDashboard.plantsSection.takePhoto", "Take photo")}</span>
+                  </button>
+                </div>
               </div>
               <input
                 ref={fileInputRef}
@@ -526,12 +528,12 @@ export function GardenPlantManageButton({
                   if (file) uploadGardenPlantPhoto(file);
                 }}
               />
-              <div className="absolute inset-x-0 bottom-0 space-y-3 p-5 text-white">
+              <div className="absolute inset-x-0 bottom-0 space-y-3 p-4 text-white sm:p-5">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.24em] text-white/70">
                     {t("gardenDashboard.plantsSection.plantProfile", "Plant profile")}
                   </div>
-                  <div className="mt-1 text-2xl font-semibold leading-tight">{displayName}</div>
+                  <div className="mt-1 text-xl font-semibold leading-tight sm:text-2xl">{displayName}</div>
                   {speciesName && speciesName !== displayName && (
                     <div className="text-sm text-white/80">{speciesName}</div>
                   )}
@@ -559,9 +561,10 @@ export function GardenPlantManageButton({
               </div>
             </div>
 
-            <div className="overflow-y-auto p-5 sm:p-6">
-              <div className="space-y-6">
-                <div className="grid gap-4 md:grid-cols-2">
+            <div className="flex min-h-0 flex-col">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+                <div className="space-y-5 sm:space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
                       {t("gardenDashboard.plantsSection.plantName", "Plant name")}
@@ -636,7 +639,7 @@ export function GardenPlantManageButton({
                   />
                 </div>
 
-                <section className="space-y-4 rounded-[26px] border border-stone-200/80 bg-stone-50/80 p-4 shadow-inner dark:border-stone-700 dark:bg-stone-900/30">
+                <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-inner sm:rounded-[26px] sm:p-4 dark:border-stone-700 dark:bg-stone-900/30">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-stone-900 dark:text-white">
@@ -648,7 +651,7 @@ export function GardenPlantManageButton({
                     </div>
                     <Button
                       type="button"
-                      className="rounded-2xl gap-2"
+                      className="w-full rounded-2xl gap-2 sm:w-auto"
                       variant={taskEditorOpen ? "secondary" : "default"}
                       onClick={() => {
                         if (taskEditorOpen) resetTaskEditor();
@@ -768,7 +771,7 @@ export function GardenPlantManageButton({
                         <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
                           {t("gardenDashboard.taskDialog.taskType", "Task Type")}
                         </label>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
                           {TASK_TYPES.map(({ type, emoji }) => {
                             const isActive = taskType === type;
                             return (
@@ -776,7 +779,7 @@ export function GardenPlantManageButton({
                                 key={type}
                                 type="button"
                                 onClick={() => setTaskType(type)}
-                                className={`flex flex-col items-center gap-1 rounded-2xl border-2 py-3 text-center text-[11px] font-medium transition ${
+                                className={`flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-2 py-3 text-center text-[10px] font-medium transition sm:min-h-[72px] sm:text-[11px] ${
                                   isActive
                                     ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-300"
                                     : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
@@ -864,7 +867,7 @@ export function GardenPlantManageButton({
                               +
                             </button>
                           </div>
-                          <div className="flex overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
+                          <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
                             {(["week", "month", "year"] as Period[]).map((period) => (
                               <button
                                 key={period}
@@ -876,7 +879,7 @@ export function GardenPlantManageButton({
                                   setYearlyDays([]);
                                   setTaskAmount((current) => Math.min(period === "week" ? 7 : period === "month" ? 12 : 52, current));
                                 }}
-                                className={`h-10 px-4 text-sm font-medium capitalize transition ${
+                                className={`h-10 px-3 text-sm font-medium capitalize transition ${
                                   taskPeriod === period
                                     ? "bg-emerald-600 text-white"
                                     : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-700"
@@ -904,7 +907,7 @@ export function GardenPlantManageButton({
                         </div>
 
                         {taskPeriod === "week" && (
-                          <div className="grid grid-cols-7 gap-2">
+                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
                             {[
                               t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
                               t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
@@ -928,7 +931,7 @@ export function GardenPlantManageButton({
                                     })
                                   }
                                   disabled={!selected && disableMoreSelections}
-                                  className={`h-12 rounded-xl border-2 text-sm font-medium transition ${
+                                  className={`h-11 rounded-xl border-2 text-xs font-medium transition sm:h-12 sm:text-sm ${
                                     selected
                                       ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
                                       : "border-stone-200 bg-white text-stone-700 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
@@ -942,7 +945,8 @@ export function GardenPlantManageButton({
                         )}
 
                         {taskPeriod === "month" && (
-                          <div className="space-y-1.5">
+                          <div className="overflow-x-auto pb-1">
+                            <div className="min-w-[430px] space-y-1.5">
                             <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
                               <div />
                               {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
@@ -983,6 +987,7 @@ export function GardenPlantManageButton({
                               </div>
                             ))}
                           </div>
+                          </div>
                         )}
 
                         {taskPeriod === "year" && (
@@ -1007,7 +1012,7 @@ export function GardenPlantManageButton({
                         </div>
                       )}
 
-                      <div className="flex gap-2">
+                      <div className="flex flex-col gap-2 sm:flex-row">
                         <Button variant="secondary" className="flex-1 rounded-2xl" onClick={resetTaskEditor} disabled={taskSaving}>
                           {t("cancel", "Cancel")}
                         </Button>
@@ -1024,12 +1029,14 @@ export function GardenPlantManageButton({
                     </div>
                   )}
                 </section>
-
-                <div className="flex flex-col-reverse gap-2 border-t border-stone-200 pt-4 sm:flex-row sm:justify-end dark:border-stone-700">
-                  <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(false)}>
+                </div>
+              </div>
+              <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
                     {t("cancel", "Cancel")}
                   </Button>
-                  <Button className="rounded-2xl" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
+                  <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
                     {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
                   </Button>
                 </div>
