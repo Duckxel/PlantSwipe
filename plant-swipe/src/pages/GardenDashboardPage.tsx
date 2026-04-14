@@ -3509,9 +3509,11 @@ export const GardenDashboardPage: React.FC = () => {
                         <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-5 shadow-sm overflow-hidden mt-1 border-t-0 rounded-t-none">
                           <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x snap-mandatory">
                             {suggestedPlants.map((sp) => (
-                              <div
+                              <button
                                 key={sp.id}
-                                className="flex-shrink-0 w-[160px] snap-start group"
+                                type="button"
+                                onClick={() => navigate(`/plants/${sp.id}`)}
+                                className="flex-shrink-0 w-[160px] snap-start group text-left"
                               >
                                 <div className="relative aspect-[3/4] rounded-2xl overflow-hidden bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 mb-2">
                                   {sp.imageUrl ? (
@@ -3533,14 +3535,11 @@ export const GardenDashboardPage: React.FC = () => {
                                   {sp.variety && (
                                     <div className="text-xs text-stone-500 dark:text-stone-400 truncate">{sp.variety}</div>
                                   )}
-                                  <button
-                                    onClick={() => navigate(`/plants/${sp.id}`)}
-                                    className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1 hover:underline"
-                                  >
+                                  <div className="text-xs text-emerald-600 dark:text-emerald-400 font-medium mt-1">
                                     {t("gardenDashboard.beginnerSuggestions.learnMore", { defaultValue: "Learn more" })}
-                                  </button>
+                                  </div>
                                 </div>
-                              </div>
+                              </button>
                             ))}
                             {/* Explore more card */}
                             <div
