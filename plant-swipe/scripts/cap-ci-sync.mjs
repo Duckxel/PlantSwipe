@@ -20,6 +20,7 @@ try {
   execSync('node scripts/assert-capacitor-store-bundle.mjs', { stdio: 'inherit', cwd: root, env: process.env })
   execSync('node scripts/sync-native-version.mjs', { stdio: 'inherit', cwd: root, env: process.env })
   execSync('npx cap sync', { stdio: 'inherit', cwd: root, env: process.env })
+  execSync('node scripts/patch-ios-spm.mjs', { stdio: 'inherit', cwd: root, env: process.env })
 } catch {
   process.exit(1)
 }
