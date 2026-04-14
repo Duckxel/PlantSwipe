@@ -264,7 +264,7 @@ export const GardenDashboardPage: React.FC = () => {
   }, [plants]);
   const [isFriendOfMember, setIsFriendOfMember] = React.useState(false);
 
-  const [addOpen, setAddOpen] = React.useState(false);
+  const [addPlantPickerOpen, setAddPlantPickerOpen] = React.useState(false);
   const [_plantQuery, setPlantQuery] = React.useState("");
   const [_plantResults, _setPlantResults] = React.useState<Plant[]>([]);
   const [selectedPlant, setSelectedPlant] = React.useState<Plant | null>(null);
@@ -286,8 +286,6 @@ export const GardenDashboardPage: React.FC = () => {
       }
     | undefined
   >(undefined);
-  const [addNickname, setAddNickname] = React.useState("");
-  const [addCount, setAddCount] = React.useState<number>(1);
   const [scheduleLockYear, setScheduleLockYear] =
     React.useState<boolean>(false);
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<
@@ -349,7 +347,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
   const anyModalOpen =
-    addOpen || scheduleOpen || inviteOpen || bookmarkDialogOpen;
+    addPlantPickerOpen || scheduleOpen || inviteOpen || bookmarkDialogOpen;
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -2462,7 +2460,7 @@ export const GardenDashboardPage: React.FC = () => {
         setActivityRev((r) => r + 1);
       } catch {}
 
-      setAddOpen(false);
+      setAddPlantPickerOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
       setAddNickname("");
@@ -2497,6 +2495,13 @@ export const GardenDashboardPage: React.FC = () => {
       setPendingGardenPlantId(gp.id);
       setTaskOpen(true);
       emitGardenRealtime("plants");
+
+      if (garden?.gardenType !== "seedling") {
+        setTimeout(() => {
+          const manageButton = document.querySelector<HTMLButtonElement>(`[data-garden-manage-id="${gp.id}"]`);
+          manageButton?.click();
+        }, 0);
+      }
       return;
     } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
@@ -3114,7 +3119,7 @@ export const GardenDashboardPage: React.FC = () => {
                       <div className="flex items-center">
                         <Button
                           className="rounded-l-2xl rounded-r-none border-r-0"
-                          onClick={() => setAddOpen(true)}
+                          onClick={() => setAddPlantPickerOpen(true)}
                         >
                           <Plus className="h-4 w-4 mr-1" />
                           {t("gardenDashboard.plantsSection.addPlant")}
@@ -3782,143 +3787,55 @@ export const GardenDashboardPage: React.FC = () => {
 
           {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
 
-          {/* Add Plant Dialog */}
-          <Dialog open={addOpen} onOpenChange={(open) => { setAddOpen(open); if (!open) setSelectedPlant(null); }}>
-              <DialogContent
-                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
-                aria-describedby={undefined}
-              >
-              <DialogHeader>
-                <DialogTitle>
-                  {t("gardenDashboard.plantsSection.addPlantToGarden")}
-                </DialogTitle>
-                  <DialogDescription className="sr-only">
-                    {t("gardenDashboard.plantsSection.searchPlants")}
-                  </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <SearchItem
-                  value={selectedPlant?.id || null}
-                  onSelect={(option) => {
-                    const plant = plantCacheRef.current.get(option.id) || null;
-                    setSelectedPlant(plant);
-                  }}
-                  onClear={() => setSelectedPlant(null)}
-                  onSearch={searchPlantsForGarden}
-                  placeholder={t("gardenDashboard.plantsSection.searchPlants")}
-                  title={t("gardenDashboard.plantsSection.searchPlants")}
-                  searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
-                  emptyMessage={t("gardenDashboard.plantsSection.noResults")}
-                  priorityZIndex={100}
-                  initialOption={selectedPlant ? {
-                    id: selectedPlant.id,
-                    label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
-                    description: null,
-                  } : null}
-                  renderItem={(option) => (
-                    <div className="flex flex-col w-full h-full">
-                      <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
-                        {option.description ? (
-                          <img src={option.description} alt="" className="w-full h-full object-cover" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-stone-400">
-                            <Leaf className="h-8 w-8" />
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
-                        <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
-                        {option.meta && (
-                          <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
-                        )}
-                      </div>
+          <SearchItem
+            open={addPlantPickerOpen}
+            onOpenChange={(nextOpen) => {
+              setAddPlantPickerOpen(nextOpen);
+              if (!nextOpen) setSelectedPlant(null);
+            }}
+            hideTrigger
+            value={selectedPlant?.id || null}
+            onSelect={(option) => {
+              const plant = plantCacheRef.current.get(option.id) || null;
+              setSelectedPlant(plant);
+            }}
+            onClear={() => setSelectedPlant(null)}
+            onSearch={searchPlantsForGarden}
+            placeholder={t("gardenDashboard.plantsSection.searchPlants")}
+            title={t("gardenDashboard.plantsSection.searchPlants")}
+            searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
+            emptyMessage={t("gardenDashboard.plantsSection.noResults")}
+            confirmLabel={adding ? t("gardenDashboard.plantsSection.adding") : t("gardenDashboard.plantsSection.add")}
+            confirmSingleSelect
+            onConfirmSingleSelect={async () => {
+              await addSelectedPlant();
+            }}
+            priorityZIndex={100}
+            initialOption={selectedPlant ? {
+              id: selectedPlant.id,
+              label: selectedPlant.name + (selectedPlant.variety ? ` '${selectedPlant.variety}'` : ''),
+              description: null,
+            } : null}
+            renderItem={(option) => (
+              <div className="flex flex-col w-full h-full">
+                <div className="aspect-[4/3] w-full overflow-hidden rounded-t-xl sm:rounded-t-2xl bg-stone-100 dark:bg-stone-800">
+                  {option.description ? (
+                    <img src={option.description} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-stone-400">
+                      <Leaf className="h-8 w-8" />
                     </div>
                   )}
-                />
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    variant="secondary"
-                    className="rounded-2xl"
-                    onClick={() => setAddOpen(false)}
-                  >
-                    {t("common.cancel")}
-                  </Button>
-                  <Button
-                    className="rounded-2xl"
-                    disabled={!selectedPlant || adding}
-                    onClick={addSelectedPlant}
-                  >
-                    {adding
-                      ? t("gardenDashboard.plantsSection.adding")
-                      : t("gardenDashboard.plantsSection.next")}
-                  </Button>
+                </div>
+                <div className="flex-1 flex flex-col justify-center px-3 py-2 min-w-0">
+                  <p className="text-sm font-medium truncate text-stone-900 dark:text-white">{option.label}</p>
+                  {option.meta && (
+                    <p className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">{option.meta}</p>
+                  )}
                 </div>
               </div>
-            </DialogContent>
-          </Dialog>
-
-          {/* Add Plant Details Dialog */}
-          <Dialog open={addDetailsOpen} onOpenChange={setAddDetailsOpen}>
-              <DialogContent
-                className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur"
-                aria-describedby={undefined}
-              >
-              <DialogHeader>
-                <DialogTitle>
-                  {t("gardenDashboard.plantsSection.addDetails")}
-                </DialogTitle>
-                  <DialogDescription className="sr-only">
-                    {t("gardenDashboard.plantsSection.customName")}
-                  </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("gardenDashboard.plantsSection.customName")}
-                  </label>
-                  <Input
-                    value={addNickname}
-                    maxLength={30}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddNickname(e.target.value)}
-                    placeholder={t(
-                      "gardenDashboard.plantsSection.optionalNickname",
-                    )}
-                  />
-                </div>
-                {garden?.gardenType !== "seedling" && (
-                <div>
-                  <label className="text-sm font-medium">
-                    {t("gardenDashboard.plantsSection.numberOfFlowers")}
-                  </label>
-                  <Input
-                    ref={countInputRef}
-                    autoFocus
-                    type="number"
-                    min={0}
-                    value={String(addCount)}
-                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setAddCount(Number(e.target.value))}
-                  />
-                </div>
-                )}
-                <div className="flex justify-end gap-2 pt-2">
-                  <Button
-                    variant="secondary"
-                    className="rounded-2xl"
-                    onClick={() => setAddDetailsOpen(false)}
-                  >
-                    {t("gardenDashboard.plantsSection.back")}
-                  </Button>
-                  <Button
-                    className="rounded-2xl"
-                    onClick={confirmAddSelectedPlant}
-                    disabled={!selectedPlant}
-                  >
-                    {t("gardenDashboard.plantsSection.add")}
-                  </Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
+            )}
+          />
 
           {/* Bookmark Selection Dialog */}
           <Dialog open={bookmarkDialogOpen} onOpenChange={setBookmarkDialogOpen}>

@@ -110,6 +110,16 @@ export interface SearchItemProps {
   priorityZIndex?: number
   /** Disable the trigger */
   disabled?: boolean
+  /** Control the dialog open state externally */
+  open?: boolean
+  /** Callback for externally-controlled open state */
+  onOpenChange?: (open: boolean) => void
+  /** Hide the built-in trigger button (useful when the dialog is opened externally) */
+  hideTrigger?: boolean
+  /** In single-select mode, require an explicit confirm action instead of selecting immediately */
+  requireSingleConfirm?: boolean
+  /** Label for the single-select confirm button when confirmation is required */
+  singleConfirmLabel?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -156,14 +166,26 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       className,
       priorityZIndex = 100,
       disabled = false,
+      open: controlledOpen,
+      onOpenChange: controlledOnOpenChange,
+      hideTrigger = false,
+      requireSingleConfirm = false,
+      singleConfirmLabel = "Continue",
     },
     ref,
   ) => {
-    const [open, setOpen] = React.useState(false)
+    const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false)
     const [search, setSearch] = React.useState("")
+    const open = controlledOpen ?? uncontrolledOpen
+    const setOpen = React.useCallback((nextOpen: boolean) => {
+      if (controlledOnOpenChange) controlledOnOpenChange(nextOpen)
+      else setUncontrolledOpen(nextOpen)
+    }, [controlledOnOpenChange])
+
     const [asyncResults, setAsyncResults] = React.useState<SearchItemOption[]>([])
     const [asyncLoading, setAsyncLoading] = React.useState(false)
     const debounceRef = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+    const [pendingSingleOption, setPendingSingleOption] = React.useState<SearchItemOption | null>(null)
     // Multi-select: working set of selected IDs (initialized from `values` on open)
     const [workingIds, setWorkingIds] = React.useState<Set<string>>(new Set())
     // Multi-select: accumulated option data for all items ever toggled on during this session.
@@ -255,6 +277,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
     React.useEffect(() => {
       if (open) {
         setWorkingIds(new Set(values))
+        setPendingSingleOption(null)
         // Seed the working options ref with already-selected options so they can
         // always be resolved on confirm, even if async results change.
         const map = new Map<string, SearchItemOption>()
@@ -263,6 +286,7 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
       } else {
         setSearch("")
         setWorkingIds(new Set())
+        setPendingSingleOption(null)
         workingOptionsRef.current = new Map()
       }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -368,33 +392,34 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
 
     return (
       <>
-        {/* Trigger button */}
-        <button
-          ref={ref}
-          type="button"
-          disabled={disabled || loading}
-          aria-haspopup="dialog"
-          aria-expanded={open}
-          onClick={() => {
-            setSearch("")
-            setOpen(true)
-          }}
-          className={cn(
-            "flex items-center justify-between w-full h-10 rounded-xl border px-3 text-sm transition-colors",
-            value
-              ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-stone-900 dark:text-white"
-              : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-stone-500 dark:text-stone-400",
-            disabled && "opacity-50 cursor-not-allowed",
-            className,
-          )}
-        >
-          <span className="truncate">{triggerLabel}</span>
-          {loading ? (
-            <Loader2 className="h-3.5 w-3.5 flex-shrink-0 ml-2 animate-spin text-stone-400" />
-          ) : (
-            <Search className="h-3.5 w-3.5 flex-shrink-0 ml-2 opacity-50" />
-          )}
-        </button>
+        {!hideTrigger && (
+          <button
+            ref={ref}
+            type="button"
+            disabled={disabled || loading}
+            aria-haspopup="dialog"
+            aria-expanded={open}
+            onClick={() => {
+              setSearch("")
+              setOpen(true)
+            }}
+            className={cn(
+              "flex items-center justify-between w-full h-10 rounded-xl border px-3 text-sm transition-colors",
+              value
+                ? "border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-900/20 text-stone-900 dark:text-white"
+                : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] text-stone-500 dark:text-stone-400",
+              disabled && "opacity-50 cursor-not-allowed",
+              className,
+            )}
+          >
+            <span className="truncate">{triggerLabel}</span>
+            {loading ? (
+              <Loader2 className="h-3.5 w-3.5 flex-shrink-0 ml-2 animate-spin text-stone-400" />
+            ) : (
+              <Search className="h-3.5 w-3.5 flex-shrink-0 ml-2 opacity-50" />
+            )}
+          </button>
+        )}
 
         {/* Search dialog */}
         <Dialog open={open} onOpenChange={setOpen}>
@@ -490,8 +515,12 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                             if (multiSelect) {
                               toggleWorking(option.id, option)
                             } else {
-                              onSelect(option)
-                              setOpen(false)
+                              if (requireSingleConfirm) {
+                                setPendingSingleOption(option)
+                              } else {
+                                onSelect(option)
+                                setOpen(false)
+                              }
                             }
                           }}
                           className={cn(
@@ -550,6 +579,33 @@ const SearchItem = React.forwardRef<HTMLButtonElement, SearchItemProps>(
                   )}
                 >
                   {confirmLabel}{workingIds.size > 0 ? ` (${workingIds.size})` : ""}
+                </button>
+              </div>
+            ) : requireSingleConfirm ? (
+              <div className="flex items-center justify-between px-5 py-3 border-t border-stone-100 dark:border-[#2a2a2d]">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="text-sm text-stone-500 hover:text-stone-700 dark:hover:text-stone-300"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={!pendingSingleOption}
+                  onClick={() => {
+                    if (!pendingSingleOption) return
+                    onSelect(pendingSingleOption)
+                    setOpen(false)
+                  }}
+                  className={cn(
+                    "px-4 py-2 rounded-xl text-sm font-medium transition-colors",
+                    pendingSingleOption
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-stone-100 dark:bg-[#2a2a2d] text-stone-400 cursor-not-allowed",
+                  )}
+                >
+                  {singleConfirmLabel}
                 </button>
               </div>
             ) : value && onClear ? (
