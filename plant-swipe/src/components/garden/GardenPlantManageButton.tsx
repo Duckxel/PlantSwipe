@@ -926,24 +926,16 @@ export function GardenPlantManageButton({
                 {t("gardenDashboard.taskDialog.frequency", "How often?")}
               </label>
               <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                <div className="flex items-center overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
-                  <button
-                    type="button"
-                    onClick={() => setTaskAmount((current) => Math.max(1, current - 1))}
-                    disabled={taskAmount <= 1}
-                    className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
-                  >
-                    −
-                  </button>
-                  <span className="w-11 text-center text-lg font-bold tabular-nums">{taskAmount}</span>
-                  <button
-                    type="button"
-                    onClick={() => setTaskAmount((current) => Math.min(maxTaskSelections, current + 1))}
-                    disabled={taskAmount >= maxTaskSelections}
-                    className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
-                  >
-                    +
-                  </button>
+                <div className="flex justify-center md:justify-start">
+                  <NumberStepper
+                    value={taskAmount}
+                    onChange={setTaskAmount}
+                    min={1}
+                    max={maxTaskSelections}
+                    className="h-10 rounded-xl border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800"
+                    buttonClassName="h-10 w-10"
+                    valueClassName="h-10 min-w-[2.75rem] text-lg"
+                  />
                 </div>
                 <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
                   {(["week", "month", "year"] as Period[]).map((period) => (
