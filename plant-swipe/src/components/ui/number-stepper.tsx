@@ -12,6 +12,7 @@ type NumberStepperProps = {
   className?: string
   buttonClassName?: string
   valueClassName?: string
+  iconClassName?: string
   disabled?: boolean
   decrementAriaLabel?: string
   incrementAriaLabel?: string
@@ -26,6 +27,7 @@ export function NumberStepper({
   className,
   buttonClassName,
   valueClassName,
+  iconClassName,
   disabled = false,
   decrementAriaLabel = "Decrease value",
   incrementAriaLabel = "Increase value",
@@ -45,7 +47,7 @@ export function NumberStepper({
   return (
     <div
       className={cn(
-        "flex items-center overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800",
+        "inline-flex w-fit shrink-0 items-center overflow-hidden rounded-2xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800",
         className,
       )}
     >
@@ -55,15 +57,15 @@ export function NumberStepper({
         disabled={!canDecrement}
         aria-label={decrementAriaLabel}
         className={cn(
-          "flex h-11 w-11 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700",
+          "grid h-11 w-11 place-items-center self-stretch text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700",
           buttonClassName,
         )}
       >
-        <Minus className="h-4 w-4" />
+        <Minus className={cn("h-4 w-4 shrink-0", iconClassName)} />
       </button>
       <div
         className={cn(
-          "min-w-[3rem] px-2 text-center text-lg font-bold tabular-nums text-stone-900 dark:text-white",
+          "flex h-11 min-w-[2.75rem] items-center justify-center px-2 text-center text-lg font-bold tabular-nums text-stone-900 dark:text-white",
           valueClassName,
         )}
       >
@@ -75,11 +77,11 @@ export function NumberStepper({
         disabled={!canIncrement}
         aria-label={incrementAriaLabel}
         className={cn(
-          "flex h-11 w-11 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700",
+          "grid h-11 w-11 place-items-center self-stretch text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700",
           buttonClassName,
         )}
       >
-        <Plus className="h-4 w-4" />
+        <Plus className={cn("h-4 w-4 shrink-0", iconClassName)} />
       </button>
     </div>
   )
