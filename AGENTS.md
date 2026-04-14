@@ -40,10 +40,12 @@ Aphylia is a plant care application serving users in the European Union. All con
 
 - `plant-swipe/` — main web app (React 19 / Vite 7) and Express API server (`server.js`)
 - `plant-swipe/src/` — frontend UI and client logic (components, pages, hooks, lib, types)
+- `plant-swipe/src/platform/` — device abstraction layer (web-first APIs with Capacitor fallbacks)
+- `plant-swipe/android/`, `plant-swipe/ios/` — native Capacitor projects (committed for CI)
 - `plant-swipe/supabase/` — database schema, migrations, and Edge Functions
 - `admin_api/` — Flask admin API and service config
 - `scripts/` — operational scripts for deployment, sitemap generation, and service restarts
-- `.github/workflows/` — CI pipelines (auto-version, translation checks, legal version updates)
+- `.github/workflows/` — CI pipelines (auto-version, translation checks, legal version updates, Capacitor mobile builds)
 
 ---
 

@@ -501,6 +501,8 @@ sudo systemctl reload nginx
 | ✅ | Moderation & user safety tools | Complete |
 | ✅ | Bug reporting system | Complete |
 | ✅ | Event system with badges (Easter Egg Hunt) | Complete |
+| ✅ | Native mobile apps (Capacitor — Android & iOS) | Complete |
+| ✅ | User onboarding tutorial system | Complete |
 | ⏳ | Collaborative collections and sharing | Planned |
 | 🔬 | Plant disease identification | Future |
 | 🔬 | Advanced plant care AI assistant | Future |
@@ -585,7 +587,7 @@ A: Plant data can be translated manually or automatically via DeepL API integrat
 A: Yes — extend `SUPPORTED_LANGUAGES` in the i18n config and add translation files in `public/locales/`.
 
 **Q: Is there a mobile app?**  
-A: Yes! Aphylia is a Progressive Web App (PWA) — fully installable on iOS, Android, and desktop with offline support, push notifications, and a native-like experience. No app store needed!
+A: Yes! Aphylia is available as a **Progressive Web App (PWA)** — installable on iOS, Android, and desktop with offline support and push notifications. Native **Android and iOS** apps are also built via **Capacitor**, wrapping the same web codebase with native shell features (status bar, deep links, native push). See the [Mobile Architecture](./plant-swipe/docs/MOBILE_ARCHITECTURE.md) docs for details.
 
 **Q: How does the PWA work offline?**  
 A: The service worker caches routes, translations, and static assets. API calls use NetworkFirst strategy with fallback.
@@ -610,6 +612,9 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | [**Garden Task Cache**](./plant-swipe/GARDEN_TASK_CACHE.md) | Task caching documentation |
 | [**Security Audit**](./plant-swipe/SECURITY_AUDIT_REPORT.md) | Security audit findings and remediations |
 | [**Event System**](./plant-swipe/docs/EVENTS.md) | Event framework and lifecycle documentation |
+| [**Mobile Architecture**](./plant-swipe/docs/MOBILE_ARCHITECTURE.md) | PWA + Capacitor native architecture and build rules |
+| [**Build Android**](./plant-swipe/docs/BUILD_ANDROID.md) | Android build and signing steps |
+| [**Build iOS**](./plant-swipe/docs/BUILD_IOS.md) | iOS build and signing steps |
 | [**Database Schema**](./plant-swipe/supabase/DATABASE_SCHEMA.md) | Complete database documentation |
 | [**Reusable Components**](./plant-swipe/src/REUSABLE_COMPONENTS.md) | Shared UI components & hooks reference |
 | [**Admin API**](./admin_api/) | Admin endpoint documentation |

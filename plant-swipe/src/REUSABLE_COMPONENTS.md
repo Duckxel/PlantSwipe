@@ -692,6 +692,31 @@ The `PlantProfileForm` component accepts an `onImageRemove?: (imageUrl: string) 
 
 ---
 
+## Pixel Art
+
+### `PixelSprite` — Crisp pixel-art rendering from sprite sheets
+
+**File:** `src/components/ui/pixel-sprite/PixelSprite.tsx`
+
+Renders a single frame from a Sprout Lands sprite sheet at any scale without blurring, using `image-rendering: pixelated` and CSS `background-position` / `background-size` for tile cropping. Coordinates use a bottom-left origin (y = 0 is the bottom row).
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `name` | `SpriteName` | — | Sprite key from `sprite-definitions.ts` |
+| `state` | `number` | `0` | Frame/state index to display |
+| `scale` | `number` | `4` | Display scale multiplier (set `0` for responsive sizing via className) |
+| `className` | `string` | — | Additional CSS classes; use `w-full h-full` with `scale={0}` for responsive mode |
+
+**Sprite definitions:** `src/components/ui/pixel-sprite/sprite-definitions.ts` — register new sprites by importing their sheet image and adding an entry to `SPRITE_DEFS` with sheet dimensions and per-state tile coordinates.
+
+**Barrel:** `import { PixelSprite } from "@/components/ui/pixel-sprite"`
+
+**Used in:** SeedlingStageIcon (seedling tray growth stage icons), SeedlingTrayGrid (cell corner sprites)
+
+---
+
 ## Onboarding Tutorial
 
 ### `TutorialOverlay` — Guided onboarding tour

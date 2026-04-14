@@ -166,8 +166,10 @@ plant-swipe/
 │   │   ├── plant/           # Plant-related components
 │   │   ├── profile/         # Profile and bookmarks
 │   │   ├── pwa/             # PWA components (ServiceWorkerToast)
+│   │   ├── seedling-tray/   # Seedling tray management components
 │   │   ├── tiptap-*/        # TipTap rich text editor components
-│   │   └── ui/              # shadcn-inspired UI primitives
+│   │   ├── tutorial/        # Onboarding tutorial overlay
+│   │   └── ui/              # shadcn-inspired UI primitives (incl. pixel-sprite/)
 │   ├── constants/           # Constants and configuration
 │   │   ├── badges.ts        # Badge definitions
 │   │   ├── classification.ts # Plant classifications
@@ -178,7 +180,8 @@ plant-swipe/
 │   │   ├── AuthContext.tsx   # Authentication state
 │   │   ├── AuthActionsContext.tsx # Auth actions (login, signup, etc.)
 │   │   ├── EggHuntContext.tsx # Event system provider (active events, progress, badge awards)
-│   │   └── ThemeContext.tsx  # Theme (dark/light) state
+│   │   ├── ThemeContext.tsx  # Theme (dark/light) state
+│   │   └── TutorialContext.tsx # Onboarding tutorial state and navigation
 │   ├── hooks/               # Custom React hooks
 │   │   ├── use-*.ts         # Various utility hooks
 │   │   ├── useAphyliaChat.ts # AI chat assistant hook
@@ -187,6 +190,7 @@ plant-swipe/
 │   │   ├── usePushSubscription.ts # Push notification handling
 │   │   ├── useSentry.ts     # Error tracking hook
 │   │   └── useTaskNotification.ts # Task reminder notifications
+│   ├── platform/            # Device abstraction layer (web-first, Capacitor fallback)
 │   ├── lib/                 # Utility libraries (40+ modules)
 │   │   ├── i18n.ts          # i18n configuration
 │   │   ├── i18nRouting.ts   # Language routing helpers
@@ -222,17 +226,23 @@ plant-swipe/
 │   └── robots.txt           # Robots configuration
 ├── scripts/
 │   ├── apply_migration.js    # Apply database migrations
+│   ├── assert-capacitor-store-bundle.mjs # Verify no server.url in store builds
+│   ├── cap-ci-sync.mjs       # CI-aware Capacitor sync
 │   ├── check-translations.js # Validate translation files
 │   ├── generate-sitemap.js   # Generate sitemap.xml
 │   ├── sync-email-template.sh # Sync email templates
+│   ├── sync-native-version.mjs # Propagate version to native projects
 │   └── verify_email_sanitization.ts # Email sanitization verification
 ├── supabase/
 │   ├── functions/           # Supabase Edge Functions
 │   │   ├── _shared/        # Shared utilities for Edge Functions
 │   │   ├── contact-support/ # Contact form handler
 │   │   └── email-campaign-runner/ # Email campaigns
-│   ├── sync_parts/          # Schema definition files (15 SQL files)
+│   ├── sync_parts/          # Schema definition files (20 SQL files)
 │   └── migrations/          # Database migrations
+├── android/                 # Android native project (Capacitor)
+├── ios/                     # iOS native project (Capacitor)
+├── capacitor.config.json    # Capacitor configuration
 ├── server.js                # Express API server
 ├── vite.config.ts           # Vite configuration
 ├── tailwind.config.js       # Tailwind configuration
