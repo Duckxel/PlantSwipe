@@ -10,6 +10,25 @@
     if (typeof window !== 'object') return
     if (window.__ENV__ && typeof window.__ENV__ === 'object') return
 
+    function normalizeOrigin(raw) {
+      if (typeof raw !== 'string') return null
+      var trimmed = raw.trim()
+      if (!trimmed || /^%[A-Z0-9_]+%$/i.test(trimmed)) return null
+      try {
+        return new URL(trimmed).origin
+      } catch (_) {
+        return null
+      }
+    }
+
+    function isNativeStoreBuild() {
+      var htmlEnv = window.__APHYLIA_HTML_ENV__ || {}
+      var raw = htmlEnv.nativeBuild
+      if (typeof raw !== 'string') return false
+      var normalized = raw.trim().toLowerCase()
+      return normalized === '1' || normalized === 'true' || normalized === 'yes'
+    }
+
     function normalizeBase(path) {
       if (typeof path !== 'string' || !path.length) return '/'
       if (!path.startsWith('/')) path = '/' + path
@@ -42,6 +61,15 @@
     }
 
     var candidates = []
+    var nativeApiOrigin = isNativeStoreBuild()
+      ? normalizeOrigin(
+          (window.__ENV__ && window.__ENV__.VITE_API_ORIGIN) ||
+          (window.__APHYLIA_HTML_ENV__ && window.__APHYLIA_HTML_ENV__.apiOrigin) ||
+          (window.__ENV__ && window.__ENV__.VITE_SITE_URL) ||
+          (window.__APHYLIA_HTML_ENV__ && window.__APHYLIA_HTML_ENV__.siteUrl) ||
+          'https://aphylia.app'
+        )
+      : null
     function pushCandidate(url) {
       if (!url) return
       if (candidates.indexOf(url) === -1) {
@@ -49,6 +77,10 @@
       }
     }
 
+    if (nativeApiOrigin) {
+      pushCandidate(new URL(join(basePath, 'api/env.js'), nativeApiOrigin).toString())
+      pushCandidate(new URL('/api/env.js', nativeApiOrigin).toString())
+    }
     pushCandidate(join(basePath, 'api/env.js'))
     pushCandidate('/api/env.js')
     pushCandidate(join(basePath, 'env.js'))

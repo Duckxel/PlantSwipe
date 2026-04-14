@@ -66,7 +66,7 @@ Environment variables commonly used:
 
 - **`VITE_APP_NATIVE_BUILD=1`** — set by `build:web:native` / Capacitor pipeline; disables vite-plugin-pwa for the native bundle.
 - **`NATIVE_BUILD_NUMBER`** — integer passed to `sync-native-version.mjs` for Android `versionCode` / iOS `CFBundleVersion` (e.g. CI run number).
-- **`VITE_SUPABASE_URL`**, **`VITE_APP_UNIVERSAL_LINK_ORIGIN`**, **`CAP_ALLOW_NAVIGATION_HOSTS`** — supply at **`cap sync`** time so `sync-native-version.mjs` can set `server.allowNavigation` (not read from `.env` in that script).
+- **`VITE_API_ORIGIN`**, **`VITE_SUPABASE_URL`**, **`VITE_APP_UNIVERSAL_LINK_ORIGIN`**, **`CAP_ALLOW_NAVIGATION_HOSTS`** — supply at **native build / `cap sync`** time. `VITE_API_ORIGIN` tells the bundled WebView where `/api/*` should resolve in store builds; `sync-native-version.mjs` uses the host-based vars to set `server.allowNavigation`.
 
 ## Related docs
 

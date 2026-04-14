@@ -4,6 +4,7 @@ import { initSentry } from '@/lib/sentry'
 initSentry()
 
 import '@/lib/runtimeEnvLoader'
+import { installNativeNetworkBridge } from '@/lib/nativeNetworkBridge'
 import { patchGoogleTranslateConflict } from '@/lib/googleTranslateFix'
 import './lib/i18n' // Initialize i18n before App
 import './index.scss'
@@ -14,6 +15,7 @@ import { Capacitor } from '@capacitor/core'
 // Apply Google Translate DOM conflict fix before React renders
 // This prevents crashes when users use browser translation extensions
 patchGoogleTranslateConflict()
+installNativeNetworkBridge()
 
 type WindowControlsOverlay = {
   visible?: boolean
