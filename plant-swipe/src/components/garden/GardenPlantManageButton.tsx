@@ -81,6 +81,7 @@ export function GardenPlantManageButton({
   const [currentImageUrl, setCurrentImageUrl] = React.useState<string | null>(gp.gardenPlantImageUrl || null);
   const [uploadingImage, setUploadingImage] = React.useState(false);
   const [imageError, setImageError] = React.useState<string | null>(null);
+  const [imageSourceOpen, setImageSourceOpen] = React.useState(false);
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   const [tasks, setTasks] = React.useState<any[]>([]);
@@ -273,6 +274,20 @@ export function GardenPlantManageButton({
       setImageError(error instanceof Error ? error.message : t("gardenDashboard.plantsSection.imageUploadError", "Failed to upload photo."));
     }
   }, [t, uploadGardenPlantPhoto]);
+
+  const handleOpenFilePicker = React.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleChooseUpload = React.useCallback(() => {
+    setImageSourceOpen(false);
+    handleOpenFilePicker();
+  }, [handleOpenFilePicker]);
+
+  const handleChooseTakePhoto = React.useCallback(async () => {
+    setImageSourceOpen(false);
+    await handleTakePhoto();
+  }, [handleTakePhoto]);
 
   const savePlantDetails = React.useCallback(async () => {
     if (submitting) return;
@@ -485,14 +500,24 @@ export function GardenPlantManageButton({
             <DialogDescription>{t("gardenDashboard.plantsSection.managePlantDescription", "Edit your plant details, photo, and routine in one place.")}</DialogDescription>
           </DialogHeader>
 
-          <button
-            type="button"
-            onClick={() => setOpen(false)}
-            aria-label={t("close", "Close")}
-            className="absolute right-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30 sm:right-4 sm:top-4"
-          >
-            <X className="h-4 w-4" />
-          </button>
+          <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:right-4 sm:top-4">
+            <button
+              type="button"
+              onClick={() => setImageSourceOpen(true)}
+              aria-label={t("gardenDashboard.plantsSection.editPhoto", "Edit photo")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/65 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
+            >
+              <Pencil className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              aria-label={t("close", "Close")}
+              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
             <div className="relative min-h-[168px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
@@ -506,28 +531,6 @@ export function GardenPlantManageButton({
                 <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
-              <div className="absolute inset-x-0 top-0 p-3 pr-14 sm:p-4 sm:pr-16">
-                <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:justify-end">
-                  <button
-                    type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={uploadingImage}
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-white/90 px-3 text-xs font-medium text-stone-900 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
-                  >
-                    {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
-                    <span>{t("gardenDashboard.plantsSection.uploadImage", "Upload")}</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleTakePhoto}
-                    disabled={uploadingImage}
-                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-white/15 px-3 text-xs font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
-                  >
-                    <Camera className="h-4 w-4" />
-                    <span>{t("gardenDashboard.plantsSection.takePhoto", "Take photo")}</span>
-                  </button>
-                </div>
-              </div>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -601,6 +604,15 @@ export function GardenPlantManageButton({
                       placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
                       className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
                     />
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+                      {t("gardenDashboard.plantsSection.statusRowTitle", "Quick status")}
+                    </p>
+                    <p className="text-xs leading-5 text-stone-400 dark:text-stone-500">
+                      {t("gardenDashboard.plantsSection.statusRowDescription", "Adjust the plant count and health together.")}
+                    </p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -1067,6 +1079,36 @@ export function GardenPlantManageButton({
                   </Button>
                 </div>
               </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={imageSourceOpen} onOpenChange={setImageSourceOpen}>
+        <DialogContent
+          priorityZIndex={120}
+          className="max-w-sm rounded-[24px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.65)] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <div className="space-y-4 p-5">
+            <DialogHeader className="space-y-1 text-left">
+              <DialogTitle className="text-base">
+                {t("gardenDashboard.plantsSection.imageSourceTitle", "Update plant photo")}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.plantsSection.imageSourceDescription", "Choose how you want to add an image for this plant.")}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-2.5">
+              <Button type="button" className="h-12 w-full justify-start gap-3 rounded-2xl" onClick={handleChooseUpload}>
+                <UploadCloud className="h-4 w-4" />
+                {t("gardenDashboard.plantsSection.uploadImage", "Upload")}
+              </Button>
+              <Button type="button" variant="secondary" className="h-12 w-full justify-start gap-3 rounded-2xl" onClick={handleChooseTakePhoto}>
+                <Camera className="h-4 w-4" />
+                {t("gardenDashboard.plantsSection.takePhoto", "Take photo")}
+              </Button>
             </div>
           </div>
         </DialogContent>
