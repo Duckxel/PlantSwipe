@@ -22,11 +22,28 @@ jobs:
   cap-sync-and-web:
     name: Web build + cap sync (CI-safe)
     runs-on: ubuntu-latest
+    outputs:
+      has-android: ${{ steps.detect-platforms.outputs.has-android }}
+      has-ios: ${{ steps.detect-platforms.outputs.has-ios }}
     defaults:
       run:
         working-directory: plant-swipe
     steps:
       - uses: actions/checkout@v4
+
+      - name: Detect native platforms
+        id: detect-platforms
+        run: |
+          if [ -f android/settings.gradle ]; then
+            echo "has-android=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-android=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ -f ios/App/App.xcodeproj/project.pbxproj ]; then
+            echo "has-ios=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-ios=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -69,7 +86,7 @@ jobs:
     name: Android debug APK
     runs-on: ubuntu-latest
     needs: cap-sync-and-web
-    if: ${{ hashFiles('plant-swipe/android/settings.gradle') != '' }}
+    if: needs.cap-sync-and-web.outputs.has-android == 'true'
     defaults:
       run:
         working-directory: plant-swipe
@@ -142,7 +159,7 @@ jobs:
     name: Android release APK (signed in CI)
     runs-on: ubuntu-latest
     needs: cap-sync-and-web
-    if: ${{ hashFiles('plant-swipe/android/settings.gradle') != '' }}
+    if: needs.cap-sync-and-web.outputs.has-android == 'true'
     defaults:
       run:
         working-directory: plant-swipe
@@ -239,7 +256,7 @@ jobs:
     name: iOS Simulator build (macOS)
     runs-on: macos-14
     needs: cap-sync-and-web
-    if: ${{ hashFiles('plant-swipe/ios/App/App.xcodeproj/project.pbxproj') != '' }}
+    if: needs.cap-sync-and-web.outputs.has-ios == 'true'
     defaults:
       run:
         working-directory: plant-swipe
