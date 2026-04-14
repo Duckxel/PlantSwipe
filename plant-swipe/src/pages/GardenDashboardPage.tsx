@@ -3625,6 +3625,7 @@ export const GardenDashboardPage: React.FC = () => {
                       dailyStats={dailyStats}
                       onNavigateToSettings={() => navigate(`/garden/${id}/settings?section=location`)}
                       hideAiFeatures={garden?.hideAiChat ?? false}
+                      gardenHasTasks={Object.values(taskCountsByPlant).some(c => c > 0)}
                     />
                   ) : (
                     <Navigate to={`/garden/${id}/overview`} replace />
@@ -5068,14 +5069,17 @@ function OverviewSection({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [serverToday, dailyStats]);
 
+  const gardenHasTasks = Object.values(taskCountsByPlant).some(c => c > 0);
   const streak = React.useMemo(() => {
+    // Gardens with no plants or no tasks should not show a streak
+    if (plants.length === 0 || !gardenHasTasks) return 0;
     let s = baseStreak;
     if (serverToday) {
       const today = dailyStats.find((d) => d.date === serverToday);
       if (today && today.success) s = baseStreak + 1;
     }
     return s;
-  }, [baseStreak, serverToday, dailyStats]);
+  }, [baseStreak, serverToday, dailyStats, plants.length, gardenHasTasks]);
 
   // Calculate task counts per plant - use server data or compute from todayTaskOccurrences
   const taskCountsPerPlant = React.useMemo(() => {
