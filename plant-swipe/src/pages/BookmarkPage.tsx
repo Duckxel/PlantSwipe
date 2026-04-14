@@ -28,7 +28,6 @@ export const BookmarkPage = () => {
   
   const [editOpen, setEditOpen] = React.useState(false)
   const [addPlantOpen, setAddPlantOpen] = React.useState(false)
-  const [hoveredId, setHoveredId] = React.useState<string | null>(null)
   
   const isOwner = user?.id === bookmark?.user_id
 
@@ -358,8 +357,7 @@ export const BookmarkPage = () => {
               {bookmark.items.map((item, index) => {
                 const p = item.plant
                 if (!p) return null
-                const isHovered = hoveredId === item.id
-                
+
                 return (
                   <motion.div
                     key={item.id}
@@ -369,10 +367,8 @@ export const BookmarkPage = () => {
                     transition={{ delay: index * 0.05, duration: 0.3 }}
                     layout
                     className="group relative"
-                    onMouseEnter={() => setHoveredId(item.id)}
-                    onMouseLeave={() => setHoveredId(null)}
                   >
-                    <Link 
+                    <Link
                       to={`/plants/${p.id}`}
                       className="block aspect-square relative rounded-3xl overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-sm hover:shadow-xl transition-all duration-300"
                     >
@@ -389,68 +385,55 @@ export const BookmarkPage = () => {
                           <Leaf className="h-12 w-12 text-emerald-300 dark:text-emerald-700" />
                         </div>
                       )}
-                      
+
                       {/* Gradient Overlay */}
                       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent opacity-80 group-hover:opacity-90 transition-opacity" />
-                      
+
                       {/* Rarity Badge */}
                       <div className="absolute top-3 left-3">
                         <Badge className={`${rarityTone[p.rarity ?? "Common"]} rounded-xl text-[10px] shadow-lg backdrop-blur-sm`}>
                           {p.rarity}
                         </Badge>
                       </div>
-                      
-                      {/* Remove Button (Owner only) */}
+
+                      {/* Remove Button (Owner only) — always visible on mobile, hover-reveal on desktop */}
                       {isOwner && (
-                        <motion.button
-                          initial={{ opacity: 0, scale: 0.8 }}
-                          animate={{ opacity: isHovered ? 1 : 0, scale: isHovered ? 1 : 0.8 }}
-                          transition={{ duration: 0.2 }}
-                          onClick={(e) => { 
+                        <button
+                          type="button"
+                          onClick={(e) => {
                             e.preventDefault()
                             e.stopPropagation()
-                            handleRemovePlant(p.id) 
+                            handleRemovePlant(p.id)
                           }}
-                          className="absolute top-3 right-3 p-2 rounded-full bg-black/50 hover:bg-red-600 text-white backdrop-blur-sm transition-colors shadow-lg"
+                          aria-label={t('bookmarks.removePlant', { defaultValue: 'Remove plant' })}
+                          className="absolute top-2 right-2 h-11 w-11 flex items-center justify-center rounded-full bg-black/60 active:bg-red-600 md:opacity-0 md:group-hover:opacity-100 text-white backdrop-blur-sm transition-all shadow-lg"
                         >
-                          <X className="h-4 w-4" />
-                        </motion.button>
+                          <X className="h-5 w-5" />
+                        </button>
                       )}
-                      
+
                       {/* Plant Info */}
-                      <div className="absolute bottom-0 left-0 right-0 p-4 text-white">
-                        <motion.div
-                          initial={false}
-                          animate={{ y: isHovered ? 0 : 8, opacity: 1 }}
-                          transition={{ duration: 0.2 }}
-                        >
-                          <h3 className="font-semibold text-lg leading-tight truncate drop-shadow-sm">
-                            {p.name}
-                          </h3>
-                          <p className="text-xs italic opacity-75 truncate mt-0.5">
-                            {p.scientificName}
-                          </p>
-                        </motion.div>
-                        
-                        {/* Season Tags - Show on hover */}
-                        <motion.div 
-                          initial={{ opacity: 0, height: 0 }}
-                          animate={{ 
-                            opacity: isHovered ? 1 : 0, 
-                            height: isHovered ? 'auto' : 0 
-                          }}
-                          transition={{ duration: 0.2 }}
-                          className="flex flex-wrap gap-1 mt-2 overflow-hidden"
-                        >
-                          {(p.seasons || []).slice(0, 3).map((s: string) => (
-                            <span 
-                              key={s} 
-                              className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-sm"
-                            >
-                              {s}
-                            </span>
-                          ))}
-                        </motion.div>
+                      <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 text-white">
+                        <h3 className="font-semibold text-base sm:text-lg leading-tight truncate drop-shadow-sm">
+                          {p.name}
+                        </h3>
+                        <p className="text-xs italic opacity-75 truncate mt-0.5">
+                          {p.scientificName}
+                        </p>
+
+                        {/* Season Tags - always visible */}
+                        {(p.seasons || []).length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-2">
+                            {(p.seasons || []).slice(0, 3).map((s: string) => (
+                              <span
+                                key={s}
+                                className="text-[10px] px-2 py-0.5 rounded-full bg-white/20 backdrop-blur-sm"
+                              >
+                                {s}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </Link>
                   </motion.div>
