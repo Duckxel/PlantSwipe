@@ -397,7 +397,9 @@ export function GardenPlantManageButton({
       }
 
       await loadTasks();
-      await Promise.resolve(onChanged()).catch(() => {});
+      // Do not await parent `load()`: it resyncs occurrences + refetches the whole garden and can take
+      // many seconds, which leaves this inline task editor stuck on "Creating…"/"Saving…".
+      void Promise.resolve(onChanged()).catch(() => {});
     },
     [emitTasksRealtime, gardenId, gp.id, loadTasks, onChanged, t],
   );
