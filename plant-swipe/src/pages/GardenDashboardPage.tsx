@@ -3422,6 +3422,9 @@ export const GardenDashboardPage: React.FC = () => {
                                     onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
                                     onClick={async (e) => {
                                       e.stopPropagation();
+                                      if (!confirm(t("gardenDashboard.plantsSection.confirmDeletePlant", { defaultValue: "Delete this plant from the garden?" }))) {
+                                        return;
+                                      }
                                       await deleteGardenPlant(gp.id);
                                       if (serverToday && id) {
                                         try {
