@@ -476,7 +476,7 @@ export function GardenPlantManageButton({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
-          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 pr-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="sr-only">
@@ -496,13 +496,13 @@ export function GardenPlantManageButton({
                 <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
               )}
               <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
-              <div className="absolute inset-x-0 top-0 p-3 sm:p-4">
-                <div className="grid grid-cols-2 gap-2 sm:flex sm:justify-end">
+              <div className="absolute inset-x-0 top-0 p-3 pr-14 sm:p-4 sm:pr-16">
+                <div className="grid grid-cols-1 gap-2 min-[360px]:grid-cols-2 sm:flex sm:justify-end">
                   <button
                     type="button"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={uploadingImage}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/90 px-3 text-xs font-medium text-stone-900 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-white/90 px-3 text-xs font-medium text-stone-900 shadow-sm transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
                   >
                     {uploadingImage ? <Loader2 className="h-4 w-4 animate-spin" /> : <UploadCloud className="h-4 w-4" />}
                     <span>{t("gardenDashboard.plantsSection.uploadImage", "Upload")}</span>
@@ -511,7 +511,7 @@ export function GardenPlantManageButton({
                     type="button"
                     onClick={handleTakePhoto}
                     disabled={uploadingImage}
-                    className="inline-flex h-11 w-full items-center justify-center gap-2 rounded-full bg-white/15 px-3 text-xs font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
+                    className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-full bg-white/15 px-3 text-xs font-medium text-white backdrop-blur transition hover:bg-white/20 disabled:cursor-not-allowed disabled:opacity-60 sm:h-10 sm:w-auto sm:px-4 sm:text-sm"
                   >
                     <Camera className="h-4 w-4" />
                     <span>{t("gardenDashboard.plantsSection.takePhoto", "Take photo")}</span>
@@ -565,35 +565,40 @@ export function GardenPlantManageButton({
             <div className="flex min-h-0 flex-col">
               <div className="p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 <div className="space-y-5 sm:space-y-6">
-                <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/75 p-4 shadow-inner sm:space-y-5 sm:rounded-[26px] sm:p-5 dark:border-stone-700 dark:bg-stone-900/20">
+                <section className="space-y-5 rounded-[24px] border border-stone-200/80 bg-stone-50/75 p-4 shadow-inner sm:space-y-5 sm:rounded-[26px] sm:p-5 dark:border-stone-700 dark:bg-stone-900/20">
                   <div className="space-y-1">
                     <h3 className="text-base font-semibold text-stone-900 dark:text-white">
                       {t("gardenDashboard.plantsSection.detailsTitle", "Plant details")}
                     </h3>
-                    <p className="text-sm leading-6 text-stone-500 dark:text-stone-400">
+                    <p className="text-xs leading-5 text-stone-500 dark:text-stone-400 sm:text-sm sm:leading-6">
                       {t("gardenDashboard.plantsSection.detailsDescription", "Update the core info for this plant without leaving the modal.")}
                     </p>
                   </div>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2.5">
+                  <div className="space-y-2.5">
+                    <div className="space-y-1">
                       <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
                         {t("gardenDashboard.plantsSection.plantName", "Plant name")}
                       </label>
-                      <Input
-                        value={nickname}
-                        maxLength={30}
-                        onChange={(event) => setNickname(event.target.value)}
-                        placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
-                        className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
-                      />
+                      <p className="px-1 text-xs leading-5 text-stone-400 dark:text-stone-500">
+                        {t("gardenDashboard.plantsSection.plantNameDescription", "Use a nickname if this plant needs a custom label in your garden.")}
+                      </p>
                     </div>
+                    <Input
+                      value={nickname}
+                      maxLength={30}
+                      onChange={(event) => setNickname(event.target.value)}
+                      placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
+                      className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
+                    />
+                  </div>
 
+                  <div className="grid gap-4 sm:grid-cols-2">
                     {gardenType !== "seedling" && (
-                      <div className="space-y-2.5">
-                        <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
+                      <div className="space-y-1.5">
+                        <p className="px-1 text-[11px] font-medium uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
                           {t("gardenDashboard.plantsSection.numberOfPlants", "Number of plants")}
-                        </label>
+                        </p>
                         <NumberStepper
                           value={Math.max(0, Number(count || 0))}
                           onChange={setCount}
@@ -602,37 +607,37 @@ export function GardenPlantManageButton({
                         />
                       </div>
                     )}
-                  </div>
 
-                  <div className="space-y-2.5">
-                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                        {t("gardenDashboard.plantsSection.healthStatus", "Plant health")}
-                      </label>
-                      {selectedHealthStatus ? (
-                        <span className={`inline-flex items-center gap-1 self-start rounded-full px-2.5 py-1 text-xs font-medium ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}>
-                          <span>{selectedHealthStatus.emoji}</span>
-                          <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
-                        </span>
-                      ) : null}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 px-1">
+                        <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+                          {t("gardenDashboard.plantsSection.healthStatus", "Plant health")}
+                        </p>
+                        {selectedHealthStatus ? (
+                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}>
+                            <span>{selectedHealthStatus.emoji}</span>
+                            <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
+                          </span>
+                        ) : null}
+                      </div>
+                      <Select
+                        value={healthStatus}
+                        onChange={(event) => setHealthStatus(event.target.value)}
+                        className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
+                      >
+                        <option value="">{t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}</option>
+                        {HEALTH_STATUSES.map((status) => (
+                          <option key={status.key} value={status.key}>
+                            {status.emoji} {t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}
+                          </option>
+                        ))}
+                      </Select>
+                      {lastHealthUpdatedLabel && (
+                        <p className="px-1 text-xs leading-5 text-stone-500 dark:text-stone-400">
+                          {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
+                        </p>
+                      )}
                     </div>
-                    <Select
-                      value={healthStatus}
-                      onChange={(event) => setHealthStatus(event.target.value)}
-                      className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
-                    >
-                      <option value="">{t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}</option>
-                      {HEALTH_STATUSES.map((status) => (
-                        <option key={status.key} value={status.key}>
-                          {status.emoji} {t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}
-                        </option>
-                      ))}
-                    </Select>
-                    {lastHealthUpdatedLabel && (
-                      <p className="px-1 text-xs leading-5 text-stone-500 dark:text-stone-400">
-                        {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
-                      </p>
-                    )}
                   </div>
 
                   <div className="space-y-2.5">
