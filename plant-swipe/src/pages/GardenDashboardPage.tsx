@@ -3265,22 +3265,6 @@ export const GardenDashboardPage: React.FC = () => {
                             } catch {}
                           }}
                         >
-                          <div className="absolute top-2 right-2 z-10">
-                              <button
-                                onClick={(e: React.MouseEvent) => {
-                                  e.stopPropagation();
-                                  if (gp?.plant) navigate(`/plants/${gp.plant.id}`);
-                                }}
-                              onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                              onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                              aria-label={t(
-                                "gardenDashboard.plantsSection.moreInformation",
-                              )}
-                              className="h-8 w-8 rounded-full flex items-center justify-center shadow border bg-white/90 text-black hover:bg-white"
-                            >
-                              <Info className="h-4 w-4" />
-                            </button>
-                          </div>
                           <div className="grid grid-cols-3 items-stretch gap-0">
                             <div className="col-span-1 relative h-full min-h-[148px] rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                               {(() => {
@@ -3302,20 +3286,37 @@ export const GardenDashboardPage: React.FC = () => {
                               })()}
                             </div>
                             <div className="col-span-2 p-3">
-                              <div className="flex items-center justify-between">
-                                <div className="font-medium truncate">
-                                  {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="min-w-0 flex-1">
+                                  <div className="font-medium truncate">
+                                    {gp.nickname || gp.plant?.name || 'Unknown Plant'}
+                                  </div>
                                 </div>
-                                {/* Health Status Badge */}
-                                {gp.healthStatus && (() => {
-                                  const status = getHealthStatus(gp.healthStatus);
-                                  return status ? (
-                                    <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color} flex items-center gap-1`}>
-                                      <span>{status.emoji}</span>
-                                      <span className="hidden sm:inline">{status.label}</span>
-                                    </span>
-                                  ) : null;
-                                })()}
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {gp.healthStatus && (() => {
+                                    const status = getHealthStatus(gp.healthStatus);
+                                    return status ? (
+                                      <span className={`text-xs px-2 py-0.5 rounded-full ${status.bg} ${status.color} flex items-center gap-1 max-w-[140px]`}>
+                                        <span>{status.emoji}</span>
+                                        <span className="hidden sm:inline truncate">{status.label}</span>
+                                      </span>
+                                    ) : null;
+                                  })()}
+                                  <button
+                                    onClick={(e: React.MouseEvent) => {
+                                      e.stopPropagation();
+                                      if (gp?.plant) navigate(`/plants/${gp.plant.id}`);
+                                    }}
+                                    onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                    onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+                                    aria-label={t(
+                                      "gardenDashboard.plantsSection.moreInformation",
+                                    )}
+                                    className="h-8 w-8 rounded-full flex items-center justify-center shadow border bg-white/90 text-black hover:bg-white"
+                                  >
+                                    <Info className="h-4 w-4" />
+                                  </button>
+                                </div>
                               </div>
                               {gp.plant?.variety && (
                                 <div className="text-xs font-extrabold bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight truncate">
