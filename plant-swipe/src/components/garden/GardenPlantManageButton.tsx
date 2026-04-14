@@ -131,12 +131,18 @@ export function GardenPlantManageButton({
   }, [gp.lastHealthUpdate]);
 
   React.useEffect(() => {
+    if (!open) return;
     setNickname(gp.nickname || "");
     setCount(Number(gp.plantsOnHand ?? 0));
     setHealthStatus(gp.healthStatus || "");
     setNotes(gp.notes || "");
     setCurrentImageUrl(gp.gardenPlantImageUrl || speciesImageUrl || null);
-  }, [gp, speciesImageUrl]);
+  }, [open, gp.id, gp.nickname, gp.plantsOnHand, gp.healthStatus, gp.notes, gp.gardenPlantImageUrl, speciesImageUrl]);
+
+  React.useEffect(() => {
+    if (open || taskEditorOpen) return;
+    setImageSourceOpen(false);
+  }, [open, taskEditorOpen]);
 
   const loadTasks = React.useCallback(async () => {
     setTasksLoading(true);
@@ -189,7 +195,6 @@ export function GardenPlantManageButton({
 
   const openCreateTask = React.useCallback(() => {
     setEditingTask(null);
-    setTaskEditorOpen(true);
     setTaskType("water");
     setTaskCustomName("");
     setTaskEmoji("");
@@ -199,6 +204,7 @@ export function GardenPlantManageButton({
     setMonthlyNthWeekdays([]);
     setYearlyDays([]);
     setTaskFormError(null);
+    setTaskEditorOpen(true);
   }, []);
 
   const openEditTask = React.useCallback((task: any) => {
@@ -503,14 +509,6 @@ export function GardenPlantManageButton({
           <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:right-4 sm:top-4">
             <button
               type="button"
-              onClick={() => setImageSourceOpen(true)}
-              aria-label={t("gardenDashboard.plantsSection.editPhoto", "Edit photo")}
-              className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/65 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
-            >
-              <Pencil className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
               onClick={() => setOpen(false)}
               aria-label={t("close", "Close")}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
@@ -520,58 +518,70 @@ export function GardenPlantManageButton({
           </div>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
-            <div className="relative min-h-[168px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
-              {currentImageUrl ? (
-                <img
-                  src={currentImageUrl}
-                  alt={displayName}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
-              )}
-              <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (event.currentTarget) event.currentTarget.value = "";
-                  if (file) uploadGardenPlantPhoto(file);
-                }}
-              />
-              <div className="absolute inset-x-0 bottom-0 space-y-2 p-3 text-white sm:space-y-3 sm:p-5">
-                <div>
-                  <div className="text-[11px] uppercase tracking-[0.24em] text-white/70">
-                    {t("gardenDashboard.plantsSection.plantProfile", "Plant profile")}
-                  </div>
-                  <div className="mt-1 text-lg font-semibold leading-tight sm:text-2xl">{displayName}</div>
-                  {speciesName && speciesName !== displayName && (
-                    <div className="text-xs text-white/80 sm:text-sm">{speciesName}</div>
-                  )}
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {gardenType !== "seedling" && (
-                    <span className="rounded-full bg-white/18 px-3 py-1 text-xs font-medium backdrop-blur">
-                      {Math.max(0, Number(count || 0))} {t("gardenDashboard.plantsSection.onHand", "On hand")}
-                    </span>
-                  )}
-                  <span className="rounded-full bg-white/18 px-3 py-1 text-xs font-medium backdrop-blur">
-                    {taskCount} {t("gardenDashboard.plantsSection.tasks", "Tasks")}
-                  </span>
-                  {dueTodayCount > 0 && (
-                    <span className="rounded-full bg-blue-500/80 px-3 py-1 text-xs font-medium">
-                      {dueTodayCount} {t("gardenDashboard.plantsSection.dueToday", "Due today")}
-                    </span>
-                  )}
-                </div>
-                {imageError && (
-                  <div className="rounded-2xl bg-red-500/20 px-3 py-2 text-xs text-white/95 backdrop-blur">
-                    {imageError}
-                  </div>
+            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:pb-4">
+              <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
+                {currentImageUrl ? (
+                  <img
+                    src={currentImageUrl}
+                    alt={displayName}
+                    className="absolute inset-0 h-full w-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
                 )}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
+                <div className="absolute right-3 top-3 z-10 sm:right-4 sm:top-4">
+                  <button
+                    type="button"
+                    onClick={() => setImageSourceOpen(true)}
+                    aria-label={t("gardenDashboard.plantsSection.editPhoto", "Edit photo")}
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/65 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (event.currentTarget) event.currentTarget.value = "";
+                    if (file) uploadGardenPlantPhoto(file);
+                  }}
+                />
+                <div className="absolute inset-x-0 bottom-0 space-y-2 p-3 text-white sm:space-y-3 sm:p-5">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-[0.24em] text-white/70">
+                      {t("gardenDashboard.plantsSection.plantProfile", "Plant profile")}
+                    </div>
+                    <div className="mt-1 text-lg font-semibold leading-tight sm:text-2xl">{displayName}</div>
+                    {speciesName && speciesName !== displayName && (
+                      <div className="text-xs text-white/80 sm:text-sm">{speciesName}</div>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {gardenType !== "seedling" && (
+                      <span className="rounded-full bg-white/18 px-3 py-1 text-xs font-medium backdrop-blur">
+                        {Math.max(0, Number(count || 0))} {t("gardenDashboard.plantsSection.onHand", "On hand")}
+                      </span>
+                    )}
+                    <span className="rounded-full bg-white/18 px-3 py-1 text-xs font-medium backdrop-blur">
+                      {taskCount} {t("gardenDashboard.plantsSection.tasks", "Tasks")}
+                    </span>
+                    {dueTodayCount > 0 && (
+                      <span className="rounded-full bg-blue-500/80 px-3 py-1 text-xs font-medium">
+                        {dueTodayCount} {t("gardenDashboard.plantsSection.dueToday", "Due today")}
+                      </span>
+                    )}
+                  </div>
+                  {imageError && (
+                    <div className="rounded-2xl bg-red-500/20 px-3 py-2 text-xs text-white/95 backdrop-blur">
+                      {imageError}
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -579,15 +589,6 @@ export function GardenPlantManageButton({
               <div className="p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 <div className="space-y-5 sm:space-y-6">
                 <section className="space-y-5 rounded-[24px] border border-stone-200/80 bg-stone-50/75 p-4 shadow-inner sm:space-y-5 sm:rounded-[26px] sm:p-5 dark:border-stone-700 dark:bg-stone-900/20">
-                  <div className="space-y-1">
-                    <h3 className="text-base font-semibold text-stone-900 dark:text-white">
-                      {t("gardenDashboard.plantsSection.detailsTitle", "Plant details")}
-                    </h3>
-                    <p className="text-xs leading-5 text-stone-500 dark:text-stone-400 sm:text-sm sm:leading-6">
-                      {t("gardenDashboard.plantsSection.detailsDescription", "Update the core info for this plant without leaving the modal.")}
-                    </p>
-                  </div>
-
                   <div className="space-y-2.5">
                     <div className="space-y-1">
                       <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
@@ -604,15 +605,6 @@ export function GardenPlantManageButton({
                       placeholder={t("gardenDashboard.plantsSection.optionalNickname", "Optional nickname")}
                       className="h-12 rounded-2xl border-stone-200 bg-white px-4 dark:border-stone-700"
                     />
-                  </div>
-
-                  <div className="space-y-1">
-                    <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
-                      {t("gardenDashboard.plantsSection.statusRowTitle", "Quick status")}
-                    </p>
-                    <p className="text-xs leading-5 text-stone-400 dark:text-stone-500">
-                      {t("gardenDashboard.plantsSection.statusRowDescription", "Adjust the plant count and health together.")}
-                    </p>
                   </div>
 
                   <div className="grid gap-4 sm:grid-cols-2">
@@ -690,16 +682,10 @@ export function GardenPlantManageButton({
                     <Button
                       type="button"
                       className="w-full rounded-2xl gap-2 sm:w-auto"
-                      variant={taskEditorOpen ? "secondary" : "default"}
-                      onClick={() => {
-                        if (taskEditorOpen) resetTaskEditor();
-                        else openCreateTask();
-                      }}
+                      onClick={openCreateTask}
                     >
                       <Plus className="h-4 w-4" />
-                      {taskEditorOpen
-                        ? t("gardenDashboard.plantsSection.closeTaskEditor", "Close editor")
-                        : t("gardenDashboard.taskDialog.addTask", "Add Task")}
+                      {t("gardenDashboard.taskDialog.addTask", "Add Task")}
                     </Button>
                   </div>
 
@@ -782,290 +768,6 @@ export function GardenPlantManageButton({
                       </div>
                     </div>
                   )}
-
-                  {taskEditorOpen && (
-                    <div className="space-y-5 rounded-[24px] border border-stone-200 bg-white p-4 shadow-sm dark:border-stone-700 dark:bg-[#262629]">
-                      <div className="flex items-center justify-between gap-3">
-                        <div>
-                          <div className="text-sm font-semibold text-stone-900 dark:text-white">
-                            {editingTask
-                              ? t("gardenDashboard.plantsSection.editTaskInline", "Edit task")
-                              : t("gardenDashboard.taskDialog.createTask", "Create task")}
-                          </div>
-                          <div className="text-xs text-stone-500 dark:text-stone-400">
-                            {t("gardenDashboard.taskDialog.createTaskDescription", "All tasks repeat. Choose frequency and calendar.")}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={resetTaskEditor}
-                          className="rounded-full px-2 py-1 text-xs text-stone-500 transition hover:bg-stone-100 dark:hover:bg-stone-800"
-                        >
-                          {t("cancel", "Cancel")}
-                        </button>
-                      </div>
-
-                      <div>
-                        <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                          {t("gardenDashboard.taskDialog.taskType", "Task Type")}
-                        </label>
-                        <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
-                          {TASK_TYPES.map(({ type, emoji }) => {
-                            const isActive = taskType === type;
-                            return (
-                              <button
-                                key={type}
-                                type="button"
-                                onClick={() => setTaskType(type)}
-                                className={`flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-2 py-3 text-center text-[10px] font-medium transition sm:min-h-[72px] sm:text-[11px] ${
-                                  isActive
-                                    ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-300"
-                                    : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
-                                }`}
-                              >
-                                <span className="text-xl">{emoji}</span>
-                                <span>{t(`garden.taskTypes.${type}`)}</span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {taskType === "custom" && (
-                        <div className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900/30">
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                              {t("gardenDashboard.taskDialog.customTaskName", "Task name")}
-                            </label>
-                            <Input
-                              value={taskCustomName}
-                              onChange={(event) => setTaskCustomName(event.target.value)}
-                              placeholder={t("gardenDashboard.taskDialog.customTaskNamePlaceholder", "e.g., Mist leaves")}
-                              className="rounded-xl"
-                            />
-                          </div>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-stone-600 dark:text-stone-400">
-                              {t("gardenDashboard.taskDialog.emoji", "Emoji")}
-                            </label>
-                            <div className="flex flex-wrap gap-1.5">
-                              {CUSTOM_EMOJI_PRESETS.map((emoji) => (
-                                <button
-                                  key={emoji}
-                                  type="button"
-                                  onClick={() => setTaskEmoji(taskEmoji === emoji ? "" : emoji)}
-                                  className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
-                                    taskEmoji === emoji
-                                      ? "border-emerald-500 bg-emerald-50 shadow-sm dark:bg-emerald-900/30"
-                                      : "border-stone-200 bg-white hover:scale-105 dark:border-stone-700 dark:bg-stone-800"
-                                  }`}
-                                >
-                                  {emoji}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-                      )}
-
-                      {taskType === "water" && (gp.plant?.wateringFrequencyWarm || gp.plant?.wateringFrequencyCold) && (
-                        <div className="rounded-2xl border border-sky-200/60 bg-sky-50 px-3.5 py-2.5 text-xs text-sky-800 dark:border-sky-700/40 dark:bg-sky-900/20 dark:text-sky-200">
-                          <span className="font-semibold">{t("gardenDashboard.taskDialog.recommendedFrequency", "Recommended:")}</span>{" "}
-                          {gp.plant?.wateringFrequencyWarm
-                            ? t("gardenDashboard.taskDialog.warmSeason", "{{count}}x/week (warm)", { count: gp.plant.wateringFrequencyWarm })
-                            : null}
-                          {gp.plant?.wateringFrequencyWarm && gp.plant?.wateringFrequencyCold ? " · " : null}
-                          {gp.plant?.wateringFrequencyCold
-                            ? t("gardenDashboard.taskDialog.coldSeason", "{{count}}x/week (cold)", { count: gp.plant.wateringFrequencyCold })
-                            : null}
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        <label className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                          {t("gardenDashboard.taskDialog.frequency", "How often?")}
-                        </label>
-                        <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                          <div className="flex items-center overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
-                            <button
-                              type="button"
-                              onClick={() => setTaskAmount((current) => Math.max(1, current - 1))}
-                              disabled={taskAmount <= 1}
-                              className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
-                            >
-                              −
-                            </button>
-                            <span className="w-11 text-center text-lg font-bold tabular-nums">{taskAmount}</span>
-                            <button
-                              type="button"
-                              onClick={() => setTaskAmount((current) => Math.min(maxTaskSelections, current + 1))}
-                              disabled={taskAmount >= maxTaskSelections}
-                              className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
-                            >
-                              +
-                            </button>
-                          </div>
-                          <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
-                            {(["week", "month", "year"] as Period[]).map((period) => (
-                              <button
-                                key={period}
-                                type="button"
-                                onClick={() => {
-                                  setTaskPeriod(period);
-                                  setWeeklyDays([]);
-                                  setMonthlyNthWeekdays([]);
-                                  setYearlyDays([]);
-                                  setTaskAmount((current) => Math.min(period === "week" ? 7 : period === "month" ? 12 : 52, current));
-                                }}
-                                className={`h-10 px-3 text-sm font-medium capitalize transition ${
-                                  taskPeriod === period
-                                    ? "bg-emerald-600 text-white"
-                                    : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-700"
-                                }`}
-                              >
-                                {t(`gardenDashboard.taskDialog.${period}`, period)}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                          <label className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
-                            {t("gardenDashboard.taskDialog.pickSchedule", "Pick your days")}
-                          </label>
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                            selectedTaskCount === taskAmount
-                              ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
-                              : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400"
-                          }`}>
-                            {selectedTaskCount} / {taskAmount}
-                          </span>
-                        </div>
-
-                        {taskPeriod === "week" && (
-                          <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                            {[
-                              t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
-                              t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
-                              t("gardenDashboard.taskDialog.dayLabels.wed", "Wed"),
-                              t("gardenDashboard.taskDialog.dayLabels.thu", "Thu"),
-                              t("gardenDashboard.taskDialog.dayLabels.fri", "Fri"),
-                              t("gardenDashboard.taskDialog.dayLabels.sat", "Sat"),
-                              t("gardenDashboard.taskDialog.dayLabels.sun", "Sun"),
-                            ].map((label, index) => {
-                              const dayNumber = MONDAY_FIRST_MAP[index];
-                              const selected = weeklyDays.includes(dayNumber);
-                              return (
-                                <button
-                                  key={label}
-                                  type="button"
-                                  onClick={() =>
-                                    setWeeklyDays((current) => {
-                                      if (current.includes(dayNumber)) return current.filter((value) => value !== dayNumber);
-                                      if (disableMoreSelections) return current;
-                                      return [...current, dayNumber];
-                                    })
-                                  }
-                                  disabled={!selected && disableMoreSelections}
-                                  className={`h-11 rounded-xl border-2 text-xs font-medium transition sm:h-12 sm:text-sm ${
-                                    selected
-                                      ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
-                                      : "border-stone-200 bg-white text-stone-700 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
-                                  } ${!selected && disableMoreSelections ? "opacity-40" : ""}`}
-                                >
-                                  {label}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {taskPeriod === "month" && (
-                          <div className="overflow-x-auto pb-1">
-                            <div className="min-w-[430px] space-y-1.5">
-                            <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
-                              <div />
-                              {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
-                                <div key={label} className="text-center text-[10px] font-medium text-stone-400 dark:text-stone-500">
-                                  {label}
-                                </div>
-                              ))}
-                            </div>
-                            {["1st", "2nd", "3rd", "4th"].map((weekName, rowIndex) => (
-                              <div key={weekName} className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
-                                <div className="text-center text-xs font-medium text-stone-400 dark:text-stone-500">{weekName}</div>
-                                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, index) => {
-                                  const key = `${rowIndex + 1}-${MONDAY_FIRST_MAP[index]}`;
-                                  const selected = monthlyNthWeekdays.includes(key);
-                                  return (
-                                    <button
-                                      key={`${weekName}-${label}`}
-                                      type="button"
-                                      onClick={() =>
-                                        setMonthlyNthWeekdays((current) => {
-                                          if (current.includes(key)) return current.filter((value) => value !== key);
-                                          if (disableMoreSelections) return current;
-                                          return [...current, key];
-                                        })
-                                      }
-                                      disabled={!selected && disableMoreSelections}
-                                      className={`h-10 rounded-xl border-2 text-[11px] font-medium transition ${
-                                        selected
-                                          ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
-                                          : "border-stone-200 bg-white hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:hover:border-stone-600"
-                                      } ${!selected && disableMoreSelections ? "opacity-40" : ""}`}
-                                      aria-label={`${weekName} ${label}`}
-                                    >
-                                      {selected ? label.slice(0, 2) : ""}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                            ))}
-                          </div>
-                          </div>
-                        )}
-
-                        {taskPeriod === "year" && (
-                          <InlineYearlyPicker
-                            selected={yearlyDays}
-                            disabledMore={disableMoreSelections}
-                            onToggle={(key) =>
-                              setYearlyDays((current) => {
-                                if (current.includes(key)) return current.filter((value) => value !== key);
-                                if (disableMoreSelections) return current;
-                                return [...current, key];
-                              })
-                            }
-                            onRemove={(key) => setYearlyDays((current) => current.filter((value) => value !== key))}
-                          />
-                        )}
-                      </div>
-
-                      {taskFormError && (
-                        <div className="rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
-                          {taskFormError}
-                        </div>
-                      )}
-
-                      <div className="flex flex-col gap-2 sm:flex-row">
-                        <Button variant="secondary" className="flex-1 rounded-2xl" onClick={resetTaskEditor} disabled={taskSaving}>
-                          {t("cancel", "Cancel")}
-                        </Button>
-                        <Button className="flex-1 rounded-2xl" onClick={handleSaveTask} disabled={taskSaving || selectedTaskCount !== taskAmount}>
-                          {taskSaving
-                            ? editingTask
-                              ? t("gardenDashboard.settingsSection.saving", "Saving...")
-                              : t("gardenDashboard.taskDialog.creating", "Creating…")
-                            : editingTask
-                              ? t("save", "Save")
-                              : t("gardenDashboard.taskDialog.createTaskButton", "Create task")}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
                 </section>
                 </div>
               </div>
@@ -1108,6 +810,293 @@ export function GardenPlantManageButton({
               <Button type="button" variant="secondary" className="h-12 w-full justify-start gap-3 rounded-2xl" onClick={handleChooseTakePhoto}>
                 <Camera className="h-4 w-4" />
                 {t("gardenDashboard.plantsSection.takePhoto", "Take photo")}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={taskEditorOpen}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) resetTaskEditor();
+          else setTaskEditorOpen(true);
+        }}
+      >
+        <DialogContent
+          priorityZIndex={125}
+          className="max-w-2xl rounded-[24px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          onOpenAutoFocus={(event) => event.preventDefault()}
+        >
+          <div className="space-y-5 p-5 sm:p-6">
+            <DialogHeader className="space-y-1 text-left">
+              <DialogTitle className="text-base">
+                {editingTask
+                  ? t("gardenDashboard.plantsSection.editTaskInline", "Edit task")
+                  : t("gardenDashboard.taskDialog.createTask", "Create task")}
+              </DialogTitle>
+              <DialogDescription className="text-sm text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.taskDialog.createTaskDescription", "All tasks repeat. Choose frequency and calendar.")}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div>
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.taskDialog.taskType", "Task Type")}
+              </label>
+              <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+                {TASK_TYPES.map(({ type, emoji }) => {
+                  const isActive = taskType === type;
+                  return (
+                    <button
+                      key={type}
+                      type="button"
+                      onClick={() => setTaskType(type)}
+                      className={`flex min-h-[76px] flex-col items-center justify-center gap-1 rounded-2xl border-2 px-2 py-3 text-center text-[10px] font-medium transition sm:min-h-[72px] sm:text-[11px] ${
+                        isActive
+                          ? "border-emerald-500 bg-emerald-50 text-emerald-700 shadow-sm dark:bg-emerald-900/30 dark:text-emerald-300"
+                          : "border-stone-200 bg-white text-stone-600 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
+                      }`}
+                    >
+                      <span className="text-xl">{emoji}</span>
+                      <span>{t(`garden.taskTypes.${type}`)}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {taskType === "custom" && (
+              <div className="space-y-3 rounded-2xl border border-stone-200 bg-stone-50 p-4 dark:border-stone-700 dark:bg-stone-900/30">
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    {t("gardenDashboard.taskDialog.customTaskName", "Task name")}
+                  </label>
+                  <Input
+                    value={taskCustomName}
+                    onChange={(event) => setTaskCustomName(event.target.value)}
+                    placeholder={t("gardenDashboard.taskDialog.customTaskNamePlaceholder", "e.g., Mist leaves")}
+                    className="rounded-xl"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-xs font-medium text-stone-600 dark:text-stone-400">
+                    {t("gardenDashboard.taskDialog.emoji", "Emoji")}
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {CUSTOM_EMOJI_PRESETS.map((emoji) => (
+                      <button
+                        key={emoji}
+                        type="button"
+                        onClick={() => setTaskEmoji(taskEmoji === emoji ? "" : emoji)}
+                        className={`flex h-9 w-9 items-center justify-center rounded-lg border text-lg transition ${
+                          taskEmoji === emoji
+                            ? "border-emerald-500 bg-emerald-50 shadow-sm dark:bg-emerald-900/30"
+                            : "border-stone-200 bg-white hover:scale-105 dark:border-stone-700 dark:bg-stone-800"
+                        }`}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {taskType === "water" && (gp.plant?.wateringFrequencyWarm || gp.plant?.wateringFrequencyCold) && (
+              <div className="rounded-2xl border border-sky-200/60 bg-sky-50 px-3.5 py-2.5 text-xs text-sky-800 dark:border-sky-700/40 dark:bg-sky-900/20 dark:text-sky-200">
+                <span className="font-semibold">{t("gardenDashboard.taskDialog.recommendedFrequency", "Recommended:")}</span>{" "}
+                {gp.plant?.wateringFrequencyWarm
+                  ? t("gardenDashboard.taskDialog.warmSeason", "{{count}}x/week (warm)", { count: gp.plant.wateringFrequencyWarm })
+                  : null}
+                {gp.plant?.wateringFrequencyWarm && gp.plant?.wateringFrequencyCold ? " · " : null}
+                {gp.plant?.wateringFrequencyCold
+                  ? t("gardenDashboard.taskDialog.coldSeason", "{{count}}x/week (cold)", { count: gp.plant.wateringFrequencyCold })
+                  : null}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                {t("gardenDashboard.taskDialog.frequency", "How often?")}
+              </label>
+              <div className="flex flex-col gap-3 md:flex-row md:items-center">
+                <div className="flex items-center overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
+                  <button
+                    type="button"
+                    onClick={() => setTaskAmount((current) => Math.max(1, current - 1))}
+                    disabled={taskAmount <= 1}
+                    className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
+                  >
+                    −
+                  </button>
+                  <span className="w-11 text-center text-lg font-bold tabular-nums">{taskAmount}</span>
+                  <button
+                    type="button"
+                    onClick={() => setTaskAmount((current) => Math.min(maxTaskSelections, current + 1))}
+                    disabled={taskAmount >= maxTaskSelections}
+                    className="flex h-10 w-10 items-center justify-center text-stone-500 transition hover:bg-stone-100 disabled:opacity-30 dark:hover:bg-stone-700"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 overflow-hidden rounded-xl border border-stone-200 bg-white dark:border-stone-700 dark:bg-stone-800">
+                  {(["week", "month", "year"] as Period[]).map((period) => (
+                    <button
+                      key={period}
+                      type="button"
+                      onClick={() => {
+                        setTaskPeriod(period);
+                        setWeeklyDays([]);
+                        setMonthlyNthWeekdays([]);
+                        setYearlyDays([]);
+                        setTaskAmount((current) => Math.min(period === "week" ? 7 : period === "month" ? 12 : 52, current));
+                      }}
+                      className={`h-10 px-3 text-sm font-medium capitalize transition ${
+                        taskPeriod === period
+                          ? "bg-emerald-600 text-white"
+                          : "text-stone-600 hover:bg-stone-100 dark:text-stone-300 dark:hover:bg-stone-700"
+                      }`}
+                    >
+                      {t(`gardenDashboard.taskDialog.${period}`, period)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold uppercase tracking-wider text-stone-500 dark:text-stone-400">
+                  {t("gardenDashboard.taskDialog.pickSchedule", "Pick your days")}
+                </label>
+                <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  selectedTaskCount === taskAmount
+                    ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                    : "bg-stone-100 text-stone-600 dark:bg-stone-800 dark:text-stone-400"
+                }`}>
+                  {selectedTaskCount} / {taskAmount}
+                </span>
+              </div>
+
+              {taskPeriod === "week" && (
+                <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                  {[
+                    t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
+                    t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
+                    t("gardenDashboard.taskDialog.dayLabels.wed", "Wed"),
+                    t("gardenDashboard.taskDialog.dayLabels.thu", "Thu"),
+                    t("gardenDashboard.taskDialog.dayLabels.fri", "Fri"),
+                    t("gardenDashboard.taskDialog.dayLabels.sat", "Sat"),
+                    t("gardenDashboard.taskDialog.dayLabels.sun", "Sun"),
+                  ].map((label, index) => {
+                    const dayNumber = MONDAY_FIRST_MAP[index];
+                    const selected = weeklyDays.includes(dayNumber);
+                    return (
+                      <button
+                        key={label}
+                        type="button"
+                        onClick={() =>
+                          setWeeklyDays((current) => {
+                            if (current.includes(dayNumber)) return current.filter((value) => value !== dayNumber);
+                            if (disableMoreSelections) return current;
+                            return [...current, dayNumber];
+                          })
+                        }
+                        disabled={!selected && disableMoreSelections}
+                        className={`h-11 rounded-xl border-2 text-xs font-medium transition sm:h-12 sm:text-sm ${
+                          selected
+                            ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
+                            : "border-stone-200 bg-white text-stone-700 hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:text-stone-300 dark:hover:border-stone-600"
+                        } ${!selected && disableMoreSelections ? "opacity-40" : ""}`}
+                      >
+                        {label}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {taskPeriod === "month" && (
+                <div className="overflow-x-auto pb-1">
+                  <div className="min-w-[430px] space-y-1.5">
+                    <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
+                      <div />
+                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+                        <div key={label} className="text-center text-[10px] font-medium text-stone-400 dark:text-stone-500">
+                          {label}
+                        </div>
+                      ))}
+                    </div>
+                    {["1st", "2nd", "3rd", "4th"].map((weekName, rowIndex) => (
+                      <div key={weekName} className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
+                        <div className="text-center text-xs font-medium text-stone-400 dark:text-stone-500">{weekName}</div>
+                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, index) => {
+                          const key = `${rowIndex + 1}-${MONDAY_FIRST_MAP[index]}`;
+                          const selected = monthlyNthWeekdays.includes(key);
+                          return (
+                            <button
+                              key={`${weekName}-${label}`}
+                              type="button"
+                              onClick={() =>
+                                setMonthlyNthWeekdays((current) => {
+                                  if (current.includes(key)) return current.filter((value) => value !== key);
+                                  if (disableMoreSelections) return current;
+                                  return [...current, key];
+                                })
+                              }
+                              disabled={!selected && disableMoreSelections}
+                              className={`h-10 rounded-xl border-2 text-[11px] font-medium transition ${
+                                selected
+                                  ? "border-emerald-500 bg-emerald-600 text-white shadow-sm"
+                                  : "border-stone-200 bg-white hover:border-stone-300 dark:border-stone-700 dark:bg-stone-800 dark:hover:border-stone-600"
+                              } ${!selected && disableMoreSelections ? "opacity-40" : ""}`}
+                              aria-label={`${weekName} ${label}`}
+                            >
+                              {selected ? label.slice(0, 2) : ""}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {taskPeriod === "year" && (
+                <InlineYearlyPicker
+                  selected={yearlyDays}
+                  disabledMore={disableMoreSelections}
+                  onToggle={(key) =>
+                    setYearlyDays((current) => {
+                      if (current.includes(key)) return current.filter((value) => value !== key);
+                      if (disableMoreSelections) return current;
+                      return [...current, key];
+                    })
+                  }
+                  onRemove={(key) => setYearlyDays((current) => current.filter((value) => value !== key))}
+                />
+              )}
+            </div>
+
+            {taskFormError && (
+              <div className="rounded-2xl bg-red-50 px-3 py-2 text-sm text-red-600 dark:bg-red-900/20 dark:text-red-300">
+                {taskFormError}
+              </div>
+            )}
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="secondary" className="flex-1 rounded-2xl" onClick={resetTaskEditor} disabled={taskSaving}>
+                {t("cancel", "Cancel")}
+              </Button>
+              <Button className="flex-1 rounded-2xl" onClick={handleSaveTask} disabled={taskSaving || selectedTaskCount !== taskAmount}>
+                {taskSaving
+                  ? editingTask
+                    ? t("gardenDashboard.settingsSection.saving", "Saving...")
+                    : t("gardenDashboard.taskDialog.creating", "Creating…")
+                  : editingTask
+                    ? t("save", "Save")
+                    : t("gardenDashboard.taskDialog.createTaskButton", "Create task")}
               </Button>
             </div>
           </div>
