@@ -149,16 +149,24 @@ jobs:
           npm version ${{ steps.version.outputs.new_version }} --no-git-tag-version --allow-same-version
           echo "Updated package.json to version ${{ steps.version.outputs.new_version }}"
 
+      - name: Sync version to native platforms
+        run: |
+          cd plant-swipe
+          node scripts/sync-native-version.mjs
+          echo "Synced version to Android, iOS, and capacitor.config.json"
+
       - name: Commit and push version bump
         run: |
-          git add plant-swipe/package.json
-          
+          git add plant-swipe/package.json plant-swipe/capacitor.config.json
+          git add plant-swipe/android/app/build.gradle 2>/dev/null || true
+          git add plant-swipe/ios/App/App/Info.plist 2>/dev/null || true
+
           # Check if there are changes to commit
           if git diff --staged --quiet; then
             echo "No version changes to commit"
             exit 0
           fi
-          
+
           git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }} [skip ci]
 
           Automatic version bump triggered by PR #${{ github.event.pull_request.number }}.
@@ -166,7 +174,7 @@ jobs:
           - Lines added: ${{ steps.version.outputs.lines_added }}
           - Bump type: ${{ steps.version.outputs.bump_type }}
           - Previous version: ${{ steps.version.outputs.current_version }}"
-          
+
           git push
 
       - name: Create version summary
