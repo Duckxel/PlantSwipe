@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { NumberStepper } from "@/components/ui/number-stepper";
 import { Select } from "@/components/ui/select";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
 import {
@@ -583,11 +584,10 @@ export function GardenPlantManageButton({
                       <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
                         {t("gardenDashboard.plantsSection.numberOfPlants", "Number of plants")}
                       </label>
-                      <Input
-                        type="number"
+                      <NumberStepper
+                        value={Math.max(0, Number(count || 0))}
+                        onChange={setCount}
                         min={0}
-                        value={String(count)}
-                        onChange={(event) => setCount(Number(event.target.value))}
                         className="h-11 rounded-2xl border-stone-200 dark:border-stone-700"
                       />
                     </div>
