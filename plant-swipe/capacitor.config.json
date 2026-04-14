@@ -2,7 +2,7 @@
 	"appId": "app.aphylia",
 	"appName": "Aphylia",
 	"webDir": "dist",
-	"version": "5.5.9",
+	"version": "6.0.10",
 	"backgroundColor": "#052e16",
 	"android": {
 		"allowMixedContent": false,
@@ -23,7 +23,11 @@
 			"presentationStyle": "fullscreen"
 		},
 		"PushNotifications": {
-			"presentationOptions": ["badge", "sound", "alert"]
+			"presentationOptions": [
+				"badge",
+				"sound",
+				"alert"
+			]
 		}
 	}
 }
