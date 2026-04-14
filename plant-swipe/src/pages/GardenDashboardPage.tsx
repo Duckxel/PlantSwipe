@@ -3103,7 +3103,7 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav data-tutorial="garden-tabs" className="flex md:justify-start md:flex-col gap-1.5 md:overflow-visible pb-1 md:pb-0 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+            <nav data-tutorial="garden-tabs" className="grid grid-cols-7 gap-1.5 pb-1 md:flex md:justify-start md:flex-col md:gap-1.5 md:overflow-visible md:pb-0">
               {(
                 canViewFullGarden
                   ? [
@@ -3126,14 +3126,14 @@ export const GardenDashboardPage: React.FC = () => {
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
                     data-tutorial={tutorialId}
-                    className={`flex-shrink-0 md:flex-shrink flex items-center justify-center md:justify-start gap-1.5 md:gap-2 px-3.5 py-2 md:px-4 md:py-2.5 rounded-full md:rounded-2xl text-[13px] md:text-sm font-medium transition-colors no-underline md:w-full whitespace-nowrap ${
+                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-2 text-[13px] font-medium transition-colors no-underline whitespace-nowrap md:w-full md:justify-start md:gap-2 md:rounded-2xl md:px-4 md:py-2.5 md:text-sm ${
                       isActive
                         ? "bg-emerald-600 text-white shadow-sm"
-                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 md:bg-transparent md:dark:bg-transparent hover:bg-stone-200/80 dark:hover:bg-stone-700/60 md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
+                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 hover:bg-stone-200/80 dark:hover:bg-stone-700/60 md:bg-transparent md:dark:bg-transparent md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
                     }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className="whitespace-nowrap">{label}</span>
+                    <span className={`${isActive ? "inline" : "hidden"} md:inline whitespace-nowrap`}>{label}</span>
                   </NavLink>
                 );
               })}
