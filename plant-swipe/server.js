@@ -4067,7 +4067,7 @@ app.use(helmet({
       defaultSrc: ["'self'", "*.aphylia.app"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.aphylia.app", "https://www.googletagmanager.com", "https://www.google.com", "https://www.gstatic.com", "https://recaptchaenterprise.googleapis.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "*.aphylia.app", "https://fonts.googleapis.com"],
-      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://www.googletagmanager.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
       fontSrc: ["'self'", "*.aphylia.app", "https://fonts.gstatic.com", "data:"],
       frameSrc: ["'self'", "*.aphylia.app", "https://www.google.com", "https://recaptcha.google.com"],
       imgSrc: ["*", "data:", "blob:"],

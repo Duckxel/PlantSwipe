@@ -794,6 +794,7 @@ export function GardenPlantManageButton({
       <Dialog open={imageSourceOpen} onOpenChange={setImageSourceOpen}>
         <DialogContent
           priorityZIndex={120}
+          aria-describedby={undefined}
           className="max-w-sm rounded-[24px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_25px_80px_-35px_rgba(15,23,42,0.65)] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
@@ -830,6 +831,7 @@ export function GardenPlantManageButton({
       >
         <DialogContent
           priorityZIndex={125}
+          aria-describedby={undefined}
           className="max-w-2xl rounded-[24px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
