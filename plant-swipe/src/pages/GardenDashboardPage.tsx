@@ -456,9 +456,9 @@ export const GardenDashboardPage: React.FC = () => {
     if (!demoLoadedRef.current) {
       setMembers([{ userId: user?.id || 'demo-user', role: 'owner', displayName: profile?.display_name || 'You' }]);
       const demoPlants = [
-        { gpId: 'gp1', pId: DEMO_PLANT_IDS.monstera, name: 'Monstera', sci: 'Monstera deliciosa', qty: 1 },
-        { gpId: 'gp2', pId: DEMO_PLANT_IDS.basil, name: 'Basil', sci: 'Ocimum basilicum', qty: 2 },
-        { gpId: 'gp3', pId: DEMO_PLANT_IDS.lily, name: 'Lily', sci: 'Lilium', qty: 3 },
+        { gpId: '11111111-1111-4111-8111-111111111111', pId: DEMO_PLANT_IDS.monstera, name: 'Monstera', sci: 'Monstera deliciosa', qty: 1 },
+        { gpId: '22222222-2222-4222-8222-222222222222', pId: DEMO_PLANT_IDS.basil, name: 'Basil', sci: 'Ocimum basilicum', qty: 2 },
+        { gpId: '33333333-3333-4333-8333-333333333333', pId: DEMO_PLANT_IDS.lily, name: 'Lily', sci: 'Lilium', qty: 3 },
       ];
       setPlants(demoPlants.map(dp => ({
         id: dp.gpId, gardenId: id, plantId: dp.pId, nickname: dp.name,
@@ -470,9 +470,9 @@ export const GardenDashboardPage: React.FC = () => {
       serverTodayRef.current = today;
       setDailyStats(demoDataRef.current?.dailyStats ?? []);
       setTodayTaskOccurrences([
-        { id: 'to1', taskId: 't1', gardenPlantId: 'gp1', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
-        { id: 'to2', taskId: 't2', gardenPlantId: 'gp2', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
-        { id: 'to3', taskId: 't3', gardenPlantId: 'gp3', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
+        { id: 'to1', taskId: 't1', gardenPlantId: '11111111-1111-4111-8111-111111111111', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to2', taskId: 't2', gardenPlantId: '22222222-2222-4222-8222-222222222222', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 1, completedAt: new Date().toISOString(), taskType: 'water' },
+        { id: 'to3', taskId: 't3', gardenPlantId: '33333333-3333-4333-8333-333333333333', dueAt: new Date().toISOString(), requiredCount: 1, completedCount: 0, completedAt: null, taskType: 'fertilize' },
       ] as any);
       demoLoadedRef.current = true;
       // Async: fetch real plant images and update plants with image data
