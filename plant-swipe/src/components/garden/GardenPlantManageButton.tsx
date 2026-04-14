@@ -523,7 +523,7 @@ export function GardenPlantManageButton({
           </div>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
-            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:pb-4">
+            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:p-0">
               <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
                 {currentImageUrl ? (
                   <img
