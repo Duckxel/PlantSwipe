@@ -4023,15 +4023,28 @@ function requireCsrfToken(req, res, next) {
   next()
 }
 
+function isTrustedNativeAppOrigin(origin) {
+  if (!origin || typeof origin !== 'string') return false
+  const normalized = origin.trim().toLowerCase()
+  return (
+    normalized === 'capacitor://localhost' ||
+    normalized === 'ionic://localhost' ||
+    normalized === 'http://localhost' ||
+    normalized === 'https://localhost'
+  )
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
     const origin = req.headers.origin
     // Allow all origins by default; optionally restrict via CORS_ALLOW_ORIGINS
     const allowList = (process.env.CORS_ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+    const allowCredentials = !!origin && (allowList.length > 0 || isTrustedNativeAppOrigin(origin))
     if (origin) {
-      if (allowList.length === 0 || allowList.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', allowList.length ? origin : '*')
+      if (allowList.length === 0 || allowList.includes(origin) || isTrustedNativeAppOrigin(origin)) {
+        const allowSpecificOrigin = allowList.length > 0 || isTrustedNativeAppOrigin(origin)
+        res.setHeader('Access-Control-Allow-Origin', allowSpecificOrigin ? origin : '*')
         res.setHeader('Vary', 'Origin')
       }
     } else {
@@ -4041,6 +4054,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
       res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
+      if (allowCredentials) {
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -5977,6 +5993,8 @@ app.get(['/api/env.js', '/env.js'], (req, res) => {
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_API_ORIGIN: process.env.VITE_API_ORIGIN || process.env.VITE_SITE_URL || process.env.WEBSITE_URL || 'https://aphylia.app',
+      VITE_SITE_URL: process.env.VITE_SITE_URL || process.env.WEBSITE_URL || 'https://aphylia.app',
       VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
