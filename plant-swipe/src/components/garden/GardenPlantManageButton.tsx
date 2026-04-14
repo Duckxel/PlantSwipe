@@ -484,8 +484,8 @@ export function GardenPlantManageButton({
             <DialogDescription>{t("gardenDashboard.plantsSection.managePlantDescription", "Edit your plant details, photo, and routine in one place.")}</DialogDescription>
           </DialogHeader>
 
-          <div className="flex max-h-[92dvh] min-h-0 flex-col overflow-hidden lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)]">
-            <div className="relative min-h-[220px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[260px] lg:min-h-[280px]">
+          <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
+            <div className="relative min-h-[168px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
               {currentImageUrl ? (
                 <img
                   src={currentImageUrl}
@@ -529,14 +529,14 @@ export function GardenPlantManageButton({
                   if (file) uploadGardenPlantPhoto(file);
                 }}
               />
-              <div className="absolute inset-x-0 bottom-0 space-y-3 p-4 text-white sm:p-5">
+              <div className="absolute inset-x-0 bottom-0 space-y-2 p-3 text-white sm:space-y-3 sm:p-5">
                 <div>
                   <div className="text-[11px] uppercase tracking-[0.24em] text-white/70">
                     {t("gardenDashboard.plantsSection.plantProfile", "Plant profile")}
                   </div>
-                  <div className="mt-1 text-xl font-semibold leading-tight sm:text-2xl">{displayName}</div>
+                  <div className="mt-1 text-lg font-semibold leading-tight sm:text-2xl">{displayName}</div>
                   {speciesName && speciesName !== displayName && (
-                    <div className="text-sm text-white/80">{speciesName}</div>
+                    <div className="text-xs text-white/80 sm:text-sm">{speciesName}</div>
                   )}
                 </div>
                 <div className="flex flex-wrap gap-2">
@@ -563,7 +563,7 @@ export function GardenPlantManageButton({
             </div>
 
             <div className="flex min-h-0 flex-col">
-              <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+              <div className="p-4 sm:p-6 lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 <div className="space-y-5 sm:space-y-6">
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
@@ -1031,7 +1031,7 @@ export function GardenPlantManageButton({
                 </section>
                 </div>
               </div>
-              <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
+              <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 lg:sticky lg:bottom-0 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
                     {t("cancel", "Cancel")}
