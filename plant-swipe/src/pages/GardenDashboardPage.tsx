@@ -3223,7 +3223,20 @@ export const GardenDashboardPage: React.FC = () => {
                               ? "border-orange-300 dark:border-orange-700/60 bg-white/80 dark:bg-[#1f1f1f]/80 shadow-[0_0_15px_-3px_rgba(251,146,60,0.3)] dark:shadow-[0_0_15px_-3px_rgba(251,146,60,0.15)]"
                               : "border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80"
                           } backdrop-blur`}
+                          role="button"
+                          tabIndex={0}
                           draggable
+                          onClick={() => {
+                            const manageButton = document.querySelector<HTMLButtonElement>(`[data-garden-manage-id="${gp.id}"]`);
+                            manageButton?.click();
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter" || e.key === " ") {
+                              e.preventDefault();
+                              const manageButton = document.querySelector<HTMLButtonElement>(`[data-garden-manage-id="${gp.id}"]`);
+                              manageButton?.click();
+                            }
+                          }}
                           onDragStart={(e) => {
                             // Prevent drag when starting from interactive controls
                             const target = e.target as HTMLElement;
@@ -3286,11 +3299,16 @@ export const GardenDashboardPage: React.FC = () => {
                               })()}
                             </div>
                             <div className="col-span-2 p-3">
-                              <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0 flex-1">
                                   <div className="font-medium truncate">
                                     {gp.nickname || gp.plant?.name || 'Unknown Plant'}
                                   </div>
+                                  {gp.plant?.scientificNameSpecies && (
+                                    <div className="mt-0.5 truncate text-[11px] uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
+                                      {gp.plant.scientificNameSpecies}
+                                    </div>
+                                  )}
                                 </div>
                                 <div className="flex items-center gap-2 shrink-0">
                                   {gp.healthStatus && (() => {
@@ -3356,7 +3374,8 @@ export const GardenDashboardPage: React.FC = () => {
                                   📝 {gp.notes}
                                 </div>
                               )}
-                              <div className="mt-2 flex gap-2 flex-wrap">
+                              <div className="mt-3 flex items-center justify-between gap-3">
+                                <div className="flex gap-2 flex-wrap">
                                 {/* Complete All button + Tasks button */}
                                     {(taskOccDueToday[gp.id] || 0) > 0 && (() => {
                                       const plantOccs = todayTaskOccurrences.filter((o) => o.gardenPlantId === gp.id);
@@ -3382,82 +3401,86 @@ export const GardenDashboardPage: React.FC = () => {
                                         </Button>
                                       );
                                     })()}
-                                <GardenPlantManageButton
-                                  gp={gp}
-                                  gardenId={id!}
-                                  onChanged={load}
-                                  actorColorCss={getActorColorCss()}
-                                  gardenType={garden?.gardenType}
-                                  taskCount={taskCountsByPlant[gp.id] || 0}
-                                  dueTodayCount={taskOccDueToday[gp.id] || 0}
-                                />
-                                <Button
-                                  variant="secondary"
-                                  className="rounded-2xl"
-                                  draggable={false}
-                                  onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                                  onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                  onClick={async () => {
-                                    await deleteGardenPlant(gp.id);
-                                    if (serverToday && id) {
-                                      try {
-                                        // Recompute success from occurrences only
-                                        const today = serverToday;
-                                        await resyncTaskOccurrencesForGarden(
-                                          id,
-                                          `${today}T00:00:00.000Z`,
-                                          `${today}T23:59:59.999Z`,
-                                        );
-                                        // Use enriched RPC — single query with pre-joined task type/emoji
-                                        const occs =
-                                          await getEnrichedOccurrencesForGardens(
-                                            [id],
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <GardenPlantManageButton
+                                    dataGardenManageId={gp.id}
+                                    iconOnly
+                                    gp={gp}
+                                    gardenId={id!}
+                                    onChanged={load}
+                                    actorColorCss={getActorColorCss()}
+                                    gardenType={garden?.gardenType}
+                                    taskCount={taskCountsByPlant[gp.id] || 0}
+                                    dueTodayCount={taskOccDueToday[gp.id] || 0}
+                                  />
+                                  <button
+                                    type="button"
+                                    className="flex h-10 w-10 items-center justify-center rounded-full border border-stone-200 bg-white/90 text-stone-500 shadow-sm transition hover:border-red-200 hover:bg-red-50 hover:text-red-600 dark:border-stone-700 dark:bg-stone-900/80 dark:text-stone-300 dark:hover:border-red-900/50 dark:hover:bg-red-900/20 dark:hover:text-red-300"
+                                    draggable={false}
+                                    onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
+                                    onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
+                                    onClick={async (e) => {
+                                      e.stopPropagation();
+                                      await deleteGardenPlant(gp.id);
+                                      if (serverToday && id) {
+                                        try {
+                                          const today = serverToday;
+                                          await resyncTaskOccurrencesForGarden(
+                                            id,
                                             `${today}T00:00:00.000Z`,
                                             `${today}T23:59:59.999Z`,
                                           );
-                                        let due = 0,
-                                          completed = 0;
-                                        for (const o of occs) {
-                                          const req = Math.max(
-                                            1,
-                                            Number(o.requiredCount || 1),
-                                          );
-                                          const comp = Math.min(
-                                            req,
-                                            Number(o.completedCount || 0),
-                                          );
-                                          due += req;
-                                          completed += comp;
-                                        }
-                                        const success =
-                                          due === 0 ? true : completed >= due;
-                                        await upsertGardenTask({
-                                          gardenId: id,
-                                          day: today,
-                                          gardenPlantId: null,
-                                          success,
+                                          const occs =
+                                            await getEnrichedOccurrencesForGardens(
+                                              [id],
+                                              `${today}T00:00:00.000Z`,
+                                              `${today}T23:59:59.999Z`,
+                                            );
+                                          let due = 0,
+                                            completed = 0;
+                                          for (const o of occs) {
+                                            const req = Math.max(
+                                              1,
+                                              Number(o.requiredCount || 1),
+                                            );
+                                            const comp = Math.min(
+                                              req,
+                                              Number(o.completedCount || 0),
+                                            );
+                                            due += req;
+                                            completed += comp;
+                                          }
+                                          const success =
+                                            due === 0 ? true : completed >= due;
+                                          await upsertGardenTask({
+                                            gardenId: id,
+                                            day: today,
+                                            gardenPlantId: null,
+                                            success,
+                                          });
+                                        } catch {}
+                                      }
+                                      emitGardenRealtime("tasks");
+                                      try {
+                                        const actorColorCss = getActorColorCss();
+                                        await logGardenActivity({
+                                          gardenId: id!,
+                                          kind: "plant_deleted",
+                                          message: `deleted "${gp.nickname || gp.plant?.name || "Plant"}"`,
+                                          plantName:
+                                            gp.nickname || gp.plant?.name || null,
+                                          actorColor: actorColorCss || null,
                                         });
+                                        setActivityRev((r) => r + 1);
                                       } catch {}
-                                    }
-                                    // Signal other UI (nav bars) to refresh notification badges
-                                    emitGardenRealtime("tasks");
-                                    try {
-                                      const actorColorCss = getActorColorCss();
-                                      await logGardenActivity({
-                                        gardenId: id!,
-                                        kind: "plant_deleted",
-                                        message: `deleted "${gp.nickname || gp.plant?.name || "Plant"}"`,
-                                        plantName:
-                                          gp.nickname || gp.plant?.name || null,
-                                        actorColor: actorColorCss || null,
-                                      });
-                                      setActivityRev((r) => r + 1);
-                                    } catch {}
-                                    await load();
-                                  }}
-                                >
-                                  {t("gardenDashboard.plantsSection.delete")}
-                                </Button>
+                                      await load();
+                                    }}
+                                    aria-label={t("gardenDashboard.plantsSection.delete")}
+                                  >
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           </div>
