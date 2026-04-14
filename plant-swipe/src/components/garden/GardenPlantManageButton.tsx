@@ -311,6 +311,11 @@ export function GardenPlantManageButton({
 
       await supabase.from("garden_plants").update(updateData).eq("id", gp.id);
 
+      const nextDisplayName = nickname.trim() || gp.nickname || gp.plant?.name || t("gardenDashboard.plantsSection.unknownPlant", "Unknown Plant");
+
+      setOpen(false);
+      setSubmitting(false);
+
       try {
         const parts: string[] = [];
         if ((gp.nickname || "") !== (nickname.trim() || "")) {
@@ -329,15 +334,15 @@ export function GardenPlantManageButton({
           await logGardenActivity({
             gardenId,
             kind: "plant_updated",
-            message: `updated ${displayName}: ${parts.join(", ")}`,
-            plantName: displayName,
+            message: `updated ${nextDisplayName}: ${parts.join(", ")}`,
+            plantName: nextDisplayName,
             actorColor: actorColorCss || null,
           });
         }
       } catch {}
 
-      await Promise.resolve(onChanged()).catch(() => {});
-      setOpen(false);
+      Promise.resolve(onChanged()).catch(() => {});
+      return;
     } catch {
       // Keep parity with the previous edit dialog: the page owns global error surfaces.
     } finally {
@@ -346,7 +351,6 @@ export function GardenPlantManageButton({
   }, [
     actorColorCss,
     count,
-    displayName,
     gardenId,
     gp.healthStatus,
     gp.id,
@@ -359,6 +363,7 @@ export function GardenPlantManageButton({
     onChanged,
     selectedHealthStatus,
     submitting,
+    t,
   ]);
 
   const syncTaskSideEffects = React.useCallback(
