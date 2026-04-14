@@ -535,7 +535,7 @@ export function GardenPlantManageButton({
                   <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
-                <div className="absolute right-3 top-3 z-10 sm:right-4 sm:top-4">
+                <div className="absolute left-3 top-3 z-10 sm:left-4 sm:top-4">
                   <button
                     type="button"
                     onClick={() => setImageSourceOpen(true)}
