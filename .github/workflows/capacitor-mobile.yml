@@ -104,7 +104,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Cache Bun download cache
         uses: actions/cache@v4
@@ -177,7 +177,7 @@ jobs:
       - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
-          java-version: '17'
+          java-version: '21'
 
       - name: Cache node_modules
         uses: actions/cache@v4
@@ -288,6 +288,14 @@ jobs:
           SKIP_SITEMAP_GENERATION: '1'
           NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 
+      - name: Resolve SPM dependencies
+        run: |
+          cd ios/App
+          xcodebuild -resolvePackageDependencies \
+            -project App.xcodeproj \
+            -scheme App \
+            -clonedSourcePackagesDirPath "${GITHUB_WORKSPACE}/plant-swipe/spm-cache"
+
       - name: Build for iOS Simulator (no code signing)
         run: |
           cd ios/App
@@ -300,14 +308,15 @@ jobs:
             -sdk iphonesimulator \
             -destination 'generic/platform=iOS Simulator' \
             -derivedDataPath "$DERIVED" \
+            -clonedSourcePackagesDirPath "${GITHUB_WORKSPACE}/plant-swipe/spm-cache" \
             CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Zip Simulator .app
         run: |
-          APP=$(find plant-swipe/ios-derived-ci -name 'App.app' -type d | head -1)
+          APP=$(find ios-derived-ci -name 'App.app' -type d | head -1)
           if [[ -z "$APP" ]]; then echo "App.app not found"; exit 1; fi
-          ditto -c -k --sequesterRsrc --keepParent "$APP" plant-swipe/ios-simulator-App.zip
+          ditto -c -k --sequesterRsrc --keepParent "$APP" ios-simulator-App.zip
 
       - name: Upload iOS Simulator app
         uses: actions/upload-artifact@v4
