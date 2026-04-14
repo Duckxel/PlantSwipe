@@ -901,7 +901,10 @@ declare
 begin
   select array_agg(t.id) into task_ids from public.garden_plant_tasks t where t.garden_id = _garden_id;
   if task_ids is null or array_length(task_ids,1) is null then
-    perform public.touch_garden_task(_garden_id, _day, null, true);
+    -- No tasks exist for this garden (no plants or no tasks configured).
+    -- Remove any existing garden_tasks record so empty gardens don't inflate streaks.
+    delete from public.garden_tasks
+      where garden_id = _garden_id and day = _day and task_type = 'watering';
     return;
   end if;
   select coalesce(sum(gpto.required_count), 0) into due_count
@@ -924,13 +927,15 @@ language sql
 security definer
 set search_path = public
 as $$
+  -- Only create garden_tasks records for gardens that actually have tasks configured.
+  -- Gardens with no plants or no tasks should not get records (prevents false streaks).
   insert into public.garden_tasks (garden_id, day, task_type, garden_plant_ids, success)
   select g.id, _day, 'watering', '{}'::uuid[], true
   from public.gardens g
+  where exists (
+    select 1 from public.garden_plant_tasks t where t.garden_id = g.id
+  )
   on conflict (garden_id, day, task_type) do nothing;
-  update public.garden_tasks
-    set success = true
-  where day = _day and task_type = 'watering' and coalesce(array_length(garden_plant_ids, 1), 0) = 0;
 $$;
 
 create or replace function public.get_user_id_by_email(_email text)

@@ -22880,6 +22880,16 @@ app.get('/api/garden/:id/advice', async (req, res) => {
       return
     }
 
+    // Garden must have at least one plant with tasks configured
+    const taskCountRows = await sql`
+      select count(*)::int as count from public.garden_plant_tasks where garden_id = ${gardenId}
+    `
+    const taskCount = Number(taskCountRows[0]?.count || 0)
+    if (taskCount < 1) {
+      res.json({ ok: true, message: 'Add tasks to your plants to receive personalized advice.', advice: null })
+      return
+    }
+
     // Calculate current week start (Monday)
     const now = new Date()
     const dayOfWeek = now.getUTCDay() // 0 = Sunday

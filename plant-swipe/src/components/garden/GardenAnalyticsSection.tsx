@@ -232,6 +232,8 @@ interface GardenAnalyticsSectionProps {
   onNavigateToSettings?: () => void;
   /** When true, hide all AI-powered features (gardener advice) */
   hideAiFeatures?: boolean;
+  /** Whether the garden has at least one plant with tasks configured */
+  gardenHasTasks?: boolean;
 }
 
 // Color palette for charts
@@ -270,18 +272,22 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   streak: streakProp,
   onNavigateToSettings,
   hideAiFeatures = false,
+  gardenHasTasks = false,
 }) => {
   // Default serverToday to current date if not provided
   const serverToday = serverTodayProp || new Date().toISOString().slice(0, 10);
   
-  // Compute streak from garden or default to 0
-  const baseStreak = streakProp ?? garden?.streak ?? 0;
+  // Compute streak from garden or default to 0.
+  // Gardens with no plants or no tasks configured should always show streak = 0.
+  const hasActiveTasks = plants.length > 0 && gardenHasTasks;
+  const baseStreak = hasActiveTasks ? (streakProp ?? garden?.streak ?? 0) : 0;
   const streak = React.useMemo(() => {
+    if (!hasActiveTasks) return 0;
     if (!serverToday || !dailyStats.length) return baseStreak;
     const today = dailyStats.find((d) => d.date === serverToday);
     if (today && today.success) return baseStreak + 1;
     return baseStreak;
-  }, [baseStreak, serverToday, dailyStats]);
+  }, [baseStreak, serverToday, dailyStats, hasActiveTasks]);
   const { t } = useTranslation("common");
   const currentLang = useLanguage();
   const { user: _user } = useAuth();
@@ -320,7 +326,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
   const gardenAgeInDays = gardenCreatedAt
     ? Math.floor((Date.now() - gardenCreatedAt.getTime()) / (1000 * 60 * 60 * 24))
     : 0;
-  const isEligibleForAdvice = gardenAgeInDays >= 7 && plants.length >= 1;
+  const isEligibleForAdvice = gardenAgeInDays >= 7 && plants.length >= 1 && gardenHasTasks;
 
   // Compute analytics from dailyStats
   const computedAnalytics = React.useMemo(() => {
@@ -357,17 +363,21 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     if (trendValue > 5) trend = "up";
     else if (trendValue < -5) trend = "down";
 
-    // Calculate consecutive successful days for best streak
+    // Calculate consecutive successful days for best streak.
+    // Only count days that actually had tasks due — days with due=0 and
+    // success=true (from legacy empty-garden records) are skipped so they
+    // don't inflate the streak.
     let bestStreak = 0;
     let currentStreak = 0;
     const sortedStats = [...dailyStats].sort((a, b) => a.date.localeCompare(b.date));
     for (const stat of sortedStats) {
-      if (stat.success) {
+      if (stat.due > 0 && stat.success) {
         currentStreak++;
         bestStreak = Math.max(bestStreak, currentStreak);
-      } else {
+      } else if (stat.due > 0 && !stat.success) {
         currentStreak = 0;
       }
+      // days with due=0 are neutral — don't break or extend the streak
     }
 
     // Find last missed day
@@ -790,18 +800,19 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       Object.entries(dowCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || "0",
     );
 
-    // Streak calculation
+    // Streak calculation — skip days with no tasks due (due=0)
     let bestStreak = 0;
     let runStreak = 0;
     const sorted = [...bestDailyStats].sort((a, b) => a.date.localeCompare(b.date));
     for (let i = 0; i < sorted.length; i++) {
       const stat = sorted[i];
-      if (stat.success) {
+      if ((stat.due || 0) > 0 && stat.success) {
         runStreak++;
         bestStreak = Math.max(bestStreak, runStreak);
-      } else {
+      } else if ((stat.due || 0) > 0 && !stat.success) {
         runStreak = 0;
       }
+      // days with due=0 are neutral
     }
 
     let lastMissed = null;
@@ -1268,12 +1279,16 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
                     </div>
                     <p className="text-sm text-muted-foreground max-w-md mx-auto">
                       {gardenAgeInDays < 7
-                        ? t("gardenDashboard.analyticsSection.adviceRequiresAge", { 
+                        ? t("gardenDashboard.analyticsSection.adviceRequiresAge", {
                             defaultValue: "Your garden needs to be at least 1 week old to receive personalized advice. Come back in {{days}} days!",
                             days: 7 - gardenAgeInDays,
                           })
-                        : t("gardenDashboard.analyticsSection.adviceRequiresPlants", { 
+                        : plants.length < 1
+                        ? t("gardenDashboard.analyticsSection.adviceRequiresPlants", {
                             defaultValue: "Add at least 1 plant to your garden to receive personalized gardening advice.",
+                          })
+                        : t("gardenDashboard.analyticsSection.adviceRequiresTasks", {
+                            defaultValue: "Add tasks to your plants to receive personalized gardening advice.",
                           })
                       }
                     </p>
