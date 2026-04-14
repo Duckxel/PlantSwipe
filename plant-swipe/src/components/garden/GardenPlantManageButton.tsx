@@ -630,16 +630,10 @@ export function GardenPlantManageButton({
                     )}
 
                     <div className="space-y-1.5">
-                      <div className="flex items-center justify-between gap-2 px-1">
+                      <div className="px-1">
                         <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-stone-400 dark:text-stone-500">
                           {t("gardenDashboard.plantsSection.healthStatus", "Plant health")}
                         </p>
-                        {selectedHealthStatus ? (
-                          <span className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-[11px] font-medium ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}>
-                            <span>{selectedHealthStatus.emoji}</span>
-                            <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
-                          </span>
-                        ) : null}
                       </div>
                       <Select
                         value={healthStatus}
