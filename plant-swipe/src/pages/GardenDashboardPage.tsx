@@ -12,7 +12,6 @@ import { useLanguageNavigate, removeLanguagePrefix } from "@/lib/i18nRouting";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { SearchInput } from "@/components/ui/search-input";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import {
   Dialog,
@@ -27,9 +26,9 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Circle, Home, Droplets, FlaskConical, Star, LocateFixed, Grid3X3 } from "lucide-react";
+import { Info, ArrowUpRight, UploadCloud, Loader2, Lock, Globe, Users, ChevronDown, ChevronLeft, ChevronRight, Leaf, Plus, Bookmark, Share2, LayoutDashboard, Sprout, ListChecks, BookOpen, BarChart3, Settings, MoreHorizontal, CheckCircle2, Home, Droplets, FlaskConical, Star, LocateFixed, Grid3X3 } from "lucide-react";
 import { SchedulePickerDialog } from "@/components/plant/SchedulePickerDialog";
-import { TaskEditorDialog } from "@/components/plant/TaskEditorDialog";
+import { GardenPlantManageButton } from "@/components/garden/GardenPlantManageButton";
 import { getUserBookmarks, getBookmarkDetails, getLikesBookmarkPlantIds, togglePlantInLikesBookmark } from "@/lib/bookmarks";
 import type { Bookmark as BookmarkType } from "@/types/bookmark";
 import { motion } from "framer-motion";
@@ -46,7 +45,6 @@ import {
   fetchServerNowISO,
   upsertGardenTask,
   getGardenTasks,
-  ensureDailyTasksForGardens,
   upsertGardenPlantSchedule,
   getGardenPlantSchedule,
   updateGardenMemberRole,
@@ -93,7 +91,7 @@ import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdo
 import { AphyliaChat } from "@/components/aphylia";
 import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
 import type { SeedlingTrayCell } from "@/types/garden";
-import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, getUserGardens, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
+import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
@@ -114,9 +112,9 @@ export const GardenDashboardPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useLanguageNavigate();
   const location = useLocation();
-  const { user, profile, refreshProfile } = useAuth();
+  const { user, profile } = useAuth();
   const { t } = useTranslation("common");
-  const { active: tutorialActive } = useTutorial();
+  const { active: _tutorialActive } = useTutorial();
   const isDemoGarden = !!(id && id.startsWith('demo-'));
   // Stable demo data — generated once, never changes across re-renders
   const demoDataRef = React.useRef<{
@@ -181,7 +179,6 @@ export const GardenDashboardPage: React.FC = () => {
   >({});
   // Seedling tray state
   const [seedlingCells, setSeedlingCells] = React.useState<SeedlingTrayCell[]>([]);
-  const [seedlingLoading, setSeedlingLoading] = React.useState(false);
   const [seedlingSelectMode, setSeedlingSelectMode] = React.useState(false);
   const [seedlingSelected, setSeedlingSelected] = React.useState<Set<number>>(new Set());
   const [seedlingModal, setSeedlingModal] = React.useState<{ type: "single" | "multi"; index: number; indices?: Set<number> } | null>(null);
@@ -268,12 +265,11 @@ export const GardenDashboardPage: React.FC = () => {
   const [isFriendOfMember, setIsFriendOfMember] = React.useState(false);
 
   const [addOpen, setAddOpen] = React.useState(false);
-  const [plantQuery, setPlantQuery] = React.useState("");
-  const [plantResults, setPlantResults] = React.useState<Plant[]>([]);
+  const [_plantQuery, setPlantQuery] = React.useState("");
+  const [_plantResults, _setPlantResults] = React.useState<Plant[]>([]);
   const [selectedPlant, setSelectedPlant] = React.useState<Plant | null>(null);
   const [adding, setAdding] = React.useState(false);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
-  const [taskOpen, setTaskOpen] = React.useState(false);
   const [pendingGardenPlantId, setPendingGardenPlantId] = React.useState<
     string | null
   >(null);
@@ -371,7 +367,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
   const anyModalOpen =
-    addOpen || addDetailsOpen || scheduleOpen || taskOpen || inviteOpen || bookmarkDialogOpen;
+    addOpen || addDetailsOpen || scheduleOpen || inviteOpen || bookmarkDialogOpen;
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -1844,14 +1840,11 @@ export const GardenDashboardPage: React.FC = () => {
     // Seedling tray: load cells when garden is seedling type
     const loadSeedlingCells = React.useCallback(async () => {
       if (!id || garden?.gardenType !== 'seedling' || isDemoGarden) return;
-      setSeedlingLoading(true);
       try {
         const cells = await getSeedlingTrayCells(id);
         setSeedlingCells(cells);
       } catch (e) {
         console.error('Failed to load seedling cells:', e);
-      } finally {
-        setSeedlingLoading(false);
       }
     }, [id, garden?.gardenType]);
 
@@ -2786,7 +2779,6 @@ export const GardenDashboardPage: React.FC = () => {
         try {
           // Recompute success solely from task occurrences
           const today = serverToday;
-          const allTasks = await listGardenTasks(garden.id);
           // Use resync to purge stale occurrences first
           await resyncTaskOccurrencesForGarden(
             garden.id,
@@ -3291,7 +3283,11 @@ export const GardenDashboardPage: React.FC = () => {
                           <div className="grid grid-cols-3 items-stretch gap-0">
                             <div className="col-span-1 relative h-full min-h-[148px] rounded-l-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                               {(() => {
-                                const primaryImageUrl = (gp.plant?.photos?.length ? getPrimaryPhotoUrl(gp.plant.photos) : null) || gp.plant?.image || null;
+                                const primaryImageUrl =
+                                  gp.gardenPlantImageUrl ||
+                                  (gp.plant?.photos?.length ? getPrimaryPhotoUrl(gp.plant.photos) : null) ||
+                                  gp.plant?.image ||
+                                  null;
                                 return primaryImageUrl ? (
                                   <img
                                     src={primaryImageUrl}
@@ -3384,28 +3380,14 @@ export const GardenDashboardPage: React.FC = () => {
                                         </Button>
                                       );
                                     })()}
-                                    <Button
-                                      variant="secondary"
-                                      className="rounded-2xl"
-                                      draggable={false}
-                                      onMouseDown={(e: React.MouseEvent) => e.stopPropagation()}
-                                      onTouchStart={(e: React.TouchEvent) => e.stopPropagation()}
-                                      onClick={() => {
-                                        setPendingGardenPlantId(gp.id);
-                                        setTaskOpen(true);
-                                      }}
-                                    >
-                                      {t(
-                                        "gardenDashboard.plantsSection.tasksButton",
-                                      )}
-                                    </Button>
-                                <EditPlantButton
+                                <GardenPlantManageButton
                                   gp={gp}
                                   gardenId={id!}
                                   onChanged={load}
-                                  serverToday={serverToday}
                                   actorColorCss={getActorColorCss()}
                                   gardenType={garden?.gardenType}
+                                  taskCount={taskCountsByPlant[gp.id] || 0}
+                                  dueTodayCount={taskOccDueToday[gp.id] || 0}
                                 />
                                 <Button
                                   variant="secondary"
@@ -3649,7 +3631,8 @@ export const GardenDashboardPage: React.FC = () => {
                           if (seedlingSelectMode) {
                             setSeedlingSelected(prev => {
                               const next = new Set(prev);
-                              next.has(i) ? next.delete(i) : next.add(i);
+                              if (next.has(i)) next.delete(i);
+                              else next.add(i);
                               return next;
                             });
                           } else {
@@ -4095,31 +4078,6 @@ export const GardenDashboardPage: React.FC = () => {
             onChangeAmount={(n) => setPendingAmount(n)}
             lockToYear={scheduleLockYear}
             allowedPeriods={scheduleAllowedPeriods}
-          />
-
-          {/* Task Editor Dialog */}
-          <TaskEditorDialog
-            open={taskOpen}
-            onOpenChange={(o) => {
-              setTaskOpen(o);
-              if (!o) setPendingGardenPlantId(null);
-            }}
-            gardenId={id!}
-            gardenPlantId={pendingGardenPlantId || ""}
-            wateringFrequencyWarm={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyWarm}
-            wateringFrequencyCold={plants.find((gp) => gp.id === pendingGardenPlantId)?.plant?.wateringFrequencyCold}
-            onChanged={async () => {
-              // Ensure page reflects latest tasks after create/update/delete
-              await load({ silent: true, preserveHeavy: true });
-              // Always refresh heavy data so counts and badges update immediately
-              await loadHeavyForCurrentTab(
-                serverTodayRef.current ?? serverToday,
-              );
-              // Notify global UI components (badges) to refresh
-              try {
-                window.dispatchEvent(new CustomEvent("garden:tasks_changed"));
-              } catch {}
-            }}
           />
 
           {/* Invite Dialog */}
@@ -6514,273 +6472,6 @@ const HEALTH_STATUSES = [
 
 function getHealthStatus(status: string | null) {
   return HEALTH_STATUSES.find(h => h.key === status) || null;
-}
-
-function EditPlantButton({
-  gp,
-  gardenId,
-  onChanged,
-  serverToday,
-  actorColorCss,
-  gardenType,
-}: {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- garden plant with plant relation
-  gp: any;
-  gardenId: string;
-  onChanged: () => Promise<void>;
-  serverToday: string | null;
-  actorColorCss?: string | null;
-  gardenType?: string;
-}) {
-  const { t } = useTranslation("common");
-  const [open, setOpen] = React.useState(false);
-  const [nickname, setNickname] = React.useState(gp.nickname || "");
-  const [count, setCount] = React.useState<number>(
-    Number(gp.plantsOnHand ?? 0),
-  );
-  const [healthStatus, setHealthStatus] = React.useState<string | null>(gp.healthStatus || null);
-  const [notes, setNotes] = React.useState(gp.notes || "");
-  const [submitting, setSubmitting] = React.useState(false);
-  const selectedHealthStatus = React.useMemo(() => getHealthStatus(healthStatus), [healthStatus]);
-  const lastHealthUpdatedLabel = React.useMemo(() => {
-    if (!gp.lastHealthUpdate) return null;
-    try {
-      return new Date(gp.lastHealthUpdate).toLocaleString([], {
-        year: "numeric",
-        month: "short",
-        day: "numeric",
-      });
-    } catch {
-      return null;
-    }
-  }, [gp.lastHealthUpdate]);
-  const pendingStatusChange =
-    (healthStatus || null) !== (gp.healthStatus || null);
-
-  React.useEffect(() => {
-    setNickname(gp.nickname || "");
-  }, [gp.nickname]);
-
-  React.useEffect(() => {
-    setCount(Number(gp.plantsOnHand ?? 0));
-  }, [gp.plantsOnHand]);
-
-  React.useEffect(() => {
-    setHealthStatus(gp.healthStatus || null);
-  }, [gp.healthStatus]);
-
-  React.useEffect(() => {
-    setNotes(gp.notes || "");
-  }, [gp.notes]);
-
-  const save = async () => {
-    if (submitting) return;
-    setSubmitting(true);
-    try {
-      // Update nickname, count, health status, and notes; delete plant if count becomes 0
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- supabase update accepts Record<string, unknown>
-      const updateData: Record<string, any> = {
-        nickname: nickname.trim() || null,
-        plants_on_hand: Math.max(0, Number(count || 0)),
-        health_status: healthStatus || null,
-        notes: notes.trim() || null,
-      };
-      // Only update last_health_update if health status changed
-      if (healthStatus !== (gp.healthStatus || null)) {
-        updateData.last_health_update = new Date().toISOString();
-      }
-      await supabase
-        .from("garden_plants")
-        .update(updateData)
-        .eq("id", gp.id);
-      if (count <= 0) {
-        await supabase.from("garden_plants").delete().eq("id", gp.id);
-        if (serverToday) await ensureDailyTasksForGardens(serverToday);
-        try {
-          await logGardenActivity({
-            gardenId,
-            kind: "plant_deleted",
-            message: `deleted "${gp.nickname || gp.plant?.name || "Plant"}"`,
-            plantName: gp.nickname || gp.plant?.name || null,
-            actorColor: actorColorCss || null,
-          });
-        } catch {}
-      }
-      // If name or count changed, log update
-      try {
-        const changedName = (gp.nickname || "") !== (nickname.trim() || "");
-        const changedCount =
-          Number(gp.plantsOnHand || 0) !== Math.max(0, Number(count || 0));
-        const changedStatus =
-          (gp.healthStatus || null) !== (healthStatus || null);
-        if (changedName || changedCount || changedStatus) {
-          const parts: string[] = [];
-          if (changedName) parts.push(`name: "${nickname.trim() || "-"}"`);
-          if (changedCount)
-            parts.push(`count: ${Math.max(0, Number(count || 0))}`);
-          if (changedStatus) {
-            const nextStatus = getHealthStatus(healthStatus);
-            parts.push(
-              `health: ${nextStatus ? nextStatus.label : "none"}`,
-            );
-          }
-          const plantName =
-            nickname.trim() || gp.nickname || gp.plant?.name || "Plant";
-          await logGardenActivity({
-            gardenId,
-            kind: "plant_updated",
-            message: `updated ${plantName}: ${parts.join(", ")}`,
-            plantName,
-            actorColor: actorColorCss || null,
-          });
-        }
-      } catch {}
-      await onChanged();
-      setOpen(false);
-    } catch (_e) {
-      // swallow; page has global error area
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  return (
-    <>
-      <Button
-        variant="secondary"
-        className="rounded-2xl"
-        onClick={() => setOpen(true)}
-      >
-        {t("gardenDashboard.taskDialog.edit")}
-      </Button>
-        <Dialog open={open} onOpenChange={setOpen}>
-          <DialogContent className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/90 dark:bg-[#1f1f1f]/90 backdrop-blur">
-          <DialogHeader>
-            <DialogTitle>
-              {t("gardenDashboard.plantsSection.editPlant")}
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <label className="text-sm font-medium">
-                {t("gardenDashboard.plantsSection.customName")}
-              </label>
-              <Input
-                value={nickname}
-                maxLength={30}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setNickname(e.target.value)}
-                placeholder={t(
-                  "gardenDashboard.plantsSection.optionalNickname",
-                )}
-              />
-            </div>
-            {gardenType !== "seedling" && (
-            <div>
-              <label className="text-sm font-medium">
-                {t("gardenDashboard.plantsSection.numberOfPlants")}
-              </label>
-              <Input
-                type="number"
-                min={0}
-                value={String(count)}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCount(Number(e.target.value))}
-              />
-            </div>
-            )}
-
-            {/* Health Status Selector */}
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-2">
-                <label className="text-sm font-medium">
-                  {t("gardenDashboard.plantsSection.healthStatus", "Plant Health")}
-                </label>
-                {selectedHealthStatus ? (
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full flex items-center gap-1 ${selectedHealthStatus.bg} ${selectedHealthStatus.color}`}
-                  >
-                    <span>{selectedHealthStatus.emoji}</span>
-                    <span>{t(`gardenDashboard.plantsSection.health.${selectedHealthStatus.key}`, selectedHealthStatus.label)}</span>
-                  </span>
-                ) : (
-                  <span className="text-xs text-stone-500 dark:text-stone-400">
-                    {t("gardenDashboard.plantsSection.healthStatusUnset", "Not set yet")}
-                  </span>
-                )}
-              </div>
-              {lastHealthUpdatedLabel && (
-                <p className="text-xs text-stone-500 dark:text-stone-400 mb-2">
-                  {t("gardenDashboard.plantsSection.healthStatusUpdated", "Last updated")} {lastHealthUpdatedLabel}
-                </p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {HEALTH_STATUSES.map((status) => {
-                  const isSelected = healthStatus === status.key;
-                  return (
-                    <button
-                      key={status.key}
-                      type="button"
-                      aria-pressed={isSelected}
-                      onClick={() => setHealthStatus(isSelected ? null : status.key)}
-                      className={`px-3 py-2 rounded-xl text-sm font-medium transition-all flex items-center gap-1.5 ${
-                        isSelected
-                          ? `${status.bg} ${status.color} ring-2 ring-offset-1 ring-current`
-                          : "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
-                      }`}
-                    >
-                      <span>{status.emoji}</span>
-                      <span>{t(`gardenDashboard.plantsSection.health.${status.key}`, status.label)}</span>
-                    </button>
-                  );
-                })}
-              </div>
-              {pendingStatusChange && (
-                <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
-                  {t(
-                    "gardenDashboard.plantsSection.healthStatusPending",
-                    "New status will be saved when you click Save."
-                  )}
-                </p>
-              )}
-            </div>
-            
-            {/* Notes */}
-            <div>
-              <label className="text-sm font-medium block mb-2">
-                {t("gardenDashboard.plantsSection.notes", "Notes")}
-              </label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
-                className="w-full px-3 py-2 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 text-sm resize-none"
-                rows={3}
-                maxLength={500}
-              />
-            </div>
-            
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                variant="secondary"
-                className="rounded-2xl"
-                onClick={() => setOpen(false)}
-              >
-                {t("cancel")}
-              </Button>
-              <Button
-                className="rounded-2xl"
-                onClick={save}
-                disabled={submitting}
-              >
-                {submitting
-                  ? t("gardenDashboard.settingsSection.saving")
-                  : t("save")}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
 }
 
 function MemberCard({
