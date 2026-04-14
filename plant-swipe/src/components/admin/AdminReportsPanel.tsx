@@ -384,6 +384,7 @@ export function AdminReportsPanel() {
                       size="icon"
                       className="rounded-lg"
                       onClick={() => setSelectedReport(null)}
+                      aria-label="Close"
                     >
                       <X className="h-4 w-4" />
                     </Button>
