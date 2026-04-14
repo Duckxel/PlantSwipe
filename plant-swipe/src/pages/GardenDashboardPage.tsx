@@ -286,10 +286,8 @@ export const GardenDashboardPage: React.FC = () => {
       }
     | undefined
   >(undefined);
-  const [addDetailsOpen, setAddDetailsOpen] = React.useState(false);
   const [addNickname, setAddNickname] = React.useState("");
   const [addCount, setAddCount] = React.useState<number>(1);
-  const countInputRef = React.useRef<HTMLInputElement | null>(null);
   const [scheduleLockYear, setScheduleLockYear] =
     React.useState<boolean>(false);
   const [scheduleAllowedPeriods, setScheduleAllowedPeriods] = React.useState<
@@ -325,22 +323,6 @@ export const GardenDashboardPage: React.FC = () => {
     shareTimeoutRef.current = setTimeout(() => setShareStatus('idle'), 2500);
   }, [garden]);
 
-  React.useEffect(() => {
-    if (addDetailsOpen) {
-      const t = setTimeout(() => {
-        try {
-          countInputRef.current?.focus();
-          countInputRef.current?.select();
-        } catch {}
-      }, 0);
-      return () => {
-        try {
-          clearTimeout(t);
-        } catch {}
-      };
-    }
-  }, [addDetailsOpen]);
-
   const [activityRev, setActivityRev] = React.useState(0);
   const streakRefreshedRef = React.useRef(false);
   const skipTodayCacheRef = React.useRef(false);
@@ -367,7 +349,7 @@ export const GardenDashboardPage: React.FC = () => {
   const [inviteOpen, setInviteOpen] = React.useState(false);
   // Track if any modal is open to pause reloads
   const anyModalOpen =
-    addOpen || addDetailsOpen || scheduleOpen || inviteOpen || bookmarkDialogOpen;
+    addOpen || scheduleOpen || inviteOpen || bookmarkDialogOpen;
   const reloadTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(
     null,
   );
@@ -2462,103 +2444,42 @@ export const GardenDashboardPage: React.FC = () => {
     if (!id || !selectedPlant || adding) return;
     setAdding(true);
     try {
-      // Open details modal to capture count and nickname
-      // Prefill the editable name field with the plant's species name
-      setAddNickname(selectedPlant.name);
-      setAddDetailsOpen(true);
-      return;
-    } catch (e: unknown) {
-      setError(e?.message || "Failed to add plant");
-    } finally {
-      setAdding(false);
-    }
-  };
-
-  const confirmAddSelectedPlant = async () => {
-    if (!id || !selectedPlant) return;
-    try {
-      // If there is exactly one existing instance of this species in the garden,
-      // and it has no per-instance count yet, backfill it from species-level inventory
-      const { data: existingRows } = await supabase
-        .from("garden_plants")
-        .select("id")
-        .eq("garden_id", id)
-        .eq("plant_id", selectedPlant.id);
-      const existingIds = (existingRows || []).map((r: { id: string }) => String(r.id));
-      if (existingIds.length === 1) {
-        const existingId = existingIds[0];
-        const { data: speciesInv } = await supabase
-          .from("garden_inventory")
-          .select("plants_on_hand")
-          .eq("garden_id", id)
-          .eq("plant_id", selectedPlant.id)
-          .maybeSingle();
-        const { data: instInv } = await supabase
-          .from("garden_instance_inventory")
-          .select("plants_on_hand")
-          .eq("garden_plant_id", existingId)
-          .maybeSingle();
-        const speciesCount = Number(speciesInv?.plants_on_hand ?? 0);
-        const instCount = Number(instInv?.plants_on_hand ?? 0);
-        if (speciesCount > 0 && instCount === 0) {
-          await supabase
-            .from("garden_instance_inventory")
-            .upsert(
-              {
-                garden_id: id,
-                garden_plant_id: existingId,
-                plants_on_hand: speciesCount,
-                seeds_on_hand: 0,
-              },
-              { onConflict: "garden_plant_id" },
-            );
-        }
-      }
-      // Treat unchanged name (same as species name) as no custom nickname
-      const trimmedName = addNickname.trim();
-      const nicknameVal =
-        trimmedName.length > 0 &&
-        trimmedName !== (selectedPlant.name || "").trim()
-          ? trimmedName
-          : null;
-      const qty = Math.max(0, Number(addCount || 0));
-      // Create a new instance and set its own count; do not merge into species inventory
       const gp = await addPlantToGarden({
         gardenId: id,
         plantId: selectedPlant.id,
         seedsPlanted: 0,
-        nickname: nicknameVal || undefined,
       });
-      if (qty > 0) {
-        await supabase
-          .from("garden_plants")
-          .update({ plants_on_hand: qty })
-          .eq("id", gp.id);
-      }
-      // Log activity: plant added
+
       try {
         const actorColorCss = getActorColorCss();
         await logGardenActivity({
           gardenId: id,
           kind: "plant_added",
-          message: `added "${nicknameVal || selectedPlant.name}"${qty > 0 ? ` x${qty}` : ""}`,
-          plantName: nicknameVal || selectedPlant.name,
+          message: `added "${selectedPlant.name}"`,
+          plantName: selectedPlant.name,
           actorColor: actorColorCss || null,
         });
         setActivityRev((r) => r + 1);
       } catch {}
-      setAddDetailsOpen(false);
-      setAddNickname("");
-      setAddCount(1);
+
       setAddOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      // Seedling gardens: ensure the single garden-level watering task exists; normal gardens: open task editor
+      setAddNickname("");
+      setAddCount(1);
+
+      await load({ silent: true, preserveHeavy: true, suppressError: true });
+      await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
+
       if (garden?.gardenType === "seedling") {
         try {
           const existing = await getSeedlingWateringTaskId(id);
           if (!existing) {
-            await createSeedlingWateringTask({ gardenId: id, gardenPlantId: gp.id, customName: garden?.name ? `Water ${garden.name}` : undefined });
+            await createSeedlingWateringTask({
+              gardenId: id,
+              gardenPlantId: gp.id,
+              customName: garden?.name ? `Water ${garden.name}` : undefined,
+            });
             await load({ silent: true, preserveHeavy: true });
             await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
             try { window.dispatchEvent(new CustomEvent("garden:tasks_changed")); } catch {}
@@ -2566,19 +2487,21 @@ export const GardenDashboardPage: React.FC = () => {
         } catch (taskErr: unknown) {
           console.warn("Failed to ensure seedling watering task:", taskErr);
         }
-        // Reopen cell modal if "Add New Plant" was used from within a cell
         if (pendingSeedlingModalRef.current) {
           const saved = pendingSeedlingModalRef.current;
           pendingSeedlingModalRef.current = null;
           setTimeout(() => setSeedlingModal(saved), 300);
         }
-      } else {
-        setPendingGardenPlantId(gp.id);
-        setTaskOpen(true);
       }
+
+      setPendingGardenPlantId(gp.id);
+      setTaskOpen(true);
       emitGardenRealtime("plants");
+      return;
     } catch (e: unknown) {
       setError(e?.message || "Failed to add plant");
+    } finally {
+      setAdding(false);
     }
   };
 
