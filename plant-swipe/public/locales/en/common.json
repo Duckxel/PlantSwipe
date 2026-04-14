@@ -896,6 +896,8 @@
     },
     "member": "member",
     "members": "members",
+    "plant": "plant",
+    "plants": "plants",
     "streak": "streak",
     "failedToLoad": "Failed to load gardens"
   },

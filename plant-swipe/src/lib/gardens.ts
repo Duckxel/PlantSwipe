@@ -320,6 +320,25 @@ export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<R
   return counts
 }
 
+export async function getGardenPlantCountsBatch(gardenIds: string[]): Promise<Record<string, number>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  const { data: plantRows } = await supabase
+    .from('garden_plants')
+    .select('garden_id')
+    .in('garden_id', safeIds)
+
+  const counts: Record<string, number> = {}
+  if (plantRows) {
+    for (const row of plantRows) {
+      const gid = String(row.garden_id)
+      counts[gid] = (counts[gid] || 0) + 1
+    }
+  }
+  return counts
+}
+
 export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
   const { valid: safeIds } = normalizeGardenIdList(gardenIds)
   if (safeIds.length === 0) return {}

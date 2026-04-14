@@ -896,6 +896,8 @@
     },
     "member": "membre",
     "members": "membres",
+    "plant": "plante",
+    "plants": "plantes",
     "streak": "série",
     "failedToLoad": "Échec du chargement des jardins"
   },
