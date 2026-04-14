@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
-import { Camera, Loader2, Pencil, Plus, Trash2, UploadCloud } from "lucide-react";
+import { Camera, Loader2, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
@@ -476,6 +476,7 @@ export function GardenPlantManageButton({
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
+          hideCloseButton
           className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 pr-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
@@ -483,6 +484,15 @@ export function GardenPlantManageButton({
             <DialogTitle>{t("gardenDashboard.plantsSection.managePlant", "Manage plant")}</DialogTitle>
             <DialogDescription>{t("gardenDashboard.plantsSection.managePlantDescription", "Edit your plant details, photo, and routine in one place.")}</DialogDescription>
           </DialogHeader>
+
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label={t("close", "Close")}
+            className="absolute right-3 top-3 z-20 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30 sm:right-4 sm:top-4"
+          >
+            <X className="h-4 w-4" />
+          </button>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
             <div className="relative min-h-[168px] overflow-hidden bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:min-h-[280px]">
