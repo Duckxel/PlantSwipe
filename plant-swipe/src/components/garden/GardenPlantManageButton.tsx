@@ -689,19 +689,27 @@ export function GardenPlantManageButton({
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                      {t("gardenDashboard.plantsSection.notes", "Notes")}
-                    </label>
-                    <textarea
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                      rows={4}
-                      maxLength={500}
-                      placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
-                      className="min-h-[132px] w-full rounded-[22px] border border-stone-200 bg-white px-4 py-3.5 text-sm leading-6 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-stone-700 dark:bg-[#2d2d30] dark:text-white"
-                    />
-                  </div>
+                  {/* Write journal entry – replaces the notes field */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate(`/garden/${gardenId}/journal`, { state: { preselectedPlantId: gp.id } });
+                    }}
+                    className="flex items-center gap-3 w-full rounded-[22px] border border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-4 text-left transition hover:border-amber-400 hover:bg-amber-50 dark:hover:border-amber-600 dark:hover:bg-amber-900/20 group"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                        {t("gardenDashboard.plantsSection.writeJournalEntry", "Write Journal Entry")}
+                      </div>
+                      <div className="text-xs text-amber-600/70 dark:text-amber-400/60">
+                        {t("gardenDashboard.plantsSection.writeJournalEntryDesc", "Record observations about this plant")}
+                      </div>
+                    </div>
+                  </button>
                 </section>
 
                 <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-inner sm:rounded-[26px] sm:p-4 dark:border-stone-700 dark:bg-stone-900/30">
@@ -807,26 +815,13 @@ export function GardenPlantManageButton({
                 </div>
               </div>
               <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 lg:sticky lg:bottom-0 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
-                  <Button
-                    variant="ghost"
-                    className="w-full rounded-2xl sm:w-auto gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/20"
-                    onClick={() => {
-                      setOpen(false);
-                      navigate(`/garden/${gardenId}/journal`, { state: { preselectedPlantId: gp.id } });
-                    }}
-                  >
-                    <BookOpen className="w-4 h-4" />
-                    {t("gardenDashboard.plantsSection.writeJournalEntry", "Write Journal Entry")}
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                  <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
+                    {t("cancel", "Cancel")}
                   </Button>
-                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
-                    <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
-                      {t("cancel", "Cancel")}
-                    </Button>
-                    <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
-                      {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
-                    </Button>
-                  </div>
+                  <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
+                    {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
+                  </Button>
                 </div>
               </div>
             </div>
