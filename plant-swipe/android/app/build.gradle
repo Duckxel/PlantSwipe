@@ -7,8 +7,8 @@ android {
         applicationId "app.aphylia"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6000013
-        versionName "6.0.13"
+        versionCode 6000014
+        versionName "6.0.14"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
