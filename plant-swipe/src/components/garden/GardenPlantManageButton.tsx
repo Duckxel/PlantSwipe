@@ -537,7 +537,7 @@ export function GardenPlantManageButton({
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           hideCloseButton
-          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 pr-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] sm:p-0 gap-0 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="sr-only">
