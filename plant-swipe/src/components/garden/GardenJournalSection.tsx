@@ -24,7 +24,6 @@ import {
   Clock,
   Image as ImageIcon,
   Loader2,
-  BookOpen,
   CheckCircle2,
   X,
   Lock,
@@ -36,6 +35,7 @@ import {
   Images,
   ArrowUpDown,
   Sprout,
+  Search,
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
@@ -148,6 +148,10 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [journalSort, setJournalSort] = React.useState<SortOrder>("newest");
   const [librarySort, setLibrarySort] = React.useState<SortOrder>("newest");
 
+  // Filter & search state
+  const [filterPlantId, setFilterPlantId] = React.useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = React.useState("");
+
   // State
   const [loading, setLoading] = React.useState(true);
   const [entries, setEntries] = React.useState<JournalEntry[]>([]);
@@ -226,12 +230,61 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   );
 
   // Journal entries sorted by user preference
+  // Filtered + sorted entries
+  const filteredEntries = React.useMemo(() => {
+    let result = entries;
+    if (filterPlantId) {
+      result = result.filter((e) => e.plantsMentioned?.includes(filterPlantId));
+    }
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      result = result.filter(
+        (e) =>
+          (e.title || "").toLowerCase().includes(q) ||
+          e.content.toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [entries, filterPlantId, searchQuery]);
+
   const sortedEntries = React.useMemo(
     () => journalSort === "newest"
-      ? [...entries].sort((a, b) => b.entryDate.localeCompare(a.entryDate))
-      : [...entries].sort((a, b) => a.entryDate.localeCompare(b.entryDate)),
-    [entries, journalSort],
+      ? [...filteredEntries].sort((a, b) => b.entryDate.localeCompare(a.entryDate))
+      : [...filteredEntries].sort((a, b) => a.entryDate.localeCompare(b.entryDate)),
+    [filteredEntries, journalSort],
   );
+
+  // Insights
+  const insights = React.useMemo(() => {
+    const uniqueDays = new Set(entries.map((e) => e.entryDate));
+    const plantsTagged = new Set(entries.flatMap((e) => e.plantsMentioned || []));
+    const totalPhotos = entries.reduce((s, e) => s + (e.photos?.length || 0), 0);
+    // Streak: consecutive days with entries ending today
+    const today = new Date().toISOString().slice(0, 10);
+    let streak = 0;
+    const daySet = new Set(entries.map((e) => e.entryDate));
+    const d = new Date();
+    while (daySet.has(d.toISOString().slice(0, 10))) {
+      streak++;
+      d.setDate(d.getDate() - 1);
+    }
+    return { totalEntries: entries.length, uniqueDays: uniqueDays.size, plantsTagged: plantsTagged.size, totalPhotos, streak, hasToday: daySet.has(today) };
+  }, [entries]);
+
+  // Group entries by date for timeline
+  const groupedByDate = React.useMemo(() => {
+    const groups: Array<{ date: string; entries: typeof sortedEntries }> = [];
+    const map = new Map<string, typeof sortedEntries>();
+    for (const e of sortedEntries) {
+      const arr = map.get(e.entryDate) || [];
+      arr.push(e);
+      map.set(e.entryDate, arr);
+    }
+    for (const [date, ents] of map) {
+      groups.push({ date, entries: ents });
+    }
+    return groups;
+  }, [sortedEntries]);
 
   // Image viewer for library
   const libraryViewer = useImageViewer();
@@ -693,68 +746,126 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   };
 
   return (
-    <div className="space-y-6">
-      {/* Header with decorative elements */}
-      <div className="relative overflow-hidden rounded-[28px] bg-gradient-to-br from-amber-50 via-orange-50 to-rose-50 dark:from-amber-900/20 dark:via-orange-900/20 dark:to-rose-900/20 p-6 md:p-8">
-        <div className="absolute -right-10 -top-10 w-40 h-40 bg-gradient-to-br from-amber-200/40 to-rose-200/40 dark:from-amber-500/10 dark:to-rose-500/10 rounded-full blur-3xl" />
-        <div className="absolute -left-10 -bottom-10 w-32 h-32 bg-gradient-to-br from-orange-200/40 to-amber-200/40 dark:from-orange-500/10 dark:to-amber-500/10 rounded-full blur-3xl" />
-        
-        <div className="relative flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div>
-            <h2 className="text-2xl md:text-3xl font-bold flex items-center gap-3">
-              <span className="text-3xl">📔</span>
-              {t("gardenDashboard.journalSection.title", "Garden Journal")}
-            </h2>
-            <p className="text-sm text-muted-foreground mt-1 max-w-md">
-              {t("gardenDashboard.journalSection.subtitle", "Record your observations, track plant progress, and reflect on your gardening journey")}
-            </p>
-          </div>
-          
-          <Button
-            onClick={() => {
-              resetForm();
-              setShowNewEntry(true);
-            }}
-            className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-lg shadow-amber-500/25 gap-2"
-            size="lg"
-          >
-            <Plus className="w-5 h-5" />
-            {todayEntry 
-              ? t("gardenDashboard.journalSection.addNote", "Add Note")
-              : t("gardenDashboard.journalSection.writeToday", "Write Today's Entry")
-            }
-          </Button>
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h2 className="text-xl font-bold flex items-center gap-2">
+          <span className="text-2xl">📔</span>
+          {t("gardenDashboard.journalSection.title", "Garden Journal")}
+        </h2>
+        <Button
+          onClick={() => { resetForm(); setShowNewEntry(true); }}
+          className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg shadow-emerald-500/20 gap-2"
+        >
+          <Plus className="w-4 h-4" />
+          {todayEntry
+            ? t("gardenDashboard.journalSection.addNote", "Add Note")
+            : t("gardenDashboard.journalSection.writeToday", "Write Today's Entry")}
+        </Button>
+      </div>
+
+      {/* Insights strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
+          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{insights.totalEntries}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.entries", "Entries")}</div>
         </div>
-        
-        {/* Quick stats */}
-        <div className="relative flex flex-wrap gap-4 mt-6">
-          <div className="flex items-center gap-2 bg-white/60 dark:bg-black/20 backdrop-blur-sm rounded-full px-4 py-2">
-            <BookOpen className="w-4 h-4 text-amber-600" />
-            <span className="text-sm font-medium">{entries.length}</span>
-            <span className="text-xs text-muted-foreground">{t("gardenDashboard.journalSection.entries", "entries")}</span>
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
+          <div className="text-xl font-bold text-violet-600 dark:text-violet-400">{insights.uniqueDays}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.daysPosted", "Days posted")}</div>
+        </div>
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
+          <div className="text-xl font-bold text-rose-600 dark:text-rose-400">{insights.totalPhotos}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.photos", "Photos")}</div>
+        </div>
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
+          <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{insights.streak > 0 ? `${insights.streak}🔥` : "—"}</div>
+          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.streak", "Day streak")}</div>
+        </div>
+      </div>
+
+      {/* Filter bar: plant chips + search */}
+      <div className="space-y-3">
+        {/* Plant filter row */}
+        {_plants.length > 0 && (
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              type="button"
+              onClick={() => setFilterPlantId(null)}
+              className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                !filterPlantId
+                  ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                  : "border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-300"
+              }`}
+            >
+              {t("gardenDashboard.journalSection.allPlants", "All plants")}
+            </button>
+            {_plants.map((gp) => {
+              const imgUrl = getPlantImageUrl(gp);
+              const name = gp.nickname || gp.plant?.name || "Plant";
+              const active = filterPlantId === gp.id;
+              const count = entries.filter((e) => e.plantsMentioned?.includes(gp.id)).length;
+              return (
+                <button
+                  key={gp.id}
+                  type="button"
+                  onClick={() => setFilterPlantId(active ? null : gp.id)}
+                  className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                    active
+                      ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300"
+                      : "border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-stone-300"
+                  }`}
+                >
+                  {imgUrl ? (
+                    <img src={imgUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
+                  ) : (
+                    <Sprout className="w-3.5 h-3.5 opacity-50" />
+                  )}
+                  <span className="truncate max-w-[80px]">{name}</span>
+                  {count > 0 && <span className="text-[10px] opacity-60">({count})</span>}
+                </button>
+              );
+            })}
           </div>
-          <div className="flex items-center gap-2 bg-white/60 dark:bg-black/20 backdrop-blur-sm rounded-full px-4 py-2">
-            <Camera className="w-4 h-4 text-rose-600" />
-            <span className="text-sm font-medium">{entries.reduce((sum, e) => sum + (e.photos?.length || 0), 0)}</span>
-            <span className="text-xs text-muted-foreground">{t("gardenDashboard.journalSection.photos", "photos")}</span>
+        )}
+
+        {/* Search + sort row */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={t("gardenDashboard.journalSection.searchEntries", "Search entries...")}
+              className="w-full h-9 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1f1f1f] text-sm placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
+            />
+            {searchQuery && (
+              <button type="button" onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
-          {todayEntry && (
-            <div className="flex items-center gap-2 bg-emerald-100 dark:bg-emerald-900/30 backdrop-blur-sm rounded-full px-4 py-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                {t("gardenDashboard.journalSection.loggedToday", "Logged today!")}
-              </span>
-            </div>
-          )}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="shrink-0 rounded-xl gap-1 text-xs text-stone-500 dark:text-stone-400"
+            onClick={() => setJournalSort(journalSort === "newest" ? "oldest" : "newest")}
+          >
+            <ArrowUpDown className="w-3.5 h-3.5" />
+            {journalSort === "newest"
+              ? t("gardenDashboard.journalSection.newestFirst", "Newest")
+              : t("gardenDashboard.journalSection.oldestFirst", "Oldest")}
+          </Button>
           {allPhotos.length >= 2 && (
             <Button
-              variant="outline"
+              variant="ghost"
               size="sm"
-              className="rounded-full gap-2 bg-white/60 dark:bg-black/20 backdrop-blur-sm border-rose-200 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+              className="shrink-0 rounded-xl gap-1 text-xs text-rose-500 dark:text-rose-400"
               onClick={() => setShowTimelapse(true)}
             >
-              <Film className="w-4 h-4" />
-              {t("gardenDashboard.journalSection.viewTimelapse", "View Timelapse")}
+              <Film className="w-3.5 h-3.5" />
+              {t("gardenDashboard.journalSection.timelapse", "Timelapse")}
             </Button>
           )}
         </div>
@@ -1318,7 +1429,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       </AnimatePresence>
 
       {/* Journal Entries Timeline */}
-      <div className="space-y-4">
+      <div>
         {fetchError && (
           <ErrorBanner
             title={t("gardenDashboard.journalSection.fetchError", "Failed to load journal")}
@@ -1327,7 +1438,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         )}
         {loading ? (
           <div className="flex items-center justify-center py-12">
-            <Loader2 className="w-8 h-8 animate-spin text-amber-500" />
+            <Loader2 className="w-8 h-8 animate-spin text-emerald-500" />
           </div>
         ) : !fetchError && entries.length === 0 ? (
           <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white/80 dark:bg-[#1f1f1f]/80 backdrop-blur p-12 text-center">
@@ -1337,192 +1448,137 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 {t("gardenDashboard.journalSection.noEntries", "Your garden journal is empty")}
               </h3>
               <p className="text-muted-foreground mb-6">
-                {t("gardenDashboard.journalSection.startJourney", "Start documenting your gardening journey. Record observations, track plant growth, and capture memories of your garden.")}
+                {t("gardenDashboard.journalSection.startJourney", "Start documenting your gardening journey.")}
               </p>
               <Button
                 onClick={() => setShowNewEntry(true)}
-                className="rounded-2xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white gap-2"
+                className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white gap-2"
               >
                 <Plus className="w-5 h-5" />
                 {t("gardenDashboard.journalSection.writeFirst", "Write Your First Entry")}
               </Button>
             </div>
           </Card>
+        ) : sortedEntries.length === 0 ? (
+          <div className="py-10 text-center text-sm text-muted-foreground">
+            {t("gardenDashboard.journalSection.noMatches", "No entries match your filters.")}
+          </div>
         ) : (
-          <div className="space-y-4">
-            <div className="flex items-center justify-end">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="rounded-xl gap-1.5 text-xs text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-white"
-                onClick={() => setJournalSort(journalSort === "newest" ? "oldest" : "newest")}
-              >
-                <ArrowUpDown className="w-3.5 h-3.5" />
-                {journalSort === "newest"
-                  ? t("gardenDashboard.journalSection.newestFirst", "Newest first")
-                  : t("gardenDashboard.journalSection.oldestFirst", "Oldest first")}
-              </Button>
-            </div>
-            <div className="space-y-6">
-            {sortedEntries.map((entry, index) => {
-              const moodConfig = getMoodConfig(entry.mood);
-              const isOwn = entry.userId === user?.id;
-              
-              return (
-                <motion.div
-                  key={entry.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.05 }}
-                >
-                  <Card className="rounded-[28px] border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] overflow-hidden">
-                    {/* Entry header */}
-                    <div className={`p-4 md:p-6 ${moodConfig.bg}`}>
-                      <div className="flex items-start justify-between">
-                        <div className="flex items-center gap-3">
-                          <div className="text-3xl">{moodConfig.emoji}</div>
-                          <div>
-                            <div className="font-semibold text-lg">
-                              {entry.title || formatDate(entry.entryDate)}
+          /* -------- Date-grouped timeline -------- */
+          <div className="relative pl-6 sm:pl-8">
+            {/* Timeline spine */}
+            <div className="absolute left-[11px] sm:left-[15px] top-2 bottom-2 w-0.5 bg-stone-200 dark:bg-stone-700 rounded-full" />
+
+            {groupedByDate.map((group) => (
+              <div key={group.date} className="relative mb-8 last:mb-0">
+                {/* Date dot + label */}
+                <div className="absolute -left-6 sm:-left-8 top-0 flex items-center gap-0">
+                  <div className="w-[22px] sm:w-[30px] flex justify-center">
+                    <div className="w-3 h-3 rounded-full bg-emerald-500 ring-4 ring-white dark:ring-[#121212] shrink-0" />
+                  </div>
+                </div>
+                <div className="mb-3">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-3 py-1 rounded-full">
+                    <Calendar className="w-3 h-3" />
+                    {formatDate(group.date)}
+                  </span>
+                </div>
+
+                {/* Entries for this date */}
+                <div className="space-y-4">
+                  {group.entries.map((entry) => {
+                    const isOwn = entry.userId === user?.id;
+                    const entryPlants = (entry.plantsMentioned || []).map((pid: string) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
+
+                    return (
+                      <Card key={entry.id} className="rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] overflow-hidden">
+                        {/* Top row: plant avatars + title + actions */}
+                        <div className="px-4 py-3 flex items-start gap-3">
+                          {/* Plant avatars */}
+                          {entryPlants.length > 0 && (
+                            <div className="flex -space-x-2 shrink-0 mt-0.5">
+                              {entryPlants.slice(0, 4).map((gp) => {
+                                const img = getPlantImageUrl(gp);
+                                return (
+                                  <div key={gp.id} className="w-8 h-8 rounded-full border-2 border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800" title={gp.nickname || gp.plant?.name || "Plant"}>
+                                    {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-4 h-4 m-auto mt-1.5 text-stone-400" />}
+                                  </div>
+                                );
+                              })}
+                              {entryPlants.length > 4 && (
+                                <div className="w-8 h-8 rounded-full border-2 border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center text-[10px] font-bold text-stone-600 dark:text-stone-300">
+                                  +{entryPlants.length - 4}
+                                </div>
+                              )}
                             </div>
-                            {entry.title && (
-                              <div className="text-sm text-muted-foreground">
-                                {formatDate(entry.entryDate)}
-                              </div>
-                            )}
+                          )}
+
+                          {/* Title & meta */}
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {entry.title && (
+                                <span className="font-semibold text-sm truncate">{entry.title}</span>
+                              )}
+                              {entry.isPrivate && <Lock className="w-3 h-3 text-stone-400 shrink-0" />}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground mt-0.5">
+                              <span>{new Date(entry.createdAt).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>
+                              {entry.photos?.length > 0 && <><span>·</span><span>{entry.photos.length} 📷</span></>}
+                              {entry.weatherSnapshot?.temp !== undefined && <><span>·</span><span>{entry.weatherSnapshot.temp}° {entry.weatherSnapshot.condition || ""}</span></>}
+                            </div>
                           </div>
-                        </div>
-                        
-                        <div className="flex items-center gap-2">
-                          {entry.isPrivate && (
-                            <div className="flex items-center gap-1 px-2 py-1 bg-white/50 dark:bg-black/20 rounded-full text-xs">
-                              <Lock className="w-3 h-3" />
-                              {t("gardenDashboard.journalSection.private", "Private")}
-                            </div>
-                          )}
+
+                          {/* Actions */}
                           {isOwn && (
-                            <div className="flex items-center gap-1">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="rounded-full h-8 w-8 p-0"
-                                onClick={() => startEditEntry(entry)}
-                                aria-label={t("common.edit", "Edit")}
-                                title={t("common.edit", "Edit")}
-                              >
-                                <Pencil className="w-4 h-4" />
+                            <div className="flex items-center gap-0.5 shrink-0">
+                              <Button variant="ghost" size="sm" className="rounded-full h-7 w-7 p-0" onClick={() => startEditEntry(entry)}>
+                                <Pencil className="w-3.5 h-3.5" />
                               </Button>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="rounded-full h-8 w-8 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-                                onClick={() => handleDeleteEntry(entry.id)}
-                                aria-label={t("common.delete", "Delete")}
-                                title={t("common.delete", "Delete")}
-                              >
-                                <Trash2 className="w-4 h-4" />
+                              <Button variant="ghost" size="sm" className="rounded-full h-7 w-7 p-0 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30" onClick={() => handleDeleteEntry(entry.id)}>
+                                <Trash2 className="w-3.5 h-3.5" />
                               </Button>
                             </div>
                           )}
                         </div>
-                      </div>
-                    </div>
-                    
-                    {/* Entry content */}
-                    <div className="p-4 md:p-6 space-y-4">
-                      <p className="text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed">
-                        {entry.content}
-                      </p>
-                      
-                      {/* Photos grid */}
-                      {entry.photos && entry.photos.length > 0 && (
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                          {entry.photos.map((photo) => (
-                            <div key={photo.id} className="relative group aspect-square rounded-xl overflow-hidden">
-                              <img
-                                src={photo.thumbnailUrl || photo.imageUrl}
-                                alt={photo.caption || "Journal photo"}
-                                className="w-full h-full object-cover group-hover:scale-105 transition-transform"
-                              />
-                              {photo.caption && (
-                                <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/60 to-transparent p-2">
-                                  <p className="text-white text-xs truncate">{photo.caption}</p>
-                                </div>
-                              )}
-                              {photo.plantHealth && (
-                                <div className="absolute top-2 right-2">
-                                  <span className={`text-lg ${PLANT_HEALTH.find(h => h.key === photo.plantHealth)?.color}`}>
-                                    {PLANT_HEALTH.find(h => h.key === photo.plantHealth)?.emoji}
-                                  </span>
-                                </div>
-                              )}
-                            </div>
-                          ))}
+
+                        {/* Content */}
+                        <div className="px-4 pb-3">
+                          <p className="text-sm text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed line-clamp-4">
+                            {entry.content}
+                          </p>
                         </div>
-                      )}
-                      
-                      {/* Plants mentioned */}
-                      {entry.plantsMentioned && entry.plantsMentioned.length > 0 && (
-                        <div className="flex flex-wrap gap-2">
-                          {entry.plantsMentioned.map((pid: string) => {
-                            const gp = plantMap.get(pid);
-                            if (!gp) return null;
-                            const imgUrl = getPlantImageUrl(gp);
-                            const name = gp.nickname || gp.plant?.name || "Plant";
-                            return (
-                              <span
-                                key={pid}
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 rounded-full text-sm border border-emerald-200/60 dark:border-emerald-800/40"
-                              >
-                                {imgUrl ? (
-                                  <img src={imgUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
-                                ) : (
-                                  <Sprout className="w-3.5 h-3.5 opacity-60" />
-                                )}
-                                {name}
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
-                      
-                      {/* Weather snapshot */}
-                      {entry.weatherSnapshot && entry.weatherSnapshot.temp !== undefined && (
-                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                          <CloudSun className="w-4 h-4" />
-                          <span>{entry.weatherSnapshot.temp}°</span>
-                          {entry.weatherSnapshot.condition && (
-                            <span>• {entry.weatherSnapshot.condition}</span>
-                          )}
-                        </div>
-                      )}
-                      
-                    </div>
-                    
-                    {/* Entry footer with timestamp */}
-                    <div className="px-4 md:px-6 py-3 bg-stone-50 dark:bg-stone-800/50 border-t border-stone-200/50 dark:border-stone-700/50">
-                      <div className="flex items-center justify-between text-xs text-muted-foreground">
-                        <div className="flex items-center gap-2">
-                          <Clock className="w-3 h-3" />
-                          {formatDate(entry.entryDate)}{" "}
-                          {new Date(entry.createdAt).toLocaleTimeString(undefined, {
-                            hour: "2-digit",
-                            minute: "2-digit",
-                          })}
-                        </div>
+
+                        {/* Photos strip */}
                         {entry.photos && entry.photos.length > 0 && (
-                          <div className="flex items-center gap-1">
-                            <ImageIcon className="w-3 h-3" />
-                            {entry.photos.length} {t("gardenDashboard.journalSection.photos", "photos")}
+                          <div className="px-4 pb-3 flex gap-2 overflow-x-auto scrollbar-none">
+                            {entry.photos.map((photo) => (
+                              <div key={photo.id} className="shrink-0 w-20 h-20 rounded-xl overflow-hidden">
+                                <img
+                                  src={photo.thumbnailUrl || photo.imageUrl}
+                                  alt={photo.caption || ""}
+                                  className="w-full h-full object-cover"
+                                />
+                              </div>
+                            ))}
                           </div>
                         )}
-                      </div>
-                    </div>
-                  </Card>
-                </motion.div>
-              );
-            })}
-            </div>
+
+                        {/* Plant name pills */}
+                        {entryPlants.length > 0 && (
+                          <div className="px-4 pb-3 flex flex-wrap gap-1.5">
+                            {entryPlants.map((gp) => (
+                              <span key={gp.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-300 border border-emerald-200/50 dark:border-emerald-800/30">
+                                {gp.nickname || gp.plant?.name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </Card>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
           </div>
         )}
       </div>
