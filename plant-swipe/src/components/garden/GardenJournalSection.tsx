@@ -809,34 +809,38 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
       {/* Activity timeline chart */}
       {!loading && entries.length > 0 && (() => {
-        // Pre-compute month spans for labels
+        // Pre-compute month spans for desktop labels (mobile puts labels per-bucket)
         const monthSpans: Array<{ label: string; span: number }> = [];
-        let prevMonth = -1;
-        for (const b of timelineBuckets) {
-          const m = new Date(b.start).getMonth();
-          if (m !== prevMonth) {
-            monthSpans.push({ label: new Date(b.start).toLocaleString(undefined, { month: "short" }), span: 1 });
-            prevMonth = m;
-          } else {
-            monthSpans[monthSpans.length - 1].span++;
+        if (!isMobile) {
+          let prevMonth = -1;
+          for (const b of timelineBuckets) {
+            const m = new Date(b.start).getMonth();
+            if (m !== prevMonth) {
+              monthSpans.push({ label: new Date(b.start).toLocaleString(undefined, { month: "short" }), span: 1 });
+              prevMonth = m;
+            } else {
+              monthSpans[monthSpans.length - 1].span++;
+            }
           }
         }
 
         return (
           <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 overflow-hidden px-4 pt-3 pb-2">
-            {/* Month labels row — each label spans its weeks */}
-            <div className="flex mb-2">
-              {monthSpans.map((ms, i) => (
-                <div key={i} className="text-center overflow-hidden" style={{ flex: ms.span }}>
-                  <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500">{ms.label}</span>
-                </div>
-              ))}
-            </div>
+            {/* Desktop: month labels spanning their weeks */}
+            {!isMobile && (
+              <div className="flex mb-2">
+                {monthSpans.map((ms, i) => (
+                  <div key={i} className="text-center overflow-hidden" style={{ flex: ms.span }}>
+                    <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500">{ms.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
-            {/* Dots row */}
+            {/* Dots row + mobile labels below each dot */}
             <div className="relative flex items-center" style={{ height: 40 }}>
-              {/* Connecting line — behind dots */}
-              <div className="absolute inset-x-0 top-1/2 -translate-y-px h-[2px] rounded-full bg-gradient-to-r from-stone-200 via-stone-200 to-stone-200 dark:from-stone-700 dark:via-stone-700 dark:to-stone-700" />
+              {/* Connecting line */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-px h-[2px] rounded-full bg-stone-200 dark:bg-stone-700" />
 
               {timelineBuckets.map((bucket) => {
                 const count = bucket.count;
@@ -869,6 +873,19 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 );
               })}
             </div>
+
+            {/* Mobile: month label under each dot */}
+            {isMobile && (
+              <div className="flex mt-1">
+                {timelineBuckets.map((bucket) => (
+                  <div key={bucket.start} className="flex-1 min-w-0 text-center">
+                    <span className={`text-[9px] font-medium ${
+                      selectedBucket === bucket.start ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
+                    }`}>{bucket.label}</span>
+                  </div>
+                ))}
+              </div>
+            )}
 
             {/* Plant avatars for selected bucket — shown below the dots row */}
             {selectedBucket && (() => {
