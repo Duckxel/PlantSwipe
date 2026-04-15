@@ -1114,20 +1114,16 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         setDailyStats((prev) => {
-          const reqDone = occsDetailed.reduce(
-            (acc: number, o: { requiredCount?: number }) =>
-              acc + Math.max(1, Number(o.requiredCount || 1)),
-            0,
-          );
-          const compDone = occsDetailed.reduce(
-            (acc: number, o: { requiredCount?: number; completedCount?: number }) =>
-              acc +
-              Math.min(
-                Math.max(1, Number(o.requiredCount || 1)),
-                Number(o.completedCount || 0),
-              ),
-            0,
-          );
+          // ⚡ Bolt: Combine multiple reduce calls into a single-pass for loop to avoid O(2N) complexity and callback overhead
+          let reqDone = 0;
+          let compDone = 0;
+          for (let i = 0; i < occsDetailed.length; i++) {
+            const o = occsDetailed[i];
+            const required = Math.max(1, Number(o.requiredCount || 1));
+            reqDone += required;
+            compDone += Math.min(required, Number(o.completedCount || 0));
+          }
+
           const success = reqDone === 0 || compDone >= reqDone;
           return prev.map((d) =>
             d.date === today ? { ...d, due: reqDone, completed: compDone, success } : d,
@@ -1541,19 +1537,15 @@ export const GardenDashboardPage: React.FC = () => {
             // Update daily stats for today only
             if (today) {
               setDailyStats((prev) => {
-                const reqDone = occs.reduce(
-                  (acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)),
-                  0,
-                );
-                const compDone = occs.reduce(
-                  (acc, o) =>
-                    acc +
-                    Math.min(
-                      Math.max(1, Number(o.requiredCount || 1)),
-                      Number(o.completedCount || 0),
-                    ),
-                  0,
-                );
+                // ⚡ Bolt: Combine multiple reduce calls into a single-pass for loop to avoid O(2N) complexity and callback overhead
+                let reqDone = 0;
+                let compDone = 0;
+                for (let i = 0; i < occs.length; i++) {
+                  const o = occs[i];
+                  const required = Math.max(1, Number(o.requiredCount || 1));
+                  reqDone += required;
+                  compDone += Math.min(required, Number(o.completedCount || 0));
+                }
                 const success = reqDone === 0 || compDone >= reqDone;
                 return prev.map((d) =>
                   d.date === today
@@ -4306,8 +4298,14 @@ function AphyliaChatPortal({
     }
     
     // Calculate total plants on hand
-    const totalPlantsOnHand = plants.reduce((sum, p) => sum + (p.plantsOnHand || 0), 0)
-    const totalSeedsPlanted = plants.reduce((sum, p) => sum + (p.seedsPlanted || 0), 0)
+    // ⚡ Bolt: Combine multiple reduce calls into a single-pass for loop to avoid O(2N) complexity and callback overhead
+    let totalPlantsOnHand = 0;
+    let totalSeedsPlanted = 0;
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      totalPlantsOnHand += (p.plantsOnHand || 0);
+      totalSeedsPlanted += (p.seedsPlanted || 0);
+    }
     
     return {
       gardenId: garden.id,
@@ -4593,19 +4591,15 @@ function RoutineSection({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {plants.map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string; plantsOnHand?: number }) => {
             const occs = occsByPlant[gp.id] || [];
-            const totalReq = occs.reduce(
-              (a, o) => a + Math.max(1, o.requiredCount || 1),
-              0,
-            );
-            const totalDone = occs.reduce(
-              (a, o) =>
-                a +
-                Math.min(
-                  Math.max(1, o.requiredCount || 1),
-                  o.completedCount || 0,
-                ),
-              0,
-            );
+            // ⚡ Bolt: Combine multiple reduce calls into a single-pass for loop to avoid O(2N) complexity and callback overhead
+            let totalReq = 0;
+            let totalDone = 0;
+            for (let i = 0; i < occs.length; i++) {
+              const o = occs[i];
+              const required = Math.max(1, o.requiredCount || 1);
+              totalReq += required;
+              totalDone += Math.min(required, o.completedCount || 0);
+            }
             if (occs.length === 0) return null;
             return (
               <Card key={gp.id} className={routineCardSurface}>
