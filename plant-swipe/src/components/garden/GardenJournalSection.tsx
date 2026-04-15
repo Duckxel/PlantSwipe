@@ -253,21 +253,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     [filteredEntries, journalSort],
   );
 
-  // Group entries by date for timeline
-  const groupedByDate = React.useMemo(() => {
-    const groups: Array<{ date: string; entries: typeof displayEntries }> = [];
-    const map = new Map<string, typeof displayEntries>();
-    for (const e of displayEntries) {
-      const arr = map.get(e.entryDate) || [];
-      arr.push(e);
-      map.set(e.entryDate, arr);
-    }
-    for (const [date, ents] of map) {
-      groups.push({ date, entries: ents });
-    }
-    return groups;
-  }, [displayEntries]);
-
   // Detect mobile for month vs week buckets
   const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640);
   React.useEffect(() => {
@@ -332,6 +317,21 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     if (!bucket) return sortedEntries;
     return sortedEntries.filter((e) => e.entryDate >= bucket.start && e.entryDate <= bucket.end);
   }, [sortedEntries, selectedBucket, timelineBuckets]);
+
+  // Group entries by date for timeline
+  const groupedByDate = React.useMemo(() => {
+    const groups: Array<{ date: string; entries: typeof displayEntries }> = [];
+    const map = new Map<string, typeof displayEntries>();
+    for (const e of displayEntries) {
+      const arr = map.get(e.entryDate) || [];
+      arr.push(e);
+      map.set(e.entryDate, arr);
+    }
+    for (const [date, ents] of map) {
+      groups.push({ date, entries: ents });
+    }
+    return groups;
+  }, [displayEntries]);
 
   // Image viewer for library
   const libraryViewer = useImageViewer();
