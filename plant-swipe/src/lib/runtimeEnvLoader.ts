@@ -156,15 +156,27 @@ const ensureEnvObject = (target: RuntimeEnvWindow) => {
   }
 }
 
+const ENV_FETCH_TIMEOUT_MS = 8_000
+
 const fetchAndApply = async (url: string) => {
-  const response = await fetch(url, { cache: 'no-store', credentials: 'same-origin' })
-  if (!response.ok) throw new Error(`Bad status ${response.status}`)
-  const text = await response.text()
-  if (isProbablyHtml(text)) throw new Error('Unexpected HTML payload')
-  injectInlineScript(text, `runtime-env:${url}`)
-  persistCache(text)
-  dispatchReady({ source: url, cached: false })
-  return true
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), ENV_FETCH_TIMEOUT_MS)
+  try {
+    const response = await fetch(url, {
+      cache: 'no-store',
+      credentials: 'same-origin',
+      signal: controller.signal,
+    })
+    if (!response.ok) throw new Error(`Bad status ${response.status}`)
+    const text = await response.text()
+    if (isProbablyHtml(text)) throw new Error('Unexpected HTML payload')
+    injectInlineScript(text, `runtime-env:${url}`)
+    persistCache(text)
+    dispatchReady({ source: url, cached: false })
+    return true
+  } finally {
+    clearTimeout(timeoutId)
+  }
 }
 
 const hydrateRuntimeEnv = async () => {
