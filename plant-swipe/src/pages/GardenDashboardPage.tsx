@@ -6092,9 +6092,9 @@ function OverviewSection({
                   {plant.plantsOnHand <= 1 && <span />}
                   <GardenPlantManageButton
                     dataGardenManageId={`overview-${plant.id}`}
-                    iconOnly
-                    open={overviewManagePlantId === plant.id}
-                    onOpenChange={(nextOpen) => {
+                    hideTrigger
+                    openOverride={overviewManagePlantId === plant.id}
+                    onOpenOverrideChange={(nextOpen) => {
                       setOverviewManagePlantId(nextOpen ? plant.id : null);
                     }}
                     gp={plant.gp}

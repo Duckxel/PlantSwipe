@@ -61,6 +61,7 @@ export function GardenPlantManageButton({
   taskCount = 0,
   dueTodayCount = 0,
   iconOnly = false,
+  hideTrigger = false,
   dataGardenManageId,
   openOverride,
   onOpenOverrideChange,
@@ -73,6 +74,7 @@ export function GardenPlantManageButton({
   taskCount?: number;
   dueTodayCount?: number;
   iconOnly?: boolean;
+  hideTrigger?: boolean;
   dataGardenManageId?: string;
   openOverride?: boolean;
   onOpenOverrideChange?: (open: boolean) => void;
@@ -511,7 +513,7 @@ export function GardenPlantManageButton({
 
   return (
     <>
-      {iconOnly ? (
+      {!hideTrigger && (iconOnly ? (
         <button
           type="button"
           data-garden-manage-id={dataGardenManageId}
@@ -528,8 +530,10 @@ export function GardenPlantManageButton({
         <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>
           {t("gardenDashboard.plantsSection.managePlant", "Manage")}
         </Button>
-      )}
+      ))}
 
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+      <div onClick={(e) => e.stopPropagation()}>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           hideCloseButton
@@ -1125,6 +1129,7 @@ export function GardenPlantManageButton({
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </>
   );
 }
