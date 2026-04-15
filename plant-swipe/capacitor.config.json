@@ -29,5 +29,10 @@
 				"alert"
 			]
 		}
+	},
+	"server": {
+		"allowNavigation": [
+			"lxnkcguwewrskqnyzjwi.supabase.co"
+		]
 	}
 }

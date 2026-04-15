@@ -20,7 +20,7 @@
     "cap:sync": "cap sync",
     "version:sync-native": "node scripts/sync-native-version.mjs",
     "cap:assert-store-bundle": "node scripts/assert-capacitor-store-bundle.mjs",
-    "sync:cap": "npm run cap:assert-store-bundle && npm run version:sync-native && npx cap sync",
+    "sync:cap": "npm run cap:assert-store-bundle && npm run version:sync-native && npx cap sync && node scripts/normalize-capacitor-generated-files.mjs",
     "build:cap": "npm run build:web:native && npm run sync:cap",
     "cap:ci:sync": "node scripts/cap-ci-sync.mjs",
     "cap:assets": "npx @capacitor/assets generate --android --ios --iconBackgroundColor '#052e16' --iconBackgroundColorDark '#252526' --splashBackgroundColor '#052e16' --splashBackgroundColorDark '#252526'",
