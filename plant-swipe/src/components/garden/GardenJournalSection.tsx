@@ -807,98 +807,100 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </Button>
       </div>
 
-      {/* Activity timeline chart — click a dot to filter */}
-      {!loading && entries.length > 0 && (
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden px-3 pt-2 pb-1.5">
-          {/* Dot area */}
-          <div className="relative flex items-end" style={{ height: 72 }}>
-            {/* Connecting line */}
-            <div className="absolute inset-x-0 h-px bg-stone-200 dark:bg-stone-700" style={{ bottom: 28 }} />
+      {/* Activity timeline chart */}
+      {!loading && entries.length > 0 && (() => {
+        // Pre-compute month spans for labels
+        const monthSpans: Array<{ label: string; span: number }> = [];
+        let prevMonth = -1;
+        for (const b of timelineBuckets) {
+          const m = new Date(b.start).getMonth();
+          if (m !== prevMonth) {
+            monthSpans.push({ label: new Date(b.start).toLocaleString(undefined, { month: "short" }), span: 1 });
+            prevMonth = m;
+          } else {
+            monthSpans[monthSpans.length - 1].span++;
+          }
+        }
 
-            {timelineBuckets.map((bucket) => {
-              const count = bucket.count;
-              const hasEntries = count > 0;
-              const isSelected = selectedBucket === bucket.start;
-              const dotSize = hasEntries ? Math.max(8, Math.min(28, 8 + Math.round((count / maxBucketCount) * 20))) : 0;
-
-              // Plants for this bucket (first 2 + overflow)
-              const bPlants = bucket.plantIds.map((pid) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
-              const showPlants = bPlants.slice(0, 2);
-              const extraPlants = bPlants.length - 2;
-
-              return (
-                <div
-                  key={bucket.start}
-                  className={`flex-1 min-w-0 flex flex-col items-center ${hasEntries ? "cursor-pointer" : ""}`}
-                  onClick={() => handleBucketClick(bucket.start, hasEntries)}
-                >
-                  {/* Entry count */}
-                  <span className={`text-[8px] font-bold leading-none mb-1 h-3 flex items-end ${
-                    !hasEntries ? "invisible" : isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
-                  }`}>
-                    {count || ""}
-                  </span>
-
-                  {/* Dot */}
-                  {hasEntries ? (
-                    <div
-                      className={`rounded-full transition-all duration-200 shrink-0 ${
-                        isSelected
-                          ? "bg-emerald-500 shadow-[0_0_10px_3px_rgba(16,185,129,0.35)] ring-2 ring-emerald-300/60 dark:ring-emerald-700/60"
-                          : bucket.isCurrent
-                            ? "bg-emerald-400 hover:bg-emerald-500 hover:scale-110"
-                            : "bg-emerald-400/50 dark:bg-emerald-600/40 hover:bg-emerald-500 hover:scale-110"
-                      }`}
-                      style={{ width: dotSize, height: dotSize }}
-                    />
-                  ) : (
-                    <div className="w-1.5 h-1.5 rounded-full bg-stone-300/40 dark:bg-stone-700/40 shrink-0" />
-                  )}
-
-                  {/* Plant avatars below dot */}
-                  <div className="flex -space-x-1 mt-1 h-4">
-                    {hasEntries && showPlants.map((gp) => {
-                      const img = getPlantImageUrl(gp);
-                      return (
-                        <div key={gp.id} className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800 shrink-0">
-                          {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-2 h-2 m-auto mt-0.5 text-stone-400" />}
-                        </div>
-                      );
-                    })}
-                    {hasEntries && extraPlants > 0 && (
-                      <div className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center shrink-0">
-                        <span className="text-[6px] font-bold text-stone-500 dark:text-stone-400">+{extraPlants}</span>
-                      </div>
-                    )}
-                  </div>
+        return (
+          <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 overflow-hidden px-4 pt-3 pb-2">
+            {/* Month labels row — each label spans its weeks */}
+            <div className="flex mb-2">
+              {monthSpans.map((ms, i) => (
+                <div key={i} className="text-center overflow-hidden" style={{ flex: ms.span }}>
+                  <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500">{ms.label}</span>
                 </div>
-              );
-            })}
-          </div>
+              ))}
+            </div>
 
-          {/* Month labels */}
-          <div className="flex mt-0.5">
-            {(() => {
-              let lastMonth = -1;
-              return timelineBuckets.map((bucket) => {
-                const d = new Date(bucket.start);
-                const m = d.getMonth();
-                const showLabel = isMobile ? true : m !== lastMonth;
-                lastMonth = m;
+            {/* Dots row */}
+            <div className="relative flex items-center" style={{ height: 40 }}>
+              {/* Connecting line — behind dots */}
+              <div className="absolute inset-x-0 top-1/2 -translate-y-px h-[2px] rounded-full bg-gradient-to-r from-stone-200 via-stone-200 to-stone-200 dark:from-stone-700 dark:via-stone-700 dark:to-stone-700" />
+
+              {timelineBuckets.map((bucket) => {
+                const count = bucket.count;
+                const hasEntries = count > 0;
+                const isSelected = selectedBucket === bucket.start;
+                const dotSize = hasEntries ? Math.max(10, Math.min(28, 10 + Math.round((count / maxBucketCount) * 18))) : 0;
+
                 return (
-                  <div key={bucket.start} className="flex-1 min-w-0 text-center overflow-hidden">
-                    {showLabel && (
-                      <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
-                        {isMobile ? bucket.label : d.toLocaleString(undefined, { month: "short" })}
-                      </span>
+                  <div
+                    key={bucket.start}
+                    className={`flex-1 min-w-0 flex justify-center ${hasEntries ? "cursor-pointer" : ""}`}
+                    onClick={() => handleBucketClick(bucket.start, hasEntries)}
+                  >
+                    {hasEntries ? (
+                      <div className={`relative z-10 rounded-full transition-all duration-200 flex items-center justify-center ${
+                        isSelected
+                          ? "bg-emerald-500 shadow-[0_0_12px_4px_rgba(16,185,129,0.3)] ring-[3px] ring-emerald-200/50 dark:ring-emerald-800/50"
+                          : bucket.isCurrent
+                            ? "bg-emerald-500 hover:scale-110"
+                            : "bg-emerald-400/60 dark:bg-emerald-600/40 hover:bg-emerald-500 hover:scale-110"
+                      }`} style={{ width: dotSize, height: dotSize }}>
+                        {count > 1 && dotSize >= 16 && (
+                          <span className="text-[8px] font-bold text-white leading-none">{count}</span>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="relative z-10 w-[5px] h-[5px] rounded-full bg-stone-300/60 dark:bg-stone-700/50" />
                     )}
                   </div>
                 );
-              });
+              })}
+            </div>
+
+            {/* Plant avatars for selected bucket — shown below the dots row */}
+            {selectedBucket && (() => {
+              const bucket = timelineBuckets.find((b) => b.start === selectedBucket);
+              if (!bucket || bucket.plantIds.length === 0) return null;
+              const bPlants = bucket.plantIds.map((pid) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
+              const show = bPlants.slice(0, 4);
+              const extra = bPlants.length - 4;
+              return (
+                <div className="flex items-center justify-center gap-1 mt-2 pb-1">
+                  {show.map((gp) => {
+                    const img = getPlantImageUrl(gp);
+                    return (
+                      <div key={gp.id} className="w-6 h-6 rounded-full border-2 border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800 shadow-sm">
+                        {img ? <img src={img} alt={gp.nickname || gp.plant?.name || ""} className="w-full h-full object-cover" /> : <Sprout className="w-3 h-3 m-auto mt-1 text-stone-400" />}
+                      </div>
+                    );
+                  })}
+                  {extra > 0 && (
+                    <div className="w-6 h-6 rounded-full border-2 border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center shadow-sm">
+                      <span className="text-[8px] font-bold text-stone-500 dark:text-stone-400">+{extra}</span>
+                    </div>
+                  )}
+                  <span className="text-[10px] text-stone-400 dark:text-stone-500 ml-1.5">
+                    {bucket.count} {bucket.count === 1 ? "entry" : "entries"}
+                  </span>
+                </div>
+              );
             })()}
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Filter bar: plant chips + search */}
       <div className="space-y-3">
