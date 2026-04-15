@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
-import { Camera, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
+import { BookOpen, Camera, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -81,6 +82,7 @@ export function GardenPlantManageButton({
 }) {
   const { t } = useTranslation("common");
   const { user } = useAuth();
+  const navigate = useLanguageNavigate();
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = openOverride ?? internalOpen;
   const setOpen = React.useCallback((next: boolean) => {
@@ -805,13 +807,26 @@ export function GardenPlantManageButton({
                 </div>
               </div>
               <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 lg:sticky lg:bottom-0 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
-                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
-                  <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
-                    {t("cancel", "Cancel")}
+                <div className="flex flex-col-reverse gap-2 sm:flex-row sm:items-center sm:justify-between">
+                  <Button
+                    variant="ghost"
+                    className="w-full rounded-2xl sm:w-auto gap-1.5 text-amber-600 hover:text-amber-700 hover:bg-amber-50 dark:text-amber-400 dark:hover:text-amber-300 dark:hover:bg-amber-900/20"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate(`/garden/${gardenId}/journal`, { state: { preselectedPlantId: gp.id } });
+                    }}
+                  >
+                    <BookOpen className="w-4 h-4" />
+                    {t("gardenDashboard.plantsSection.writeJournalEntry", "Write Journal Entry")}
                   </Button>
-                  <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
-                    {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
-                  </Button>
+                  <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                    <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
+                      {t("cancel", "Cancel")}
+                    </Button>
+                    <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
+                      {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>

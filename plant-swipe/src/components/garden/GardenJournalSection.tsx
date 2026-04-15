@@ -10,6 +10,7 @@ import { useImageUpload } from "@/hooks/useImageUpload";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { useAuth } from "@/context/AuthContext";
+import { useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Plus,
@@ -127,7 +128,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 }) => {
   const { t } = useTranslation("common");
   const { user } = useAuth();
-  
+  const location = useLocation();
+
   // Tab state
   type JournalView = "journal" | "library";
   const [activeView, setActiveView] = React.useState<JournalView>("journal");
@@ -469,6 +471,20 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   React.useEffect(() => {
     fetchEntries();
   }, [fetchEntries]);
+
+  // Open new entry form with a preselected plant when navigated from plant manage dialog
+  const preselectedHandled = React.useRef(false);
+  React.useEffect(() => {
+    const state = location.state as { preselectedPlantId?: string } | null;
+    if (state?.preselectedPlantId && !preselectedHandled.current) {
+      preselectedHandled.current = true;
+      resetForm();
+      setSelectedPlantIds(new Set([state.preselectedPlantId]));
+      setShowNewEntry(true);
+      // Clear the location state so it doesn't re-trigger on re-render
+      window.history.replaceState({}, "");
+    }
+  }, [location.state]);
 
   // Photo selection & removal are now handled by imageUpload hook
 
