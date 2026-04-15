@@ -2463,8 +2463,6 @@ export const GardenDashboardPage: React.FC = () => {
       setAddPlantPickerOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      setAddNickname("");
-      setAddCount(1);
 
       await load({ silent: true, preserveHeavy: true, suppressError: true });
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -3104,6 +3102,7 @@ export const GardenDashboardPage: React.FC = () => {
                     hasJournalEntry={hasJournalEntry}
                     roadmapCompletions={roadmapCompletions}
                     onCompleteRoadmapStep={completeBeginnerRoadmapStep}
+                    onChanged={load}
                   />
                 }
               />
@@ -4632,6 +4631,7 @@ function OverviewSection({
   hasJournalEntry = false,
   roadmapCompletions = new Set<string>(),
   onCompleteRoadmapStep,
+  onChanged,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4682,6 +4682,7 @@ function OverviewSection({
   hasJournalEntry?: boolean;
   roadmapCompletions?: Set<string>;
   onCompleteRoadmapStep: (stepKey: string) => Promise<void>;
+  onChanged: () => void;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -6098,7 +6099,7 @@ function OverviewSection({
                     }}
                     gp={plant.gp}
                     gardenId={gardenId}
-                    onChanged={load}
+                    onChanged={onChanged}
                     actorColorCss={null}
                     gardenType={garden?.gardenType}
                     taskCount={plant.taskCount}
