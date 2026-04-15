@@ -17,7 +17,6 @@ import {
   Calendar,
   Camera,
   CloudSun,
-  Leaf,
   Pencil,
   Trash2,
   ChevronLeft,
@@ -1094,40 +1093,102 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                 {/* Date display */}
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Calendar className="w-4 h-4" />
-                  {new Date().toLocaleDateString(undefined, { 
-                    weekday: "long", 
-                    year: "numeric", 
-                    month: "long", 
-                    day: "numeric" 
+                  {new Date().toLocaleDateString(undefined, {
+                    weekday: "long",
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric"
                   })}
                 </div>
 
-                {/* Mood selector */}
+                {/* Plant picker – prominent circles at the top */}
+                {_plants.length > 0 && (
                 <div>
-                  <label className="text-sm font-medium mb-2 flex items-center gap-2">
-                    <Leaf className="w-4 h-4" />
-                    {t("gardenDashboard.journalSection.gardenStatus", "How's your garden today?")}
-                  </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mt-2">
-                    {MOODS.map((mood) => (
-                      <button
-                        key={mood.key}
-                        type="button"
-                        aria-pressed={entryMood === mood.key}
-                        onClick={() => setEntryMood(entryMood === mood.key ? null : mood.key)}
-                        className={`flex flex-col items-center gap-1 p-3 rounded-xl border-2 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 ${
-                          entryMood === mood.key
-                            ? `${mood.bg} border-current ${mood.color} shadow-md scale-105`
-                            : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 hover:scale-102"
-                        }`}
-                      >
-                        <span className="text-2xl">{mood.emoji}</span>
-                        <span className="text-xs font-medium">{t(`gardenDashboard.journalSection.moods.${mood.key}`, mood.label)}</span>
-                        <span className="text-[10px] text-muted-foreground">{mood.desc}</span>
-                      </button>
-                    ))}
+                  <div className="flex items-center justify-between mb-3">
+                    <label className="text-sm font-medium flex items-center gap-2">
+                      <Sprout className="w-4 h-4" />
+                      {t("gardenDashboard.journalSection.plantsAbout", "Which plants is this about?")}
+                    </label>
+                    <button
+                      type="button"
+                      onClick={selectedPlantIds.size === _plants.length ? deselectAllPlants : selectAllPlants}
+                      className="text-xs font-medium text-emerald-600 dark:text-emerald-400 hover:underline"
+                    >
+                      {selectedPlantIds.size === _plants.length
+                        ? t("gardenDashboard.journalSection.deselectAll", "Deselect all")
+                        : t("gardenDashboard.journalSection.selectAll", "Select all")}
+                    </button>
                   </div>
+                  <div className="flex flex-wrap gap-3">
+                    {_plants.map((gp) => {
+                      const imgUrl = getPlantImageUrl(gp);
+                      const name = gp.nickname || gp.plant?.name || "Plant";
+                      const selected = selectedPlantIds.has(gp.id);
+                      return (
+                        <button
+                          key={gp.id}
+                          type="button"
+                          onClick={() => togglePlant(gp.id)}
+                          className="flex flex-col items-center gap-1.5 group"
+                        >
+                          <div className={`relative w-14 h-14 rounded-full overflow-hidden border-2 transition-all ${
+                            selected
+                              ? "border-emerald-500 shadow-lg shadow-emerald-500/20 scale-110"
+                              : "border-stone-200 dark:border-stone-700 group-hover:border-stone-400 dark:group-hover:border-stone-500"
+                          }`}>
+                            {imgUrl ? (
+                              <img src={imgUrl} alt={name} className="w-full h-full object-cover" />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center bg-stone-100 dark:bg-stone-800">
+                                <Sprout className="w-6 h-6 text-stone-400" />
+                              </div>
+                            )}
+                            {selected && (
+                              <div className="absolute inset-0 bg-emerald-500/20 flex items-center justify-center">
+                                <CheckCircle2 className="w-5 h-5 text-white drop-shadow-md" />
+                              </div>
+                            )}
+                          </div>
+                          <span className={`text-xs truncate max-w-[72px] ${
+                            selected
+                              ? "font-semibold text-emerald-700 dark:text-emerald-300"
+                              : "text-stone-500 dark:text-stone-400"
+                          }`}>{name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Health status selector - shown when plants are selected */}
+                  {selectedPlantIds.size > 0 && (
+                    <div className="mt-4 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-700/50">
+                      <label className="text-sm font-medium mb-2 block">
+                        {t("gardenDashboard.journalSection.updateHealth", "Update plant health status")}
+                      </label>
+                      <p className="text-xs text-muted-foreground mb-2">
+                        {t("gardenDashboard.journalSection.updateHealthDesc", "Optionally update the health status of the selected plants.")}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {PLANT_HEALTH.map((h) => (
+                          <button
+                            key={h.key}
+                            type="button"
+                            onClick={() => setEntryHealthStatus(entryHealthStatus === h.key ? null : h.key)}
+                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-all ${
+                              entryHealthStatus === h.key
+                                ? `border-current ${h.color} bg-white dark:bg-stone-900 shadow-sm font-medium`
+                                : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300"
+                            }`}
+                          >
+                            <span>{h.emoji}</span>
+                            <span>{t(`gardenDashboard.journalSection.health.${h.key}`, h.label)}</span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
+                )}
 
                 {/* Title (optional) */}
                 <div>
@@ -1178,83 +1239,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     <input {...imageUpload.inputProps} />
                   </div>
                 </div>
-
-                {/* Plant picker */}
-                {_plants.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <label className="text-sm font-medium flex items-center gap-2">
-                      <Sprout className="w-4 h-4" />
-                      {t("gardenDashboard.journalSection.plantsAbout", "Which plants is this about?")}
-                    </label>
-                    <button
-                      type="button"
-                      onClick={selectedPlantIds.size === _plants.length ? deselectAllPlants : selectAllPlants}
-                      className="text-xs font-medium text-amber-600 dark:text-amber-400 hover:underline"
-                    >
-                      {selectedPlantIds.size === _plants.length
-                        ? t("gardenDashboard.journalSection.deselectAll", "Deselect all")
-                        : t("gardenDashboard.journalSection.selectAll", "Select all")}
-                    </button>
-                  </div>
-                  <div className="flex flex-wrap gap-2 mt-1">
-                    {_plants.map((gp) => {
-                      const imgUrl = getPlantImageUrl(gp);
-                      const name = gp.nickname || gp.plant?.name || "Plant";
-                      const selected = selectedPlantIds.has(gp.id);
-                      return (
-                        <button
-                          key={gp.id}
-                          type="button"
-                          onClick={() => togglePlant(gp.id)}
-                          className={`flex items-center gap-2 px-3 py-1.5 rounded-full border text-sm transition-all ${
-                            selected
-                              ? "border-emerald-400 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 shadow-sm"
-                              : "border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600 text-stone-600 dark:text-stone-400"
-                          }`}
-                        >
-                          {imgUrl ? (
-                            <img src={imgUrl} alt="" className="w-5 h-5 rounded-full object-cover" />
-                          ) : (
-                            <Sprout className="w-4 h-4 opacity-50" />
-                          )}
-                          <span className="truncate max-w-[120px]">{name}</span>
-                          {selected && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  {/* Health status selector - shown when plants are selected */}
-                  {selectedPlantIds.size > 0 && (
-                    <div className="mt-4 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 border border-stone-200/50 dark:border-stone-700/50">
-                      <label className="text-sm font-medium mb-2 block">
-                        {t("gardenDashboard.journalSection.updateHealth", "Update plant health status")}
-                      </label>
-                      <p className="text-xs text-muted-foreground mb-2">
-                        {t("gardenDashboard.journalSection.updateHealthDesc", "Optionally update the health status of the selected plants.")}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {PLANT_HEALTH.map((h) => (
-                          <button
-                            key={h.key}
-                            type="button"
-                            onClick={() => setEntryHealthStatus(entryHealthStatus === h.key ? null : h.key)}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-sm transition-all ${
-                              entryHealthStatus === h.key
-                                ? `border-current ${h.color} bg-white dark:bg-stone-900 shadow-sm font-medium`
-                                : "border-stone-200 dark:border-stone-700 text-stone-600 dark:text-stone-400 hover:border-stone-300"
-                            }`}
-                          >
-                            <span>{h.emoji}</span>
-                            <span>{t(`gardenDashboard.journalSection.health.${h.key}`, h.label)}</span>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                )}
 
                 {/* Privacy toggle */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-stone-50 dark:bg-stone-800/50">
