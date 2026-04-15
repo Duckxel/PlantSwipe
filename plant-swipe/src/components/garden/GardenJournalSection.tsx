@@ -253,23 +253,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     [filteredEntries, journalSort],
   );
 
-  // Insights
-  const insights = React.useMemo(() => {
-    const uniqueDays = new Set(entries.map((e) => e.entryDate));
-    const plantsTagged = new Set(entries.flatMap((e) => e.plantsMentioned || []));
-    const totalPhotos = entries.reduce((s, e) => s + (e.photos?.length || 0), 0);
-    // Streak: consecutive days with entries ending today
-    const today = new Date().toISOString().slice(0, 10);
-    let streak = 0;
-    const daySet = new Set(entries.map((e) => e.entryDate));
-    const d = new Date();
-    while (daySet.has(d.toISOString().slice(0, 10))) {
-      streak++;
-      d.setDate(d.getDate() - 1);
-    }
-    return { totalEntries: entries.length, uniqueDays: uniqueDays.size, plantsTagged: plantsTagged.size, totalPhotos, streak, hasToday: daySet.has(today) };
-  }, [entries]);
-
   // Group entries by date for timeline
   const groupedByDate = React.useMemo(() => {
     const groups: Array<{ date: string; entries: typeof sortedEntries }> = [];
@@ -778,25 +761,79 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </Button>
       </div>
 
-      {/* Insights strip */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
-          <div className="text-xl font-bold text-emerald-600 dark:text-emerald-400">{insights.totalEntries}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.entries", "Entries")}</div>
+      {/* Horizontal visual timeline */}
+      {!loading && timelineDates.length > 0 && (
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden">
+          <div className="overflow-x-auto scrollbar-none">
+            <div className="relative min-w-max px-6 pt-5 pb-4">
+              {/* Spine line – sits behind the dots */}
+              <div className="absolute left-6 right-6 h-[3px] rounded-full bg-gradient-to-r from-emerald-300 via-teal-300 to-emerald-300 dark:from-emerald-800 dark:via-teal-800 dark:to-emerald-800" style={{ top: "50px" }} />
+
+              <div className="flex items-start gap-0">
+                {timelineDates.map((date, i) => {
+                  const isActive = focusDate === date;
+                  const isToday = date === new Date().toISOString().slice(0, 10);
+                  const dayEntries = filteredEntries.filter((e) => e.entryDate === date);
+                  const entryCount = dayEntries.length;
+                  const hasPhotos = dayEntries.some((e) => e.photos?.length > 0);
+                  // Collect plant images for this date (deduplicated, max 3)
+                  const datePlantIds = [...new Set(dayEntries.flatMap((e) => e.plantsMentioned || []))];
+                  const datePlants = datePlantIds.map((pid) => plantMap.get(pid)).filter(Boolean).slice(0, 3) as GardenPlantInfo[];
+
+                  return (
+                    <button
+                      key={date}
+                      type="button"
+                      onClick={() => scrollToDate(date)}
+                      className={`relative flex flex-col items-center group ${i > 0 ? "ml-4 sm:ml-6" : ""}`}
+                      style={{ minWidth: "72px" }}
+                    >
+                      {/* Date label */}
+                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-3 transition-colors ${
+                        isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500 group-hover:text-stone-600 dark:group-hover:text-stone-300"
+                      }`}>
+                        {isToday ? "Today" : formatDotDate(date)}
+                      </span>
+
+                      {/* Dot */}
+                      <div className={`relative z-10 rounded-full transition-all duration-200 ${
+                        isActive
+                          ? "w-5 h-5 bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.35)]"
+                          : isToday
+                            ? "w-4 h-4 bg-emerald-400 ring-4 ring-emerald-100 dark:ring-emerald-900/40 group-hover:scale-125"
+                            : "w-3.5 h-3.5 bg-stone-300 dark:bg-stone-600 group-hover:bg-emerald-400 group-hover:scale-125"
+                      }`} />
+
+                      {/* Plant thumbnails row */}
+                      {datePlants.length > 0 ? (
+                        <div className="flex -space-x-1.5 mt-3">
+                          {datePlants.map((gp) => {
+                            const img = getPlantImageUrl(gp);
+                            return (
+                              <div key={gp.id} className="w-6 h-6 rounded-full border-2 border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800">
+                                {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-3 h-3 m-auto mt-1 text-stone-400" />}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="mt-3 h-6" />
+                      )}
+
+                      {/* Entry count + photo */}
+                      <span className={`text-[10px] mt-1 whitespace-nowrap ${
+                        isActive ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-stone-400 dark:text-stone-500"
+                      }`}>
+                        {entryCount}{hasPhotos ? " 📷" : ""}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
         </div>
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
-          <div className="text-xl font-bold text-violet-600 dark:text-violet-400">{insights.uniqueDays}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.daysPosted", "Days posted")}</div>
-        </div>
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
-          <div className="text-xl font-bold text-rose-600 dark:text-rose-400">{insights.totalPhotos}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.photos", "Photos")}</div>
-        </div>
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-3 text-center">
-          <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{insights.streak > 0 ? `${insights.streak}🔥` : "—"}</div>
-          <div className="text-[11px] text-muted-foreground mt-0.5">{t("gardenDashboard.journalSection.streak", "Day streak")}</div>
-        </div>
-      </div>
+      )}
 
       {/* Filter bar: plant chips + search */}
       <div className="space-y-3">
@@ -1441,60 +1478,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Horizontal timeline scrubber */}
-      {!loading && timelineDates.length > 1 && (
-        <div className="relative rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-4 overflow-hidden">
-          <div className="overflow-x-auto scrollbar-none">
-            <div className="flex items-center min-w-max">
-              {/* Spine line */}
-              <div className="absolute left-4 right-4 top-1/2 -translate-y-[3px] h-[3px] bg-stone-200 dark:bg-stone-700 rounded-full" />
-
-              {timelineDates.map((date, i) => {
-                const isActive = focusDate === date;
-                const isToday = date === new Date().toISOString().slice(0, 10);
-                const entryCount = filteredEntries.filter((e) => e.entryDate === date).length;
-                const hasPhotos = filteredEntries.some((e) => e.entryDate === date && e.photos?.length > 0);
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    onClick={() => scrollToDate(date)}
-                    className={`relative flex flex-col items-center z-10 transition-all ${
-                      i === 0 ? "" : "ml-6 sm:ml-10"
-                    }`}
-                  >
-                    {/* Top label */}
-                    <span className={`text-[10px] font-semibold mb-2 whitespace-nowrap transition-colors ${
-                      isActive
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : "text-stone-500 dark:text-stone-400"
-                    }`}>
-                      {isToday ? "Today" : formatDotDate(date)}
-                    </span>
-
-                    {/* Dot */}
-                    <div className={`w-4 h-4 rounded-full border-[3px] transition-all ${
-                      isActive
-                        ? "border-emerald-500 bg-emerald-500 scale-125 shadow-lg shadow-emerald-500/30"
-                        : isToday
-                          ? "border-emerald-400 bg-white dark:bg-[#1f1f1f]"
-                          : "border-stone-300 dark:border-stone-600 bg-white dark:bg-[#1f1f1f] hover:border-emerald-400 hover:scale-110"
-                    }`} />
-
-                    {/* Bottom label: count + photo indicator */}
-                    <span className={`text-[10px] mt-1.5 whitespace-nowrap ${
-                      isActive ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-400 dark:text-stone-500"
-                    }`}>
-                      {entryCount} {entryCount === 1 ? "entry" : "entries"}{hasPhotos ? " 📷" : ""}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Journal Entries Timeline */}
       <div>
