@@ -813,102 +813,64 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
       {/* Weekly activity chart timeline */}
       {!loading && entries.length > 0 && (
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden">
-          <div className="overflow-x-auto scrollbar-none">
-            <div className="relative min-w-max px-4 pt-3 pb-3">
-              {/* Column chart + spine */}
-              <div className="flex items-end gap-[2px]" style={{ height: 120 }}>
-                {weeklyBuckets.map((week) => {
-                  const count = week.entries.length;
-                  const isActive = focusDate === week.weekStart;
-                  const hasEntries = count > 0;
-                  // Bar height: proportional, min 4px for empty weeks
-                  const barH = hasEntries ? Math.max(16, Math.round((count / maxWeekEntries) * 80)) : 4;
-                  // Plants for this week
-                  const weekPlants = week.plantIds.map((pid) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
-                  const showPlants = weekPlants.slice(0, 2);
-                  const extraPlants = weekPlants.length - 2;
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] px-3 pt-3 pb-2 overflow-hidden">
+          {/* Bars */}
+          <div className="flex items-end gap-px" style={{ height: 56 }}>
+            {weeklyBuckets.map((week) => {
+              const count = week.entries.length;
+              const isActive = focusDate === week.weekStart;
+              const hasEntries = count > 0;
+              const barH = hasEntries ? Math.max(6, Math.round((count / maxWeekEntries) * 48)) : 2;
 
-                  return (
-                    <button
-                      key={week.weekStart}
-                      type="button"
-                      onClick={() => hasEntries && scrollToWeek(week.weekStart, week.weekEnd)}
-                      className={`relative flex flex-col items-center group ${hasEntries ? "cursor-pointer" : "cursor-default"}`}
-                      style={{ width: 28 }}
-                      title={`${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}`}
-                    >
-                      {/* Entry count above bar */}
-                      {count > 1 && (
-                        <span className={`text-[9px] font-bold mb-0.5 ${
-                          isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"
-                        }`}>
-                          {count}
-                        </span>
-                      )}
-
-                      {/* Bar */}
-                      <div
-                        className={`w-3 rounded-full transition-all duration-200 ${
-                          isActive
-                            ? "bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.3)]"
-                            : hasEntries
-                              ? week.isCurrent
-                                ? "bg-emerald-400 group-hover:bg-emerald-500"
-                                : "bg-emerald-300/70 dark:bg-emerald-700/50 group-hover:bg-emerald-400 dark:group-hover:bg-emerald-600"
-                              : "bg-stone-200/60 dark:bg-stone-800/40"
-                        }`}
-                        style={{ height: barH }}
-                      />
-
-                      {/* Plant avatars below bar */}
-                      {hasEntries && showPlants.length > 0 ? (
-                        <div className="flex -space-x-1 mt-1">
-                          {showPlants.map((gp) => {
-                            const img = getPlantImageUrl(gp);
-                            return (
-                              <div key={gp.id} className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800">
-                                {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-2 h-2 m-auto mt-0.5 text-stone-400" />}
-                              </div>
-                            );
-                          })}
-                          {extraPlants > 0 && (
-                            <div className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
-                              <span className="text-[7px] font-bold text-stone-600 dark:text-stone-300">+{extraPlants}</span>
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="mt-1 h-4" />
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Month labels along the bottom */}
-              <div className="flex mt-1.5" style={{ gap: "2px" }}>
-                {(() => {
-                  // Show month label at the first week of each month
-                  let lastMonth = -1;
-                  return weeklyBuckets.map((week) => {
-                    const d = new Date(week.weekStart);
-                    const m = d.getMonth();
-                    const showLabel = m !== lastMonth;
-                    lastMonth = m;
-                    return (
-                      <div key={week.weekStart} className="text-center" style={{ width: 28 }}>
-                        {showLabel && (
-                          <span className="text-[9px] font-medium text-stone-400 dark:text-stone-500">
-                            {d.toLocaleString(undefined, { month: "short" })}
-                          </span>
-                        )}
-                      </div>
-                    );
-                  });
-                })()}
-              </div>
-            </div>
+              return (
+                <button
+                  key={week.weekStart}
+                  type="button"
+                  onClick={() => hasEntries && scrollToWeek(week.weekStart, week.weekEnd)}
+                  className={`flex-1 min-w-0 flex flex-col items-center justify-end group ${hasEntries ? "cursor-pointer" : "cursor-default"}`}
+                  title={`${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}`}
+                >
+                  {count > 1 && (
+                    <span className={`text-[7px] font-bold leading-none mb-px ${
+                      isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
+                    }`}>{count}</span>
+                  )}
+                  <div
+                    className={`w-full max-w-[8px] rounded-sm transition-all duration-150 ${
+                      isActive
+                        ? "bg-emerald-500 shadow-[0_0_6px_1px_rgba(16,185,129,0.3)]"
+                        : hasEntries
+                          ? week.isCurrent
+                            ? "bg-emerald-400 group-hover:bg-emerald-500"
+                            : "bg-emerald-300/70 dark:bg-emerald-700/50 group-hover:bg-emerald-400"
+                          : "bg-stone-200/40 dark:bg-stone-800/30"
+                    }`}
+                    style={{ height: barH }}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          {/* Month labels */}
+          <div className="flex gap-px mt-1">
+            {(() => {
+              let lastMonth = -1;
+              return weeklyBuckets.map((week) => {
+                const d = new Date(week.weekStart);
+                const m = d.getMonth();
+                const showLabel = m !== lastMonth;
+                lastMonth = m;
+                return (
+                  <div key={week.weekStart} className="flex-1 min-w-0 text-center overflow-hidden">
+                    {showLabel && (
+                      <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
+                        {d.toLocaleString(undefined, { month: "short" })}
+                      </span>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       )}
