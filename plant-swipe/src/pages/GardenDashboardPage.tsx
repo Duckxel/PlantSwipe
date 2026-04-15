@@ -4686,6 +4686,7 @@ function OverviewSection({
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
   const { user: authUser } = useAuth();
+  const [overviewManagePlantId, setOverviewManagePlantId] = React.useState<string | null>(null);
   const [expandedBeginnerRoadmapStep, setExpandedBeginnerRoadmapStep] = React.useState<string | null>(null);
   const [expandedBeginnerLessonKey, setExpandedBeginnerLessonKey] = React.useState<string>('lesson_1');
   const roadmapScrollRef = React.useRef<HTMLDivElement | null>(null);
@@ -4939,6 +4940,7 @@ function OverviewSection({
       const taskInfo = taskCountsPerPlant[gp.id] || { total: 0, dueToday: 0 };
       return {
         id: gp.id,
+        gp,
         name: gp.nickname || gp.plant?.name || "Plant",
         variety: gp.plant?.variety || null,
         imageUrl: primaryImageUrl,
@@ -6056,8 +6058,7 @@ function OverviewSection({
                     : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30"
                 }`}
                 onClick={() => {
-                  const manageButton = document.querySelector<HTMLButtonElement>(`[data-garden-manage-id="overview-${plant.id}"]`);
-                  manageButton?.click();
+                  setOverviewManagePlantId(plant.id);
                 }}
                 style={{
                   animationDelay: `${idx * 40}ms`,
@@ -6091,6 +6092,10 @@ function OverviewSection({
                   <GardenPlantManageButton
                     dataGardenManageId={`overview-${plant.id}`}
                     iconOnly
+                    open={overviewManagePlantId === plant.id}
+                    onOpenChange={(nextOpen) => {
+                      setOverviewManagePlantId(nextOpen ? plant.id : null);
+                    }}
                     gp={plant.gp}
                     gardenId={gardenId}
                     onChanged={load}

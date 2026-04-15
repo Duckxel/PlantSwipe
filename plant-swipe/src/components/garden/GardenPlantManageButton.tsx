@@ -62,6 +62,8 @@ export function GardenPlantManageButton({
   dueTodayCount = 0,
   iconOnly = false,
   dataGardenManageId,
+  openOverride,
+  onOpenOverrideChange,
 }: {
   gp: any;
   gardenId: string;
@@ -72,10 +74,17 @@ export function GardenPlantManageButton({
   dueTodayCount?: number;
   iconOnly?: boolean;
   dataGardenManageId?: string;
+  openOverride?: boolean;
+  onOpenOverrideChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation("common");
   const { user } = useAuth();
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const open = openOverride ?? internalOpen;
+  const setOpen = React.useCallback((next: boolean) => {
+    if (onOpenOverrideChange) onOpenOverrideChange(next);
+    else setInternalOpen(next);
+  }, [onOpenOverrideChange]);
   const [nickname, setNickname] = React.useState(gp.nickname || "");
   const [count, setCount] = React.useState<number>(Number(gp.plantsOnHand ?? 0));
   const [healthStatus, setHealthStatus] = React.useState<string>(gp.healthStatus || "");
