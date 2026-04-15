@@ -16,13 +16,10 @@ import {
   Plus,
   Calendar,
   Camera,
-  CloudSun,
   Pencil,
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Clock,
-  Image as ImageIcon,
   Loader2,
   CheckCircle2,
   X,
@@ -740,10 +737,6 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     });
   };
 
-  // Get mood config
-  const getMoodConfig = (mood: string | null) => {
-    return MOODS.find((m) => m.key === mood) || MOODS[2]; // default to neutral
-  };
 
   return (
     <div className="space-y-5">
