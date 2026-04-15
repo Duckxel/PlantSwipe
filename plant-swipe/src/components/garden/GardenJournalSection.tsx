@@ -148,7 +148,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // Filter & search state
   const [filterPlantId, setFilterPlantId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [focusDate, setFocusDate] = React.useState<string | null>(null);
+  const [selectedWeeks, setSelectedWeeks] = React.useState<Set<string>>(new Set());
+  const isDraggingRef = React.useRef(false);
   const dateRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
   // State
@@ -243,8 +244,19 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           e.content.toLowerCase().includes(q),
       );
     }
+    if (selectedWeeks.size > 0) {
+      result = result.filter((e) => {
+        for (const ws of selectedWeeks) {
+          const end = new Date(ws);
+          end.setDate(end.getDate() + 6);
+          const endStr = end.toISOString().slice(0, 10);
+          if (e.entryDate >= ws && e.entryDate <= endStr) return true;
+        }
+        return false;
+      });
+    }
     return result;
-  }, [entries, filterPlantId, searchQuery]);
+  }, [entries, filterPlantId, searchQuery, selectedWeeks]);
 
   const sortedEntries = React.useMemo(
     () => journalSort === "newest"
@@ -319,17 +331,26 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     [weeklyBuckets],
   );
 
-  // Scroll to the first entry date in a week
-  const scrollToWeek = React.useCallback((weekStart: string, weekEnd: string) => {
-    setFocusDate(weekStart);
-    // Find the first date within this week that has a ref
-    for (const [date, el] of dateRefs.current) {
-      if (date >= weekStart && date <= weekEnd) {
-        el.scrollIntoView({ behavior: "smooth", block: "start" });
-        return;
-      }
-    }
+  // Drag handlers for multi-week select on the chart
+  const handleWeekPointerDown = React.useCallback((weekStart: string, hasEntries: boolean) => {
+    if (!hasEntries) return;
+    isDraggingRef.current = true;
+    setSelectedWeeks(new Set([weekStart]));
   }, []);
+  const handleWeekPointerEnter = React.useCallback((weekStart: string, hasEntries: boolean) => {
+    if (!isDraggingRef.current || !hasEntries) return;
+    setSelectedWeeks((prev) => new Set([...prev, weekStart]));
+  }, []);
+  const handleWeekPointerUp = React.useCallback(() => {
+    isDraggingRef.current = false;
+  }, []);
+  // Clear drag on window pointer up
+  React.useEffect(() => {
+    const up = () => { isDraggingRef.current = false; };
+    window.addEventListener("pointerup", up);
+    return () => window.removeEventListener("pointerup", up);
+  }, []);
+  const clearWeekFilter = React.useCallback(() => setSelectedWeeks(new Set()), []);
 
   // Format week label: "Jan 6" or "Dec 30"
   const formatWeekLabel = (dateStr: string) => {
@@ -811,66 +832,97 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </Button>
       </div>
 
-      {/* Weekly activity chart timeline */}
+      {/* Weekly activity chart — dot timeline with drag-to-select */}
       {!loading && entries.length > 0 && (
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] px-3 pt-3 pb-2 overflow-hidden">
-          {/* Bars */}
-          <div className="flex items-end gap-px" style={{ height: 56 }}>
-            {weeklyBuckets.map((week) => {
-              const count = week.entries.length;
-              const isActive = focusDate === week.weekStart;
-              const hasEntries = count > 0;
-              const barH = hasEntries ? Math.max(6, Math.round((count / maxWeekEntries) * 48)) : 2;
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden select-none">
+          {/* Clear filter hint */}
+          {selectedWeeks.size > 0 && (
+            <div className="flex items-center justify-between px-3 pt-2">
+              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
+                {selectedWeeks.size} {selectedWeeks.size === 1 ? "week" : "weeks"} selected
+              </span>
+              <button type="button" onClick={clearWeekFilter} className="text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 underline">
+                Clear
+              </button>
+            </div>
+          )}
 
-              return (
-                <button
-                  key={week.weekStart}
-                  type="button"
-                  onClick={() => hasEntries && scrollToWeek(week.weekStart, week.weekEnd)}
-                  className={`flex-1 min-w-0 flex flex-col items-center justify-end group ${hasEntries ? "cursor-pointer" : "cursor-default"}`}
-                  title={`${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}`}
-                >
-                  {count > 1 && (
-                    <span className={`text-[7px] font-bold leading-none mb-px ${
-                      isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
-                    }`}>{count}</span>
-                  )}
-                  <div
-                    className={`w-full max-w-[8px] rounded-sm transition-all duration-150 ${
-                      isActive
-                        ? "bg-emerald-500 shadow-[0_0_6px_1px_rgba(16,185,129,0.3)]"
-                        : hasEntries
-                          ? week.isCurrent
-                            ? "bg-emerald-400 group-hover:bg-emerald-500"
-                            : "bg-emerald-300/70 dark:bg-emerald-700/50 group-hover:bg-emerald-400"
-                          : "bg-stone-200/40 dark:bg-stone-800/30"
-                    }`}
-                    style={{ height: barH }}
-                  />
-                </button>
-              );
-            })}
-          </div>
-          {/* Month labels */}
-          <div className="flex gap-px mt-1">
-            {(() => {
-              let lastMonth = -1;
-              return weeklyBuckets.map((week) => {
-                const d = new Date(week.weekStart);
-                const m = d.getMonth();
-                const showLabel = m !== lastMonth;
-                lastMonth = m;
+          <div className="px-3 pt-2 pb-1">
+            {/* Dot row — aligned to center of the 48px-tall area */}
+            <div
+              className="relative flex items-center"
+              style={{ height: 48 }}
+              onPointerUp={handleWeekPointerUp}
+            >
+              {/* Connecting line behind dots */}
+              <div className="absolute inset-x-0 top-1/2 h-px bg-stone-200 dark:bg-stone-700" />
+
+              {weeklyBuckets.map((week) => {
+                const count = week.entries.length;
+                const hasEntries = count > 0;
+                const isSelected = selectedWeeks.has(week.weekStart);
+                // Dot size: proportional to entries, 6–24px
+                const dotSize = hasEntries ? Math.max(6, Math.min(24, 6 + Math.round((count / maxWeekEntries) * 18))) : 0;
+
                 return (
-                  <div key={week.weekStart} className="flex-1 min-w-0 text-center overflow-hidden">
-                    {showLabel && (
-                      <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
-                        {d.toLocaleString(undefined, { month: "short" })}
-                      </span>
+                  <div
+                    key={week.weekStart}
+                    className="flex-1 min-w-0 flex justify-center relative"
+                    onPointerDown={() => handleWeekPointerDown(week.weekStart, hasEntries)}
+                    onPointerEnter={() => handleWeekPointerEnter(week.weekStart, hasEntries)}
+                    title={hasEntries ? `${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}` : formatWeekLabel(week.weekStart)}
+                  >
+                    {hasEntries ? (
+                      <div className="relative flex flex-col items-center cursor-pointer">
+                        {/* Count label above large dots */}
+                        {count > 1 && (
+                          <span className={`absolute text-[8px] font-bold leading-none ${
+                            isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
+                          }`} style={{ bottom: dotSize / 2 + 10 }}>
+                            {count}
+                          </span>
+                        )}
+                        <div
+                          className={`rounded-full transition-all duration-200 ${
+                            isSelected
+                              ? "bg-emerald-500 shadow-[0_0_10px_3px_rgba(16,185,129,0.35)] ring-2 ring-emerald-300 dark:ring-emerald-700"
+                              : week.isCurrent
+                                ? "bg-emerald-400 hover:bg-emerald-500 hover:shadow-md"
+                                : "bg-emerald-400/60 dark:bg-emerald-600/50 hover:bg-emerald-500 hover:shadow-md"
+                          }`}
+                          style={{ width: dotSize, height: dotSize }}
+                        />
+                      </div>
+                    ) : (
+                      /* Empty week: thin dash on the line */
+                      <div className="w-1 h-1 rounded-full bg-stone-300/50 dark:bg-stone-700/50" />
                     )}
                   </div>
                 );
-              });
-            })()}
+              })}
+            </div>
+
+            {/* Month labels */}
+            <div className="flex mt-0.5">
+              {(() => {
+                let lastMonth = -1;
+                return weeklyBuckets.map((week) => {
+                  const d = new Date(week.weekStart);
+                  const m = d.getMonth();
+                  const showLabel = m !== lastMonth;
+                  lastMonth = m;
+                  return (
+                    <div key={week.weekStart} className="flex-1 min-w-0 text-center overflow-hidden">
+                      {showLabel && (
+                        <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
+                          {d.toLocaleString(undefined, { month: "short" })}
+                        </span>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
           </div>
         </div>
       )}
