@@ -559,8 +559,8 @@ export function GardenPlantManageButton({
           </div>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
-            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:h-full lg:p-0">
-              <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:h-full lg:min-h-0 lg:rounded-none">
+            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:h-full lg:p-3 lg:pb-3">
+              <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:h-full lg:min-h-0">
                 {currentImageUrl ? (
                   <img
                     src={currentImageUrl}
@@ -696,16 +696,16 @@ export function GardenPlantManageButton({
                       setOpen(false);
                       navigate(`/garden/${gardenId}/journal`, { state: { preselectedPlantId: gp.id } });
                     }}
-                    className="flex items-center gap-3 w-full rounded-[22px] border border-dashed border-amber-300 dark:border-amber-700/60 bg-amber-50/60 dark:bg-amber-900/10 px-4 py-4 text-left transition hover:border-amber-400 hover:bg-amber-50 dark:hover:border-amber-600 dark:hover:bg-amber-900/20 group"
+                    className="flex items-center gap-3 w-full rounded-[22px] border border-dashed border-violet-300 dark:border-violet-700/60 bg-violet-50/60 dark:bg-violet-900/10 px-4 py-4 text-left transition hover:border-violet-400 hover:bg-violet-50 dark:hover:border-violet-600 dark:hover:bg-violet-900/20 group"
                   >
-                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 group-hover:scale-110 transition-transform">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform">
                       <BookOpen className="h-5 w-5" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                      <div className="text-sm font-medium text-violet-700 dark:text-violet-300">
                         {t("gardenDashboard.plantsSection.writeJournalEntry", "Write Journal Entry")}
                       </div>
-                      <div className="text-xs text-amber-600/70 dark:text-amber-400/60">
+                      <div className="text-xs text-violet-500/70 dark:text-violet-400/60">
                         {t("gardenDashboard.plantsSection.writeJournalEntryDesc", "Record observations about this plant")}
                       </div>
                     </div>
