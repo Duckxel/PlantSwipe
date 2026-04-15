@@ -268,23 +268,73 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     return groups;
   }, [sortedEntries]);
 
-  // All unique dates for the horizontal timeline bar (always chronological)
-  const timelineDates = React.useMemo(() => {
-    const dates = [...new Set(filteredEntries.map((e) => e.entryDate))];
-    return dates.sort((a, b) => a.localeCompare(b));
+  // Weekly buckets for the horizontal timeline chart (past year)
+  const weeklyBuckets = React.useMemo(() => {
+    // Build weeks from ~52 weeks ago to this week
+    const now = new Date();
+    const today = now.toISOString().slice(0, 10);
+    // Start of this week (Monday)
+    const dayOfWeek = (now.getDay() + 6) % 7; // 0=Mon
+    const thisMonday = new Date(now);
+    thisMonday.setDate(thisMonday.getDate() - dayOfWeek);
+    thisMonday.setHours(0, 0, 0, 0);
+
+    const weeks: Array<{
+      weekStart: string; // YYYY-MM-DD (Monday)
+      weekEnd: string;
+      entries: typeof filteredEntries;
+      plantIds: string[];
+      hasPhotos: boolean;
+      isCurrent: boolean;
+    }> = [];
+
+    for (let w = 51; w >= 0; w--) {
+      const start = new Date(thisMonday);
+      start.setDate(start.getDate() - w * 7);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      const startStr = start.toISOString().slice(0, 10);
+      const endStr = end.toISOString().slice(0, 10);
+
+      const weekEntries = filteredEntries.filter(
+        (e) => e.entryDate >= startStr && e.entryDate <= endStr,
+      );
+      const pIds = [...new Set(weekEntries.flatMap((e) => e.plantsMentioned || []))];
+
+      weeks.push({
+        weekStart: startStr,
+        weekEnd: endStr,
+        entries: weekEntries,
+        plantIds: pIds,
+        hasPhotos: weekEntries.some((e) => e.photos?.length > 0),
+        isCurrent: startStr <= today && today <= endStr,
+      });
+    }
+    return weeks;
   }, [filteredEntries]);
 
-  // Scroll to a date group when clicking a timeline dot
-  const scrollToDate = React.useCallback((date: string) => {
-    setFocusDate(date);
-    const el = dateRefs.current.get(date);
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  // Max entries in any week (for sizing)
+  const maxWeekEntries = React.useMemo(
+    () => Math.max(1, ...weeklyBuckets.map((w) => w.entries.length)),
+    [weeklyBuckets],
+  );
+
+  // Scroll to the first entry date in a week
+  const scrollToWeek = React.useCallback((weekStart: string, weekEnd: string) => {
+    setFocusDate(weekStart);
+    // Find the first date within this week that has a ref
+    for (const [date, el] of dateRefs.current) {
+      if (date >= weekStart && date <= weekEnd) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        return;
+      }
+    }
   }, []);
 
-  // Format for timeline dot labels: "15 Apr"
-  const formatDotDate = (dateStr: string) => {
+  // Format week label: "Jan 6" or "Dec 30"
+  const formatWeekLabel = (dateStr: string) => {
     const d = new Date(dateStr);
-    return `${d.getDate()} ${d.toLocaleString(undefined, { month: "short" })}`;
+    return `${d.toLocaleString(undefined, { month: "short" })} ${d.getDate()}`;
   };
 
   // Image viewer for library
@@ -761,74 +811,102 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </Button>
       </div>
 
-      {/* Horizontal visual timeline */}
-      {!loading && timelineDates.length > 0 && (
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden">
+      {/* Weekly activity chart timeline */}
+      {!loading && entries.length > 0 && (
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden">
           <div className="overflow-x-auto scrollbar-none">
-            <div className="relative min-w-max px-6 pt-5 pb-4">
-              {/* Spine line – sits behind the dots */}
-              <div className="absolute left-6 right-6 h-[3px] rounded-full bg-gradient-to-r from-emerald-300 via-teal-300 to-emerald-300 dark:from-emerald-800 dark:via-teal-800 dark:to-emerald-800" style={{ top: "50px" }} />
-
-              <div className="flex items-start gap-0">
-                {timelineDates.map((date, i) => {
-                  const isActive = focusDate === date;
-                  const isToday = date === new Date().toISOString().slice(0, 10);
-                  const dayEntries = filteredEntries.filter((e) => e.entryDate === date);
-                  const entryCount = dayEntries.length;
-                  const hasPhotos = dayEntries.some((e) => e.photos?.length > 0);
-                  // Collect plant images for this date (deduplicated, max 3)
-                  const datePlantIds = [...new Set(dayEntries.flatMap((e) => e.plantsMentioned || []))];
-                  const datePlants = datePlantIds.map((pid) => plantMap.get(pid)).filter(Boolean).slice(0, 3) as GardenPlantInfo[];
+            <div className="relative min-w-max px-4 pt-3 pb-3">
+              {/* Column chart + spine */}
+              <div className="flex items-end gap-[2px]" style={{ height: 120 }}>
+                {weeklyBuckets.map((week) => {
+                  const count = week.entries.length;
+                  const isActive = focusDate === week.weekStart;
+                  const hasEntries = count > 0;
+                  // Bar height: proportional, min 4px for empty weeks
+                  const barH = hasEntries ? Math.max(16, Math.round((count / maxWeekEntries) * 80)) : 4;
+                  // Plants for this week
+                  const weekPlants = week.plantIds.map((pid) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
+                  const showPlants = weekPlants.slice(0, 2);
+                  const extraPlants = weekPlants.length - 2;
 
                   return (
                     <button
-                      key={date}
+                      key={week.weekStart}
                       type="button"
-                      onClick={() => scrollToDate(date)}
-                      className={`relative flex flex-col items-center group ${i > 0 ? "ml-4 sm:ml-6" : ""}`}
-                      style={{ minWidth: "72px" }}
+                      onClick={() => hasEntries && scrollToWeek(week.weekStart, week.weekEnd)}
+                      className={`relative flex flex-col items-center group ${hasEntries ? "cursor-pointer" : "cursor-default"}`}
+                      style={{ width: 28 }}
+                      title={`${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}`}
                     >
-                      {/* Date label */}
-                      <span className={`text-[10px] font-bold uppercase tracking-wider mb-3 transition-colors ${
-                        isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500 group-hover:text-stone-600 dark:group-hover:text-stone-300"
-                      }`}>
-                        {isToday ? "Today" : formatDotDate(date)}
-                      </span>
+                      {/* Entry count above bar */}
+                      {count > 1 && (
+                        <span className={`text-[9px] font-bold mb-0.5 ${
+                          isActive ? "text-emerald-600 dark:text-emerald-400" : "text-stone-500 dark:text-stone-400"
+                        }`}>
+                          {count}
+                        </span>
+                      )}
 
-                      {/* Dot */}
-                      <div className={`relative z-10 rounded-full transition-all duration-200 ${
-                        isActive
-                          ? "w-5 h-5 bg-emerald-500 shadow-[0_0_12px_3px_rgba(16,185,129,0.35)]"
-                          : isToday
-                            ? "w-4 h-4 bg-emerald-400 ring-4 ring-emerald-100 dark:ring-emerald-900/40 group-hover:scale-125"
-                            : "w-3.5 h-3.5 bg-stone-300 dark:bg-stone-600 group-hover:bg-emerald-400 group-hover:scale-125"
-                      }`} />
+                      {/* Bar */}
+                      <div
+                        className={`w-3 rounded-full transition-all duration-200 ${
+                          isActive
+                            ? "bg-emerald-500 shadow-[0_0_8px_2px_rgba(16,185,129,0.3)]"
+                            : hasEntries
+                              ? week.isCurrent
+                                ? "bg-emerald-400 group-hover:bg-emerald-500"
+                                : "bg-emerald-300/70 dark:bg-emerald-700/50 group-hover:bg-emerald-400 dark:group-hover:bg-emerald-600"
+                              : "bg-stone-200/60 dark:bg-stone-800/40"
+                        }`}
+                        style={{ height: barH }}
+                      />
 
-                      {/* Plant thumbnails row */}
-                      {datePlants.length > 0 ? (
-                        <div className="flex -space-x-1.5 mt-3">
-                          {datePlants.map((gp) => {
+                      {/* Plant avatars below bar */}
+                      {hasEntries && showPlants.length > 0 ? (
+                        <div className="flex -space-x-1 mt-1">
+                          {showPlants.map((gp) => {
                             const img = getPlantImageUrl(gp);
                             return (
-                              <div key={gp.id} className="w-6 h-6 rounded-full border-2 border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800">
-                                {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-3 h-3 m-auto mt-1 text-stone-400" />}
+                              <div key={gp.id} className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800">
+                                {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-2 h-2 m-auto mt-0.5 text-stone-400" />}
                               </div>
                             );
                           })}
+                          {extraPlants > 0 && (
+                            <div className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center">
+                              <span className="text-[7px] font-bold text-stone-600 dark:text-stone-300">+{extraPlants}</span>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className="mt-3 h-6" />
+                        <div className="mt-1 h-4" />
                       )}
-
-                      {/* Entry count + photo */}
-                      <span className={`text-[10px] mt-1 whitespace-nowrap ${
-                        isActive ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-stone-400 dark:text-stone-500"
-                      }`}>
-                        {entryCount}{hasPhotos ? " 📷" : ""}
-                      </span>
                     </button>
                   );
                 })}
+              </div>
+
+              {/* Month labels along the bottom */}
+              <div className="flex mt-1.5" style={{ gap: "2px" }}>
+                {(() => {
+                  // Show month label at the first week of each month
+                  let lastMonth = -1;
+                  return weeklyBuckets.map((week) => {
+                    const d = new Date(week.weekStart);
+                    const m = d.getMonth();
+                    const showLabel = m !== lastMonth;
+                    lastMonth = m;
+                    return (
+                      <div key={week.weekStart} className="text-center" style={{ width: 28 }}>
+                        {showLabel && (
+                          <span className="text-[9px] font-medium text-stone-400 dark:text-stone-500">
+                            {d.toLocaleString(undefined, { month: "short" })}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             </div>
           </div>
