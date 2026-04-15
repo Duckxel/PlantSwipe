@@ -2438,13 +2438,14 @@ export const GardenDashboardPage: React.FC = () => {
     emitGardenRealtime("members");
   };
 
-  const addSelectedPlant = async () => {
-    if (!id || !selectedPlant || adding) return;
+  const addSelectedPlant = async (plantOverride?: any) => {
+    const plant = plantOverride ?? selectedPlant;
+    if (!id || !plant || adding) return;
     setAdding(true);
     try {
       const gp = await addPlantToGarden({
         gardenId: id,
-        plantId: selectedPlant.id,
+        plantId: plant.id,
         seedsPlanted: 0,
       });
 
@@ -2453,8 +2454,8 @@ export const GardenDashboardPage: React.FC = () => {
         await logGardenActivity({
           gardenId: id,
           kind: "plant_added",
-          message: `added "${selectedPlant.name}"`,
-          plantName: selectedPlant.name,
+          message: `added "${plant.name}"`,
+          plantName: plant.name,
           actorColor: actorColorCss || null,
         });
         setActivityRev((r) => r + 1);
@@ -2491,7 +2492,6 @@ export const GardenDashboardPage: React.FC = () => {
       }
 
       setPendingGardenPlantId(gp.id);
-      setTaskOpen(true);
       emitGardenRealtime("plants");
 
       if (garden?.gardenType !== "seedling") {
@@ -3797,6 +3797,7 @@ export const GardenDashboardPage: React.FC = () => {
             onSelect={(option) => {
               const plant = plantCacheRef.current.get(option.id) || null;
               setSelectedPlant(plant);
+              if (plant) addSelectedPlant(plant);
             }}
             onClear={() => setSelectedPlant(null)}
             onSearch={searchPlantsForGarden}
@@ -3804,11 +3805,6 @@ export const GardenDashboardPage: React.FC = () => {
             title={t("gardenDashboard.plantsSection.searchPlants")}
             searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
             emptyMessage={t("gardenDashboard.plantsSection.noResults")}
-            confirmLabel={adding ? t("gardenDashboard.plantsSection.adding") : t("gardenDashboard.plantsSection.add")}
-            confirmSingleSelect
-            onConfirmSingleSelect={async () => {
-              await addSelectedPlant();
-            }}
             priorityZIndex={100}
             initialOption={selectedPlant ? {
               id: selectedPlant.id,
