@@ -148,6 +148,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // Filter & search state
   const [filterPlantId, setFilterPlantId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [focusDate, setFocusDate] = React.useState<string | null>(null);
+  const dateRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
   // State
   const [loading, setLoading] = React.useState(true);
@@ -282,6 +284,25 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     }
     return groups;
   }, [sortedEntries]);
+
+  // All unique dates for the horizontal timeline bar (always chronological)
+  const timelineDates = React.useMemo(() => {
+    const dates = [...new Set(filteredEntries.map((e) => e.entryDate))];
+    return dates.sort((a, b) => a.localeCompare(b));
+  }, [filteredEntries]);
+
+  // Scroll to a date group when clicking a timeline dot
+  const scrollToDate = React.useCallback((date: string) => {
+    setFocusDate(date);
+    const el = dateRefs.current.get(date);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, []);
+
+  // Format for timeline dot labels: "15 Apr"
+  const formatDotDate = (dateStr: string) => {
+    const d = new Date(dateStr);
+    return `${d.getDate()} ${d.toLocaleString(undefined, { month: "short" })}`;
+  };
 
   // Image viewer for library
   const libraryViewer = useImageViewer();
@@ -1421,6 +1442,60 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         )}
       </AnimatePresence>
 
+      {/* Horizontal timeline scrubber */}
+      {!loading && timelineDates.length > 1 && (
+        <div className="relative rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-white/80 dark:bg-[#1f1f1f]/80 p-4 overflow-hidden">
+          <div className="overflow-x-auto scrollbar-none">
+            <div className="flex items-center min-w-max">
+              {/* Spine line */}
+              <div className="absolute left-4 right-4 top-1/2 -translate-y-[3px] h-[3px] bg-stone-200 dark:bg-stone-700 rounded-full" />
+
+              {timelineDates.map((date, i) => {
+                const isActive = focusDate === date;
+                const isToday = date === new Date().toISOString().slice(0, 10);
+                const entryCount = filteredEntries.filter((e) => e.entryDate === date).length;
+                const hasPhotos = filteredEntries.some((e) => e.entryDate === date && e.photos?.length > 0);
+                return (
+                  <button
+                    key={date}
+                    type="button"
+                    onClick={() => scrollToDate(date)}
+                    className={`relative flex flex-col items-center z-10 transition-all ${
+                      i === 0 ? "" : "ml-6 sm:ml-10"
+                    }`}
+                  >
+                    {/* Top label */}
+                    <span className={`text-[10px] font-semibold mb-2 whitespace-nowrap transition-colors ${
+                      isActive
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-stone-500 dark:text-stone-400"
+                    }`}>
+                      {isToday ? "Today" : formatDotDate(date)}
+                    </span>
+
+                    {/* Dot */}
+                    <div className={`w-4 h-4 rounded-full border-[3px] transition-all ${
+                      isActive
+                        ? "border-emerald-500 bg-emerald-500 scale-125 shadow-lg shadow-emerald-500/30"
+                        : isToday
+                          ? "border-emerald-400 bg-white dark:bg-[#1f1f1f]"
+                          : "border-stone-300 dark:border-stone-600 bg-white dark:bg-[#1f1f1f] hover:border-emerald-400 hover:scale-110"
+                    }`} />
+
+                    {/* Bottom label: count + photo indicator */}
+                    <span className={`text-[10px] mt-1.5 whitespace-nowrap ${
+                      isActive ? "text-emerald-600 dark:text-emerald-400 font-medium" : "text-stone-400 dark:text-stone-500"
+                    }`}>
+                      {entryCount} {entryCount === 1 ? "entry" : "entries"}{hasPhotos ? " 📷" : ""}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Journal Entries Timeline */}
       <div>
         {fetchError && (
@@ -1463,7 +1538,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
             <div className="absolute left-[11px] sm:left-[15px] top-2 bottom-2 w-0.5 bg-stone-200 dark:bg-stone-700 rounded-full" />
 
             {groupedByDate.map((group) => (
-              <div key={group.date} className="relative mb-8 last:mb-0">
+              <div key={group.date} ref={(el) => { if (el) dateRefs.current.set(group.date, el); else dateRefs.current.delete(group.date); }} className="relative mb-8 last:mb-0 scroll-mt-4">
                 {/* Date dot + label */}
                 <div className="absolute -left-6 sm:-left-8 top-0 flex items-center gap-0">
                   <div className="w-[22px] sm:w-[30px] flex justify-center">
