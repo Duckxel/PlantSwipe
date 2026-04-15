@@ -148,8 +148,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // Filter & search state
   const [filterPlantId, setFilterPlantId] = React.useState<string | null>(null);
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [selectedWeeks, setSelectedWeeks] = React.useState<Set<string>>(new Set());
-  const isDraggingRef = React.useRef(false);
+  const [selectedBucket, setSelectedBucket] = React.useState<string | null>(null);
   const dateRefs = React.useRef<Map<string, HTMLDivElement>>(new Map());
 
   // State
@@ -244,19 +243,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           e.content.toLowerCase().includes(q),
       );
     }
-    if (selectedWeeks.size > 0) {
-      result = result.filter((e) => {
-        for (const ws of selectedWeeks) {
-          const end = new Date(ws);
-          end.setDate(end.getDate() + 6);
-          const endStr = end.toISOString().slice(0, 10);
-          if (e.entryDate >= ws && e.entryDate <= endStr) return true;
-        }
-        return false;
-      });
-    }
     return result;
-  }, [entries, filterPlantId, searchQuery, selectedWeeks]);
+  }, [entries, filterPlantId, searchQuery]);
 
   const sortedEntries = React.useMemo(
     () => journalSort === "newest"
@@ -267,9 +255,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
   // Group entries by date for timeline
   const groupedByDate = React.useMemo(() => {
-    const groups: Array<{ date: string; entries: typeof sortedEntries }> = [];
-    const map = new Map<string, typeof sortedEntries>();
-    for (const e of sortedEntries) {
+    const groups: Array<{ date: string; entries: typeof displayEntries }> = [];
+    const map = new Map<string, typeof displayEntries>();
+    for (const e of displayEntries) {
       const arr = map.get(e.entryDate) || [];
       arr.push(e);
       map.set(e.entryDate, arr);
@@ -278,85 +266,72 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       groups.push({ date, entries: ents });
     }
     return groups;
-  }, [sortedEntries]);
+  }, [displayEntries]);
 
-  // Weekly buckets for the horizontal timeline chart (past year)
-  const weeklyBuckets = React.useMemo(() => {
-    // Build weeks from ~52 weeks ago to this week
+  // Detect mobile for month vs week buckets
+  const [isMobile, setIsMobile] = React.useState(typeof window !== 'undefined' && window.innerWidth < 640);
+  React.useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 640);
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // Build timeline buckets (weeks on desktop, months on mobile) from ALL entries (not filtered by bucket)
+  const timelineBuckets = React.useMemo(() => {
     const now = new Date();
     const today = now.toISOString().slice(0, 10);
-    // Start of this week (Monday)
-    const dayOfWeek = (now.getDay() + 6) % 7; // 0=Mon
-    const thisMonday = new Date(now);
-    thisMonday.setDate(thisMonday.getDate() - dayOfWeek);
-    thisMonday.setHours(0, 0, 0, 0);
+    type Bucket = { start: string; end: string; label: string; count: number; plantIds: string[]; isCurrent: boolean };
+    const buckets: Bucket[] = [];
 
-    const weeks: Array<{
-      weekStart: string; // YYYY-MM-DD (Monday)
-      weekEnd: string;
-      entries: typeof filteredEntries;
-      plantIds: string[];
-      hasPhotos: boolean;
-      isCurrent: boolean;
-    }> = [];
-
-    for (let w = 51; w >= 0; w--) {
-      const start = new Date(thisMonday);
-      start.setDate(start.getDate() - w * 7);
-      const end = new Date(start);
-      end.setDate(end.getDate() + 6);
-      const startStr = start.toISOString().slice(0, 10);
-      const endStr = end.toISOString().slice(0, 10);
-
-      const weekEntries = filteredEntries.filter(
-        (e) => e.entryDate >= startStr && e.entryDate <= endStr,
-      );
-      const pIds = [...new Set(weekEntries.flatMap((e) => e.plantsMentioned || []))];
-
-      weeks.push({
-        weekStart: startStr,
-        weekEnd: endStr,
-        entries: weekEntries,
-        plantIds: pIds,
-        hasPhotos: weekEntries.some((e) => e.photos?.length > 0),
-        isCurrent: startStr <= today && today <= endStr,
-      });
+    if (isMobile) {
+      // Monthly buckets: past 12 months
+      for (let m = 11; m >= 0; m--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - m, 1);
+        const start = d.toISOString().slice(0, 10);
+        const endD = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+        const end = endD.toISOString().slice(0, 10);
+        const label = d.toLocaleString(undefined, { month: "short" });
+        const bEntries = filteredEntries.filter((e) => e.entryDate >= start && e.entryDate <= end);
+        buckets.push({ start, end, label, count: bEntries.length, plantIds: [...new Set(bEntries.flatMap((e) => e.plantsMentioned || []))], isCurrent: start <= today && today <= end });
+      }
+    } else {
+      // Weekly buckets: past 52 weeks
+      const dayOfWeek = (now.getDay() + 6) % 7;
+      const thisMonday = new Date(now);
+      thisMonday.setDate(thisMonday.getDate() - dayOfWeek);
+      thisMonday.setHours(0, 0, 0, 0);
+      for (let w = 51; w >= 0; w--) {
+        const start = new Date(thisMonday);
+        start.setDate(start.getDate() - w * 7);
+        const end = new Date(start);
+        end.setDate(end.getDate() + 6);
+        const startStr = start.toISOString().slice(0, 10);
+        const endStr = end.toISOString().slice(0, 10);
+        const bEntries = filteredEntries.filter((e) => e.entryDate >= startStr && e.entryDate <= endStr);
+        buckets.push({ start: startStr, end: endStr, label: "", count: bEntries.length, plantIds: [...new Set(bEntries.flatMap((e) => e.plantsMentioned || []))], isCurrent: startStr <= today && today <= endStr });
+      }
     }
-    return weeks;
-  }, [filteredEntries]);
+    return buckets;
+  }, [filteredEntries, isMobile]);
 
-  // Max entries in any week (for sizing)
-  const maxWeekEntries = React.useMemo(
-    () => Math.max(1, ...weeklyBuckets.map((w) => w.entries.length)),
-    [weeklyBuckets],
+  const maxBucketCount = React.useMemo(
+    () => Math.max(1, ...timelineBuckets.map((b) => b.count)),
+    [timelineBuckets],
   );
 
-  // Drag handlers for multi-week select on the chart
-  const handleWeekPointerDown = React.useCallback((weekStart: string, hasEntries: boolean) => {
+  // Toggle a single bucket on/off
+  const handleBucketClick = React.useCallback((bucketStart: string, hasEntries: boolean) => {
     if (!hasEntries) return;
-    isDraggingRef.current = true;
-    setSelectedWeeks(new Set([weekStart]));
+    setSelectedBucket((prev) => prev === bucketStart ? null : bucketStart);
   }, []);
-  const handleWeekPointerEnter = React.useCallback((weekStart: string, hasEntries: boolean) => {
-    if (!isDraggingRef.current || !hasEntries) return;
-    setSelectedWeeks((prev) => new Set([...prev, weekStart]));
-  }, []);
-  const handleWeekPointerUp = React.useCallback(() => {
-    isDraggingRef.current = false;
-  }, []);
-  // Clear drag on window pointer up
-  React.useEffect(() => {
-    const up = () => { isDraggingRef.current = false; };
-    window.addEventListener("pointerup", up);
-    return () => window.removeEventListener("pointerup", up);
-  }, []);
-  const clearWeekFilter = React.useCallback(() => setSelectedWeeks(new Set()), []);
 
-  // Format week label: "Jan 6" or "Dec 30"
-  const formatWeekLabel = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return `${d.toLocaleString(undefined, { month: "short" })} ${d.getDate()}`;
-  };
+  // Apply bucket filter on top of sorted entries for display
+  const displayEntries = React.useMemo(() => {
+    if (!selectedBucket) return sortedEntries;
+    const bucket = timelineBuckets.find((b) => b.start === selectedBucket);
+    if (!bucket) return sortedEntries;
+    return sortedEntries.filter((e) => e.entryDate >= bucket.start && e.entryDate <= bucket.end);
+  }, [sortedEntries, selectedBucket, timelineBuckets]);
 
   // Image viewer for library
   const libraryViewer = useImageViewer();
@@ -832,97 +807,95 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         </Button>
       </div>
 
-      {/* Weekly activity chart — dot timeline with drag-to-select */}
+      {/* Activity timeline chart — click a dot to filter */}
       {!loading && entries.length > 0 && (
-        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden select-none">
-          {/* Clear filter hint */}
-          {selectedWeeks.size > 0 && (
-            <div className="flex items-center justify-between px-3 pt-2">
-              <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-medium">
-                {selectedWeeks.size} {selectedWeeks.size === 1 ? "week" : "weeks"} selected
-              </span>
-              <button type="button" onClick={clearWeekFilter} className="text-[11px] text-stone-400 hover:text-stone-600 dark:hover:text-stone-300 underline">
-                Clear
-              </button>
-            </div>
-          )}
+        <div className="rounded-2xl border border-stone-200/70 dark:border-stone-700/50 bg-gradient-to-b from-white to-stone-50/80 dark:from-[#1f1f1f] dark:to-[#181818] overflow-hidden px-3 pt-2 pb-1.5">
+          {/* Dot area */}
+          <div className="relative flex items-end" style={{ height: 72 }}>
+            {/* Connecting line */}
+            <div className="absolute inset-x-0 h-px bg-stone-200 dark:bg-stone-700" style={{ bottom: 28 }} />
 
-          <div className="px-3 pt-2 pb-1">
-            {/* Dot row — aligned to center of the 48px-tall area */}
-            <div
-              className="relative flex items-center"
-              style={{ height: 48 }}
-              onPointerUp={handleWeekPointerUp}
-            >
-              {/* Connecting line behind dots */}
-              <div className="absolute inset-x-0 top-1/2 h-px bg-stone-200 dark:bg-stone-700" />
+            {timelineBuckets.map((bucket) => {
+              const count = bucket.count;
+              const hasEntries = count > 0;
+              const isSelected = selectedBucket === bucket.start;
+              const dotSize = hasEntries ? Math.max(8, Math.min(28, 8 + Math.round((count / maxBucketCount) * 20))) : 0;
 
-              {weeklyBuckets.map((week) => {
-                const count = week.entries.length;
-                const hasEntries = count > 0;
-                const isSelected = selectedWeeks.has(week.weekStart);
-                // Dot size: proportional to entries, 6–24px
-                const dotSize = hasEntries ? Math.max(6, Math.min(24, 6 + Math.round((count / maxWeekEntries) * 18))) : 0;
+              // Plants for this bucket (first 2 + overflow)
+              const bPlants = bucket.plantIds.map((pid) => plantMap.get(pid)).filter(Boolean) as GardenPlantInfo[];
+              const showPlants = bPlants.slice(0, 2);
+              const extraPlants = bPlants.length - 2;
 
-                return (
-                  <div
-                    key={week.weekStart}
-                    className="flex-1 min-w-0 flex justify-center relative"
-                    onPointerDown={() => handleWeekPointerDown(week.weekStart, hasEntries)}
-                    onPointerEnter={() => handleWeekPointerEnter(week.weekStart, hasEntries)}
-                    title={hasEntries ? `${formatWeekLabel(week.weekStart)} — ${count} ${count === 1 ? "entry" : "entries"}` : formatWeekLabel(week.weekStart)}
-                  >
-                    {hasEntries ? (
-                      <div className="relative flex flex-col items-center cursor-pointer">
-                        {/* Count label above large dots */}
-                        {count > 1 && (
-                          <span className={`absolute text-[8px] font-bold leading-none ${
-                            isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
-                          }`} style={{ bottom: dotSize / 2 + 10 }}>
-                            {count}
-                          </span>
-                        )}
-                        <div
-                          className={`rounded-full transition-all duration-200 ${
-                            isSelected
-                              ? "bg-emerald-500 shadow-[0_0_10px_3px_rgba(16,185,129,0.35)] ring-2 ring-emerald-300 dark:ring-emerald-700"
-                              : week.isCurrent
-                                ? "bg-emerald-400 hover:bg-emerald-500 hover:shadow-md"
-                                : "bg-emerald-400/60 dark:bg-emerald-600/50 hover:bg-emerald-500 hover:shadow-md"
-                          }`}
-                          style={{ width: dotSize, height: dotSize }}
-                        />
+              return (
+                <div
+                  key={bucket.start}
+                  className={`flex-1 min-w-0 flex flex-col items-center ${hasEntries ? "cursor-pointer" : ""}`}
+                  onClick={() => handleBucketClick(bucket.start, hasEntries)}
+                >
+                  {/* Entry count */}
+                  <span className={`text-[8px] font-bold leading-none mb-1 h-3 flex items-end ${
+                    !hasEntries ? "invisible" : isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-stone-400 dark:text-stone-500"
+                  }`}>
+                    {count || ""}
+                  </span>
+
+                  {/* Dot */}
+                  {hasEntries ? (
+                    <div
+                      className={`rounded-full transition-all duration-200 shrink-0 ${
+                        isSelected
+                          ? "bg-emerald-500 shadow-[0_0_10px_3px_rgba(16,185,129,0.35)] ring-2 ring-emerald-300/60 dark:ring-emerald-700/60"
+                          : bucket.isCurrent
+                            ? "bg-emerald-400 hover:bg-emerald-500 hover:scale-110"
+                            : "bg-emerald-400/50 dark:bg-emerald-600/40 hover:bg-emerald-500 hover:scale-110"
+                      }`}
+                      style={{ width: dotSize, height: dotSize }}
+                    />
+                  ) : (
+                    <div className="w-1.5 h-1.5 rounded-full bg-stone-300/40 dark:bg-stone-700/40 shrink-0" />
+                  )}
+
+                  {/* Plant avatars below dot */}
+                  <div className="flex -space-x-1 mt-1 h-4">
+                    {hasEntries && showPlants.map((gp) => {
+                      const img = getPlantImageUrl(gp);
+                      return (
+                        <div key={gp.id} className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] overflow-hidden bg-stone-100 dark:bg-stone-800 shrink-0">
+                          {img ? <img src={img} alt="" className="w-full h-full object-cover" /> : <Sprout className="w-2 h-2 m-auto mt-0.5 text-stone-400" />}
+                        </div>
+                      );
+                    })}
+                    {hasEntries && extraPlants > 0 && (
+                      <div className="w-4 h-4 rounded-full border border-white dark:border-[#1f1f1f] bg-stone-200 dark:bg-stone-700 flex items-center justify-center shrink-0">
+                        <span className="text-[6px] font-bold text-stone-500 dark:text-stone-400">+{extraPlants}</span>
                       </div>
-                    ) : (
-                      /* Empty week: thin dash on the line */
-                      <div className="w-1 h-1 rounded-full bg-stone-300/50 dark:bg-stone-700/50" />
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Month labels */}
+          <div className="flex mt-0.5">
+            {(() => {
+              let lastMonth = -1;
+              return timelineBuckets.map((bucket) => {
+                const d = new Date(bucket.start);
+                const m = d.getMonth();
+                const showLabel = isMobile ? true : m !== lastMonth;
+                lastMonth = m;
+                return (
+                  <div key={bucket.start} className="flex-1 min-w-0 text-center overflow-hidden">
+                    {showLabel && (
+                      <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
+                        {isMobile ? bucket.label : d.toLocaleString(undefined, { month: "short" })}
+                      </span>
                     )}
                   </div>
                 );
-              })}
-            </div>
-
-            {/* Month labels */}
-            <div className="flex mt-0.5">
-              {(() => {
-                let lastMonth = -1;
-                return weeklyBuckets.map((week) => {
-                  const d = new Date(week.weekStart);
-                  const m = d.getMonth();
-                  const showLabel = m !== lastMonth;
-                  lastMonth = m;
-                  return (
-                    <div key={week.weekStart} className="flex-1 min-w-0 text-center overflow-hidden">
-                      {showLabel && (
-                        <span className="text-[8px] font-medium text-stone-400 dark:text-stone-500">
-                          {d.toLocaleString(undefined, { month: "short" })}
-                        </span>
-                      )}
-                    </div>
-                  );
-                });
-              })()}
-            </div>
+              });
+            })()}
           </div>
         </div>
       )}
@@ -1602,7 +1575,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               </Button>
             </div>
           </Card>
-        ) : sortedEntries.length === 0 ? (
+        ) : displayEntries.length === 0 ? (
           <div className="py-10 text-center text-sm text-muted-foreground">
             {t("gardenDashboard.journalSection.noMatches", "No entries match your filters.")}
           </div>
