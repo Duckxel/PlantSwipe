@@ -5,6 +5,10 @@ interface ImportMetaEnv {
   readonly VITE_DISABLE_PWA?: string
   /** Set to "1" for Capacitor store builds (no service worker in bundle). */
   readonly VITE_APP_NATIVE_BUILD?: string
+  /** Absolute HTTPS API origin used by bundled native builds for `/api/*` requests. */
+  readonly VITE_API_ORIGIN?: string
+  /** Canonical public site URL. */
+  readonly VITE_SITE_URL?: string
 }
 
 interface ImportMeta {

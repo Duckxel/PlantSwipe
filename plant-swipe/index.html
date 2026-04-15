@@ -118,6 +118,13 @@
         });
       </script>
       <script>
+        window.__APHYLIA_HTML_ENV__ = {
+          nativeBuild: "%VITE_APP_NATIVE_BUILD%",
+          apiOrigin: "%VITE_API_ORIGIN%",
+          siteUrl: "%VITE_SITE_URL%"
+        };
+      </script>
+      <script>
         (function() {
           try {
             var savedTheme = localStorage.getItem('plantswipe.theme') || 'system';
