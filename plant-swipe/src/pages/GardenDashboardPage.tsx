@@ -2447,6 +2447,7 @@ export const GardenDashboardPage: React.FC = () => {
         gardenId: id,
         plantId: plant.id,
         seedsPlanted: 0,
+        plantsOnHand: 1,
       });
 
       try {
