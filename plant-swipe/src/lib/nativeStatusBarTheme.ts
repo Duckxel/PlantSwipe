@@ -11,7 +11,10 @@ export async function applyNativeChromeForTheme(effectiveTheme: 'light' | 'dark'
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar')
     const color = effectiveTheme === 'dark' ? BAR_DARK : BAR_LIGHT
-    await StatusBar.setOverlaysWebView({ overlay: false })
+    // overlay: true lets the WebView extend behind the status bar; the actual
+    // spacing is handled by CSS env(safe-area-inset-top) on <body> which
+    // kicks in immediately — no race-condition flash on startup.
+    await StatusBar.setOverlaysWebView({ overlay: true })
     await StatusBar.setBackgroundColor({ color })
     await StatusBar.setStyle({ style: Style.Light })
   } catch {

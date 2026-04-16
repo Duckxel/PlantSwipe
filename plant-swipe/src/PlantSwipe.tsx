@@ -5,6 +5,7 @@ import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
 import { isNativeCapacitor } from "@/platform/runtime";
+import { platformHapticTap } from "@/platform/haptics";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, LayoutGrid, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
@@ -1681,6 +1682,7 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
+    platformHapticTap(10)
     // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
@@ -1782,6 +1784,7 @@ export default function PlantSwipe() {
 
   const toggleLiked = React.useCallback(async (plantId: string) => {
     if (!ensureLoggedIn() || !user?.id) return
+    platformHapticTap(15)
     const prev = [...likedIds]
     const has = prev.includes(plantId)
     const optimistic = has ? prev.filter((id) => id !== plantId) : [...prev, plantId]

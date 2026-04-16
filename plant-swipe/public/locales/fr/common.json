@@ -590,6 +590,12 @@
       "label": "Je suis parent",
       "labelDescription": "Les avertissements de toxicité et de sécurité seront mis en évidence de manière plus visible sur les pages de plantes."
     },
+    "haptics": {
+      "title": "Retour haptique",
+      "description": "Contrôlez les vibrations lors de l'interaction avec l'application.",
+      "label": "Activer les vibrations",
+      "labelDescription": "Ressentez une légère vibration lorsque vous appuyez sur les éléments de navigation, aimez des plantes ou interagissez avec des cartes."
+    },
     "email": {
       "title": "Adresse e-mail",
       "emailAddressLabel": "Adresse e-mail :",

@@ -3,6 +3,7 @@
  */
 import type { NavigateFunction } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
+import { platformHapticTap } from '@/platform/haptics'
 
 const SW_NAME = 'sw-native.js'
 
@@ -32,10 +33,12 @@ type BackHandler = () => boolean
 const backHandlers: BackHandler[] = []
 
 function tryCloseOpenOverlays(): boolean {
+  // Match Radix Dialog, AlertDialog, and Sheet/Drawer overlays
   const open = document.querySelector(
-    '[role="dialog"][data-state="open"], [data-state="open"][role="alertdialog"], [data-state="open"][data-radix-dialog-content]',
+    '[role="dialog"][data-state="open"], [data-state="open"][role="alertdialog"], [data-state="open"][data-radix-dialog-content], [data-state="open"][data-radix-drawer-content]',
   )
   if (!open) return false
+  platformHapticTap(10)
   document.dispatchEvent(
     new KeyboardEvent('keydown', { key: 'Escape', code: 'Escape', bubbles: true, cancelable: true }),
   )
@@ -62,6 +65,7 @@ export function registerCapacitorAndroidBackButton(): void {
   androidBackListenerAttached = true
   void import('@capacitor/app').then(({ App }) => {
     App.addListener('backButton', ({ canGoBack }) => {
+      // Try registered LIFO handlers first (overlays, then in-app navigation)
       for (let i = backHandlers.length - 1; i >= 0; i -= 1) {
         try {
           if (backHandlers[i]()) return
@@ -69,10 +73,13 @@ export function registerCapacitorAndroidBackButton(): void {
           /* continue */
         }
       }
+      // Fall back to browser history if available
       if (canGoBack) {
+        platformHapticTap(10)
         window.history.back()
         return
       }
+      // No history left — exit the app
       void App.exitApp()
     }).catch(() => {})
   })
@@ -88,6 +95,7 @@ export function registerCapacitorBackNavigation(navigate: NavigateFunction): () 
     if (typeof window === 'undefined') return false
     const segs = pathSegments(window.location.pathname) // e.g. /fr/swipe → 2 segments
     if (segs.length <= 1) return false
+    platformHapticTap(10)
     navigate(-1)
     return true
   })

@@ -59,13 +59,21 @@ html.capacitor-native body select {
     -webkit-user-select: none;
     -ms-user-select: none;
     user-select: none;
-    padding-top: var(--window-controls-overlay-height, 0px);
+    /* PWA window-controls overlay + native safe area for status bar / notch.
+       env(safe-area-inset-top) kicks in immediately on Capacitor before the
+       StatusBar JS plugin has executed, preventing the content-behind-clock
+       flash on Android and iOS. On regular browsers the value is 0px. */
+    padding-top: calc(var(--window-controls-overlay-height, 0px) + env(safe-area-inset-top, 0px));
   }
 
     /* Mobile: reserve space above fixed bottom nav (nav bar + home indicator) */
     @media (max-width: 1023px) {
       body.mobile-nav-mounted {
         padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+      }
+      /* Pages without mobile nav still need bottom safe area on native */
+      body:not(.mobile-nav-mounted):not(.aphylia-chat-open) {
+        padding-bottom: env(safe-area-inset-bottom, 0px);
       }
     }
 
