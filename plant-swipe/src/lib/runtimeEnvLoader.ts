@@ -1,6 +1,11 @@
 type RuntimeEnvWindow = Window & {
   __ENV__?: Record<string, unknown>
   __plantswipeEnvBootstrap__?: boolean
+  __APHYLIA_HTML_ENV__?: {
+    nativeBuild?: unknown
+    apiOrigin?: unknown
+    siteUrl?: unknown
+  }
 }
 
 const CACHE_KEY = 'plantswipe.env.inline'
@@ -14,6 +19,26 @@ const normalizeBase = (value?: string) => {
   if (!next.startsWith('/')) next = `/${next}`
   if (!next.endsWith('/')) next = `${next}/`
   return next.replace(/\/{2,}/g, '/')
+}
+
+const normalizeOrigin = (value?: string | null) => {
+  if (!value) return null
+  const trimmed = value.trim()
+  if (!trimmed || /^%[A-Z0-9_]+%$/i.test(trimmed)) return null
+  try {
+    return new URL(trimmed).origin
+  } catch {
+    return null
+  }
+}
+
+const isNativeStoreBuild = () => {
+  if (import.meta.env.VITE_APP_NATIVE_BUILD === '1') return true
+  if (!hasWindow) return false
+  const raw = (window as RuntimeEnvWindow).__APHYLIA_HTML_ENV__?.nativeBuild
+  if (typeof raw !== 'string') return false
+  const normalized = raw.trim().toLowerCase()
+  return normalized === '1' || normalized === 'true' || normalized === 'yes'
 }
 
 const resolveBasePath = () => {
@@ -39,9 +64,28 @@ const joinPath = (base: string, resource: string) => {
   return `${cleanBase}${cleanResource}`.replace(/\/{2,}/g, '/')
 }
 
+const nativeApiOrigin =
+  hasWindow && isNativeStoreBuild()
+    ? normalizeOrigin(
+        (window as RuntimeEnvWindow).__ENV__?.VITE_API_ORIGIN as string | undefined ||
+          ((window as RuntimeEnvWindow).__APHYLIA_HTML_ENV__?.apiOrigin as string | undefined) ||
+          ((window as RuntimeEnvWindow).__ENV__?.VITE_SITE_URL as string | undefined) ||
+          ((window as RuntimeEnvWindow).__APHYLIA_HTML_ENV__?.siteUrl as string | undefined) ||
+          (import.meta.env.VITE_API_ORIGIN as string | undefined) ||
+          (import.meta.env.VITE_SITE_URL as string | undefined) ||
+          'https://aphylia.app'
+      )
+    : null
+
 const candidateUrls = hasWindow
   ? Array.from(
       new Set([
+        ...(nativeApiOrigin
+          ? [
+              new URL(joinPath(basePath, 'api/env.js'), nativeApiOrigin).toString(),
+              new URL('/api/env.js', nativeApiOrigin).toString(),
+            ]
+          : []),
         joinPath(basePath, 'api/env.js'),
         '/api/env.js',
         joinPath(basePath, 'env.js'),

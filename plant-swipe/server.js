@@ -4023,15 +4023,28 @@ function requireCsrfToken(req, res, next) {
   next()
 }
 
+function isTrustedNativeAppOrigin(origin) {
+  if (!origin || typeof origin !== 'string') return false
+  const normalized = origin.trim().toLowerCase()
+  return (
+    normalized === 'capacitor://localhost' ||
+    normalized === 'ionic://localhost' ||
+    normalized === 'http://localhost' ||
+    normalized === 'https://localhost'
+  )
+}
+
 // Global CORS and preflight handling for API routes
 app.use((req, res, next) => {
   try {
     const origin = req.headers.origin
     // Allow all origins by default; optionally restrict via CORS_ALLOW_ORIGINS
     const allowList = (process.env.CORS_ALLOW_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean)
+    const allowCredentials = !!origin && (allowList.length > 0 || isTrustedNativeAppOrigin(origin))
     if (origin) {
-      if (allowList.length === 0 || allowList.includes(origin)) {
-        res.setHeader('Access-Control-Allow-Origin', allowList.length ? origin : '*')
+      if (allowList.length === 0 || allowList.includes(origin) || isTrustedNativeAppOrigin(origin)) {
+        const allowSpecificOrigin = allowList.length > 0 || isTrustedNativeAppOrigin(origin)
+        res.setHeader('Access-Control-Allow-Origin', allowSpecificOrigin ? origin : '*')
         res.setHeader('Vary', 'Origin')
       }
     } else {
@@ -4041,6 +4054,9 @@ app.use((req, res, next) => {
       res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS')
       res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-CSRF-Token')
       res.setHeader('Access-Control-Expose-Headers', 'X-CSRF-Token')
+      if (allowCredentials) {
+        res.setHeader('Access-Control-Allow-Credentials', 'true')
+      }
       if (req.method === 'OPTIONS') {
         res.status(204).end()
         return
@@ -4067,7 +4083,7 @@ app.use(helmet({
       defaultSrc: ["'self'", "*.aphylia.app"],
       scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'", "*.aphylia.app", "https://www.googletagmanager.com", "https://www.google.com", "https://www.gstatic.com", "https://recaptchaenterprise.googleapis.com"],
       styleSrc: ["'self'", "'unsafe-inline'", "*.aphylia.app", "https://fonts.googleapis.com"],
-      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
+      connectSrc: ["'self'", "*.aphylia.app", "wss://*.aphylia.app", "https://*.supabase.co", "wss://*.supabase.co", "https://www.google-analytics.com", "https://analytics.google.com", "https://region1.google-analytics.com", "https://www.googletagmanager.com", "https://recaptchaenterprise.googleapis.com", "https://www.google.com", "https://*.sentry.io", "https://fonts.googleapis.com", "https://fonts.gstatic.com", "https://geocoding-api.open-meteo.com", "https://nominatim.openstreetmap.org"],
       fontSrc: ["'self'", "*.aphylia.app", "https://fonts.gstatic.com", "data:"],
       frameSrc: ["'self'", "*.aphylia.app", "https://www.google.com", "https://recaptcha.google.com"],
       imgSrc: ["*", "data:", "blob:"],
@@ -5977,6 +5993,8 @@ app.get(['/api/env.js', '/env.js'], (req, res) => {
     const env = {
       VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL || process.env.REACT_APP_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || '',
       VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY || process.env.REACT_APP_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY || '',
+      VITE_API_ORIGIN: process.env.VITE_API_ORIGIN || process.env.VITE_SITE_URL || process.env.WEBSITE_URL || 'https://aphylia.app',
+      VITE_SITE_URL: process.env.VITE_SITE_URL || process.env.WEBSITE_URL || 'https://aphylia.app',
       VITE_ADMIN_STATIC_TOKEN: process.env.VITE_ADMIN_STATIC_TOKEN || process.env.ADMIN_STATIC_TOKEN || '',
       VITE_ADMIN_PUBLIC_MODE: String(process.env.VITE_ADMIN_PUBLIC_MODE || process.env.ADMIN_PUBLIC_MODE || '').toLowerCase() === 'true',
       VITE_DISABLE_PWA: disablePwaEnv,
@@ -24688,7 +24706,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { title, content, mood, isPrivate, tags, photos } = req.body || {}
+    const { title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!content?.trim()) {
       res.status(400).json({ ok: false, error: 'Content is required' })
       return
@@ -24724,12 +24742,14 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     const today = new Date().toISOString().slice(0, 10)
 
     // Insert entry
+    const mentionedIds = Array.isArray(plantsMentioned) ? plantsMentioned.filter(Boolean) : []
     const insertResult = await sql`
       insert into public.garden_journal_entries (
-        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot
+        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot, plants_mentioned
       ) values (
         ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()},
-        ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb
+        ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb,
+        ${sql.array(mentionedIds)}::uuid[]
       )
       returning id
     `
@@ -24742,6 +24762,20 @@ app.post('/api/garden/:id/journal', async (req, res) => {
           insert into public.garden_journal_photos (entry_id, image_url)
           values (${entryId}, ${photoUrl})
         `
+      }
+    }
+
+    // Update health status of mentioned plants if provided
+    if (healthStatus && mentionedIds.length > 0) {
+      try {
+        await sql`
+          update public.garden_plants
+          set health_status = ${healthStatus}
+          where id = any(${sql.array(mentionedIds)}::uuid[])
+            and garden_id = ${gardenId}
+        `
+      } catch (healthErr) {
+        console.warn('[journal] Failed to update plant health status:', healthErr)
       }
     }
 
@@ -24762,7 +24796,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { entryId, title, content, mood, isPrivate, tags, photos } = req.body || {}
+    const { entryId, title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!entryId) {
       res.status(400).json({ ok: false, error: 'Entry ID is required' })
       return
@@ -24779,6 +24813,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
       return
     }
 
+    const mentionedIds = Array.isArray(plantsMentioned) ? plantsMentioned.filter(Boolean) : []
     await sql`
       update public.garden_journal_entries set
         title = ${title || null},
@@ -24786,9 +24821,24 @@ app.put('/api/garden/:id/journal', async (req, res) => {
         mood = ${mood || null},
         is_private = ${isPrivate || false},
         tags = ${sql.array(tags || [])},
+        plants_mentioned = ${sql.array(mentionedIds)}::uuid[],
         updated_at = now()
       where id = ${entryId}
     `
+
+    // Update health status of mentioned plants if provided
+    if (healthStatus && mentionedIds.length > 0) {
+      try {
+        await sql`
+          update public.garden_plants
+          set health_status = ${healthStatus}
+          where id = any(${sql.array(mentionedIds)}::uuid[])
+            and garden_id = ${gardenId}
+        `
+      } catch (healthErr) {
+        console.warn('[journal] Failed to update plant health status:', healthErr)
+      }
+    }
 
     // Add new photos if any
     if (photos?.length) {
@@ -27354,9 +27404,12 @@ async function buildGardenContextString(context) {
         parts.push(`- Content: ${content}`)
       }
       if (entry.plantsMentioned && entry.plantsMentioned.length > 0) {
-        const plantNames = entry.plantsMentioned.map(p => p.plantName).filter(Boolean)
-        if (plantNames.length > 0) {
-          parts.push(`- Plants mentioned: ${plantNames.join(', ')}`)
+        const plantDescs = entry.plantsMentioned.map(p => {
+          if (p.healthStatus) return `${p.plantName} (health: ${p.healthStatus})`
+          return p.plantName
+        }).filter(Boolean)
+        if (plantDescs.length > 0) {
+          parts.push(`- Plants this entry is about: ${plantDescs.join(', ')}`)
         }
       }
     }
@@ -28005,13 +28058,13 @@ async function fetchJournalContext(gardenId) {
     if (allPlantIds.length > 0) {
       try {
         const plantRows = await sql`
-          select gp.id, coalesce(gp.nickname, p.name) as name
+          select gp.id, coalesce(gp.nickname, p.name) as name, gp.health_status
           from public.garden_plants gp
           left join public.plants p on p.id = gp.plant_id
           where gp.id = any(${allPlantIds}::uuid[])
         `
         for (const pr of plantRows) {
-          plantNameMap[pr.id] = pr.name
+          plantNameMap[pr.id] = { name: pr.name, healthStatus: pr.health_status }
         }
       } catch { }
     }
@@ -28030,10 +28083,14 @@ async function fetchJournalContext(gardenId) {
         aiFeedback: row.ai_feedback,
         authorName: row.author_name,
         createdAt: row.created_at,
-        plantsMentioned: (row.plants_mentioned || []).map(id => ({
-          plantId: id,
-          plantName: plantNameMap[id] || 'Unknown plant'
-        }))
+        plantsMentioned: (row.plants_mentioned || []).map(id => {
+          const info = plantNameMap[id]
+          return {
+            plantId: id,
+            plantName: info?.name || info || 'Unknown plant',
+            healthStatus: info?.healthStatus || null
+          }
+        })
       }
     })
   } catch (err) {

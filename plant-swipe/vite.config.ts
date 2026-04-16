@@ -54,6 +54,7 @@ const isPwaDisabled = disablePwaFlag === 'true' || disablePwaFlag === '1' || dis
 const nativeCapacitorWebBuildFlag = String(process.env.VITE_APP_NATIVE_BUILD || '').trim().toLowerCase()
 const isNativeCapacitorWebBuild =
   nativeCapacitorWebBuildFlag === 'true' || nativeCapacitorWebBuildFlag === '1' || nativeCapacitorWebBuildFlag === 'yes'
+const configuredApiOrigin = String(process.env.VITE_API_ORIGIN || process.env.VITE_SITE_URL || 'https://aphylia.app').trim()
 
 export default defineConfig({
   base: appBase,
@@ -63,6 +64,8 @@ export default defineConfig({
     'import.meta.env.VITE_COMMIT_SHA': JSON.stringify(getGitCommitSha()),
     // "1" when built via build:web:native / build:cap — client skips SW maintenance and enables native recovery UX
     'import.meta.env.VITE_APP_NATIVE_BUILD': JSON.stringify(isNativeCapacitorWebBuild ? '1' : ''),
+    'import.meta.env.VITE_API_ORIGIN': JSON.stringify(configuredApiOrigin),
+    'import.meta.env.VITE_SITE_URL': JSON.stringify(String(process.env.VITE_SITE_URL || 'https://aphylia.app').trim()),
   },
   plugins: [
     react(),

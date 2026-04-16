@@ -267,6 +267,7 @@ VITE_SUPABASE_ANON_KEY=your-anon-key
 # App Configuration (optional)
 VITE_APP_BASE_PATH=/               # Base path for sub-path deployments
 VITE_SITE_URL=https://aphylia.app  # Canonical site URL
+VITE_API_ORIGIN=https://aphylia.app # Absolute HTTPS API origin for bundled native builds
 
 # PWA Configuration (optional)
 VITE_ENABLE_PWA=false              # Enable PWA in development

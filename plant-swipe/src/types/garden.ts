@@ -86,6 +86,9 @@ export interface GardenPlant {
   healthStatus?: PlantHealthStatus | null
   notes?: string | null
   lastHealthUpdate?: string | null
+  gardenPlantImageId?: string | null
+  gardenPlantImageUrl?: string | null
+  gardenPlantImageCaption?: string | null
 }
 
 export type GardenPlantEventType = "water" | "fertilize" | "prune" | "harvest" | "note"
