@@ -24706,7 +24706,7 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { title, content, mood, isPrivate, tags, photos } = req.body || {}
+    const { title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!content?.trim()) {
       res.status(400).json({ ok: false, error: 'Content is required' })
       return
@@ -24742,12 +24742,14 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     const today = new Date().toISOString().slice(0, 10)
 
     // Insert entry
+    const mentionedIds = Array.isArray(plantsMentioned) ? plantsMentioned.filter(Boolean) : []
     const insertResult = await sql`
       insert into public.garden_journal_entries (
-        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot
+        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot, plants_mentioned
       ) values (
         ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()},
-        ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb
+        ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb,
+        ${sql.array(mentionedIds)}::uuid[]
       )
       returning id
     `
@@ -24760,6 +24762,20 @@ app.post('/api/garden/:id/journal', async (req, res) => {
           insert into public.garden_journal_photos (entry_id, image_url)
           values (${entryId}, ${photoUrl})
         `
+      }
+    }
+
+    // Update health status of mentioned plants if provided
+    if (healthStatus && mentionedIds.length > 0) {
+      try {
+        await sql`
+          update public.garden_plants
+          set health_status = ${healthStatus}
+          where id = any(${sql.array(mentionedIds)}::uuid[])
+            and garden_id = ${gardenId}
+        `
+      } catch (healthErr) {
+        console.warn('[journal] Failed to update plant health status:', healthErr)
       }
     }
 
@@ -24780,7 +24796,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { entryId, title, content, mood, isPrivate, tags, photos } = req.body || {}
+    const { entryId, title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!entryId) {
       res.status(400).json({ ok: false, error: 'Entry ID is required' })
       return
@@ -24797,6 +24813,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
       return
     }
 
+    const mentionedIds = Array.isArray(plantsMentioned) ? plantsMentioned.filter(Boolean) : []
     await sql`
       update public.garden_journal_entries set
         title = ${title || null},
@@ -24804,9 +24821,24 @@ app.put('/api/garden/:id/journal', async (req, res) => {
         mood = ${mood || null},
         is_private = ${isPrivate || false},
         tags = ${sql.array(tags || [])},
+        plants_mentioned = ${sql.array(mentionedIds)}::uuid[],
         updated_at = now()
       where id = ${entryId}
     `
+
+    // Update health status of mentioned plants if provided
+    if (healthStatus && mentionedIds.length > 0) {
+      try {
+        await sql`
+          update public.garden_plants
+          set health_status = ${healthStatus}
+          where id = any(${sql.array(mentionedIds)}::uuid[])
+            and garden_id = ${gardenId}
+        `
+      } catch (healthErr) {
+        console.warn('[journal] Failed to update plant health status:', healthErr)
+      }
+    }
 
     // Add new photos if any
     if (photos?.length) {
@@ -27372,9 +27404,12 @@ async function buildGardenContextString(context) {
         parts.push(`- Content: ${content}`)
       }
       if (entry.plantsMentioned && entry.plantsMentioned.length > 0) {
-        const plantNames = entry.plantsMentioned.map(p => p.plantName).filter(Boolean)
-        if (plantNames.length > 0) {
-          parts.push(`- Plants mentioned: ${plantNames.join(', ')}`)
+        const plantDescs = entry.plantsMentioned.map(p => {
+          if (p.healthStatus) return `${p.plantName} (health: ${p.healthStatus})`
+          return p.plantName
+        }).filter(Boolean)
+        if (plantDescs.length > 0) {
+          parts.push(`- Plants this entry is about: ${plantDescs.join(', ')}`)
         }
       }
     }
@@ -28023,13 +28058,13 @@ async function fetchJournalContext(gardenId) {
     if (allPlantIds.length > 0) {
       try {
         const plantRows = await sql`
-          select gp.id, coalesce(gp.nickname, p.name) as name
+          select gp.id, coalesce(gp.nickname, p.name) as name, gp.health_status
           from public.garden_plants gp
           left join public.plants p on p.id = gp.plant_id
           where gp.id = any(${allPlantIds}::uuid[])
         `
         for (const pr of plantRows) {
-          plantNameMap[pr.id] = pr.name
+          plantNameMap[pr.id] = { name: pr.name, healthStatus: pr.health_status }
         }
       } catch { }
     }
@@ -28048,10 +28083,14 @@ async function fetchJournalContext(gardenId) {
         aiFeedback: row.ai_feedback,
         authorName: row.author_name,
         createdAt: row.created_at,
-        plantsMentioned: (row.plants_mentioned || []).map(id => ({
-          plantId: id,
-          plantName: plantNameMap[id] || 'Unknown plant'
-        }))
+        plantsMentioned: (row.plants_mentioned || []).map(id => {
+          const info = plantNameMap[id]
+          return {
+            plantId: id,
+            plantName: info?.name || info || 'Unknown plant',
+            healthStatus: info?.healthStatus || null
+          }
+        })
       }
     })
   } catch (err) {

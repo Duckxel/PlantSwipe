@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
 // @ts-nocheck
 import React from "react";
-import { Camera, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
+import { BookOpen, Camera, Pencil, Plus, Trash2, UploadCloud, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { useAuth } from "@/context/AuthContext";
+import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ export function GardenPlantManageButton({
   taskCount = 0,
   dueTodayCount = 0,
   iconOnly = false,
+  hideTrigger = false,
   dataGardenManageId,
   openOverride,
   onOpenOverrideChange,
@@ -73,12 +75,14 @@ export function GardenPlantManageButton({
   taskCount?: number;
   dueTodayCount?: number;
   iconOnly?: boolean;
+  hideTrigger?: boolean;
   dataGardenManageId?: string;
   openOverride?: boolean;
   onOpenOverrideChange?: (open: boolean) => void;
 }) {
   const { t } = useTranslation("common");
   const { user } = useAuth();
+  const navigate = useLanguageNavigate();
   const [internalOpen, setInternalOpen] = React.useState(false);
   const open = openOverride ?? internalOpen;
   const setOpen = React.useCallback((next: boolean) => {
@@ -511,7 +515,7 @@ export function GardenPlantManageButton({
 
   return (
     <>
-      {iconOnly ? (
+      {!hideTrigger && (iconOnly ? (
         <button
           type="button"
           data-garden-manage-id={dataGardenManageId}
@@ -528,12 +532,14 @@ export function GardenPlantManageButton({
         <Button variant="secondary" className="rounded-2xl" onClick={() => setOpen(true)}>
           {t("gardenDashboard.plantsSection.managePlant", "Manage")}
         </Button>
-      )}
+      ))}
 
+      {/* eslint-disable-next-line jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+      <div onClick={(e) => e.stopPropagation()}>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent
           hideCloseButton
-          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 pr-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
+          className="w-[calc(100vw-1rem)] max-w-5xl overflow-hidden rounded-[28px] border border-stone-200/70 bg-white/95 p-0 shadow-[0_35px_95px_-45px_rgba(15,23,42,0.65)] backdrop-blur sm:w-full sm:rounded-[30px] sm:p-0 gap-0 dark:border-[#3e3e42]/70 dark:bg-[#1f1f1f]/95"
           onOpenAutoFocus={(event) => event.preventDefault()}
         >
           <DialogHeader className="sr-only">
@@ -553,7 +559,7 @@ export function GardenPlantManageButton({
           </div>
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
-            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:h-full lg:p-0">
+            <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:h-full lg:p-3 lg:pb-3">
               <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:h-full lg:min-h-0">
                 {currentImageUrl ? (
                   <img
@@ -683,19 +689,27 @@ export function GardenPlantManageButton({
                     </div>
                   </div>
 
-                  <div className="space-y-2.5">
-                    <label className="text-sm font-medium text-stone-700 dark:text-stone-200">
-                      {t("gardenDashboard.plantsSection.notes", "Notes")}
-                    </label>
-                    <textarea
-                      value={notes}
-                      onChange={(event) => setNotes(event.target.value)}
-                      rows={4}
-                      maxLength={500}
-                      placeholder={t("gardenDashboard.plantsSection.notesPlaceholder", "Add observations about this plant...")}
-                      className="min-h-[132px] w-full rounded-[22px] border border-stone-200 bg-white px-4 py-3.5 text-sm leading-6 shadow-sm transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring dark:border-stone-700 dark:bg-[#2d2d30] dark:text-white"
-                    />
-                  </div>
+                  {/* Write journal entry – replaces the notes field */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setOpen(false);
+                      navigate(`/garden/${gardenId}/journal`, { state: { preselectedPlantId: gp.id } });
+                    }}
+                    className="flex items-center gap-3 w-full rounded-[22px] border border-dashed border-violet-300 dark:border-violet-700/60 bg-violet-50/60 dark:bg-violet-900/10 px-4 py-4 text-left transition hover:border-violet-400 hover:bg-violet-50 dark:hover:border-violet-600 dark:hover:bg-violet-900/20 group"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 group-hover:scale-110 transition-transform">
+                      <BookOpen className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-violet-700 dark:text-violet-300">
+                        {t("gardenDashboard.plantsSection.writeJournalEntry", "Write Journal Entry")}
+                      </div>
+                      <div className="text-xs text-violet-500/70 dark:text-violet-400/60">
+                        {t("gardenDashboard.plantsSection.writeJournalEntryDesc", "Record observations about this plant")}
+                      </div>
+                    </div>
+                  </button>
                 </section>
 
                 <section className="space-y-4 rounded-[24px] border border-stone-200/80 bg-stone-50/80 p-3.5 shadow-inner sm:rounded-[26px] sm:p-4 dark:border-stone-700 dark:bg-stone-900/30">
@@ -1125,6 +1139,7 @@ export function GardenPlantManageButton({
           </div>
         </DialogContent>
       </Dialog>
+      </div>
     </>
   );
 }

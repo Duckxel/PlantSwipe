@@ -2438,14 +2438,16 @@ export const GardenDashboardPage: React.FC = () => {
     emitGardenRealtime("members");
   };
 
-  const addSelectedPlant = async () => {
-    if (!id || !selectedPlant || adding) return;
+  const addSelectedPlant = async (plantOverride?: any) => {
+    const plant = plantOverride ?? selectedPlant;
+    if (!id || !plant || adding) return;
     setAdding(true);
     try {
       const gp = await addPlantToGarden({
         gardenId: id,
-        plantId: selectedPlant.id,
+        plantId: plant.id,
         seedsPlanted: 0,
+        plantsOnHand: 1,
       });
 
       try {
@@ -2453,8 +2455,8 @@ export const GardenDashboardPage: React.FC = () => {
         await logGardenActivity({
           gardenId: id,
           kind: "plant_added",
-          message: `added "${selectedPlant.name}"`,
-          plantName: selectedPlant.name,
+          message: `added "${plant.name}"`,
+          plantName: plant.name,
           actorColor: actorColorCss || null,
         });
         setActivityRev((r) => r + 1);
@@ -2463,8 +2465,6 @@ export const GardenDashboardPage: React.FC = () => {
       setAddPlantPickerOpen(false);
       setSelectedPlant(null);
       setPlantQuery("");
-      setAddNickname("");
-      setAddCount(1);
 
       await load({ silent: true, preserveHeavy: true, suppressError: true });
       await loadHeavyForCurrentTab(serverTodayRef.current ?? serverToday);
@@ -2493,7 +2493,6 @@ export const GardenDashboardPage: React.FC = () => {
       }
 
       setPendingGardenPlantId(gp.id);
-      setTaskOpen(true);
       emitGardenRealtime("plants");
 
       if (garden?.gardenType !== "seedling") {
@@ -3031,7 +3030,7 @@ export const GardenDashboardPage: React.FC = () => {
                 {t("gardenDashboard.friendsOnlyGarden")}
               </div>
             )}
-            <nav data-tutorial="garden-tabs" className="grid grid-cols-7 gap-1.5 pb-1 md:flex md:justify-start md:flex-col md:gap-1.5 md:overflow-visible md:pb-0">
+            <nav data-tutorial="garden-tabs" className="flex items-center justify-center gap-1 pb-1 overflow-x-auto scrollbar-none md:flex-col md:justify-start md:gap-1.5 md:overflow-visible md:pb-0">
               {(
                 canViewFullGarden
                   ? [
@@ -3054,14 +3053,14 @@ export const GardenDashboardPage: React.FC = () => {
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
                     data-tutorial={tutorialId}
-                    className={`flex min-w-0 items-center justify-center gap-1.5 rounded-full px-2 py-2 text-[13px] font-medium transition-colors no-underline whitespace-nowrap md:w-full md:justify-start md:gap-2 md:rounded-2xl md:px-4 md:py-2.5 md:text-sm ${
+                    className={`flex items-center justify-center gap-1.5 rounded-full text-[13px] font-medium transition-all no-underline whitespace-nowrap shrink-0 md:w-full md:justify-start md:gap-2 md:rounded-2xl md:px-4 md:py-2.5 md:text-sm ${
                       isActive
-                        ? "bg-emerald-600 text-white shadow-sm"
-                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 hover:bg-stone-200/80 dark:hover:bg-stone-700/60 md:bg-transparent md:dark:bg-transparent md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
+                        ? "bg-emerald-600 text-white shadow-sm px-4 py-2"
+                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 hover:bg-stone-200/80 dark:hover:bg-stone-700/60 px-2.5 py-2 md:bg-transparent md:dark:bg-transparent md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
                     }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className={`${isActive ? "inline" : "hidden"} md:inline whitespace-nowrap`}>{label}</span>
+                    <span className={`${isActive ? "inline" : "hidden"} md:inline`}>{label}</span>
                   </NavLink>
                 );
               })}
@@ -3104,6 +3103,7 @@ export const GardenDashboardPage: React.FC = () => {
                     hasJournalEntry={hasJournalEntry}
                     roadmapCompletions={roadmapCompletions}
                     onCompleteRoadmapStep={completeBeginnerRoadmapStep}
+                    onChanged={load}
                   />
                 }
               />
@@ -3798,6 +3798,7 @@ export const GardenDashboardPage: React.FC = () => {
             onSelect={(option) => {
               const plant = plantCacheRef.current.get(option.id) || null;
               setSelectedPlant(plant);
+              if (plant) addSelectedPlant(plant);
             }}
             onClear={() => setSelectedPlant(null)}
             onSearch={searchPlantsForGarden}
@@ -3805,11 +3806,6 @@ export const GardenDashboardPage: React.FC = () => {
             title={t("gardenDashboard.plantsSection.searchPlants")}
             searchPlaceholder={t("gardenDashboard.plantsSection.searchPlants")}
             emptyMessage={t("gardenDashboard.plantsSection.noResults")}
-            confirmLabel={adding ? t("gardenDashboard.plantsSection.adding") : t("gardenDashboard.plantsSection.add")}
-            confirmSingleSelect
-            onConfirmSingleSelect={async () => {
-              await addSelectedPlant();
-            }}
             priorityZIndex={100}
             initialOption={selectedPlant ? {
               id: selectedPlant.id,
@@ -4632,6 +4628,7 @@ function OverviewSection({
   hasJournalEntry = false,
   roadmapCompletions = new Set<string>(),
   onCompleteRoadmapStep,
+  onChanged,
 }: {
   gardenId: string;
   activityRev?: number;
@@ -4682,6 +4679,7 @@ function OverviewSection({
   hasJournalEntry?: boolean;
   roadmapCompletions?: Set<string>;
   onCompleteRoadmapStep: (stepKey: string) => Promise<void>;
+  onChanged: () => void;
 }) {
   const { t } = useTranslation("common");
   const navigate = useLanguageNavigate();
@@ -6091,14 +6089,14 @@ function OverviewSection({
                   {plant.plantsOnHand <= 1 && <span />}
                   <GardenPlantManageButton
                     dataGardenManageId={`overview-${plant.id}`}
-                    iconOnly
-                    open={overviewManagePlantId === plant.id}
-                    onOpenChange={(nextOpen) => {
+                    hideTrigger
+                    openOverride={overviewManagePlantId === plant.id}
+                    onOpenOverrideChange={(nextOpen) => {
                       setOverviewManagePlantId(nextOpen ? plant.id : null);
                     }}
                     gp={plant.gp}
                     gardenId={gardenId}
-                    onChanged={load}
+                    onChanged={onChanged}
                     actorColorCss={null}
                     gardenType={garden?.gardenType}
                     taskCount={plant.taskCount}
