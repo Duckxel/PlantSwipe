@@ -591,7 +591,12 @@ export async function getUserScans(options?: {
       }
       
       // Merge successfully rechecked scans back into the list
-      const recheckedMap = new Map(recheckedScans.map(s => [s.id, s]))
+      // ⚡ Bolt: Replace new Map(arr.map()) with single-pass for loop
+      const recheckedMap = new Map<string, any>()
+      for (let i = 0; i < recheckedScans.length; i++) {
+        const s = recheckedScans[i]
+        recheckedMap.set(s.id, s)
+      }
       scans = scans.map(s => recheckedMap.get(s.id) || s)
     }
   }

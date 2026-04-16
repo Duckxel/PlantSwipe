@@ -14474,7 +14474,12 @@ app.get('/api/admin/member-messages', async (req, res) => {
           )
           if (profileResp.ok) {
             const profiles = await profileResp.json().catch(() => [])
-            const profileMap = new Map(profiles.map(p => [p.id, p.display_name]))
+            // ⚡ Bolt: Replace new Map(arr.map()) with single-pass for loop
+            const profileMap = new Map()
+            for (let i = 0; i < profiles.length; i++) {
+              const p = profiles[i]
+              profileMap.set(p.id, p.display_name)
+            }
             conversations = conversations.map(c => ({
               ...c,
               participant_1_name: profileMap.get(c.participant_1) || null,

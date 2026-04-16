@@ -181,13 +181,24 @@ export async function getPendingGardenInvites(userId: string): Promise<GardenInv
   if (!data || data.length === 0) return []
 
   // Get inviter profiles
-  const inviterIds = [...new Set(data.map(d => d.inviter_id))]
+  // ⚡ Bolt: Replace new Set(arr.map()) and new Map(arr.map()) with single-pass loops
+  const inviterIdsSet = new Set<string>()
+  for (let i = 0; i < data.length; i++) {
+    inviterIdsSet.add(data[i].inviter_id)
+  }
+  const inviterIds = Array.from(inviterIdsSet)
+
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, display_name')
     .in('id', inviterIds)
 
-  const profileMap = new Map((profiles || []).map(p => [p.id, p.display_name]))
+  const profileMap = new Map<string, string>()
+  const profArr = profiles || []
+  for (let i = 0; i < profArr.length; i++) {
+    const p = profArr[i]
+    profileMap.set(p.id, p.display_name)
+  }
 
   return data.map(row => ({
     id: String(row.id),
@@ -237,13 +248,24 @@ export async function getSentGardenInvites(userId: string): Promise<GardenInvite
   if (!data || data.length === 0) return []
 
   // Get invitee profiles
-  const inviteeIds = [...new Set(data.map(d => d.invitee_id))]
+  // ⚡ Bolt: Replace new Set(arr.map()) and new Map(arr.map()) with single-pass loops
+  const inviteeIdsSet = new Set<string>()
+  for (let i = 0; i < data.length; i++) {
+    inviteeIdsSet.add(data[i].invitee_id)
+  }
+  const inviteeIds = Array.from(inviteeIdsSet)
+
   const { data: profiles } = await supabase
     .from('profiles')
     .select('id, display_name')
     .in('id', inviteeIds)
 
-  const profileMap = new Map((profiles || []).map(p => [p.id, p.display_name]))
+  const profileMap = new Map<string, string>()
+  const profArr = profiles || []
+  for (let i = 0; i < profArr.length; i++) {
+    const p = profArr[i]
+    profileMap.set(p.id, p.display_name)
+  }
 
   return data.map(row => ({
     id: String(row.id),

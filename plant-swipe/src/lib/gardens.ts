@@ -3702,7 +3702,12 @@ export async function getGardensByIds(gardenIds: string[]): Promise<PublicGarden
   
   // Build result with preview data - maintain original order
   /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
-  const gardensById = new Map(gardens.map((g: any) => [String(g.id), g]))
+  // ⚡ Bolt: Replace new Map(arr.map()) with single-pass for loop
+  const gardensById = new Map<string, any>()
+  for (let i = 0; i < gardens.length; i++) {
+    const g = gardens[i]
+    gardensById.set(String(g.id), g)
+  }
   
   return gardenIds
     .filter(id => gardensById.has(id))
@@ -3940,7 +3945,12 @@ export async function resizeSeedlingTray(gardenId: string, newRows: number, newC
     .from('seedling_tray_cells')
     .select('position')
     .eq('garden_id', gardenId)
-  const existingPositions = new Set((existing || []).map((r: any) => r.position))
+  // ⚡ Bolt: Replace new Set(arr.map()) with single-pass for loop
+  const existingPositions = new Set<any>()
+  const existingArr = existing || []
+  for (let i = 0; i < existingArr.length; i++) {
+    existingPositions.add(existingArr[i].position)
+  }
 
   // Insert missing positions
   const missing = []
