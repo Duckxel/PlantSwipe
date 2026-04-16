@@ -20,19 +20,13 @@ on:
         required: false
         default: 'https://aphylia.app'
         type: string
-  push:
-    branches:
-      - main
-    paths:
-      - 'plant-swipe/android/**'
-      - 'plant-swipe/ios/**'
-      - 'plant-swipe/capacitor.config.*'
-      - 'plant-swipe/package.json'
-      - 'plant-swipe/bun.lock'
-      - 'plant-swipe/scripts/sync-native-version.mjs'
-      - 'plant-swipe/scripts/cap-ci-sync.mjs'
-      - 'plant-swipe/scripts/assert-capacitor-store-bundle.mjs'
-      - '.github/workflows/capacitor-mobile.yml'
+  # Main-branch builds run AFTER Auto Version Increment completes so the bumped
+  # version in package.json / capacitor.config.json / native projects is actually
+  # compiled into the APK / IPA. Running on `push` here would race the bump job.
+  workflow_run:
+    workflows: ["Auto Version Increment"]
+    types: [completed]
+    branches: [main]
   pull_request:
     paths:
       - 'plant-swipe/android/**'
@@ -53,6 +47,9 @@ jobs:
   cap-sync-and-web:
     name: Web build + cap sync (CI-safe)
     runs-on: ubuntu-latest
+    # Skip if the upstream Auto Version Increment run failed — building stale
+    # code with a half-applied bump would just reintroduce the mismatch.
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     outputs:
       has-android: ${{ steps.detect-platforms.outputs.has-android }}
       has-ios: ${{ steps.detect-platforms.outputs.has-ios }}
@@ -60,7 +57,12 @@ jobs:
       run:
         working-directory: plant-swipe
     steps:
+      # For workflow_run triggers actions/checkout defaults to the SHA that started
+      # the upstream run (the PR merge commit, pre-bump). Pin to main so we pick up
+      # the version bump commit that Auto Version Increment just pushed.
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
 
       - name: Detect native platforms
         id: detect-platforms
@@ -123,6 +125,8 @@ jobs:
         working-directory: plant-swipe
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -197,6 +201,8 @@ jobs:
         working-directory: plant-swipe
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -295,6 +301,8 @@ jobs:
         working-directory: plant-swipe
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_run' && 'main' || github.ref }}
 
       - name: Select Xcode 26
         run: |
@@ -374,11 +382,15 @@ jobs:
     name: Create GitHub Release
     runs-on: ubuntu-latest
     needs: [android-debug, android-release]
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # Releases only cut from main after Auto Version Increment has bumped and
+    # the build jobs (which now checkout main post-bump) produced versioned APKs.
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.head_branch == 'main' && github.event.workflow_run.conclusion == 'success'
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Get version from package.json
         id: version
