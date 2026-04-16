@@ -9,6 +9,17 @@ name: Capacitor mobile
 
 on:
   workflow_dispatch:
+    inputs:
+      api_origin_debug:
+        description: 'API server for debug builds'
+        required: false
+        default: 'https://dev01.aphylia.app'
+        type: string
+      api_origin_release:
+        description: 'API server for release builds'
+        required: false
+        default: 'https://aphylia.app'
+        type: string
   push:
     branches:
       - main
@@ -159,6 +170,7 @@ jobs:
       - name: Build PWA + cap sync
         run: bun run build:cap
         env:
+          VITE_API_ORIGIN: ${{ inputs.api_origin_debug || 'https://dev01.aphylia.app' }}
           SKIP_SITEMAP_GENERATION: '1'
           NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 
@@ -224,6 +236,7 @@ jobs:
       - name: Build PWA + cap sync
         run: bun run build:cap
         env:
+          VITE_API_ORIGIN: ${{ inputs.api_origin_release || 'https://aphylia.app' }}
           SKIP_SITEMAP_GENERATION: '1'
           NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 
@@ -315,6 +328,7 @@ jobs:
       - name: Build PWA + cap sync
         run: bun run build:cap
         env:
+          VITE_API_ORIGIN: ${{ inputs.api_origin_debug || 'https://dev01.aphylia.app' }}
           SKIP_SITEMAP_GENERATION: '1'
           NATIVE_BUILD_NUMBER: ${{ github.run_number }}
 

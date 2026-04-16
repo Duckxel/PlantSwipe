@@ -104,10 +104,17 @@
       }
     }
 
+    var ENV_FETCH_TIMEOUT = 8000
+
     function loadFrom(url, onDone) {
       try {
-        fetch(url, { cache: 'no-store', credentials: 'same-origin' })
+        var controller = typeof AbortController === 'function' ? new AbortController() : null
+        var timeoutId = controller ? setTimeout(function () { controller.abort() }, ENV_FETCH_TIMEOUT) : null
+        var fetchOpts = { cache: 'no-store', credentials: 'same-origin' }
+        if (controller) fetchOpts.signal = controller.signal
+        fetch(url, fetchOpts)
           .then(function (res) {
+            if (timeoutId) clearTimeout(timeoutId)
             if (!res.ok) throw new Error('status ' + res.status)
             var ct = (res.headers.get('content-type') || '').toLowerCase()
             return res.text().then(function (txt) {
@@ -120,7 +127,7 @@
               }, 0)
             })
           })
-          .catch(function () { onDone(false) })
+          .catch(function () { if (timeoutId) clearTimeout(timeoutId); onDone(false) })
       } catch (e) { onDone(false) }
     }
 

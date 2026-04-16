@@ -3,16 +3,20 @@ import { getEnvAny } from '@/lib/utils'
 import type { JSONContent } from '@tiptap/core'
 
 // Frontend should only consume public env vars. Accept common prefixes for portability.
+// Empty-string fallback prevents a hard crash in Capacitor native builds where env vars
+// are loaded asynchronously from the remote API and may not yet be available at module
+// init time.  The dynamic-import guard in main.tsx normally ensures vars are ready, but
+// this fallback acts as a safety net so the app can still render in guest/offline mode.
 const supabaseUrl = getEnvAny([
   'VITE_SUPABASE_URL',
   'REACT_APP_SUPABASE_URL',
   'NEXT_PUBLIC_SUPABASE_URL',
-])
+], '')
 const supabaseAnonKey = getEnvAny([
   'VITE_SUPABASE_ANON_KEY',
   'REACT_APP_SUPABASE_ANON_KEY',
   'NEXT_PUBLIC_SUPABASE_ANON_KEY',
-])
+], '')
 
 /** Only treat URL as Supabase auth callback (avoids false positives with other #fragments). */
 function isSupabaseAuthCallbackUrl(url: URL, params: Record<string, string>): boolean {
