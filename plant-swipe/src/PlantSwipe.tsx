@@ -169,7 +169,7 @@ const createLowercasedSet = (arr: string[]): Set<string> => {
 
 // --- Main Component ---
 export default function PlantSwipe() {
-  const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan } = useAuth()
+  const { user, signIn, signUp, signOut, profile, refreshProfile, banned, acknowledgeBan, loading: authLoading } = useAuth()
   const currentLang = useLanguage()
   const { t } = useTranslation('common')
   const { active: tutorialActive } = useTutorial()
