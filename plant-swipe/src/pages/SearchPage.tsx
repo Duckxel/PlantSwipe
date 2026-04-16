@@ -165,7 +165,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   const hasMore = visibleCount < plants.length;
 
   return (
-    <div className="max-w-6xl mx-auto mt-8 px-2 md:px-4 pb-16 space-y-6">
+    <div className="max-w-6xl mx-auto mt-2 lg:mt-8 px-2 md:px-4 pb-16 space-y-6">
       {/* 2-column grid on mobile, 2-column on desktop */}
       <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
