@@ -13,6 +13,7 @@ import {
   isNodeTypeSelected,
   sanitizeUrl,
 } from "@/lib/tiptap-utils"
+import { openExternalUrl } from "@/lib/capDeepLinks"
 
 /**
  * Configuration for the link popover functionality
@@ -155,12 +156,12 @@ export function useLinkHandler(props: LinkHandlerProps) {
   }, [editor])
 
   const openLink = useCallback(
-    (target: string = "_blank", features: string = "noopener,noreferrer") => {
+    (_target: string = "_blank", _features: string = "noopener,noreferrer") => {
       if (!url) return
 
       const safeUrl = sanitizeUrl(url, window.location.href)
       if (safeUrl !== "#") {
-        window.open(safeUrl, target, features)
+        openExternalUrl(safeUrl)
       }
     },
     [url]

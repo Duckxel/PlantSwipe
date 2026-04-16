@@ -33,6 +33,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useTranslation } from "react-i18next"
+import { openExternalUrl } from "@/lib/capDeepLinks"
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -292,7 +293,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
     } catch {
-      window.open(activeImage.src, "_blank", "noopener,noreferrer")
+      openExternalUrl(activeImage.src)
     }
   }, [activeImage])
 

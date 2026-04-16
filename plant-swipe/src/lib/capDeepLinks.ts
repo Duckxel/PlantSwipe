@@ -42,7 +42,9 @@ function collectAppHosts(): Set<string> {
 }
 
 /**
- * Open external auth / mail links in the system browser when not same-origin app.
+ * Open external auth / mail links.
+ * On native Capacitor, uses @capacitor/browser for an in-app browser experience.
+ * On web, opens a new tab.
  */
 export function openExternalUrl(href: string): void {
   if (typeof window === 'undefined') return
@@ -56,7 +58,16 @@ export function openExternalUrl(href: string): void {
   } catch {
     /* fall through */
   }
-  window.open(href, '_blank', 'noopener,noreferrer')
+  if (Capacitor.isNativePlatform()) {
+    void import('@capacitor/browser').then(({ Browser }) => {
+      Browser.open({ url: href }).catch(() => {
+        // Fallback if plugin fails
+        window.open(href, '_blank', 'noopener,noreferrer')
+      })
+    })
+  } else {
+    window.open(href, '_blank', 'noopener,noreferrer')
+  }
 }
 
 /**

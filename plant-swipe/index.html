@@ -87,7 +87,9 @@
         };
         
         // Check for existing consent on page load
+        // Skip on native Capacitor — GA/reCAPTCHA scripts fail from capacitor:// origin
         (function() {
+          if ("%VITE_APP_NATIVE_BUILD%" === "1") return;
           try {
             var stored = localStorage.getItem('cookie_consent');
             if (stored) {
@@ -106,16 +108,18 @@
           }
         })();
         
-        // Listen for consent events
-        window.addEventListener('cookie_consent_granted', function(e) {
-          var level = e.detail && e.detail.level;
-          if (level === 'analytics' || level === 'all') {
-            window.__loadGoogleAnalytics();
-          }
-          if (level !== 'rejected') {
-            window.__loadRecaptcha();
-          }
-        });
+        // Listen for consent events — skip on native Capacitor
+        if ("%VITE_APP_NATIVE_BUILD%" !== "1") {
+          window.addEventListener('cookie_consent_granted', function(e) {
+            var level = e.detail && e.detail.level;
+            if (level === 'analytics' || level === 'all') {
+              window.__loadGoogleAnalytics();
+            }
+            if (level !== 'rejected') {
+              window.__loadRecaptcha();
+            }
+          });
+        }
       </script>
       <script>
         window.__APHYLIA_HTML_ENV__ = {

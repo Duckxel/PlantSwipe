@@ -5,6 +5,7 @@ import { useDebounce } from "@/hooks/useDebounce"
 import { useTranslation } from "react-i18next"
 import { useLanguage } from "@/lib/i18nRouting"
 import { cn } from "@/lib/utils"
+import { isNativeCapacitor } from "@/platform/runtime"
 
 /** Represents a geocoded location result */
 export interface LocationSuggestion {
@@ -198,10 +199,54 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   }
 
   /**
-   * GPS-based detection via browser Geolocation + Nominatim reverse geocoding.
-   * Returns a promise that resolves with the detected location or null.
+   * Reverse-geocode coordinates via Nominatim.
    */
-  const detectViaGPS = (): Promise<SelectedLocation | null> => {
+  const reverseGeocode = async (latitude: number, longitude: number): Promise<SelectedLocation | null> => {
+    try {
+      const resp = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
+        { headers: { Accept: "application/json" } }
+      )
+
+      if (resp.ok) {
+        const data = await resp.json()
+        const detectedCity =
+          data.address?.city ||
+          data.address?.town ||
+          data.address?.village ||
+          data.address?.municipality ||
+          ""
+        const detectedCountry = data.address?.country || ""
+
+        if (detectedCity || detectedCountry) {
+          return { city: detectedCity, country: detectedCountry, latitude, longitude }
+        }
+      }
+    } catch (err) {
+      console.error("[CityCountrySelector] Reverse geocoding failed:", err)
+    }
+    return null
+  }
+
+  /**
+   * GPS-based detection via Capacitor Geolocation (native) or browser Geolocation (web)
+   * + Nominatim reverse geocoding.
+   */
+  const detectViaGPS = async (): Promise<SelectedLocation | null> => {
+    // On native Capacitor, use the @capacitor/geolocation plugin for proper native GPS
+    if (isNativeCapacitor()) {
+      try {
+        const { Geolocation } = await import("@capacitor/geolocation")
+        const position = await Geolocation.getCurrentPosition({ timeout: 8000 })
+        const { latitude, longitude } = position.coords
+        return reverseGeocode(latitude, longitude)
+      } catch (err) {
+        console.error("[CityCountrySelector] Native geolocation error:", err)
+        return null
+      }
+    }
+
+    // Web fallback — browser Geolocation API
     return new Promise((resolve) => {
       if (!navigator.geolocation) {
         resolve(null)
@@ -210,32 +255,8 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
 
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          try {
-            const { latitude, longitude } = position.coords
-            const resp = await fetch(
-              `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-              { headers: { Accept: "application/json" } }
-            )
-
-            if (resp.ok) {
-              const data = await resp.json()
-              const detectedCity =
-                data.address?.city ||
-                data.address?.town ||
-                data.address?.village ||
-                data.address?.municipality ||
-                ""
-              const detectedCountry = data.address?.country || ""
-
-              if (detectedCity || detectedCountry) {
-                resolve({ city: detectedCity, country: detectedCountry, latitude, longitude })
-                return
-              }
-            }
-          } catch (err) {
-            console.error("[CityCountrySelector] Reverse geocoding failed:", err)
-          }
-          resolve(null)
+          const { latitude, longitude } = position.coords
+          resolve(await reverseGeocode(latitude, longitude))
         },
         (err) => {
           console.error("[CityCountrySelector] Geolocation error:", err)
@@ -247,10 +268,11 @@ export const CityCountrySelector: React.FC<CityCountrySelectorProps> = ({
   }
 
   /**
-   * Detect location via browser GPS + reverse geocoding.
+   * Detect location via native GPS (Capacitor) or browser GPS + reverse geocoding.
    */
   const detectLocation = async () => {
-    if (!navigator.geolocation) {
+    // On native, the Capacitor plugin handles permission prompts natively
+    if (!isNativeCapacitor() && !navigator.geolocation) {
       alert(t("setup.location.geoNotSupported", "Geolocation is not supported by your browser"))
       return
     }

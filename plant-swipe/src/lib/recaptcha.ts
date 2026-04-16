@@ -6,6 +6,8 @@
  * with graceful fallbacks when consent hasn't been given.
  */
 
+import { isNativeCapacitor } from '@/platform/runtime'
+
 // reCAPTCHA Enterprise site key
 const RECAPTCHA_SITE_KEY = '6Leg5BgsAAAAAEh94kkCnfgS9vV-Na4Arws3yUtd'
 
@@ -60,6 +62,12 @@ function hasRecaptchaConsent(): boolean {
  * Ensure reCAPTCHA is loaded (will load if consent given and not yet loaded)
  */
 async function ensureRecaptchaLoaded(): Promise<boolean> {
+  // reCAPTCHA can't load on native Capacitor — Google's script rejects the
+  // capacitor:// / localhost origin.  Skip immediately to avoid a 5s timeout.
+  if (isNativeCapacitor()) {
+    return false
+  }
+
   // If already loaded, we're good
   if (window.grecaptcha?.enterprise) {
     return true

@@ -6,6 +6,7 @@ import { Cookie, Shield, BarChart3, X, Lock } from 'lucide-react'
 import { disableAnalytics, enableAnalytics } from '@/lib/gdprAnalytics'
 import { updateSentryConsent } from '@/lib/sentry'
 import { useAuth } from '@/context/AuthContext'
+import { isNativeCapacitor } from '@/platform/runtime'
 
 type ConsentLevel = 'essential' | 'analytics' | 'all' | 'rejected'
 
@@ -127,19 +128,26 @@ export function CookieConsent() {
   const { t } = useTranslation('common')
   const [show, setShow] = useState(false)
   const [showDetails, setShowDetails] = useState(false)
-  
+
   // Check if user is logged in - if so, they already accepted Terms (including cookies)
   const { user, loading: authLoading } = useAuth()
 
   useEffect(() => {
     // Only show on client-side and wait for auth to be determined
     if (typeof window === 'undefined') return
+
+    // Cookies are irrelevant on native Capacitor apps — auto-grant and never show the banner
+    if (isNativeCapacitor()) {
+      autoGrantConsentForLoggedInUser()
+      return
+    }
+
     if (authLoading) return // Wait for auth state to be known
-    
+
     // Small delay to avoid flash on page load
     const timer = setTimeout(() => {
       const consent = localStorage.getItem('cookie_consent')
-      
+
       // If user is logged in, they already accepted Terms (which includes cookie policy)
       // Auto-grant consent and don't show the banner
       if (user) {
@@ -147,13 +155,13 @@ export function CookieConsent() {
         setShow(false)
         return
       }
-      
+
       // For non-logged-in users, show banner if no consent given yet
       if (!consent) {
         setShow(true)
       }
     }, 500)
-    
+
     return () => clearTimeout(timer)
   }, [user, authLoading])
 

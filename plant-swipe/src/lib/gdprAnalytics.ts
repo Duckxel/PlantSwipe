@@ -6,6 +6,8 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic GDPR analytics event data */
 
+import { isNativeCapacitor } from '@/platform/runtime'
+
 // GA Measurement ID
 const GA_MEASUREMENT_ID = 'G-LDSYW5QNK5'
 
@@ -44,12 +46,14 @@ export function isAnalyticsReady(): boolean {
  */
 export function initializeAnalytics(): void {
   if (typeof window === 'undefined') return
-  
+  // GA script can't load on native Capacitor (wrong origin)
+  if (isNativeCapacitor()) return
+
   if (!hasAnalyticsConsent()) {
     console.log('[Analytics] User has not given consent - skipping initialization')
     return
   }
-  
+
   if (window.__loadGoogleAnalytics) {
     window.__loadGoogleAnalytics()
   }

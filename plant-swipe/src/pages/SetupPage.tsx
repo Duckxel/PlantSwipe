@@ -10,6 +10,7 @@ import { CityCountrySelector, type SelectedLocation } from "@/components/ui/city
 import { ChevronLeft, Bell, Flower2, Trees, Sparkles, Clock, Sprout, Palette, MapPin, Check, Globe, Monitor, Sun, Moon, ShieldCheck } from "lucide-react"
 import { ACCENT_OPTIONS, applyAccentByKey, getAccentHex, type AccentKey } from "@/lib/accent"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
+import { isNativeCapacitor } from "@/platform/runtime"
 
 type SetupStep = 'welcome' | 'language_theme' | 'accent' | 'location' | 'garden_type' | 'experience' | 'purpose' | 'parent_mode' | 'notification_time' | 'notifications' | 'complete'
 
@@ -413,7 +414,12 @@ export function SetupPage() {
 
   const requestNotificationPermission = async () => {
     try {
-      if ('Notification' in window) {
+      if (isNativeCapacitor()) {
+        // Use Capacitor native push API — Web Notification API doesn't control native notifications
+        const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
+        await registerNativePushForCurrentUser()
+        console.log('[setup] Native push registration completed')
+      } else if ('Notification' in window) {
         const permission = await Notification.requestPermission()
         console.log('[setup] Notification permission:', permission)
       }

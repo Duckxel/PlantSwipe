@@ -28,6 +28,7 @@ import type { Message } from '@/types/messaging'
 import { COMMON_REACTIONS } from '@/types/messaging'
 import { isImageMessage, parseImageMessage, extractInternalLinks } from '@/lib/messaging'
 import { InternalLinkPreview } from './InternalLinkPreview'
+import { openExternalUrl } from '@/lib/capDeepLinks'
 
 interface MessageBubbleProps {
   message: Message
@@ -191,7 +192,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
         break
       case 'external':
         if (message.linkUrl) {
-          window.open(message.linkUrl, '_blank', 'noopener,noreferrer')
+          openExternalUrl(message.linkUrl)
         }
         break
     }

@@ -29,6 +29,10 @@
 				"sound",
 				"alert"
 			]
+		},
+		"Keyboard": {
+			"resize": "none",
+			"resizeOnFullScreen": false
 		}
 	}
 }
