@@ -9,12 +9,13 @@ import { Label } from "@/components/ui/label"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
-import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette } from "lucide-react"
+import { Settings, Mail, Lock, Trash2, AlertTriangle, Check, Globe, Monitor, Sun, Moon, Bell, Clock, Shield, User, Eye, EyeOff, ChevronDown, ChevronUp, MapPin, Calendar, Download, FileText, ExternalLink, Palette, Vibrate } from "lucide-react"
 import { Link } from "@/components/i18n/Link"
 import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 import { CityCountrySelector } from "@/components/ui/city-country-selector"
+import { isHapticsEnabled, setHapticsEnabled as persistHapticsEnabled, isHapticsAvailable, platformHapticTap } from "@/platform/haptics"
 import { validateEmail, validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation"
 import { validatePassword } from "@/lib/passwordValidation"
 import { ValidatedInput } from "@/components/ui/validated-input"
@@ -139,6 +140,7 @@ export default function SettingsPage() {
   const [isPrivate, setIsPrivate] = React.useState(false)
   const [disableFriendRequests, setDisableFriendRequests] = React.useState(false)
   const [isParent, setIsParent] = React.useState(false)
+  const [hapticsEnabled, setLocalHapticsEnabled] = React.useState(() => isHapticsEnabled())
   const [gardenInvitePrivacy, setGardenInvitePrivacy] = React.useState<'anyone' | 'friends_only'>('anyone')
   const [notifyPush, setNotifyPush] = React.useState(true)
   const [notifyEmail, setNotifyEmail] = React.useState(true)
@@ -598,6 +600,14 @@ export default function SettingsPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleToggleHaptics = () => {
+    const newValue = !hapticsEnabled
+    persistHapticsEnabled(newValue)
+    setLocalHapticsEnabled(newValue)
+    // Give the user a taste of haptics when they turn it on
+    if (newValue) platformHapticTap(25)
   }
 
   const handleToggleFriendRequests = async () => {
@@ -2284,6 +2294,38 @@ export default function SettingsPage() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Haptic Feedback */}
+          {isHapticsAvailable() && (
+            <Card className={glassCard}>
+              <CardHeader>
+                <div className="flex items-center gap-2">
+                  <Vibrate className="h-5 w-5 text-emerald-600" />
+                  <CardTitle>{t('settings.haptics.title', { defaultValue: 'Haptic Feedback' })}</CardTitle>
+                </div>
+                <CardDescription>{t('settings.haptics.description', { defaultValue: 'Control vibration feedback when interacting with the app.' })}</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-start gap-3 p-4 rounded-2xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-stone-50/50 dark:bg-[#1c1c1f]/50">
+                  <input
+                    type="checkbox"
+                    id="haptics-enabled"
+                    checked={hapticsEnabled}
+                    onChange={handleToggleHaptics}
+                    className="mt-1 h-5 w-5 rounded border-stone-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <div className="flex-1">
+                    <Label htmlFor="haptics-enabled" className="font-semibold cursor-pointer text-base">
+                      {t('settings.haptics.label', { defaultValue: 'Enable vibrations' })}
+                    </Label>
+                    <p className="text-sm opacity-70 mt-1">
+                      {t('settings.haptics.labelDescription', { defaultValue: 'Feel a gentle vibration when you tap navigation items, like plants, or interact with cards.' })}
+                    </p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Garden Preferences */}
           <Card className={glassCard}>

@@ -590,6 +590,12 @@
       "label": "I am a parent",
       "labelDescription": "Toxicity and safety warnings will be highlighted more prominently on plant pages."
     },
+    "haptics": {
+      "title": "Haptic Feedback",
+      "description": "Control vibration feedback when interacting with the app.",
+      "label": "Enable vibrations",
+      "labelDescription": "Feel a gentle vibration when you tap navigation items, like plants, or interact with cards."
+    },
     "email": {
       "title": "Email Address",
       "emailAddressLabel": "Email Address:",

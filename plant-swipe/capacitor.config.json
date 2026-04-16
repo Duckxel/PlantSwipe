@@ -12,7 +12,8 @@
 		"contentInset": "always",
 		"allowsLinkPreview": false,
 		"backgroundColor": "#052e16",
-		"preferredContentMode": "mobile"
+		"preferredContentMode": "mobile",
+		"allowsBackForwardNavigationGestures": true
 	},
 	"plugins": {
 		"StatusBar": {

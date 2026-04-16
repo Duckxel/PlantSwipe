@@ -4,7 +4,7 @@
  */
 export { isNativeCapacitor, isBrowserEnvironment } from '@/platform/runtime'
 export { platformStorage } from '@/platform/storage'
-export { platformHapticTap, isHapticsAvailable } from '@/platform/haptics'
+export { platformHapticTap, isHapticsAvailable, isHapticsEnabled, setHapticsEnabled } from '@/platform/haptics'
 export {
   platformShare,
   isPlatformShareSupported,
