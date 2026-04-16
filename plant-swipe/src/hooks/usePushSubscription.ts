@@ -244,7 +244,8 @@ export function usePushSubscription(userId: string | null) {
   }, [supported, userId, autoEnableTried])
 
   const enable = React.useCallback(async () => {
-    if (!supported) {
+    const native = isNativeCapacitor()
+    if (!supported && !native) {
       setError('Push notifications are not supported on this device')
       return
     }
@@ -256,7 +257,7 @@ export function usePushSubscription(userId: string | null) {
     setError(null)
     try {
       setOptOut(userId, false)
-      if (isNativeCapacitor()) {
+      if (native) {
         const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
         await registerNativePushForCurrentUser()
       } else {
@@ -264,7 +265,7 @@ export function usePushSubscription(userId: string | null) {
         await registerPushSubscription()
       }
       setSubscribed(true)
-      if (typeof Notification !== 'undefined') {
+      if (!native && typeof Notification !== 'undefined') {
         setPermission(Notification.permission)
       }
     } catch (err) {
@@ -275,7 +276,7 @@ export function usePushSubscription(userId: string | null) {
   }, [supported, userId])
 
   const disable = React.useCallback(async () => {
-    if (!supported) return
+    if (!supported && !isNativeCapacitor()) return
     setLoading(true)
     setError(null)
     try {
@@ -291,7 +292,10 @@ export function usePushSubscription(userId: string | null) {
     }
   }, [supported, userId])
 
-  return { supported, permission, subscribed, loading, error, enable, disable, refresh }
+  // On native, push is always "supported" through the Capacitor plugin
+  const effectivelySupported = supported || isNativeCapacitor()
+
+  return { supported: effectivelySupported, permission, subscribed, loading, error, enable, disable, refresh }
 }
 
 export default usePushSubscription
