@@ -89,6 +89,7 @@ const SetupPageLazy = lazy(() => import("@/pages/SetupPage").then(module => ({ d
 const EmailVerificationPageLazy = lazy(() => import("@/pages/EmailVerificationPage").then(module => ({ default: module.EmailVerificationPage })))
 const ForgotPasswordPageLazy = lazy(() => import("@/pages/ForgotPasswordPage").then(module => ({ default: module.ForgotPasswordPage })))
 const PasswordChangePageLazy = lazy(() => import("@/pages/PasswordChangePage").then(module => ({ default: module.PasswordChangePage })))
+const AuthPageLazy = lazy(() => import("@/pages/AuthPage").then(module => ({ default: module.AuthPage })))
 
 type SearchSortMode = "default" | "newest" | "popular" | "favorites" | "impressions"
 
@@ -1996,10 +1997,15 @@ export default function PlantSwipe() {
   }, [authMode])
 
 
+    // Auth pages - full-screen login/signup experience
+    const isLoginPage = pathWithoutLang === "/login"
+    const isSignupPage = pathWithoutLang === "/signup"
+    const isAuthPage = isLoginPage || isSignupPage
+
     // Landing page has its own layout, skip the app shell
     // Show landing page for both logged out users AND logged in users visiting "/"
     const isLandingPage = currentView === "landing"
-    
+
     // Setup page has its own full-screen layout
     const isSetupPage = pathWithoutLang === "/setup"
     
@@ -2009,7 +2015,7 @@ export default function PlantSwipe() {
     // IMPORTANT: Legal update modal takes priority over setup - don't redirect if user needs to accept new terms
     const needsSetup = user && profile && profile.setup_completed !== true
     // Only exclude: setup page itself, admin panel, and forgot/password-change pages
-    const setupExcludedPaths = ['/setup', '/admin', '/forgot-password', '/password-change']
+    const setupExcludedPaths = ['/setup', '/admin', '/forgot-password', '/password-change', '/login', '/signup']
     const isExcludedFromSetup = setupExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToSetup = needsSetup && !needsLegalUpdate && !isExcludedFromSetup
 
@@ -2018,7 +2024,7 @@ export default function PlantSwipe() {
     // SECURITY: Use !== true to catch both false AND null/undefined values
     const needsEmailVerification = user && profile && profile.setup_completed === true && profile.email_verified !== true
     // Exclude: verify-email page itself, admin panel, and forgot/password-change pages
-    const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-password', '/password-change']
+    const emailVerifyExcludedPaths = ['/verify-email', '/admin', '/forgot-password', '/password-change', '/login', '/signup']
     const isExcludedFromEmailVerify = emailVerifyExcludedPaths.some(p => pathWithoutLang.startsWith(p))
     const shouldRedirectToEmailVerify = needsEmailVerification && !needsLegalUpdate && !shouldRedirectToSetup && !isExcludedFromEmailVerify
     
@@ -2049,6 +2055,46 @@ export default function PlantSwipe() {
     // This takes priority over every other page/view.
     if (banned) {
       return <BannedModal open={banned} onAcknowledge={acknowledgeBan} />
+    }
+
+    // ========== Auth Pages (full-screen login/signup) ==========
+    if (isAuthPage) {
+      // Already logged in — skip auth pages
+      if (user) {
+        return <Navigate to="/discovery" replace />
+      }
+      return (
+        <ErrorBoundary fallback={routeErrorFallback}>
+          <Suspense fallback={routeLoadingFallback}>
+            <AuthPageLazy mode={isSignupPage ? "signup" : "login"} />
+          </Suspense>
+        </ErrorBoundary>
+      )
+    }
+
+    // ========== Auth Gate ==========
+    // On native Capacitor, require login to access the app.
+    // On web, the landing page and a few public pages remain accessible.
+    if (!user && !authLoading) {
+      const publicPaths = ['/', '/about', '/download', '/pricing', '/terms', '/privacy',
+        '/forgot-password', '/login', '/signup', '/contact', '/blog', '/error']
+      const isPublicPath = publicPaths.some(p =>
+        p === '/' ? pathWithoutLang === '/' : pathWithoutLang.startsWith(p)
+      )
+
+      if (isNativeCapacitor() && !isPublicPath) {
+        return <Navigate to="/login" replace />
+      }
+
+      // On web, redirect protected routes to landing page (keeps SEO crawlability)
+      if (!isNativeCapacitor() && !isPublicPath && !isLandingPage) {
+        // Let discovery, search, plant info, and public profiles remain accessible on web
+        const webPublicViews = ['/discovery', '/search', '/plants/', '/u/']
+        const isWebPublicView = webPublicViews.some(p => pathWithoutLang.startsWith(p))
+        if (!isWebPublicView) {
+          return <Navigate to="/login" replace />
+        }
+      }
     }
 
     // Setup page - full screen wizard experience
@@ -2176,6 +2222,10 @@ export default function PlantSwipe() {
     }
 
     if (isLandingPage) {
+      // On native Capacitor, skip the marketing landing page — go straight to login or discovery
+      if (isNativeCapacitor()) {
+        return user ? <Navigate to="/discovery" replace /> : <Navigate to="/login" replace />
+      }
       return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <ErrorBoundary fallback={routeErrorFallback}>
@@ -2612,7 +2662,7 @@ export default function PlantSwipe() {
             />
             <Route
               path="/profile"
-              element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/" replace />}
+              element={user ? (profile?.display_name ? <Navigate to={`/u/${encodeURIComponent(profile.display_name)}`} replace /> : <Navigate to="/u/_me" replace />) : <Navigate to="/login" replace />}
             />
             <Route
               path="/u/:username"
@@ -2629,7 +2679,7 @@ export default function PlantSwipe() {
                   <FriendsPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
@@ -2639,7 +2689,7 @@ export default function PlantSwipe() {
                   <MessagesPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
@@ -2649,7 +2699,7 @@ export default function PlantSwipe() {
                   <ScanPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
@@ -2659,7 +2709,7 @@ export default function PlantSwipe() {
                   <SettingsPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
@@ -2669,7 +2719,7 @@ export default function PlantSwipe() {
                   <SetupPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
@@ -2679,7 +2729,7 @@ export default function PlantSwipe() {
                   <BugCatcherPageLazy />
                 </Suspense>
               ) : (
-                <Navigate to="/" replace />
+                <Navigate to="/login" replace />
               )}
             />
             <Route
