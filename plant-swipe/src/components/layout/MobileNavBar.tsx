@@ -218,7 +218,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
                 <Button
                   variant="secondary"
                   size="icon"
-                  className="rounded-2xl h-9 w-9"
+                  className="rounded-2xl"
                   onClick={openNotificationsFromMenu}
                   aria-label="Notifications"
                 >
