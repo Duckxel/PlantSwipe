@@ -148,8 +148,24 @@
       <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
       <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
       <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
-      <!-- PWA Manifest - Dynamic manifest with screenshots from database -->
-      <link rel="manifest" href="/api/manifest.webmanifest" />
+      <!-- PWA Manifest - Dynamic manifest with screenshots from database; static fallback at /manifest.webmanifest -->
+      <link id="app-manifest" rel="manifest" href="/api/manifest.webmanifest" />
+      <script>
+        (function swapManifestOnFailure() {
+          try {
+            var link = document.getElementById('app-manifest')
+            if (!link) return
+            // Probe the dynamic manifest; fall back to the static one if the API is unreachable.
+            fetch(link.href, { method: 'HEAD', cache: 'no-store' })
+              .then(function (r) {
+                if (!r.ok) throw new Error('manifest not ok')
+              })
+              .catch(function () {
+                link.href = '/manifest.webmanifest'
+              })
+          } catch (_) {}
+        })()
+      </script>
       <style>
         :root {
           color: #0f172a;

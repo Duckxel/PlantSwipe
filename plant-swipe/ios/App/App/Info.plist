@@ -30,7 +30,7 @@
 	<string>Main</string>
 	<key>UIRequiredDeviceCapabilities</key>
 	<array>
-		<string>armv7</string>
+		<string>arm64</string>
 	</array>
 	<key>UISupportedInterfaceOrientations</key>
 	<array>
@@ -49,6 +49,8 @@
 	<string>Aphylia uses the camera to capture plant photos and messages.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Aphylia may access your photo library when you choose an existing image.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Aphylia uses your location only when you tap "Detect my city" to suggest nearby cities. Your coordinates are never stored.</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

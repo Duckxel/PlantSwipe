@@ -24,6 +24,8 @@ import {
 import { broadcastGardenUpdate } from "@/lib/realtime";
 import { supabase } from "@/lib/supabaseClient";
 import { platformPickCameraPhoto } from "@/platform/camera";
+import { useFileDrop } from "@/hooks/useFileDrop";
+import { isNativeCapacitor } from "@/platform/runtime";
 
 type Period = "week" | "month" | "year";
 
@@ -312,6 +314,16 @@ export function GardenPlantManageButton({
     await handleTakePhoto();
   }, [handleTakePhoto]);
 
+  const { isDragging: isPhotoDragging, bind: photoDropBind } = useFileDrop({
+    accept: ["image/"],
+    maxBytes: 20 * 1024 * 1024,
+    enabled: !isNativeCapacitor(),
+    onFiles: (files) => {
+      const file = files[0];
+      if (file) void uploadGardenPlantPhoto(file);
+    },
+  });
+
   const savePlantDetails = React.useCallback(async () => {
     if (submitting) return;
     setSubmitting(true);
@@ -560,7 +572,10 @@ export function GardenPlantManageButton({
 
           <div className="max-h-[92dvh] overflow-y-auto lg:grid lg:max-h-[85vh] lg:grid-cols-[320px_minmax(0,1fr)] lg:overflow-hidden">
             <div className="p-3 pb-0 sm:p-4 sm:pb-0 lg:h-full lg:p-3 lg:pb-3">
-              <div className="relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:h-full lg:min-h-0">
+              <div
+                {...photoDropBind}
+                className={`relative min-h-[168px] overflow-hidden rounded-[28px] bg-gradient-to-br from-emerald-500 via-emerald-400 to-teal-500 sm:min-h-[220px] lg:h-full lg:min-h-0 ${isPhotoDragging ? "ring-4 ring-white/80 ring-offset-2 ring-offset-emerald-600" : ""}`}
+              >
                 {currentImageUrl ? (
                   <img
                     src={currentImageUrl}
@@ -571,6 +586,13 @@ export function GardenPlantManageButton({
                   <div className="absolute inset-0 flex items-center justify-center text-7xl">🌿</div>
                 )}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/65 via-black/10 to-black/10" />
+                {isPhotoDragging && (
+                  <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-emerald-950/60 text-white">
+                    <div className="rounded-2xl border border-white/40 bg-white/10 px-4 py-2 text-sm font-medium backdrop-blur">
+                      {t("gardenDashboard.plantsSection.dropToUpload", "Drop image to upload")}
+                    </div>
+                  </div>
+                )}
                 <div className="absolute left-3 top-3 z-10 sm:left-4 sm:top-4">
                   <button
                     type="button"

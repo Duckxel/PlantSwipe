@@ -58,19 +58,28 @@ try {
 }
 
 // Apply theme before rendering to avoid flash
+let initialEffectiveTheme: 'light' | 'dark' = 'light'
 try {
   const savedTheme = localStorage.getItem('plantswipe.theme') || 'system'
   const getSystemTheme = () => {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   }
-  const effectiveTheme = savedTheme === 'system' ? getSystemTheme() : savedTheme
-  if (effectiveTheme === 'dark') {
+  initialEffectiveTheme = (savedTheme === 'system' ? getSystemTheme() : savedTheme) as 'light' | 'dark'
+  if (initialEffectiveTheme === 'dark') {
     document.documentElement.classList.add('dark')
   } else {
     document.documentElement.classList.remove('dark')
   }
 } catch {
   /* ignore theme init errors */
+}
+
+// Apply native status-bar chrome BEFORE React mounts so the native shell
+// doesn't flash the default iOS/Android bar color during bootstrap.
+if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
+  void import('@/lib/nativeStatusBarTheme')
+    .then(({ applyNativeChromeForTheme }) => applyNativeChromeForTheme(initialEffectiveTheme))
+    .catch(() => { /* status bar plugin unavailable */ })
 }
 
 try {
@@ -87,20 +96,38 @@ if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
     /* ignore */
   }
 
-  // Configure native keyboard behavior — prevents the WebView from resizing
-  // on input focus which causes layout jumps. Instead, the keyboard overlays
-  // and scrolls the focused element into view.
+  // Configure native keyboard. Resize mode "None" means the WebView doesn't
+  // shrink on focus (no layout jumps); we expose `--keyboard-height` and
+  // ensure the focused input is scrolled into view on both iOS and Android.
   void import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
     Keyboard.setResizeMode({ mode: KeyboardResize.None }).catch(() => {})
     Keyboard.setScroll({ isDisabled: false }).catch(() => {})
-    Keyboard.addListener('keyboardWillShow', (info) => {
-      document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`)
+
+    const onShow = (height: number) => {
+      document.documentElement.style.setProperty('--keyboard-height', `${height}px`)
       document.body.classList.add('keyboard-visible')
-    }).catch(() => {})
-    Keyboard.addListener('keyboardWillHide', () => {
+      const el = document.activeElement as HTMLElement | null
+      if (el && typeof el.scrollIntoView === 'function') {
+        // Defer to next frame so the CSS var has been applied.
+        requestAnimationFrame(() => {
+          try {
+            el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          } catch {
+            /* older WebViews */
+          }
+        })
+      }
+    }
+    const onHide = () => {
       document.documentElement.style.setProperty('--keyboard-height', '0px')
       document.body.classList.remove('keyboard-visible')
-    }).catch(() => {})
+    }
+
+    // iOS fires willShow/willHide; Android only fires didShow/didHide reliably.
+    Keyboard.addListener('keyboardWillShow', (info) => onShow(info.keyboardHeight)).catch(() => {})
+    Keyboard.addListener('keyboardDidShow', (info) => onShow(info.keyboardHeight)).catch(() => {})
+    Keyboard.addListener('keyboardWillHide', onHide).catch(() => {})
+    Keyboard.addListener('keyboardDidHide', onHide).catch(() => {})
   }).catch(() => { /* plugin unavailable */ })
 }
 

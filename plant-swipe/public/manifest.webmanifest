@@ -1,0 +1,56 @@
+{
+  "name": "Aphylia",
+  "short_name": "Aphylia",
+  "description": "Swipe through plants, build your dream garden, and learn how to care for each one.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone"],
+  "orientation": "portrait",
+  "theme_color": "#052e16",
+  "background_color": "#052e16",
+  "lang": "en",
+  "dir": "ltr",
+  "categories": ["lifestyle", "education", "utilities"],
+  "icons": [
+    {
+      "src": "/icons/plant-swipe-icon-outline.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192x192.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512x512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Swipe plants",
+      "short_name": "Swipe",
+      "url": "/swipe",
+      "description": "Discover new plants"
+    },
+    {
+      "name": "My garden",
+      "short_name": "Garden",
+      "url": "/garden",
+      "description": "Open your garden"
+    }
+  ]
+}

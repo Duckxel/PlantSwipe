@@ -30,6 +30,8 @@ ga4_keyfile.json
 # Generated files
 public/sitemap.xml
 public/llms.txt
+public/.well-known/apple-app-site-association
+public/.well-known/assetlinks.json
 
 # Ephemeral chat uploads
 uploads/to_delete/
