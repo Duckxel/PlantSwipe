@@ -75,6 +75,12 @@ export const DEMO_GARDEN_MEMBER_COUNTS: Record<string, number> = {
   'demo-garden-3': 1,
 }
 
+export const DEMO_GARDEN_PLANT_COUNTS: Record<string, number> = {
+  'demo-garden-1': 8,
+  'demo-garden-2': 3,
+  'demo-garden-3': 12,
+}
+
 // ─── Scans (new users have zero) ────────────────────────────────────
 // imageUrl left empty — ScanPage enriches them with real images from DB
 

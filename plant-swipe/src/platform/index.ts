@@ -15,5 +15,7 @@ export {
   platformGetCameraStream,
   platformEnumerateVideoDevices,
   isPlatformCameraSupported,
+  platformPickCameraPhoto,
+  type PlatformPhotoResult,
 } from '@/platform/camera'
 export { isPlatformWebPushSupported } from '@/platform/push'

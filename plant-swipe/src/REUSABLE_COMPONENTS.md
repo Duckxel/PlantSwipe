@@ -172,6 +172,51 @@ A search-specific input with a search icon, loading spinner, clear button, and k
 
 ---
 
+### `NumberStepper`
+
+**File:** `src/components/ui/number-stepper.tsx`
+
+A compact plus/minus numeric stepper with a centered value display. Use it when a number should be adjusted with touch-friendly increment/decrement controls instead of plain text entry.
+
+**Props:**
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `value` | `number` | Current numeric value |
+| `onChange` | `(value: number) => void` | Called with the next clamped value |
+| `min` | `number` | Minimum allowed value |
+| `max` | `number` | Maximum allowed value |
+| `step` | `number` | Increment/decrement size (default `1`) |
+| `decrementLabel` | `string` | Accessible label for the minus button |
+| `incrementLabel` | `string` | Accessible label for the plus button |
+| `className` | `string` | Additional classes on the wrapper |
+| `valueClassName` | `string` | Additional classes on the value display |
+
+**Example:**
+
+```tsx
+import { NumberStepper } from "@/components/ui/number-stepper"
+
+<NumberStepper
+  value={count}
+  min={0}
+  max={99}
+  onChange={setCount}
+  decrementLabel="Decrease plant count"
+  incrementLabel="Increase plant count"
+/>
+```
+
+**Features:**
+- Large touch-friendly plus/minus buttons
+- Built-in min/max clamping
+- Shared styling for task amount and quantity pickers
+- Dark mode support
+
+**Used in:** GardenPlantManageButton
+
+---
+
 ### `CityCountrySelector`
 
 **File:** `src/components/ui/city-country-selector.tsx`

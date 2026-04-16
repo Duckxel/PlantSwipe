@@ -320,6 +320,25 @@ export async function getGardenMemberCountsBatch(gardenIds: string[]): Promise<R
   return counts
 }
 
+export async function getGardenPlantCountsBatch(gardenIds: string[]): Promise<Record<string, number>> {
+  const { valid: safeIds } = normalizeGardenIdList(gardenIds)
+  if (safeIds.length === 0) return {}
+
+  const { data: plantRows } = await supabase
+    .from('garden_plants')
+    .select('garden_id')
+    .in('garden_id', safeIds)
+
+  const counts: Record<string, number> = {}
+  if (plantRows) {
+    for (const row of plantRows) {
+      const gid = String(row.garden_id)
+      counts[gid] = (counts[gid] || 0) + 1
+    }
+  }
+  return counts
+}
+
 export async function listTasksForMultipleGardensMinimal(gardenIds: string[], _limitPerGarden: number = 500): Promise<Record<string, Array<{ id: string; type: TaskType; emoji: string | null; gardenPlantId: string }>>> {
   const { valid: safeIds } = normalizeGardenIdList(gardenIds)
   if (safeIds.length === 0) return {}
@@ -629,10 +648,16 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   const rows = (data || []) as any[]
   if (rows.length === 0) return []
   const plantIds = Array.from(new Set(rows.map(r => r.plant_id)))
+  const gardenPlantIds = rows.map((r) => String(r.id))
     const { data: plantRows } = await supabase
       .from('plants')
       .select('*, plant_images (id,link,use)')
       .in('id', plantIds)
+  const { data: gardenPlantImageRows } = await supabase
+    .from('garden_plant_images')
+    .select('id, garden_plant_id, image_url, caption, uploaded_at')
+    .in('garden_plant_id', gardenPlantIds)
+    .order('uploaded_at', { ascending: false })
   
   // Load translations for ALL languages (including English)
   // Only fetch name field to minimize egress (~90% reduction)
@@ -650,6 +675,20 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
   }
   
   const idToPlant: Record<string, Plant> = {}
+  const latestImageByGardenPlant: Record<string, { id: string; imageUrl: string; caption: string | null }> = {}
+  if (gardenPlantImageRows && gardenPlantImageRows.length > 0) {
+    /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
+    for (const row of gardenPlantImageRows as any[]) {
+      const gardenPlantId = String(row.garden_plant_id)
+      if (latestImageByGardenPlant[gardenPlantId]) continue
+      if (!row.image_url) continue
+      latestImageByGardenPlant[gardenPlantId] = {
+        id: String(row.id),
+        imageUrl: String(row.image_url),
+        caption: row.caption || null,
+      }
+    }
+  }
   if (plantRows && plantRows.length > 0) {
     for (const p of plantRows) {
       if (!p || !p.id) continue
@@ -705,6 +744,9 @@ export async function getGardenPlants(gardenId: string, language?: SupportedLang
       healthStatus: r.health_status || null,
       notes: r.notes || null,
       lastHealthUpdate: r.last_health_update || null,
+      gardenPlantImageId: latestImageByGardenPlant[String(r.id)]?.id || null,
+      gardenPlantImageUrl: latestImageByGardenPlant[String(r.id)]?.imageUrl || null,
+      gardenPlantImageCaption: latestImageByGardenPlant[String(r.id)]?.caption || null,
       plant: idToPlant[plantId] || null,
       /* eslint-disable-next-line @typescript-eslint/no-explicit-any */
       sortIndex: (r as any).sort_index ?? null,

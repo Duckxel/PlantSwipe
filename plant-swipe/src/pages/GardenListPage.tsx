@@ -33,6 +33,7 @@ import {
   listTasksForMultipleGardensMinimal,
   getEnrichedOccurrencesForGardens,
   getGardenMemberCountsBatch,
+  getGardenPlantCountsBatch,
   progressTaskOccurrence,
   listCompletionsForOccurrences,
   logGardenActivity,
@@ -53,7 +54,7 @@ import {
 } from "@/lib/realtime";
 import type { Garden } from "@/types/garden";
 import { useTutorial } from "@/context/TutorialContext";
-import { DEMO_GARDENS, DEMO_GARDEN_PROGRESS, DEMO_GARDEN_MEMBER_COUNTS } from "@/lib/tutorialDemoData";
+import { DEMO_GARDENS, DEMO_GARDEN_PROGRESS, DEMO_GARDEN_MEMBER_COUNTS, DEMO_GARDEN_PLANT_COUNTS } from "@/lib/tutorialDemoData";
 import { useTranslation } from "react-i18next";
 import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
@@ -82,6 +83,9 @@ export const GardenListPage: React.FC = () => {
     Record<string, { due: number; completed: number }>
   >({});
   const [memberCountsByGarden, setMemberCountsByGarden] = React.useState<
+    Record<string, number>
+  >({});
+  const [plantCountsByGarden, setPlantCountsByGarden] = React.useState<
     Record<string, number>
   >({});
   const [serverToday, setServerToday] = React.useState<string | null>(null);
@@ -215,6 +219,7 @@ export const GardenListPage: React.FC = () => {
       gardensRef.current = DEMO_GARDENS;
       setProgressByGarden(DEMO_GARDEN_PROGRESS);
       setMemberCountsByGarden(DEMO_GARDEN_MEMBER_COUNTS);
+      setPlantCountsByGarden(DEMO_GARDEN_PLANT_COUNTS);
       setLoading(false);
       return;
     }
@@ -386,12 +391,17 @@ export const GardenListPage: React.FC = () => {
             .catch(() => {});
         }
 
-        // Fetch member counts for cached gardens - use batch fetch
+        // Fetch member counts and plant counts for cached gardens - use batch fetch
         if (data.length > 0) {
           const gardenIds = data.map((g) => g.id);
           getGardenMemberCountsBatch(gardenIds)
             .then((counts) => {
               setMemberCountsByGarden(counts);
+            })
+            .catch(() => {});
+          getGardenPlantCountsBatch(gardenIds)
+            .then((counts) => {
+              setPlantCountsByGarden(counts);
             })
             .catch(() => {});
         }
@@ -428,12 +438,17 @@ export const GardenListPage: React.FC = () => {
         24 * 60 * 60 * 1000,
       ); // 24 hours
 
-      // Fetch member counts for all gardens - use batch fetch
+      // Fetch member counts and plant counts for all gardens - use batch fetch
       if (data.length > 0) {
         const gardenIds = data.map((g) => g.id);
         getGardenMemberCountsBatch(gardenIds)
           .then((counts) => {
             setMemberCountsByGarden(counts);
+          })
+          .catch(() => {});
+        getGardenPlantCountsBatch(gardenIds)
+          .then((counts) => {
+            setPlantCountsByGarden(counts);
           })
           .catch(() => {});
       }
@@ -2267,6 +2282,27 @@ export const GardenListPage: React.FC = () => {
                                 {memberCountsByGarden[g.id] === 1
                                   ? t("garden.member")
                                   : t("garden.members")}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <svg
+                                className="w-4 h-4 text-emerald-500"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M12 19V6M12 6c-1.5-3-5-4-7-3 2 1 4 3 5 5M12 6c1.5-3 5-4 7-3-2 1-4 3-5 5"
+                                />
+                              </svg>
+                              <span>
+                                {plantCountsByGarden[g.id] ?? 0}{" "}
+                                {(plantCountsByGarden[g.id] ?? 0) === 1
+                                  ? t("garden.plant", { defaultValue: "plant" })
+                                  : t("garden.plants", { defaultValue: "plants" })}
                               </span>
                             </div>
                             {(g.streak ?? 0) > 0 && (
