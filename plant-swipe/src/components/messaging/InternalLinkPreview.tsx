@@ -27,6 +27,7 @@ import {
   type InternalLink,
   type InternalLinkPreviewData
 } from '@/lib/messaging'
+import { openExternalUrl } from '@/lib/capDeepLinks'
 
 interface InternalLinkPreviewProps {
   content: string
@@ -159,8 +160,8 @@ const LinkPreviewCard: React.FC<{
         navigate(`/blog/${link.id}`)
         break
       case 'media':
-        // Open media in new tab
-        window.open(link.url, '_blank', 'noopener,noreferrer')
+        // Open media in native browser (native) or new tab (web)
+        openExternalUrl(link.url)
         break
     }
   }

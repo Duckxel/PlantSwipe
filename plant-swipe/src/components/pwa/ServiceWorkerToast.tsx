@@ -355,8 +355,39 @@ export function ServiceWorkerToast() {
     }
   }, [])
 
+  // Native Capacitor: use @capacitor/network for reliable connectivity status
+  React.useEffect(() => {
+    if (!isNativeCapacitor()) return
+    let listenerHandle: { remove: () => Promise<void> } | null = null
+
+    const setup = async () => {
+      try {
+        const { Network } = await import('@capacitor/network')
+        const status = await Network.getStatus()
+        setIsOffline(!status.connected)
+
+        listenerHandle = await Network.addListener('networkStatusChange', (s) => {
+          if (s.connected) {
+            clearOfflineTimers()
+            setIsOffline(false)
+          } else {
+            setIsOffline(true)
+          }
+        })
+      } catch {
+        // Plugin unavailable — fall through to web listeners
+      }
+    }
+    void setup()
+
+    return () => { listenerHandle?.remove().catch(() => {}) }
+  }, [clearOfflineTimers])
+
+  // Web fallback: online/offline events + verification
   React.useEffect(() => {
     if (typeof window === 'undefined') return
+    // On native, the Capacitor Network plugin handles this
+    if (isNativeCapacitor()) return
 
     const handleOnline = () => {
       // Browser says online — trust it and clear timers

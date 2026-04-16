@@ -86,6 +86,22 @@ if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
   } catch {
     /* ignore */
   }
+
+  // Configure native keyboard behavior — prevents the WebView from resizing
+  // on input focus which causes layout jumps. Instead, the keyboard overlays
+  // and scrolls the focused element into view.
+  void import('@capacitor/keyboard').then(({ Keyboard, KeyboardResize }) => {
+    Keyboard.setResizeMode({ mode: KeyboardResize.None }).catch(() => {})
+    Keyboard.setScroll({ isDisabled: false }).catch(() => {})
+    Keyboard.addListener('keyboardWillShow', (info) => {
+      document.documentElement.style.setProperty('--keyboard-height', `${info.keyboardHeight}px`)
+      document.body.classList.add('keyboard-visible')
+    }).catch(() => {})
+    Keyboard.addListener('keyboardWillHide', () => {
+      document.documentElement.style.setProperty('--keyboard-height', '0px')
+      document.body.classList.remove('keyboard-visible')
+    }).catch(() => {})
+  }).catch(() => { /* plugin unavailable */ })
 }
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
