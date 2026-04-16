@@ -88,6 +88,7 @@ export default defineConfig({
         'locales/en/common.json',
         'locales/fr/common.json',
           'offline.html',
+          'manifest.webmanifest',
       ],
       // Manifest is served dynamically from /api/manifest.webmanifest
       // This allows screenshots to be loaded from the database at runtime

@@ -17,8 +17,9 @@
 	},
 	"plugins": {
 		"StatusBar": {
-			"style": "DEFAULT",
-			"backgroundColor": "#052e16"
+			"style": "LIGHT",
+			"backgroundColor": "#052e16",
+			"overlaysWebView": true
 		},
 		"Camera": {
 			"presentationStyle": "fullscreen"

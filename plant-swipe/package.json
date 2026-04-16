@@ -5,8 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -b && vite build",
-    "build:web": "tsc -b && vite build",
+    "build": "tsc -b && vite build && node scripts/build-well-known.mjs --out=dist/.well-known",
+    "build:web": "tsc -b && vite build && node scripts/build-well-known.mjs --out=dist/.well-known",
     "build:web:native": "VITE_APP_NATIVE_BUILD=1 tsc -b && VITE_APP_NATIVE_BUILD=1 vite build",
     "build:low-mem": "tsc -b && vite build",
     "lint": "eslint .",

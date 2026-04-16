@@ -1698,6 +1698,7 @@ export default function PlantSwipe() {
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
+    platformHapticTap(8)
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
@@ -1706,6 +1707,7 @@ export default function PlantSwipe() {
   }, [swipeList.length])
 
   const handleInfo = React.useCallback(() => {
+    platformHapticTap(12)
     if (current) navigate(`/plants/${current.id}`)
   }, [current, navigate])
 

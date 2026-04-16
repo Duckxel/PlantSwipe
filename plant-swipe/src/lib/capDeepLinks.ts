@@ -100,4 +100,39 @@ export function registerCapacitorDeepLinks(navigate: NavigateFunction): void {
       if (url) handleIncomingUrl(url)
     }).catch(() => {})
   })
+
+  // Any anchor with target="_blank" or an http(s) URL to a different origin
+  // would otherwise spawn the system browser — kicking the user out of the
+  // native shell. Intercept at capture phase and route through the in-app
+  // browser instead (which `openExternalUrl` already handles).
+  if (typeof document !== 'undefined') {
+    document.addEventListener(
+      'click',
+      (event) => {
+        const ev = event as MouseEvent
+        if (ev.defaultPrevented || ev.button !== 0) return
+        if (ev.metaKey || ev.ctrlKey || ev.shiftKey || ev.altKey) return
+        const target = ev.target as Element | null
+        const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null
+        if (!anchor) return
+        const href = anchor.getAttribute('href') ?? ''
+        if (!href || href.startsWith('#') || href.startsWith('javascript:')) return
+        // mailto: / tel: — let the OS handle natively.
+        if (/^(mailto:|tel:|sms:)/i.test(href)) return
+        let u: URL
+        try {
+          u = new URL(href, window.location.href)
+        } catch {
+          return
+        }
+        const hosts = collectAppHosts()
+        const external = !isOurAppUrl(u, hosts)
+        const blank = anchor.target === '_blank'
+        if (!external && !blank) return
+        ev.preventDefault()
+        openExternalUrl(u.href)
+      },
+      true,
+    )
+  }
 }

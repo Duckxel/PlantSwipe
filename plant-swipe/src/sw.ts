@@ -110,6 +110,7 @@ self.addEventListener('activate', (event) => {
     'static-assets-v',
     'image-cache-v',
     'font-cache-v',
+    'supabase-read-v',
   ]
   const legacyRuntimeNames = new Set([
     'pages-cache',
@@ -248,6 +249,42 @@ registerRoute(
       new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: YEAR_IN_SECONDS }),
     ],
   })
+)
+
+// Cache read-only Supabase REST/Storage requests so the app has something to
+// show on flaky mobile networks. Only caches GETs, and never the auth/realtime
+// endpoints where a stale response would break login or subscriptions.
+const supabaseUrl =
+  import.meta.env.VITE_SUPABASE_URL as string | undefined
+let supabaseOrigin: string | null = null
+try {
+  if (supabaseUrl) supabaseOrigin = new URL(supabaseUrl).origin
+} catch {
+  supabaseOrigin = null
+}
+
+registerRoute(
+  ({ request, url }) => {
+    if (request.method !== 'GET') return false
+    if (!supabaseOrigin || url.origin !== supabaseOrigin) return false
+    // Skip auth, realtime, and functions — these must always hit the network.
+    if (url.pathname.startsWith('/auth/')) return false
+    if (url.pathname.startsWith('/realtime/')) return false
+    if (url.pathname.startsWith('/functions/')) return false
+    // Cache REST reads and public storage reads.
+    return (
+      url.pathname.startsWith('/rest/') ||
+      url.pathname.startsWith('/storage/v1/object/public/')
+    )
+  },
+  new NetworkFirst({
+    cacheName: v('supabase-read'),
+    networkTimeoutSeconds: 4,
+    plugins: [
+      new CacheableResponsePlugin({ statuses: [0, 200] }),
+      new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: DAY_IN_SECONDS * 14 }),
+    ],
+  }),
 )
 
 offlineFallback({

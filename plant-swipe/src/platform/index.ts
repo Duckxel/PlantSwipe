@@ -16,6 +16,9 @@ export {
   platformEnumerateVideoDevices,
   isPlatformCameraSupported,
   platformPickCameraPhoto,
+  platformPickCameraPhotoWithOutcome,
+  openNativeAppSettings,
   type PlatformPhotoResult,
+  type PlatformPhotoOutcome,
 } from '@/platform/camera'
 export { isPlatformWebPushSupported } from '@/platform/push'
