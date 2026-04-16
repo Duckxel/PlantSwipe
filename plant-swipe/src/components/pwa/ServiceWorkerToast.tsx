@@ -290,6 +290,7 @@ export function ServiceWorkerToast() {
   }, [surfaceWaitingUpdate])
 
   React.useEffect(() => {
+    if (NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     const handleControllerChange = () => {
       if (!pendingReloadRef.current) return
@@ -413,6 +414,7 @@ export function ServiceWorkerToast() {
   }, [isOffline, verifyOffline])
 
   React.useEffect(() => {
+    if (NATIVE_STORE_BUILD || isNativeCapacitor()) return
     if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
     navigator.serviceWorker.addEventListener('message', handleSwMessage)
     return () => {
