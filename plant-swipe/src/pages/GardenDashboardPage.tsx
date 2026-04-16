@@ -76,20 +76,24 @@ import { useTranslation } from "react-i18next";
 import { useLanguage } from "@/lib/i18nRouting";
 import { OverviewSectionSkeleton } from "@/components/garden/GardenSkeletons";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
-import { GardenAnalyticsSection } from "@/components/garden/GardenAnalyticsSection";
-import { GardenJournalSection } from "@/components/garden/GardenJournalSection";
+const GardenAnalyticsSection = React.lazy(() => import("@/components/garden/GardenAnalyticsSection").then(m => ({ default: m.GardenAnalyticsSection })));
+const GardenJournalSection = React.lazy(() => import("@/components/garden/GardenJournalSection").then(m => ({ default: m.GardenJournalSection })));
 import { GardenLocationEditor } from "@/components/garden/GardenLocationEditor";
 import { GardenAdviceLanguageEditor } from "@/components/garden/GardenAdviceLanguageEditor";
 import { GardenAiChatToggle } from "@/components/garden/GardenAiChatToggle";
-import { GardenSettingsSection } from "@/components/garden/GardenSettingsSection";
+const GardenSettingsSection = React.lazy(() => import("@/components/garden/GardenSettingsSection").then(m => ({ default: m.GardenSettingsSection })));
 import { GardenLivingSpaceEditor } from "@/components/garden/GardenLivingSpaceEditor";
 import { GardenClimateEditor } from "@/components/garden/GardenClimateEditor";
 import { GardenUsageEditor } from "@/components/garden/GardenUsageEditor";
 import { TodaysTasksWidget } from "@/components/garden/TodaysTasksWidget";
-import { GardenTasksSection } from "@/components/garden/GardenTasksSection";
+const GardenTasksSection = React.lazy(() => import("@/components/garden/GardenTasksSection").then(m => ({ default: m.GardenTasksSection })));
 import { GardenSwitcherDropdown } from "@/components/garden/GardenSwitcherDropdown";
-import { AphyliaChat } from "@/components/aphylia";
-import { SeedlingTrayGrid, SeedlingCellModal, SeedlingCareList, SeedlingTrayAnalytics, TransplantToGardenDialog } from "@/components/seedling-tray";
+const AphyliaChat = React.lazy(() => import("@/components/aphylia").then(m => ({ default: m.AphyliaChat })));
+const SeedlingTrayGrid = React.lazy(() => import("@/components/seedling-tray").then(m => ({ default: m.SeedlingTrayGrid })));
+const SeedlingCellModal = React.lazy(() => import("@/components/seedling-tray").then(m => ({ default: m.SeedlingCellModal })));
+const SeedlingCareList = React.lazy(() => import("@/components/seedling-tray").then(m => ({ default: m.SeedlingCareList })));
+const SeedlingTrayAnalytics = React.lazy(() => import("@/components/seedling-tray").then(m => ({ default: m.SeedlingTrayAnalytics })));
+const TransplantToGardenDialog = React.lazy(() => import("@/components/seedling-tray").then(m => ({ default: m.TransplantToGardenDialog })));
 import type { SeedlingTrayCell } from "@/types/garden";
 import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
@@ -668,43 +672,43 @@ export const GardenDashboardPage: React.FC = () => {
             setServerToday(today);
             serverTodayRef.current = today;
           }
+          // Parallelize today's progress + streak refresh (they're independent)
           if (today) {
-            try {
-              const { due, completed } = await getGardenTodayProgressUltraFast(
-                id,
-                today,
-              );
-              const success = due === 0 ? true : completed >= due;
-              setDailyStats((prev) =>
-                prev.map((d) =>
-                  d.date === today ? { ...d, due, completed, success } : d,
-                ),
-              );
-            } catch (err) {
-              console.warn(
-                "[GardenDashboard] Failed to hydrate today progress:",
-                err,
-              );
-            }
+            const progressPromise = getGardenTodayProgressUltraFast(id, today)
+              .then(({ due, completed }) => {
+                const success = due === 0 ? true : completed >= due;
+                setDailyStats((prev) =>
+                  prev.map((d) =>
+                    d.date === today ? { ...d, due, completed, success } : d,
+                  ),
+                );
+              })
+              .catch((err) => {
+                console.warn(
+                  "[GardenDashboard] Failed to hydrate today progress:",
+                  err,
+                );
+              });
+
+            const streakPromise = (async () => {
+              if (!streakRefreshedRef.current) {
+                streakRefreshedRef.current = true;
+                await refreshGardenStreak(
+                  id,
+                  new Date(new Date(today).getTime() - 24 * 3600 * 1000)
+                    .toISOString()
+                    .slice(0, 10),
+                );
+                const g1 = await getGarden(id);
+                setGarden(g1);
+                gardenCreatedDayIso = g1?.createdAt
+                  ? new Date(g1.createdAt).toISOString().slice(0, 10)
+                  : gardenCreatedDayIso;
+              }
+            })().catch(() => {});
+
+            await Promise.all([progressPromise, streakPromise]);
           }
-        // Ensure base streak is refreshed from server, at most once per session
-        try {
-          if (!streakRefreshedRef.current) {
-            streakRefreshedRef.current = true;
-            await refreshGardenStreak(
-              id,
-              new Date(new Date(today).getTime() - 24 * 3600 * 1000)
-                .toISOString()
-                .slice(0, 10),
-            );
-            const g1 = await getGarden(id);
-            setGarden(g1);
-            // Prefer refreshed garden's createdAt if available
-            gardenCreatedDayIso = g1?.createdAt
-              ? new Date(g1.createdAt).toISOString().slice(0, 10)
-              : gardenCreatedDayIso;
-          }
-        } catch {}
         // Do not recompute today's task here to avoid overriding recent actions; rely on action-specific updates
         const start = new Date(today);
         start.setDate(start.getDate() - 29);
@@ -1090,20 +1094,13 @@ export const GardenDashboardPage: React.FC = () => {
         }
 
         setDailyStats((prev) => {
-          const reqDone = occsDetailed.reduce(
-            (acc: number, o: { requiredCount?: number }) =>
-              acc + Math.max(1, Number(o.requiredCount || 1)),
-            0,
-          );
-          const compDone = occsDetailed.reduce(
-            (acc: number, o: { requiredCount?: number; completedCount?: number }) =>
-              acc +
-              Math.min(
-                Math.max(1, Number(o.requiredCount || 1)),
-                Number(o.completedCount || 0),
-              ),
-            0,
-          );
+          let reqDone = 0;
+          let compDone = 0;
+          for (const o of occsDetailed) {
+            const req = Math.max(1, Number((o as { requiredCount?: number }).requiredCount || 1));
+            reqDone += req;
+            compDone += Math.min(req, Number((o as { completedCount?: number }).completedCount || 0));
+          }
           const success = reqDone === 0 || compDone >= reqDone;
           return prev.map((d) =>
             d.date === today ? { ...d, due: reqDone, completed: compDone, success } : d,
@@ -1116,6 +1113,11 @@ export const GardenDashboardPage: React.FC = () => {
             weekDaysIso[0],
           ).catch(() => null);
 
+          // Pre-build Map for O(1) day-to-index lookups (replaces O(7) indexOf per occurrence)
+          const dayIsoToIdx = new Map(weekDaysIso.map((d, i) => [d, i]));
+          const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
+          const weekEndIso = `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
+
           if (cachedWeekStats) {
             setWeekCountsByType({
               water: cachedWeekStats.waterTasksByDay,
@@ -1126,10 +1128,6 @@ export const GardenDashboardPage: React.FC = () => {
             });
             setWeekCounts(cachedWeekStats.totalTasksByDay);
 
-            const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
-            const weekEndIso =
-              `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
-            // Use enriched RPC — single query with pre-joined task type/emoji
             const weekOccs = await getEnrichedOccurrencesForGardens(
               [id],
               weekStartIso,
@@ -1139,11 +1137,7 @@ export const GardenDashboardPage: React.FC = () => {
             const enrichedWeekOccsCached: typeof weekTaskOccurrences = [];
             for (const o of weekOccs) {
               const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
-              const remaining = Math.max(
-                0,
-                Number(o.requiredCount || 1) - Number(o.completedCount || 0),
-              );
-              const idx = weekDaysIso.indexOf(dayIso);
+              const idx = dayIsoToIdx.get(dayIso) ?? -1;
               if (idx >= 0) {
                 enrichedWeekOccsCached.push({
                   id: o.id,
@@ -1158,6 +1152,10 @@ export const GardenDashboardPage: React.FC = () => {
                   dayIndex: idx,
                 });
               }
+              const remaining = Math.max(
+                0,
+                Number(o.requiredCount || 1) - Number(o.completedCount || 0),
+              );
               if (remaining <= 0) continue;
               if (dayIso <= today) continue;
               if (idx >= 0) {
@@ -1175,22 +1173,13 @@ export const GardenDashboardPage: React.FC = () => {
             setWeekTaskOccurrences(enrichedWeekOccsCached);
           } else {
             const loadWeekData = async () => {
-              const weekStartIso = `${weekDaysIso[0]}T00:00:00.000Z`;
-              const weekEndIso =
-                `${weekDaysIso[weekDaysIso.length - 1]}T23:59:59.999Z`;
-              // Use enriched RPC — single query with pre-joined task type/emoji
               const weekOccs = await getEnrichedOccurrencesForGardens(
                 [id],
                 weekStartIso,
                 weekEndIso,
               );
-              const typeCounts: {
-                water: number[];
-                fertilize: number[];
-                harvest: number[];
-                cut: number[];
-                custom: number[];
-              } = {
+              // Single-pass: build enriched array, type counts, AND due map simultaneously
+              const typeCounts = {
                 water: Array(7).fill(0),
                 fertilize: Array(7).fill(0),
                 harvest: Array(7).fill(0),
@@ -1198,13 +1187,14 @@ export const GardenDashboardPage: React.FC = () => {
                 custom: Array(7).fill(0),
               };
               const enrichedWeekOccsLoad: typeof weekTaskOccurrences = [];
+              const dueMapSets: Record<string, Set<number>> = {};
               for (const o of weekOccs) {
                 const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
-                const idx = weekDaysIso.indexOf(dayIso);
+                const idx = dayIsoToIdx.get(dayIso) ?? -1;
                 if (idx >= 0) {
                   const typ = (o.taskType || "custom") as "water" | "fertilize" | "harvest" | "cut" | "custom";
-                  const inc = Math.max(1, Number(o.requiredCount || 1));
-                  typeCounts[typ][idx] += inc;
+                  const req = Math.max(1, Number(o.requiredCount || 1));
+                  typeCounts[typ][idx] += req;
                   enrichedWeekOccsLoad.push({
                     id: o.id,
                     taskId: o.taskId,
@@ -1217,34 +1207,22 @@ export const GardenDashboardPage: React.FC = () => {
                     taskEmoji: o.taskEmoji,
                     dayIndex: idx,
                   });
+                  // Due map: only future incomplete occurrences
+                  const remaining = req - Number(o.completedCount || 0);
+                  if (remaining > 0 && dayIso > today) {
+                    const pid = String(o.gardenPlantId);
+                    if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
+                    dueMapSets[pid].add(idx);
+                  }
                 }
               }
-              const totals = weekDaysIso.map(
-                (_, i) =>
-                  typeCounts.water[i] +
-                  typeCounts.fertilize[i] +
-                  typeCounts.harvest[i] +
-                  typeCounts.cut[i] +
-                  typeCounts.custom[i],
-              );
+              const totals = Array(7);
+              for (let i = 0; i < 7; i++) {
+                totals[i] = typeCounts.water[i] + typeCounts.fertilize[i] +
+                  typeCounts.harvest[i] + typeCounts.cut[i] + typeCounts.custom[i];
+              }
               setWeekCountsByType(typeCounts);
               setWeekCounts(totals);
-              const dueMapSets: Record<string, Set<number>> = {};
-              for (const o of weekOccs) {
-                const dayIso = new Date(o.dueAt).toISOString().slice(0, 10);
-                const remaining = Math.max(
-                  0,
-                  Number(o.requiredCount || 1) - Number(o.completedCount || 0),
-                );
-                if (remaining <= 0) continue;
-                if (dayIso <= today) continue;
-                const idx = weekDaysIso.indexOf(dayIso);
-                if (idx >= 0) {
-                  const pid = String(o.gardenPlantId);
-                  if (!dueMapSets[pid]) dueMapSets[pid] = new Set<number>();
-                  dueMapSets[pid].add(idx);
-                }
-              }
               const dueMapNext: Record<string, number[]> = {};
               for (const pid of Object.keys(dueMapSets))
                 dueMapNext[pid] = Array.from(dueMapSets[pid]).sort(
@@ -1517,19 +1495,13 @@ export const GardenDashboardPage: React.FC = () => {
             // Update daily stats for today only
             if (today) {
               setDailyStats((prev) => {
-                const reqDone = occs.reduce(
-                  (acc, o) => acc + Math.max(1, Number(o.requiredCount || 1)),
-                  0,
-                );
-                const compDone = occs.reduce(
-                  (acc, o) =>
-                    acc +
-                    Math.min(
-                      Math.max(1, Number(o.requiredCount || 1)),
-                      Number(o.completedCount || 0),
-                    ),
-                  0,
-                );
+                let reqDone = 0;
+                let compDone = 0;
+                for (const o of occs) {
+                  const req = Math.max(1, Number(o.requiredCount || 1));
+                  reqDone += req;
+                  compDone += Math.min(req, Number(o.completedCount || 0));
+                }
                 const success = reqDone === 0 || compDone >= reqDone;
                 return prev.map((d) =>
                   d.date === today
@@ -3072,6 +3044,7 @@ export const GardenDashboardPage: React.FC = () => {
             )}
           </aside>
           <main className={mainPanelClass}>
+            <React.Suspense fallback={<OverviewSectionSkeleton />}>
             <Routes>
               <Route
                 path="overview"
@@ -3783,6 +3756,7 @@ export const GardenDashboardPage: React.FC = () => {
               <Route path="" element={<Navigate to={`overview`} replace />} />
               <Route path="*" element={<Navigate to={`overview`} replace />} />
             </Routes>
+            </React.Suspense>
           </main>
 
           {/* Tasks sidebar removed per requirement: tasks now on Garden list page */}
@@ -4127,8 +4101,12 @@ function AphyliaChatPortal({
     }
     
     // Calculate total plants on hand
-    const totalPlantsOnHand = plants.reduce((sum, p) => sum + (p.plantsOnHand || 0), 0)
-    const totalSeedsPlanted = plants.reduce((sum, p) => sum + (p.seedsPlanted || 0), 0)
+    let totalPlantsOnHand = 0;
+    let totalSeedsPlanted = 0;
+    for (const p of plants) {
+      totalPlantsOnHand += p.plantsOnHand || 0;
+      totalSeedsPlanted += p.seedsPlanted || 0;
+    }
     
     return {
       gardenId: garden.id,
@@ -4297,11 +4275,14 @@ function RoutineSection({
     return emptyPhrases[idx];
   }, [emptyPhrases]);
   const maxCount = Math.max(1, ...weekCounts);
-  const occsByPlant: Record<string, typeof todayTaskOccurrences> = {};
-  for (const o of todayTaskOccurrences) {
-    if (!occsByPlant[o.gardenPlantId]) occsByPlant[o.gardenPlantId] = [];
-    occsByPlant[o.gardenPlantId].push(o);
-  }
+  const occsByPlant = React.useMemo(() => {
+    const map: Record<string, typeof todayTaskOccurrences> = {};
+    for (const o of todayTaskOccurrences) {
+      if (!map[o.gardenPlantId]) map[o.gardenPlantId] = [];
+      map[o.gardenPlantId].push(o);
+    }
+    return map;
+  }, [todayTaskOccurrences]);
   // Fetch completions for done occurrences to display actor names
   const [completionsByOcc, setCompletionsByOcc] = React.useState<
     Record<string, Array<{ userId: string; displayName: string | null }>>
@@ -4414,19 +4395,13 @@ function RoutineSection({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {plants.map((gp: { id: string; nickname?: string | null; plant?: { name?: string }; plantName?: string; name?: string; plantsOnHand?: number }) => {
             const occs = occsByPlant[gp.id] || [];
-            const totalReq = occs.reduce(
-              (a, o) => a + Math.max(1, o.requiredCount || 1),
-              0,
-            );
-            const totalDone = occs.reduce(
-              (a, o) =>
-                a +
-                Math.min(
-                  Math.max(1, o.requiredCount || 1),
-                  o.completedCount || 0,
-                ),
-              0,
-            );
+            let totalReq = 0;
+            let totalDone = 0;
+            for (const o of occs) {
+              const req = Math.max(1, o.requiredCount || 1);
+              totalReq += req;
+              totalDone += Math.min(req, o.completedCount || 0);
+            }
             if (occs.length === 0) return null;
             return (
               <Card key={gp.id} className={routineCardSurface}>
@@ -4852,10 +4827,17 @@ function OverviewSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gardenId, serverToday, activityRev]);
 
+  // Pre-index dailyStats by date for O(1) lookups (used 4+ times)
+  const dailyStatsMap = React.useMemo(() => {
+    const m = new Map<string, typeof dailyStats[number]>();
+    for (const d of dailyStats) m.set(d.date, d);
+    return m;
+  }, [dailyStats]);
+
   const totalToDoToday =
-    dailyStats.find((d) => d.date === (serverToday || ""))?.due ?? 0;
+    dailyStatsMap.get(serverToday || "")?.due ?? 0;
   const completedToday =
-    dailyStats.find((d) => d.date === (serverToday || ""))?.completed ?? 0;
+    dailyStatsMap.get(serverToday || "")?.completed ?? 0;
   const progressPct =
     totalToDoToday === 0
       ? 100
@@ -4886,12 +4868,12 @@ function OverviewSection({
     d.setDate(d.getDate() - (29 - i));
     const dateIso = d.toISOString().slice(0, 10);
     const dayNum = d.getDate();
-    const found = dailyStats.find((x) => x.date === dateIso);
+    const found = dailyStatsMap.get(dateIso);
     const success = found ? found.success : false;
     const completed = found ? found.completed || 0 : 0;
     return { dayNum, isToday: i === 29, success, completed };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }), [serverToday, dailyStats]);
+  }), [serverToday, dailyStatsMap]);
 
   const gardenHasTasks = Object.values(taskCountsByPlant).some(c => c > 0);
   const streak = React.useMemo(() => {
@@ -4899,11 +4881,11 @@ function OverviewSection({
     if (plants.length === 0 || !gardenHasTasks) return 0;
     let s = baseStreak;
     if (serverToday) {
-      const today = dailyStats.find((d) => d.date === serverToday);
-      if (today && today.success) s = baseStreak + 1;
+      const todayStat = dailyStatsMap.get(serverToday);
+      if (todayStat && todayStat.success) s = baseStreak + 1;
     }
     return s;
-  }, [baseStreak, serverToday, dailyStats, plants.length, gardenHasTasks]);
+  }, [baseStreak, serverToday, dailyStatsMap, plants.length, gardenHasTasks]);
 
   // Calculate task counts per plant - use server data or compute from todayTaskOccurrences
   const taskCountsPerPlant = React.useMemo(() => {

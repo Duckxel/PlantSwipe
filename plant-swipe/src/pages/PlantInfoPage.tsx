@@ -215,18 +215,14 @@ async function fetchPlantStatusAndBasicInfo(id: string, language?: string): Prom
 }
 
 async function fetchPlantWithRelations(id: string, language?: string): Promise<Plant | null> {
-  const { data, error } = await supabase.from('plants').select('*').eq('id', id).maybeSingle()
-  if (error) throw new Error(error.message)
-  if (!data) return null
-  
   // All translatable fields are stored in plant_translations for ALL languages (including English)
-  // Load translation for the requested language
   const targetLanguage = language || 'en'
-  
-  // Run all independent queries in parallel for faster loading
+
+  // Run ALL queries in parallel — including the main plant query and color translation chain
   const [
+    plantResult,
     translationResult,
-    colorLinksResult,
+    colorsResolved,
     imagesResult,
     schedulesResult,
     sourcesResult,
@@ -234,13 +230,48 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     contributorsResult,
     recipesResult,
   ] = await Promise.all([
+    supabase.from('plants').select('*').eq('id', id).maybeSingle(),
     supabase
       .from('plant_translations')
       .select('*')
       .eq('plant_id', id)
       .eq('language', targetLanguage)
       .maybeSingle(),
-    supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id),
+    // Colors + color translations in one async chain (eliminates waterfall)
+    (async () => {
+      const { data: colorLinks } = await supabase
+        .from('plant_colors')
+        .select('color_id, colors:color_id (id,name,hex_code)')
+        .eq('plant_id', id)
+      if (!colorLinks?.length) return [] as Array<{ id: string; name: string; hexCode: string }>
+      const colorIds: string[] = []
+      const colorEntries: Array<{ id: string; fallbackName: string; hexCode: string }> = []
+      for (const c of colorLinks as any[]) {
+        const cid = c.colors?.id
+        if (cid) {
+          colorIds.push(cid)
+          colorEntries.push({ id: cid, fallbackName: c.colors?.name, hexCode: c.colors?.hex_code })
+        }
+      }
+      const colorTranslationsMap: Record<string, string> = {}
+      if (colorIds.length > 0) {
+        const { data: colorTranslations } = await supabase
+          .from('color_translations')
+          .select('color_id, name')
+          .eq('language', targetLanguage)
+          .in('color_id', colorIds)
+        if (colorTranslations) {
+          for (const ct of colorTranslations) {
+            colorTranslationsMap[(ct as { color_id: string; name: string }).color_id] = (ct as { color_id: string; name: string }).name
+          }
+        }
+      }
+      return colorEntries.map(({ id: cid, fallbackName, hexCode }) => ({
+        id: cid,
+        name: colorTranslationsMap[cid] || fallbackName,
+        hexCode,
+      }))
+    })(),
     supabase.from('plant_images').select('id,link,use').eq('plant_id', id),
     supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
@@ -248,38 +279,19 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
     supabase.from('plant_recipes').select('id,name,name_fr,category,time,link').eq('plant_id', id),
   ])
-  
+
+  const data = plantResult.data
+  if (plantResult.error) throw new Error(plantResult.error.message)
+  if (!data) return null
+
   const translation = translationResult.data || null
-  const colorLinks = colorLinksResult.data
+  const colors = colorsResolved
   const images = imagesResult.data
   const schedules = schedulesResult.data
   const sources = sourcesResult.data
   const infusionMixRows = infusionMixResult.data
   const contributorRows = contributorsResult.data
   const recipeRows = recipesResult?.data
-  
-  // Fetch color translations for the target language (depends on colorLinks result)
-  const colorIds = (colorLinks || []).map((c: any) => c.colors?.id).filter(Boolean)
-  let colorTranslationsMap: Record<string, string> = {}
-  if (colorIds.length > 0) {
-    const { data: colorTranslations } = await supabase
-      .from('color_translations')
-      .select('color_id, name')
-      .eq('language', targetLanguage)
-      .in('color_id', colorIds)
-    if (colorTranslations) {
-      colorTranslationsMap = colorTranslations.reduce((acc: Record<string, string>, t: { color_id: string; name: string }) => {
-        acc[t.color_id] = t.name
-        return acc
-      }, {})
-    }
-  }
-  
-  const colors = (colorLinks || []).map((c: any) => ({
-    id: c.colors?.id,
-    name: colorTranslationsMap[c.colors?.id] || c.colors?.name,
-    hexCode: c.colors?.hex_code
-  }))
   const infusionMix = (infusionMixRows || []).reduce((acc: Record<string, string>, row: any) => {
     if (row?.mix_name) acc[row.mix_name] = row?.benefit || ''
     return acc
@@ -439,9 +451,17 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     createdTime: data.created_time || undefined,
     updatedBy: data.updated_by || undefined,
     updatedTime: data.updated_time || undefined,
-    contributors: (contributorRows || [])
-      .map((row: any) => row?.contributor_name)
-      .filter((name: any) => typeof name === 'string' && name.trim()),
+    contributors: (() => {
+      const seen = new Map<string, string>()
+      for (const row of (contributorRows || []) as any[]) {
+        const name = row?.contributor_name
+        if (typeof name === 'string' && name.trim()) {
+          const key = name.toLowerCase()
+          if (!seen.has(key)) seen.set(key, name)
+        }
+      }
+      return Array.from(seen.values())
+    })(),
 
     // Display
     images: (images as PlantImage[]) || [],
@@ -658,13 +678,15 @@ const PlantInfoPage: React.FC = () => {
       return
     }
     let ignore = false
-    fetchImpression('plant', id).then((data) => {
-      if (!ignore && data) setImpressionCount(data.count)
-    })
-    // Fetch total likes for this plant (admin only)
-    supabase.auth.getSession().then(({ data: sessionData }) => {
+    // Parallelize impression + likes fetch instead of sequential chains
+    Promise.all([
+      fetchImpression('plant', id),
+      supabase.auth.getSession(),
+    ]).then(([impressionData, { data: sessionData }]) => {
+      if (ignore) return
+      if (impressionData) setImpressionCount(impressionData.count)
       const token = sessionData.session?.access_token
-      if (!token || ignore) return
+      if (!token) return
       fetch(`/api/plants/${encodeURIComponent(id)}/likes-count`, {
         headers: { Authorization: `Bearer ${token}` },
         credentials: 'same-origin',
@@ -1228,11 +1250,17 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   // Companion plants state and fetching
   const [companionPlants, setCompanionPlants] = React.useState<Array<{ id: string; name: string; imageUrl?: string }>>([])
   const [companionsLoading, setCompanionsLoading] = React.useState(false)
-  
+
+  // Stabilize companion IDs reference — only recompute when the plant itself changes
+  const companionIds = React.useMemo(
+    () => plant?.companionPlants || (plant?.miscellaneous?.companions as string[] | undefined) || null,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [plant?.id],
+  )
+
   React.useEffect(() => {
     let ignore = false
     const loadCompanions = async () => {
-      const companionIds = plant?.companionPlants || (plant?.miscellaneous?.companions as string[] | undefined)
       if (!companionIds || companionIds.length === 0) {
         setCompanionPlants([])
         return
@@ -1319,14 +1347,17 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     }
     loadCompanions()
     return () => { ignore = true }
-  }, [plant?.companionPlants, plant?.miscellaneous?.companions, currentLang])
+  }, [companionIds, currentLang])
   
-  // Comprehensive enum value translator
+  // Comprehensive enum value translator — cached to avoid repeated 27-key brute-force lookups
+  const enumCache = React.useMemo(() => new Map<string, string>(), [t])
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
     if (!value) return ''
     const raw = value.toLowerCase().trim()
-    
-    // All plantInfo enum groups to search through
+
+    const cached = enumCache.get(raw)
+    if (cached !== undefined) return cached
+
     const enumGroups = [
       'utility', 'ediblePart', 'toxicity', 'poisoningMethod',
       'lifeCycle', 'averageLifespan', 'foliagePersistence',
@@ -1335,12 +1366,15 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
       'status', 'month',
     ]
-    
+
     for (const group of enumGroups) {
       const translated = t(`plantInfo:enums.${group}.${raw}`, { defaultValue: '' })
-      if (translated) return translated
+      if (translated) {
+        enumCache.set(raw, translated)
+        return translated
+      }
     }
-    
+
     // Also try common namespace for legacy keys
     const legacyKey = raw.replace(/[_\s-]/g, '')
     const legacyPaths = [
@@ -1353,12 +1387,17 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     ]
     for (const path of legacyPaths) {
       const translated = t(`common:${path}`, { defaultValue: '' })
-      if (translated) return translated
+      if (translated) {
+        enumCache.set(raw, translated)
+        return translated
+      }
     }
-    
+
     // Fallback: format the value nicely (replace _ with space, capitalize words)
-    return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-  }, [t])
+    const fallback = value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+    enumCache.set(raw, fallback)
+    return fallback
+  }, [t, enumCache])
   
   const monthLabels = React.useMemo(() => [
     t('plantInfo:timeline.months.jan'),
@@ -1390,10 +1429,10 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       { label: t('plantInfo:dimensions.spacing'), value: spacing ? `${spacing} cm` : '—', subLabel: t('plantInfo:dimensions.spacingSub') },
     ]
     const habitats = plant.habitat || []
-  const activePins = habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
+  const activePins = React.useMemo(() => habitats.slice(0, MAP_PIN_POSITIONS.length).map((label, idx) => ({
     ...MAP_PIN_POSITIONS[idx],
     label: translateEnum(label),
-  }))
+  })), [habitats, translateEnum])
     const palette = plant.colors?.length ? plant.colors : []
     const showPalette = palette.length > 0
     const hasLifeCycleData = (plant.lifeCycle?.length ?? 0) > 0 || (plant.averageLifespan?.length ?? 0) > 0 || (plant.foliagePersistence?.length ?? 0) > 0
@@ -1401,35 +1440,36 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
     const gridClass = showRightColumn
       ? 'grid gap-3 sm:gap-4 grid-cols-1 lg:grid-cols-[minmax(0,2.5fr)_minmax(0,1fr)] items-start'
       : ''
-    const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
-      if (!schedules.length) return t('plantInfo:values.flexible')
-      return schedules
-        .map((schedule) => {
-          const season = schedule.season ? `${translateEnum(schedule.season)}: ` : ''
-          const quantity = schedule.quantity ? `${schedule.quantity}` : ''
-          const period = schedule.timePeriod ? ` / ${translateEnum(schedule.timePeriod)}` : ''
-          return `${season}${quantity}${period}`.trim() || t('plantInfo:values.scheduled')
-        })
-        .join(' • ')
-    }
-      // Helper to join arrays with bullet separator
+    // Memoize the entire section-items computation block — contains 20+ joinArr/translateEnum calls
+    const { structuredRecipes, hasStructuredRecipes, recipesIdeasList, contributorsList, createdTimestamp, updatedTimestamp, createdByLabel, updatedByLabel, sourcesValue, infoSections } = React.useMemo(() => {
+      const formatWaterPlans = (schedules: PlantWateringSchedule[] = []) => {
+        if (!schedules.length) return t('plantInfo:values.flexible')
+        return schedules
+          .map((schedule) => {
+            const season = schedule.season ? `${translateEnum(schedule.season)}: ` : ''
+            const quantity = schedule.quantity ? `${schedule.quantity}` : ''
+            const period = schedule.timePeriod ? ` / ${translateEnum(schedule.timePeriod)}` : ''
+            return `${season}${quantity}${period}`.trim() || t('plantInfo:values.scheduled')
+          })
+          .join(' • ')
+      }
       const joinArr = (arr: string[] | undefined) => arr?.length ? arr.map(v => translateEnum(v)).join(' • ') : null
       const joinRaw = (arr: string[] | undefined) => arr?.length ? arr.join(' • ') : null
 
       const temperatureWindow = plant.temperatureIdeal != null ? `${plant.temperatureIdeal}°C` : null
       const humidityValue = plant.hygrometry != null ? `${plant.hygrometry}%` : null
-      const companionNames = companionPlants.length > 0 ? companionPlants.map(c => c.name) : compactStrings(plant.companionPlants)
+      const _companionNames = companionPlants.length > 0 ? companionPlants.map(c => c.name) : compactStrings(plant.companionPlants)
       const infusionMixSummary = formatInfusionMixSummary(plant.infusionMixes)
-      const structuredRecipes: PlantRecipe[] = Array.isArray(plant.recipes) ? plant.recipes.filter((r: any) => r?.name) : []
-      const hasStructuredRecipes = structuredRecipes.length > 0
-      const recipesIdeasList = compactStrings(plant.recipesIdeas)
+      const _structuredRecipes: PlantRecipe[] = Array.isArray(plant.recipes) ? plant.recipes.filter((r: any) => r?.name) : []
+      const _hasStructuredRecipes = _structuredRecipes.length > 0
+      const _recipesIdeasList = compactStrings(plant.recipesIdeas)
 
-      const createdTimestamp = formatTimestampDetailed(plant.createdTime)
-      const updatedTimestamp = formatTimestampDetailed(plant.updatedTime)
-      const createdByLabel = plant.createdBy ?? undefined
-      const updatedByLabel = plant.updatedBy ?? undefined
-      const contributorsList = Array.from(new Map(compactStrings(plant.contributors).map(n => [n.toLowerCase(), n])).values())
-      const sourcesValue = formatSourcesList(plant.sources)
+      const _createdTimestamp = formatTimestampDetailed(plant.createdTime)
+      const _updatedTimestamp = formatTimestampDetailed(plant.updatedTime)
+      const _createdByLabel = plant.createdBy ?? undefined
+      const _updatedByLabel = plant.updatedBy ?? undefined
+      const _contributorsList = plant.contributors || []
+      const _sourcesValue = formatSourcesList(plant.sources)
 
       // ── Section 2: Identity ──
       const identityItems = filterInfoItems([
@@ -1546,7 +1586,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
 
       // ── Section 8: Misc ──
       const miscItems = filterInfoItems([
-        { label: tp('labels.companions'), value: companionNames.length ? companionNames.join(' • ') : null },
+        { label: tp('labels.companions'), value: _companionNames.length ? _companionNames.join(' • ') : null },
         { label: tp('labels.biotopePlants'), value: joinRaw(plant.biotopePlants) },
         { label: tp('labels.beneficialPlants'), value: joinRaw(plant.beneficialPlants) },
         { label: tp('labels.harmfulPlants'), value: joinRaw(plant.harmfulPlants) },
@@ -1555,7 +1595,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       ])
 
       // ── All sections in spec order ──
-      const infoSections = [
+      const _infoSections = [
         { title: tp('sections.identityTraits'), icon: <Palette className="h-4 w-4" />, items: identityItems, disclaimer: undefined as string | undefined, disclaimerAfter: undefined as number | undefined },
         { title: tp('sections.safety'), icon: <Skull className="h-4 w-4" />, items: safetyItems },
         { title: tp('sections.careHighlights'), icon: <Droplets className="h-4 w-4" />, items: careHighlights },
@@ -1566,6 +1606,20 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
         { title: tp('sections.consumption'), icon: <Utensils className="h-4 w-4" />, items: consumptionItems, disclaimer: hasMedicinalContent ? tp('disclaimers.medicinal') : undefined, disclaimerAfter: 0 },
         { title: tp('sections.misc'), icon: <Leaf className="h-4 w-4" />, items: miscItems },
       ].filter((section) => section.items.length > 0)
+
+      return {
+        structuredRecipes: _structuredRecipes,
+        hasStructuredRecipes: _hasStructuredRecipes,
+        recipesIdeasList: _recipesIdeasList,
+        contributorsList: _contributorsList,
+        createdTimestamp: _createdTimestamp,
+        updatedTimestamp: _updatedTimestamp,
+        createdByLabel: _createdByLabel,
+        updatedByLabel: _updatedByLabel,
+        sourcesValue: _sourcesValue,
+        infoSections: _infoSections,
+      }
+    }, [plant, t, tp, translateEnum, companionPlants])
 
   return (
     <section

@@ -60,7 +60,7 @@ import { useLanguageNavigate } from "@/lib/i18nRouting";
 import { Link } from "@/components/i18n/Link";
 import { GardenListSkeleton } from "@/components/garden/GardenSkeletons";
 import { updateTaskNotificationState } from "@/hooks/useTaskNotification";
-import { GardenListSidebar } from "@/components/garden/GardenListSidebar";
+const GardenListSidebar = React.lazy(() => import("@/components/garden/GardenListSidebar").then(m => ({ default: m.GardenListSidebar })));
 
 export const GardenListPage: React.FC = () => {
   const { user, profile } = useAuth();
@@ -315,25 +315,6 @@ export const GardenListPage: React.FC = () => {
                 .catch(() => {});
             }
 
-            // Fetch member counts for fresh gardens
-            if (freshData.length > 0) {
-              const gardenIds = freshData.map((g) => g.id);
-              supabase
-                .from("garden_members")
-                .select("garden_id")
-                .in("garden_id", gardenIds)
-                .then(({ data: memberRows }) => {
-                  if (memberRows) {
-                    const counts: Record<string, number> = {};
-                    for (const row of memberRows) {
-                      const gid = String(row.garden_id);
-                      counts[gid] = (counts[gid] || 0) + 1;
-                    }
-                    setMemberCountsByGarden(counts);
-                  }
-                })
-                .catch(() => {});
-            }
           })
           .catch(() => {
             // If background fetch fails, keep using cached data
@@ -369,26 +350,6 @@ export const GardenListPage: React.FC = () => {
             .catch(() => {
               setProgressByGarden({});
             });
-        }
-
-        // Fetch member counts for cached gardens
-        if (data.length > 0) {
-          const gardenIds = data.map((g) => g.id);
-          supabase
-            .from("garden_members")
-            .select("garden_id")
-            .in("garden_id", gardenIds)
-            .then(({ data: memberRows }) => {
-              if (memberRows) {
-                const counts: Record<string, number> = {};
-                for (const row of memberRows) {
-                  const gid = String(row.garden_id);
-                  counts[gid] = (counts[gid] || 0) + 1;
-                }
-                setMemberCountsByGarden(counts);
-              }
-            })
-            .catch(() => {});
         }
 
         // Fetch member counts and plant counts for cached gardens - use batch fetch
@@ -699,13 +660,8 @@ export const GardenListPage: React.FC = () => {
         const compMap =
           ids.length > 0 ? await listCompletionsForOccurrences(ids) : {};
         setCompletionsByOcc(compMap || {});
-        const idToGardenName = gardensList.reduce<Record<string, string>>(
-          (acc, g) => {
-            acc[g.id] = g.name;
-            return acc;
-          },
-          {},
-        );
+        const idToGardenName: Record<string, string> = {};
+        for (const g of gardensList) idToGardenName[g.id] = g.name;
         const all = plantsMinimal.map((gp) => ({
           id: gp.id,
           gardenId: gp.gardenId,
@@ -2547,6 +2503,7 @@ export const GardenListPage: React.FC = () => {
         </div>
 
         {/* Right-side Tasks sidebar for all gardens - hidden for non-logged-in users */}
+        <React.Suspense fallback={<div className="hidden lg:block w-80 animate-pulse bg-stone-100 dark:bg-stone-800 rounded-2xl h-96" />}>
         <GardenListSidebar
           user={user}
           t={t}
@@ -2570,6 +2527,7 @@ export const GardenListPage: React.FC = () => {
           handleDeclineInvite={handleDeclineInvite}
           processingInviteId={processingInviteId}
         />
+        </React.Suspense>
       </div>
     </div>
   );
