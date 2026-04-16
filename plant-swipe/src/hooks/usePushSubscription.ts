@@ -86,24 +86,26 @@ export function usePushSubscription(userId: string | null) {
   
   // Try to re-sync existing browser subscription to server
   // This handles cases where browser has subscription but it wasn't synced properly
+  // Skipped on native Capacitor — native push uses FCM/APNs, not web PushManager
   React.useEffect(() => {
+    if (isNativeCapacitor()) { setSynced(true); return }
     if (!supported || !userId || synced) return
     if (resyncAttempted.has(userId)) {
       setSynced(true)
       return
     }
-    
+
     const tryResync = async () => {
       try {
         const existing = await getExistingSubscription()
         const permissionStatus = typeof Notification !== 'undefined' ? Notification.permission : 'unsupported'
-        
+
         console.log('[push] Checking subscription status:', {
           hasExistingSubscription: !!existing,
           permissionStatus,
           userId: userId.slice(0, 8) + '...'
         })
-        
+
         if (hasOptedOut(userId)) {
           resyncAttempted.add(userId)
           setSynced(true)
@@ -140,7 +142,7 @@ export function usePushSubscription(userId: string | null) {
         setSynced(true) // Mark as attempted to avoid retry loops
       }
     }
-    
+
     // Small delay to avoid blocking initial render
     const timeout = setTimeout(tryResync, 1500)
     return () => clearTimeout(timeout)
@@ -198,10 +200,13 @@ export function usePushSubscription(userId: string | null) {
 
   // Auto-enable push notifications for new users (default behavior)
   // This runs once per user session when they first log in
+  // Skipped on native Capacitor — native push registration is handled explicitly
+  // via SetupPage or Settings to avoid crash loops from conflicting Web/Native APIs
   React.useEffect(() => {
+    if (isNativeCapacitor()) return
     if (!supported || !userId || autoEnableTried) return
     if (autoEnableAttempted.has(userId)) return
-    
+
     const tryAutoEnable = async () => {
       try {
         // Check if user already has a subscription
@@ -210,14 +215,14 @@ export function usePushSubscription(userId: string | null) {
           setSubscribed(true)
           return
         }
-        
+
         // Only auto-prompt if permission is 'default' (not yet asked)
         // and the user is logged in
         if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
           // Mark that we've attempted auto-enable for this user
           autoEnableAttempted.add(userId)
           setAutoEnableTried(true)
-          
+
           // Try to enable push notifications
           await requestNotificationPermission()
           await registerPushSubscription()
@@ -232,7 +237,7 @@ export function usePushSubscription(userId: string | null) {
         autoEnableAttempted.add(userId)
       }
     }
-    
+
     // Small delay to avoid blocking initial render
     const timeout = setTimeout(tryAutoEnable, 2000)
     return () => clearTimeout(timeout)
@@ -251,8 +256,13 @@ export function usePushSubscription(userId: string | null) {
     setError(null)
     try {
       setOptOut(userId, false)
-      await requestNotificationPermission()
-      await registerPushSubscription()
+      if (isNativeCapacitor()) {
+        const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
+        await registerNativePushForCurrentUser()
+      } else {
+        await requestNotificationPermission()
+        await registerPushSubscription()
+      }
       setSubscribed(true)
       if (typeof Notification !== 'undefined') {
         setPermission(Notification.permission)
