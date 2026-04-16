@@ -4,6 +4,7 @@ import { useLanguageNavigate, usePathWithoutLanguage, addLanguagePrefix } from "
 import { Navigate } from "@/components/i18n/Navigate";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { executeRecaptcha } from "@/lib/recaptcha";
+import { isNativeCapacitor } from "@/platform/runtime";
 import { useMotionValue, animate } from "framer-motion";
 import { ChevronDown, ChevronUp, LayoutGrid, ListFilter, MessageSquarePlus, Plus, Loader2 } from "lucide-react";
 import { useHotkeys } from "react-hotkeys-hook";
@@ -311,7 +312,9 @@ export default function PlantSwipe() {
   const [authMarketingConsent, setAuthMarketingConsent] = useState(false) // GDPR: Must be unchecked by default - pre-ticked boxes don't constitute valid consent (Recital 32)
 
   // Track if cookie consent is needed for auth (reCAPTCHA requires cookies)
+  // Native Capacitor apps skip reCAPTCHA entirely, so cookies are never required
   const [authNeedsCookies, setAuthNeedsCookies] = useState(() => {
+    if (isNativeCapacitor()) return false
     const level = getConsentLevel()
     return !level || level === 'rejected'
   })
@@ -1819,29 +1822,40 @@ export default function PlantSwipe() {
     try {
       console.log('[auth] submit start', { mode: authMode })
       
-      // Check if user has accepted cookies (required for reCAPTCHA security)
-      const consentLevel = getConsentLevel()
-      if (!consentLevel || consentLevel === 'rejected') {
-        console.warn('[auth] cookie consent required but not given or rejected')
-        setAuthError(t('auth.cookiesRequired'))
-        setAuthSubmitting(false)
-        return
+      // reCAPTCHA is not available in native Capacitor apps (WebView can't load
+      // the Google JS SDK). Skip the cookie-consent gate and token acquisition
+      // entirely so native users can sign up / log in without friction.
+      const isNative = isNativeCapacitor()
+
+      if (!isNative) {
+        // Check if user has accepted cookies (required for reCAPTCHA security)
+        const consentLevel = getConsentLevel()
+        if (!consentLevel || consentLevel === 'rejected') {
+          console.warn('[auth] cookie consent required but not given or rejected')
+          setAuthError(t('auth.cookiesRequired'))
+          setAuthSubmitting(false)
+          return
+        }
       }
-      
+
       // Execute reCAPTCHA v3 Enterprise (consent-aware, may return null)
       let recaptchaToken: string | undefined
-      try {
-        const action = authMode === 'signup' ? 'signup' : 'login'
-        const token = await executeRecaptcha(action)
-        recaptchaToken = token ?? undefined
-        if (token) {
-          console.log('[auth] reCAPTCHA token obtained')
-        } else {
-          console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+      if (!isNative) {
+        try {
+          const action = authMode === 'signup' ? 'signup' : 'login'
+          const token = await executeRecaptcha(action)
+          recaptchaToken = token ?? undefined
+          if (token) {
+            console.log('[auth] reCAPTCHA token obtained')
+          } else {
+            console.log('[auth] reCAPTCHA skipped (no consent or unavailable)')
+          }
+        } catch (recaptchaError) {
+          console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
+          // Continue without token - backend will decide how to handle
         }
-      } catch (recaptchaError) {
-        console.warn('[auth] reCAPTCHA execution failed', recaptchaError)
-        // Continue without token - backend will decide how to handle
+      } else {
+        console.log('[auth] reCAPTCHA skipped (native Capacitor app)')
       }
       
       if (authMode === 'signup') {
@@ -1954,8 +1968,13 @@ export default function PlantSwipe() {
       confirmPasswordValidation.reset()
     } else {
       // Re-check cookie consent when dialog opens (may have been accepted via main banner)
-      const level = getConsentLevel()
-      setAuthNeedsCookies(!level || level === 'rejected')
+      // Native apps never need cookies (no reCAPTCHA)
+      if (isNativeCapacitor()) {
+        setAuthNeedsCookies(false)
+      } else {
+        const level = getConsentLevel()
+        setAuthNeedsCookies(!level || level === 'rejected')
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authOpen])
@@ -2300,16 +2319,18 @@ export default function PlantSwipe() {
                       </button>
                     </div>
                   )}
-                  <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
-                    This site is protected by reCAPTCHA and the Google{' '}
-                    <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-                    <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-                  </p>
+                  {!isNativeCapacitor() && (
+                    <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                      This site is protected by reCAPTCHA and the Google{' '}
+                      <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                      <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                    </p>
+                  )}
                 </div>
               </div>
             </DialogContent>
           </Dialog>
-          
+
           {/* GDPR Cookie Consent Banner */}
           <CookieConsent />
           
@@ -3061,12 +3082,14 @@ export default function PlantSwipe() {
                   </button>
                 </div>
               )}
-              {/* reCAPTCHA disclosure (required when hiding the badge) */}
-              <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
-                This site is protected by reCAPTCHA and the Google{' '}
-                <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
-                <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
-              </p>
+              {/* reCAPTCHA disclosure (required when hiding the badge) - hidden on native apps */}
+              {!isNativeCapacitor() && (
+                <p className="text-[10px] text-center text-stone-400 dark:text-stone-500">
+                  This site is protected by reCAPTCHA and the Google{' '}
+                  <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Privacy Policy</a> and{' '}
+                  <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="underline hover:text-stone-600 dark:hover:text-stone-400">Terms of Service</a> apply.
+                </p>
+              )}
             </div>
           </div>
         </DialogContent>
