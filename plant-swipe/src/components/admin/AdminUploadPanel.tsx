@@ -929,7 +929,7 @@ export const AdminUploadPanel: React.FC = () => {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-200 flex items-center justify-between">
           <span>{error}</span>
-          <button type="button" onClick={() => setError(null)} className="ml-3 flex-shrink-0">
+          <button type="button" onClick={() => setError(null)} aria-label="Dismiss error" title="Dismiss error" className="ml-3 flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded">
             <X className="h-4 w-4" />
           </button>
         </div>

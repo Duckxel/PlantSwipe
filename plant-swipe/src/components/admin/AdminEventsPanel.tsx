@@ -510,7 +510,7 @@ export const AdminEventsPanel: React.FC = () => {
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
             Edit Event
           </h3>
-          <button onClick={handleCancel} className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+          <button onClick={handleCancel} aria-label="Cancel editing" title="Cancel editing" className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-stone-500">
             <X className="h-4 w-4 text-stone-500" />
           </button>
         </div>
@@ -689,7 +689,7 @@ export const AdminEventsPanel: React.FC = () => {
         <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           {error}
-          <button onClick={() => setError(null)} className="ml-auto"><X className="h-3.5 w-3.5" /></button>
+          <button onClick={() => setError(null)} aria-label="Dismiss error" title="Dismiss error" className="ml-auto focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded"><X className="h-3.5 w-3.5" /></button>
         </div>
       )}
       {success && (
