@@ -17,6 +17,7 @@ import {
   registerCapacitorBackNavigation,
   registerNativeOverlayBackHandler,
 } from '@/lib/capNativeBridge'
+import { registerNativePushNavigation } from '@/lib/nativePushRegistration'
 
 function AppShell() {
   const location = useLocation()
@@ -127,6 +128,7 @@ function CapacitorLinkBridge() {
   React.useEffect(() => {
     registerCapacitorDeepLinks(navigate)
     registerCapacitorAndroidBackButton()
+    registerNativePushNavigation(navigate)
     const unNav = registerCapacitorBackNavigation(navigate)
     const unOverlay = registerNativeOverlayBackHandler()
     patchIosInteractivePopGesture()
