@@ -1408,6 +1408,13 @@ if (fcmNativePushEnabled) {
   console.warn('[notifications] FCM_LEGACY_SERVER_KEY not set — native app tokens stored but server will not send FCM until configured')
 }
 
+/**
+ * Android channel created by the client in `nativePushRegistration.ts`. Must
+ * match `ANDROID_CHANNEL_ID` there — without a channel_id, Android 8+ drops
+ * notifications silently on many OEM ROMs (Xiaomi, Huawei, Oppo…).
+ */
+const FCM_ANDROID_CHANNEL_ID = 'aphylia_priority'
+
 async function sendFcmLegacyToToken(token, { title, body, data }) {
   if (!fcmLegacyServerKey || !token) return { ok: false }
   const dataStrings = {}
@@ -1425,7 +1432,18 @@ async function sendFcmLegacyToToken(token, { title, body, data }) {
     body: JSON.stringify({
       to: token,
       priority: 'high',
-      notification: { title, body },
+      // `content_available: true` wakes iOS apps from background so the APNs
+      // path can hand off to the Capacitor push listener.  Ignored on Android.
+      content_available: true,
+      // Best-effort delivery window — Doze-mode reminders shouldn't linger
+      // more than a day past their schedule.
+      time_to_live: 60 * 60 * 24,
+      notification: {
+        title,
+        body,
+        android_channel_id: FCM_ANDROID_CHANNEL_ID,
+        sound: 'default',
+      },
       data: dataStrings,
     }),
   })
