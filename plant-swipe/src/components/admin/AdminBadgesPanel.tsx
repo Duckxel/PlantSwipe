@@ -788,7 +788,7 @@ export const AdminBadgesPanel: React.FC = () => {
         <div className="flex items-center gap-2 p-3 rounded-xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 text-sm">
           <AlertCircle className="h-4 w-4 flex-shrink-0" />
           {error}
-          <button onClick={() => setError(null)} className="ml-auto">
+          <button onClick={() => setError(null)} className="ml-auto focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none rounded-sm" aria-label="Dismiss error" title="Dismiss error">
             <X className="h-3.5 w-3.5" />
           </button>
         </div>

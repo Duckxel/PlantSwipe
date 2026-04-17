@@ -48,3 +48,6 @@
 ## 2024-05-20 - Adding Keyboard Focus and Button Types to Action Buttons
 **Learning:** Adding semantic `type="button"` and `focus-visible` utility classes to interactive components ensures they behave consistently, especially within complex UIs, preventing form submission issues and enabling proper keyboard navigation.
 **Action:** Consistently set `type="button"` and `focus-visible` utility classes (e.g. `focus-visible:ring-2`) on custom buttons inside UIs.
+## 2026-04-17 - Accessible Error Dismissal Buttons
+**Learning:** Icon-only error dismissal buttons (`<X>`) across admin panels lacked `aria-label`/`title` for screen readers and tooltips, and didn't have keyboard focus indicators (`focus-visible:ring-2`). Even text-based "dismiss" buttons missed the focus indicators.
+**Action:** Always add explicit `aria-label` and `title` to icon-only buttons. Add `focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none rounded-sm` to ensure keyboard users can navigate to and activate these error alert dismissals.
