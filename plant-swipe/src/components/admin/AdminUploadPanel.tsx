@@ -439,11 +439,7 @@ function FileExplorer({
       {error && (
         <div className="px-3 py-2 text-xs text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/10 border-b border-red-200 dark:border-red-900/30">
           {error}
-          <button
-            type="button"
-            onClick={() => setError(null)}
-            className="ml-2 underline hover:no-underline"
-          >
+          <button type="button" onClick={() => setError(null)} className="ml-2 underline hover:no-underline focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none rounded-sm">
             dismiss
           </button>
         </div>
@@ -929,7 +925,7 @@ export const AdminUploadPanel: React.FC = () => {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 dark:bg-red-900/20 px-4 py-3 text-sm text-red-700 dark:text-red-200 flex items-center justify-between">
           <span>{error}</span>
-          <button type="button" onClick={() => setError(null)} className="ml-3 flex-shrink-0">
+          <button type="button" onClick={() => setError(null)} className="ml-3 flex-shrink-0 focus-visible:ring-2 focus-visible:ring-red-500 focus-visible:outline-none rounded-sm" aria-label="Dismiss error" title="Dismiss error">
             <X className="h-4 w-4" />
           </button>
         </div>
