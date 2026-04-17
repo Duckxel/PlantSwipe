@@ -68,6 +68,23 @@ const notificationBadgeUrl = new URL('icons/icon-192x192.png', self.registration
 const transparentIconDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const defaultNotificationTarget = new URL('.', self.registration.scope).href
 
+/**
+ * A stale copy of this worker can persist inside an Android Capacitor WebView
+ * after an app upgrade. Its `notificationclick` used to call
+ * `clients.openWindow()`, which in a WebView dispatches ACTION_VIEW to the
+ * system browser and boots the user out of the native shell. When we detect
+ * we're running under a Capacitor-like origin (localhost), we keep the worker
+ * idle for push handling and let `@capacitor/push-notifications` do the work.
+ */
+const isCapacitorLikeOrigin = (() => {
+  try {
+    const host = self.location.hostname.toLowerCase()
+    return host === 'localhost' || host === '127.0.0.1' || host === '::1'
+  } catch {
+    return false
+  }
+})()
+
 const resolveNotificationUrl = (target?: string | null) => {
   if (!target) return defaultNotificationTarget
   try {
@@ -309,6 +326,10 @@ self.addEventListener('message', (event) => {
 })
 
 self.addEventListener('push', (event) => {
+  // Capacitor Android: a stale SW registration survives app upgrades; the
+  // native plugin will display and route the notification, so silently drop
+  // the push here instead of spawning a second UI the user can't dismiss.
+  if (isCapacitorLikeOrigin) return
   if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
     return
   }
@@ -406,20 +427,28 @@ self.addEventListener('push', (event) => {
 })
 
 self.addEventListener('notificationclick', (event) => {
-  const notificationData = (event.notification?.data || {}) as { 
+  // See `isCapacitorLikeOrigin` above: inside the native shell,
+  // `clients.openWindow()` would dispatch an ACTION_VIEW intent that launches
+  // Chrome and crashes the Capacitor app. Close and bail — the native plugin
+  // owns tap routing.
+  if (isCapacitorLikeOrigin) {
+    event.notification?.close()
+    return
+  }
+  const notificationData = (event.notification?.data || {}) as {
     ctaUrl?: string
     url?: string
     conversationId?: string
     type?: string
   }
   const action = event.action
-  
+
   // Handle dismiss action - just close the notification
   if (action === 'dismiss') {
     event.notification?.close()
     return
   }
-  
+
   // Close notification first
   event.notification?.close()
   

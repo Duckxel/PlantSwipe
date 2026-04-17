@@ -21,11 +21,49 @@ export let lastNativePushToken: string | null = null
 let navigateFn: ((path: string) => void) | null = null
 
 /**
+ * Path buffered from a notification tap that arrived before the React tree
+ * finished mounting (cold-launch from a tap). Flushed as soon as
+ * `registerNativePushNavigation` wires up the router navigator.
+ */
+let pendingPath: string | null = null
+
+/**
+ * De-duplicate tap events. Android's push plugin reads the FCM extras during
+ * bridge init, but in rare races (config change, WebView reload) it can
+ * re-emit `pushNotificationActionPerformed` for the same notification id. We
+ * keep a bounded set so a redelivered tap can't loop-navigate.
+ */
+const processedNotificationIds = new Set<string>()
+const PROCESSED_ID_MAX = 50
+
+function markProcessed(id: string): boolean {
+  if (processedNotificationIds.has(id)) return false
+  processedNotificationIds.add(id)
+  if (processedNotificationIds.size > PROCESSED_ID_MAX) {
+    const first = processedNotificationIds.values().next().value
+    if (first) processedNotificationIds.delete(first)
+  }
+  return true
+}
+
+/**
  * Call once from the root component so that notification taps can navigate
  * inside the app instead of opening Chrome.
  */
 export function registerNativePushNavigation(navigate: (path: string) => void): void {
   navigateFn = navigate
+  // Flush a path captured from a cold-start tap before the router existed.
+  if (pendingPath) {
+    const path = pendingPath
+    pendingPath = null
+    queueMicrotask(() => {
+      try {
+        navigate(path)
+      } catch (err) {
+        if (import.meta.env.DEV) console.warn('[native push] deferred navigate failed', err)
+      }
+    })
+  }
 }
 
 async function postFcmToken(token: string): Promise<void> {
@@ -127,8 +165,24 @@ export async function registerNativePushForCurrentUser(): Promise<void> {
         // Handle notification taps — navigate inside the app instead of opening Chrome
         await PushNotifications.addListener('pushNotificationActionPerformed', (action) => {
           try {
-            const data = action?.notification?.data as Record<string, unknown> | undefined
+            const notification = action?.notification
+            const data = notification?.data as Record<string, unknown> | undefined
+            // Prefer FCM's message id (stable across replays) with an id fallback
+            // so we can drop a redelivered tap that would otherwise re-navigate.
+            const messageId =
+              (data?.['google.message_id'] as string | undefined) ||
+              (notification?.id as string | undefined) ||
+              null
+            if (messageId && !markProcessed(messageId)) return
+
             const path = resolveNotificationPath(data)
+            // Buffer the path if the router navigator hasn't registered yet.
+            // On a cold-start tap the push plugin fires before App.tsx mounts
+            // `CapacitorLinkBridge`, which is when navigateFn is populated.
+            if (!navigateFn) {
+              pendingPath = path
+              return
+            }
             // Defer to the next microtask so we never re-enter React Router
             // mid-render if the tap arrives while it's still mounting.
             queueMicrotask(() => {
