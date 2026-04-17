@@ -35,3 +35,7 @@
 ## 2026-04-03 - Combine multiple aggregations in single-pass loops
 **Learning:** Performing multiple `.reduce()` or chained `.filter().length` operations over the same array to calculate related metrics (e.g., total required tasks and total completed tasks) increases time complexity to O(2N) and adds unnecessary function call overhead.
 **Action:** Replace multiple `.reduce()` calls or `.filter().length` chains on the same array with a single-pass `for` loop that computes all required aggregates simultaneously, avoiding intermediate array allocations and reducing loop overhead.
+
+## 2026-04-17 - Optimize task aggregation in useMemo
+**Learning:** When computing multiple aggregates (like lengths of filtered arrays and groupings) over the same array inside a React useMemo hook, using chained array methods (like `.filter(x => ...).length`) creates multiple intermediate array allocations. This causes unnecessary garbage collection overhead.
+**Action:** Combine multiple aggregates and calculations into a single-pass `for` loop to reduce time complexity from O(kN) to O(N) and completely eliminate intermediate array allocations.

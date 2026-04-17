@@ -4086,17 +4086,25 @@ function AphyliaChatPortal({
   // Build comprehensive garden context with ALL available data
   // This ensures the AI has full knowledge of the garden even if backend enrichment fails
   const gardenContext = React.useMemo(() => {
-    // Calculate task stats
+    // ⚡ Bolt: Compute task stats and grouping in single-pass loops to avoid intermediate array allocations
     const totalTasksToday = todayTaskOccurrences.length
-    const completedTasksToday = todayTaskOccurrences.filter(t => t.completedAt !== null).length
+    let completedTasksToday = 0
+    for (let i = 0; i < totalTasksToday; i++) {
+      if (todayTaskOccurrences[i].completedAt !== null) {
+        completedTasksToday++
+      }
+    }
     const pendingTasksToday = totalTasksToday - completedTasksToday
     
     const totalTasksThisWeek = weekTaskOccurrences.length
-    const completedTasksThisWeek = weekTaskOccurrences.filter(t => t.completedAt !== null).length
-    
-    // Group tasks by type for this week
+    let completedTasksThisWeek = 0
     const tasksByType: Record<string, number> = {}
-    for (const task of weekTaskOccurrences) {
+
+    for (let i = 0; i < totalTasksThisWeek; i++) {
+      const task = weekTaskOccurrences[i]
+      if (task.completedAt !== null) {
+        completedTasksThisWeek++
+      }
       tasksByType[task.taskType] = (tasksByType[task.taskType] || 0) + 1
     }
     
@@ -4925,7 +4933,6 @@ function OverviewSection({
         variety: gp.plant?.variety || null,
         imageUrl: primaryImageUrl,
         plantId: gp.plant?.id,
-        gp,
         plantsOnHand: Number(gp.plantsOnHand || 0),
         healthStatus: gp.healthStatus || null,
         taskCount: taskInfo.total,
