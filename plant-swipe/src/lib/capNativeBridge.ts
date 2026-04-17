@@ -1,32 +1,15 @@
 /**
- * Capacitor-only: hardware back (Android), minimal SW for native push, iOS swipe-back alignment.
+ * Capacitor-only: hardware back (Android), iOS swipe-back alignment.
+ *
+ * The old `sw-native.js` minimal service worker used to be registered here for
+ * FCM push on Android. It was removed because its `notificationclick` handler
+ * called `clients.openWindow()`, which on Android booted the user out of the
+ * WebView into Chrome and trapped the app in a crash loop after upgrade. Native
+ * push is now handled exclusively via `@capacitor/push-notifications`.
  */
 import type { NavigateFunction } from 'react-router-dom'
 import { Capacitor } from '@capacitor/core'
 import { platformHapticTap } from '@/platform/haptics'
-
-const SW_NAME = 'sw-native.js'
-
-function swUrlAndScope(): { url: string; scope: string } {
-  let base = import.meta.env.BASE_URL || '/'
-  if (!base.startsWith('/')) base = `/${base}`
-  if (!base.endsWith('/')) base = `${base}/`
-  const url = `${base}${SW_NAME}`.replace(/\/{2,}/g, '/')
-  return { url, scope: base }
-}
-
-/** Register minimal push SW on native (no Workbox / precache). */
-export async function registerNativeMinimalServiceWorker(): Promise<ServiceWorkerRegistration | null> {
-  if (!Capacitor.isNativePlatform()) return null
-  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return null
-  try {
-    const { url, scope } = swUrlAndScope()
-    return await navigator.serviceWorker.register(url, { scope, type: 'classic' })
-  } catch (e) {
-    if (import.meta.env.DEV) console.warn('[native] sw-native registration failed', e)
-    return null
-  }
-}
 
 type BackHandler = () => boolean
 

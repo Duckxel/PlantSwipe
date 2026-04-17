@@ -2416,7 +2416,7 @@ export default function PlantSwipe() {
 
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-4 max-lg:pb-6 pt-[max(0.5rem,env(safe-area-inset-top,0px))] md:px-8 md:pt-4 lg:pb-8 overflow-y-visible">
+          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-4 max-lg:pb-6 pt-2 md:px-8 md:pt-4 lg:pb-8 overflow-y-visible">
           <div className="overflow-y-visible">
           <TopBar
             openLogin={openLogin}
@@ -2439,7 +2439,7 @@ export default function PlantSwipe() {
 
           {/* Layout: grid with sidebar on desktop */}
           <div
-            className={`max-w-6xl mx-auto mt-6 ${
+            className={`max-w-6xl mx-auto mt-2 lg:mt-6 ${
               currentView === "search" && showFilters
                 ? "lg:grid lg:grid-cols-[260px_1fr] lg:gap-10"
                 : ""

@@ -132,14 +132,25 @@ if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
 }
 
 if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    // Capacitor store builds omit the SW; probing registration is pointless and can touch stale state.
-    if (import.meta.env.VITE_APP_NATIVE_BUILD === '1') return
+  const isNativeShell =
+    import.meta.env.VITE_APP_NATIVE_BUILD === '1' || Capacitor.isNativePlatform()
+  if (isNativeShell) {
+    // Tear down any service worker left over from a previous build (e.g. the
+    // old `sw-native.js` whose `notificationclick` called `clients.openWindow()`
+    // and booted the user into Chrome). Run immediately — a queued push can
+    // fire the stale SW before React mounts, so we can't wait for `load`.
     navigator.serviceWorker
-      .getRegistration()
-      .then((registration) => registration?.update().catch(() => {}))
+      .getRegistrations()
+      .then((regs) => Promise.all((regs || []).map((r) => r.unregister().catch(() => false))))
       .catch(() => {})
-  })
+  } else {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker
+        .getRegistration()
+        .then((registration) => registration?.update().catch(() => {}))
+        .catch(() => {})
+    })
+  }
 }
 
 if (import.meta.env.PROD) {
