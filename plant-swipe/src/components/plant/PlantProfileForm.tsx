@@ -9,7 +9,7 @@ import type { TFunction } from "i18next"
 import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X, UploadCloud } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X, UploadCloud, Pencil, Check, Plus, Link as LinkIcon } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
@@ -935,49 +935,132 @@ const SourcesEditor: React.FC<{ value: PlantSource[] | undefined; onChange: (v: 
   const { t } = useTranslation('plantAdmin')
   const sources = Array.isArray(value) ? value : []
   const [draft, setDraft] = React.useState<PlantSource>({ name: "", url: "" })
+  const [editingIdx, setEditingIdx] = React.useState<number | null>(null)
+  const [editDraft, setEditDraft] = React.useState<PlantSource>({ name: "", url: "" })
+
   const addSource = () => {
     if (!draft.name?.trim()) return
     onChange([...sources, { name: draft.name.trim(), url: draft.url?.trim() || undefined }])
     setDraft({ name: "", url: "" })
   }
-  const remove = (idx: number) => onChange(sources.filter((_, i) => i !== idx))
+  const remove = (idx: number) => {
+    if (editingIdx === idx) setEditingIdx(null)
+    onChange(sources.filter((_, i) => i !== idx))
+  }
+  const startEdit = (idx: number) => {
+    setEditingIdx(idx)
+    setEditDraft({ name: sources[idx].name || "", url: sources[idx].url || "" })
+  }
+  const cancelEdit = () => {
+    setEditingIdx(null)
+    setEditDraft({ name: "", url: "" })
+  }
+  const saveEdit = () => {
+    if (editingIdx === null || !editDraft.name?.trim()) return
+    const next = sources.map((s, i) => i === editingIdx
+      ? { ...s, name: editDraft.name.trim(), url: editDraft.url?.trim() || undefined }
+      : s)
+    onChange(next)
+    setEditingIdx(null)
+    setEditDraft({ name: "", url: "" })
+  }
+
   return (
     <div className="grid gap-3">
-      <div className="grid gap-2 rounded border border-dashed p-3 bg-white/60 dark:bg-black/10">
+      <div className="space-y-2">
+        {sources.map((src, idx) => (
+          <div key={idx} className="rounded-lg border bg-white/70 dark:bg-[#161d16] shadow-sm transition-colors hover:border-emerald-400/60">
+            {editingIdx === idx ? (
+              <div className="grid gap-2 p-3">
+                <Input
+                  autoFocus
+                  placeholder={t('plantAdmin.sourcesEditor.namePlaceholder', 'Source name')}
+                  value={editDraft.name || ""}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, name: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+                  }}
+                />
+                <Input
+                  placeholder={t('plantAdmin.sourcesEditor.urlPlaceholder', 'https://example.com')}
+                  value={editDraft.url || ""}
+                  onChange={(e) => setEditDraft((d) => ({ ...d, url: e.target.value }))}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') { e.preventDefault(); saveEdit() }
+                    if (e.key === 'Escape') { e.preventDefault(); cancelEdit() }
+                  }}
+                />
+                <div className="flex justify-end gap-2 pt-1">
+                  <Button type="button" variant="outline" size="sm" onClick={cancelEdit}>
+                    <X className="h-4 w-4 mr-1" />
+                    {t('plantAdmin.sourcesEditor.cancel', 'Cancel')}
+                  </Button>
+                  <Button type="button" size="sm" onClick={saveEdit} disabled={!editDraft.name?.trim()}>
+                    <Check className="h-4 w-4 mr-1" />
+                    {t('plantAdmin.sourcesEditor.save', 'Save')}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between gap-3 px-3 py-2">
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-medium truncate">{src.name}</span>
+                  {src.url && (
+                    <a href={src.url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:text-blue-800 underline break-all inline-flex items-center gap-1">
+                      <LinkIcon className="h-3 w-3 shrink-0" />
+                      <span className="truncate">{src.url}</span>
+                    </a>
+                  )}
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    className="p-1.5 rounded text-muted-foreground hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 transition-colors"
+                    onClick={() => startEdit(idx)}
+                    aria-label={t('plantAdmin.sourcesEditor.editAria', 'Edit source')}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </button>
+                  <button
+                    type="button"
+                    className="p-1.5 rounded text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                    onClick={() => remove(idx)}
+                    aria-label={t('plantAdmin.sourcesEditor.removeAria', 'Remove source')}
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {!sources.length && (
+          <p className="text-xs text-muted-foreground italic px-1">
+            {t('plantAdmin.sourcesEditor.empty', 'No sources added yet.')}
+          </p>
+        )}
+      </div>
+      <div className="grid gap-2 rounded-lg border border-dashed p-3 bg-white/60 dark:bg-black/10">
         <Input
           placeholder={t('plantAdmin.sourcesEditor.namePlaceholder', 'Source name')}
           value={draft.name || ""}
           onChange={(e) => setDraft((d) => ({ ...d, name: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSource() } }}
         />
         <Input
           placeholder={t('plantAdmin.sourcesEditor.urlPlaceholder', 'https://example.com')}
           value={draft.url || ""}
           onChange={(e) => setDraft((d) => ({ ...d, url: e.target.value }))}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addSource() } }}
         />
-        <div className="flex justify-between text-sm text-muted-foreground">
-          <span>{t('plantAdmin.sourcesEditor.helperText', 'Add multiple references as needed.')}</span>
-          <Button type="button" onClick={addSource} disabled={!draft.name?.trim()}>
+        <div className="flex justify-between items-center gap-3 text-sm text-muted-foreground">
+          <span className="text-xs">{t('plantAdmin.sourcesEditor.helperText', 'Add multiple references as needed.')}</span>
+          <Button type="button" size="sm" onClick={addSource} disabled={!draft.name?.trim()}>
+            <Plus className="h-4 w-4 mr-1" />
             {t('plantAdmin.sourcesEditor.addSource', 'Add source')}
           </Button>
         </div>
-      </div>
-      <div className="space-y-2">
-        {sources.map((src, idx) => (
-          <div key={`${src.name}-${idx}`} className="flex items-center justify-between rounded border px-3 py-2 bg-white/70 dark:bg-[#161d16]">
-            <div className="flex flex-col">
-              <span className="font-medium">{src.name}</span>
-              {src.url && (
-                <a href={src.url} target="_blank" rel="noreferrer" className="text-xs text-blue-600 underline break-all">
-                  {src.url}
-                </a>
-              )}
-            </div>
-            <button type="button" className="text-red-600 hover:text-red-800" onClick={() => remove(idx)} aria-label={t('plantAdmin.sourcesEditor.removeAria', 'Remove source')}>
-              <X className="h-4 w-4" />
-            </button>
-          </div>
-        ))}
-        {!sources.length && <p className="text-xs text-muted-foreground">No sources added yet.</p>}
       </div>
     </div>
   )
