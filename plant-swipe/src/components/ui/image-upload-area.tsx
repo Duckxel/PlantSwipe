@@ -67,7 +67,7 @@ export const ImageUploadArea: React.FC<ImageUploadAreaProps> = ({
             <button
               type="button"
               onClick={onClearError}
-              className="ml-auto hover:text-red-900 dark:hover:text-red-100"
+              className="ml-auto hover:text-red-900 dark:hover:text-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-sm"
               aria-label="Dismiss"
             >
               <X className="w-4 h-4" />
