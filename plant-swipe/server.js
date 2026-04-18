@@ -4388,11 +4388,12 @@ app.get('/api/admin/system-health', async (req, res) => {
     // Disk stats (for root or /home depending on platform)
     let diskStats = null
     try {
-      const { promisify } = await import('util')
-      const execAsync = promisify(execCb)
       // Try df command for disk usage
       const diskPath = process.platform === 'win32' ? 'C:' : '/'
-      const dfResult = await execAsync(`df -B1 ${diskPath} 2>/dev/null || df -k ${diskPath} 2>/dev/null`).catch(() => null)
+      let dfResult = await execFile('df', ['-B1', diskPath]).catch(() => null)
+      if (!dfResult) {
+        dfResult = await execFile('df', ['-k', diskPath]).catch(() => null)
+      }
       if (dfResult && dfResult.stdout) {
         const lines = dfResult.stdout.trim().split('\n')
         if (lines.length >= 2) {

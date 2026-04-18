@@ -42,3 +42,8 @@
 **Vulnerability:** The `/api/users/:id/private` endpoint in `server.js` manually used the boolean helper `isAdminFromRequest(req)` instead of the standardized `ensureAdmin(req, res)` to check for administrative privileges. This bypassed the standard authentication flow controls, such as checking static admin tokens or returning consistent HTTP 401/403 responses.
 **Learning:** When an endpoint needs to grant access to both the resource owner and an admin, it's unsafe to rely on low-level boolean helpers like `isAdminFromRequest` which don't correctly handle all authentication states (e.g. static CI tokens) and error reporting.
 **Prevention:** Implement dual-authorization routes by first validating resource ownership. If that check fails, delegate the fallback authorization directly to the robust `ensureAdmin(req, res)` middleware, allowing it to securely handle the unauthenticated/unauthorized responses.
+
+## 2025-03-08 - Use execFile to prevent command injection
+**Vulnerability:** Found `exec` being used to call `df` with string interpolated parameters (`df -B1 ${diskPath} ...`). While `diskPath` in this case was largely safe, `exec` uses a shell to execute the command which makes the application vulnerable to command injection.
+**Learning:** `execFile` from `child_process` securely passes arguments to the binary without spawning an intermediary shell, thereby neutralizing shell metacharacter injections.
+**Prevention:** Always use `execFile` instead of `exec`. To handle shell operators like `||` (e.g. `cmd1 || cmd2`), use `try/catch` and JavaScript fallback logic instead.
