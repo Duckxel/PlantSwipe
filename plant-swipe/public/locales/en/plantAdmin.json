@@ -976,7 +976,11 @@
       "urlPlaceholder": "https://example.com",
       "helperText": "Add multiple references as needed.",
       "addSource": "Add source",
-      "removeAria": "Remove source"
+      "removeAria": "Remove source",
+      "editAria": "Edit source",
+      "save": "Save",
+      "cancel": "Cancel",
+      "empty": "No sources added yet."
     },
     "recipeEditor": {
       "addNewRecipe": "Add new recipe",

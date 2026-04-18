@@ -1003,7 +1003,11 @@
       "urlPlaceholder": "https://example.com",
       "helperText": "Ajoutez autant de références que nécessaire.",
       "addSource": "Ajouter une source",
-      "removeAria": "Retirer la source"
+      "removeAria": "Retirer la source",
+      "editAria": "Modifier la source",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "empty": "Aucune source ajoutée pour l'instant."
     },
     "recipeEditor": {
       "addNewRecipe": "Ajouter une recette",
