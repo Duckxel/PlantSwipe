@@ -335,64 +335,25 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     const today = serverToday || new Date().toISOString().slice(0, 10);
     const todayDate = new Date(today);
     
-    // Last 7 days for weekly stats
-    const last7Days = dailyStats.filter((d) => {
-      const diff = (todayDate.getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24);
-      return diff >= 0 && diff < 7;
-    });
-
-    // Previous 7 days for trend comparison
-    const prev7Days = dailyStats.filter((d) => {
-      const diff = (todayDate.getTime() - new Date(d.date).getTime()) / (1000 * 60 * 60 * 24);
-      return diff >= 7 && diff < 14;
-    });
-
-    const currentWeekCompleted = last7Days.reduce((sum, d) => sum + (d.completed || 0), 0);
-    const currentWeekDue = last7Days.reduce((sum, d) => sum + (d.due || 0), 0);
-    const prevWeekCompleted = prev7Days.reduce((sum, d) => sum + (d.completed || 0), 0);
-
-    const completionRate = currentWeekDue > 0 
-      ? Math.round((currentWeekCompleted / currentWeekDue) * 100) 
-      : 100;
-
-    const trendValue = prevWeekCompleted > 0
-      ? Math.round(((currentWeekCompleted - prevWeekCompleted) / prevWeekCompleted) * 100)
-      : 0;
-
-    let trend: "up" | "down" | "stable" = "stable";
-    if (trendValue > 5) trend = "up";
-    else if (trendValue < -5) trend = "down";
-
     // Calculate consecutive successful days for best streak.
     // Only count days that actually had tasks due — days with due=0 and
     // success=true (from legacy empty-garden records) are skipped so they
     // don't inflate the streak.
     let bestStreak = 0;
     let currentStreak = 0;
+    let lastMissed: string | null = null;
     const sortedStats = [...dailyStats].sort((a, b) => a.date.localeCompare(b.date));
+
     for (const stat of sortedStats) {
       if (stat.due > 0 && stat.success) {
         currentStreak++;
         bestStreak = Math.max(bestStreak, currentStreak);
       } else if (stat.due > 0 && !stat.success) {
         currentStreak = 0;
+        lastMissed = stat.date; // Because it is sorted chronologically, this naturally ends up as the last missed day
       }
       // days with due=0 are neutral — don't break or extend the streak
     }
-
-    // Find last missed day
-    const lastMissed = sortedStats
-      .filter((d) => !d.success && d.due > 0)
-      .pop()?.date || null;
-
-    // Estimate task breakdown (if we don't have detailed data)
-    const tasksByType = {
-      water: Math.round(currentWeekCompleted * 0.5),
-      fertilize: Math.round(currentWeekCompleted * 0.15),
-      harvest: Math.round(currentWeekCompleted * 0.15),
-      cut: Math.round(currentWeekCompleted * 0.1),
-      custom: Math.round(currentWeekCompleted * 0.1),
-    };
 
     // Monthly comparison calculation (moved up for single-pass loop)
     const thisMonthStart = new Date(today);
@@ -406,11 +367,24 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
     let perfectDays = 0;
     let thisMonthTasks = 0;
     let lastMonthTasks = 0;
+    let currentWeekCompleted = 0;
+    let currentWeekDue = 0;
+    let prevWeekCompleted = 0;
     const dayOfWeekCounts: Record<number, number> = { 0: 0, 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, 6: 0 };
 
     for (let i = 0; i < dailyStats.length; i++) {
       const d = dailyStats[i];
       const completed = d.completed || 0;
+      const date = new Date(d.date);
+
+      // Weekly / Trend aggregations
+      const diffDays = (todayDate.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+      if (diffDays >= 0 && diffDays < 7) {
+        currentWeekCompleted += completed;
+        currentWeekDue += (d.due || 0);
+      } else if (diffDays >= 7 && diffDays < 14) {
+        prevWeekCompleted += completed;
+      }
 
       // Extended stats
       totalTasksCompleted += completed;
@@ -418,7 +392,6 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       if (d.success && d.due > 0) perfectDays++;
 
       // Day of week counts
-      const date = new Date(d.date);
       const dayOfWeek = date.getDay();
       dayOfWeekCounts[dayOfWeek] += completed;
 
@@ -429,6 +402,27 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
         lastMonthTasks += completed;
       }
     }
+
+    const completionRate = currentWeekDue > 0
+      ? Math.round((currentWeekCompleted / currentWeekDue) * 100)
+      : 100;
+
+    const trendValue = prevWeekCompleted > 0
+      ? Math.round(((currentWeekCompleted - prevWeekCompleted) / prevWeekCompleted) * 100)
+      : 0;
+
+    let trend: "up" | "down" | "stable" = "stable";
+    if (trendValue > 5) trend = "up";
+    else if (trendValue < -5) trend = "down";
+
+    // Estimate task breakdown (if we don't have detailed data)
+    const tasksByType = {
+      water: Math.round(currentWeekCompleted * 0.5),
+      fertilize: Math.round(currentWeekCompleted * 0.15),
+      harvest: Math.round(currentWeekCompleted * 0.15),
+      cut: Math.round(currentWeekCompleted * 0.1),
+      custom: Math.round(currentWeekCompleted * 0.1),
+    };
 
     const averageTasksPerDay = totalDaysActive > 0 ? Math.round((totalTasksCompleted / totalDaysActive) * 10) / 10 : 0;
     const mostActiveDayNum = Object.entries(dayOfWeekCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || '0';
