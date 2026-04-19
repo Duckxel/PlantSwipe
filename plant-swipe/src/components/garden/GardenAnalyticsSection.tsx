@@ -433,6 +433,24 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
       : 0;
 
+    // ⚡ Bolt: Calculate plant stats using a single-pass loop to avoid intermediate array allocations
+    // from .map() and multiple .filter() calls in this hot path
+    let needingAttentionCount = 0;
+    let healthyCount = 0;
+    const speciesSet = new Set<string>();
+
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      const plantId = p.plantId || p.plant?.id;
+      if (plantId) speciesSet.add(plantId);
+
+      if ((p.plantsOnHand || 0) < 1) {
+        needingAttentionCount++;
+      } else {
+        healthyCount++;
+      }
+    }
+
     return {
       dailyStats: dailyStats,
       weeklyStats: {
@@ -455,9 +473,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       })),
       plantStats: {
         total: plants.length,
-        species: new Set(plants.map((p) => p.plantId || p.plant?.id)).size,
-        needingAttention: plants.filter((p) => (p.plantsOnHand || 0) < 1).length,
-        healthy: plants.filter((p) => (p.plantsOnHand || 0) >= 1).length,
+        species: speciesSet.size,
+        needingAttention: needingAttentionCount,
+        healthy: healthyCount,
       },
       streakInfo: {
         current: streak,
