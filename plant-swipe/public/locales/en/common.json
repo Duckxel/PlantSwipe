@@ -20,6 +20,7 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
+    "networkError": "Network error",
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
@@ -906,7 +907,20 @@
     "plant": "plant",
     "plants": "plants",
     "streak": "streak",
-    "failedToLoad": "Failed to load gardens"
+    "failedToLoad": "Failed to load gardens",
+    "garden": "Garden",
+    "createFailed": "Failed to create garden",
+    "switchGarden": "Switch garden",
+    "loading": "Loading...",
+    "noOtherGardens": "No other gardens",
+    "livingSpaceLabel": "Living Space",
+    "livingSpaceHint": "Where will your plants grow? Select all that apply.",
+    "livingSpaceOptions": {
+      "indoor": "Indoor",
+      "outdoor": "Outdoor",
+      "terrarium": "Terrarium",
+      "greenhouse": "Greenhouse"
+    }
   },
   "gardens": {
     "publicGardensTitle": "Public Gardens",
@@ -1508,7 +1522,16 @@
       "aiFeedback": "AI Gardener Feedback",
       "generating": "Generating...",
       "getAIFeedback": "Get AI Feedback",
-      "photosAnalyzed": "{{count}} photo(s) analyzed"
+      "photosAnalyzed": "{{count}} photo(s) analyzed",
+      "videoExportError": "Failed to generate video. Your browser may not support this feature.",
+      "saveEntryError": "Failed to save entry: {{error}}",
+      "deletePhotoError": "Failed to delete photo"
+    },
+    "membersSection": {
+      "viewProfile": "View profile",
+      "openMemberActions": "Open member actions",
+      "addMemberFailed": "Failed to add member",
+      "noAccountFound": "No account found"
     },
     "routineSection": {
       "thisWeek": "This week",
@@ -1558,6 +1581,9 @@
       "importingPlants": "Importing plants...",
       "plantsImported": "{{count}} plant(s) imported successfully",
       "importFailed": "Failed to import plants",
+      "addPlantFailed": "Failed to add plant",
+      "saveScheduleFailed": "Failed to save schedule",
+      "logWateringFailed": "Failed to log watering",
       "onHand": "On hand:",
       "tasks": "Tasks:",
       "dueToday": "Due today:",
@@ -1626,6 +1652,11 @@
       "adviceLanguageDescription": "Choose the language for your personalized gardening advice.",
       "selectLanguage": "Select Language",
       "adviceWillBeIn": "Your gardening advice will be in {{language}}",
+      "saveLocationError": "Failed to save location",
+      "saveLocationRetry": "Failed to save location. Please try again.",
+      "saveLanguageError": "Failed to save language preference",
+      "saveLanguageRetry": "Failed to save language preference. Please try again.",
+      "saveGardenFailed": "Failed to save garden",
       "gardenName": "Garden name",
       "coverImageUrl": "Cover image URL",
       "coverUploadButton": "Upload image",

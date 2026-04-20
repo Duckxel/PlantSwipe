@@ -74,11 +74,11 @@ export const GardenAdviceLanguageEditor: React.FC<GardenAdviceLanguageEditorProp
         setTimeout(() => setSaved(false), 2000);
       } else {
         console.error("[language] Save failed:", data.error || "Unknown error");
-        alert(data.error || "Failed to save language preference");
+        alert(data.error || t("gardenDashboard.settingsSection.saveLanguageError", { defaultValue: "Failed to save language preference" }));
       }
     } catch (err) {
       console.error("[language] Failed to save:", err);
-      alert("Failed to save language preference. Please try again.");
+      alert(t("gardenDashboard.settingsSection.saveLanguageRetry", { defaultValue: "Failed to save language preference. Please try again." }));
     } finally {
       setSaving(false);
     }

@@ -20,6 +20,7 @@
     "loading": "Chargement...",
     "error": "Erreur",
     "success": "Succès",
+    "networkError": "Erreur réseau",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "delete": "Supprimer",
@@ -906,7 +907,20 @@
     "plant": "plante",
     "plants": "plantes",
     "streak": "série",
-    "failedToLoad": "Échec du chargement des jardins"
+    "failedToLoad": "Échec du chargement des jardins",
+    "garden": "Jardin",
+    "createFailed": "Échec de la création du jardin",
+    "switchGarden": "Changer de jardin",
+    "loading": "Chargement...",
+    "noOtherGardens": "Aucun autre jardin",
+    "livingSpaceLabel": "Espace de vie",
+    "livingSpaceHint": "Où vos plantes vont-elles pousser ? Sélectionnez toutes les options qui s'appliquent.",
+    "livingSpaceOptions": {
+      "indoor": "Intérieur",
+      "outdoor": "Extérieur",
+      "terrarium": "Terrarium",
+      "greenhouse": "Serre"
+    }
   },
   "gardens": {
     "publicGardensTitle": "Jardins publics",
@@ -1508,7 +1522,16 @@
       "aiFeedback": "Conseils IA du jardinier",
       "generating": "Génération...",
       "getAIFeedback": "Obtenir des conseils IA",
-      "photosAnalyzed": "{{count}} photo(s) analysée(s)"
+      "photosAnalyzed": "{{count}} photo(s) analysée(s)",
+      "videoExportError": "Échec de la génération de la vidéo. Votre navigateur ne prend peut-être pas en charge cette fonctionnalité.",
+      "saveEntryError": "Échec de l'enregistrement de l'entrée : {{error}}",
+      "deletePhotoError": "Échec de la suppression de la photo"
+    },
+    "membersSection": {
+      "viewProfile": "Voir le profil",
+      "openMemberActions": "Ouvrir les actions du membre",
+      "addMemberFailed": "Échec de l'ajout du membre",
+      "noAccountFound": "Aucun compte trouvé"
     },
     "routineSection": {
       "thisWeek": "Cette semaine",
@@ -1558,6 +1581,9 @@
       "importingPlants": "Importation des plantes...",
       "plantsImported": "{{count}} plante(s) importée(s) avec succès",
       "importFailed": "Échec de l'importation des plantes",
+      "addPlantFailed": "Échec de l'ajout de la plante",
+      "saveScheduleFailed": "Échec de l'enregistrement du calendrier",
+      "logWateringFailed": "Échec de l'enregistrement de l'arrosage",
       "onHand": "En stock :",
       "tasks": "Tâches :",
       "dueToday": "Dû aujourd'hui :",
@@ -1626,6 +1652,11 @@
       "adviceLanguageDescription": "Choisissez la langue de vos conseils de jardinage personnalisés.",
       "selectLanguage": "Sélectionner la langue",
       "adviceWillBeIn": "Vos conseils de jardinage seront en {{language}}",
+      "saveLocationError": "Échec de l'enregistrement de la localisation",
+      "saveLocationRetry": "Échec de l'enregistrement de la localisation. Veuillez réessayer.",
+      "saveLanguageError": "Échec de l'enregistrement de la préférence de langue",
+      "saveLanguageRetry": "Échec de l'enregistrement de la préférence de langue. Veuillez réessayer.",
+      "saveGardenFailed": "Échec de l'enregistrement du jardin",
       "gardenName": "Nom du jardin",
       "coverImageUrl": "URL de l'image de couverture",
       "coverUploadButton": "Téléverser une image",

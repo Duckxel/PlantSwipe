@@ -563,7 +563,7 @@ export function GardenPlantManageButton({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              aria-label={t("close", "Close")}
+              aria-label={t("common.close", { defaultValue: "Close" })}
               className="inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/70 bg-white/95 text-stone-900 shadow-md transition hover:bg-white focus:outline-none focus:ring-2 focus:ring-white/80 focus:ring-offset-2 focus:ring-offset-black/30"
             >
               <X className="h-4 w-4" />
@@ -839,10 +839,10 @@ export function GardenPlantManageButton({
               <div className="border-t border-stone-200 bg-white/95 p-4 sm:px-6 sm:py-4 lg:sticky lg:bottom-0 dark:border-stone-700 dark:bg-[#1f1f1f]/95">
                 <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
                   <Button variant="secondary" className="w-full rounded-2xl sm:w-auto" onClick={() => setOpen(false)}>
-                    {t("cancel", "Cancel")}
+                    {t("common.cancel", { defaultValue: "Cancel" })}
                   </Button>
                   <Button className="w-full rounded-2xl sm:w-auto" onClick={savePlantDetails} disabled={submitting || uploadingImage}>
-                    {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("save", "Save")}
+                    {submitting ? t("gardenDashboard.settingsSection.saving", "Saving...") : t("common.save", { defaultValue: "Save" })}
                   </Button>
                 </div>
               </div>
@@ -1146,7 +1146,7 @@ export function GardenPlantManageButton({
 
             <div className="flex flex-col gap-2 sm:flex-row">
               <Button variant="secondary" className="flex-1 rounded-2xl" onClick={resetTaskEditor} disabled={taskSaving}>
-                {t("cancel", "Cancel")}
+                {t("common.cancel", { defaultValue: "Cancel" })}
               </Button>
               <Button className="flex-1 rounded-2xl" onClick={handleSaveTask} disabled={taskSaving || selectedTaskCount !== taskAmount}>
                 {taskSaving
@@ -1154,7 +1154,7 @@ export function GardenPlantManageButton({
                     ? t("gardenDashboard.settingsSection.saving", "Saving...")
                     : t("gardenDashboard.taskDialog.creating", "Creating…")
                   : editingTask
-                    ? t("save", "Save")
+                    ? t("common.save", { defaultValue: "Save" })
                     : t("gardenDashboard.taskDialog.createTaskButton", "Create task")}
               </Button>
             </div>

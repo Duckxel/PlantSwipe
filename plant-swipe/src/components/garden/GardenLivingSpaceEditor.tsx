@@ -11,10 +11,10 @@ const LIVING_SPACE_OPTIONS: Array<{
   labelKey: string;
   defaultLabel: string;
 }> = [
-  { value: "indoor", icon: <Home className="w-5 h-5" />, labelKey: "garden.livingSpace.indoor", defaultLabel: "Indoor" },
-  { value: "outdoor", icon: <Trees className="w-5 h-5" />, labelKey: "garden.livingSpace.outdoor", defaultLabel: "Outdoor" },
-  { value: "terrarium", icon: <FlaskConical className="w-5 h-5" />, labelKey: "garden.livingSpace.terrarium", defaultLabel: "Terrarium" },
-  { value: "greenhouse", icon: <Warehouse className="w-5 h-5" />, labelKey: "garden.livingSpace.greenhouse", defaultLabel: "Greenhouse" },
+  { value: "indoor", icon: <Home className="w-5 h-5" />, labelKey: "garden.livingSpaceOptions.indoor", defaultLabel: "Indoor" },
+  { value: "outdoor", icon: <Trees className="w-5 h-5" />, labelKey: "garden.livingSpaceOptions.outdoor", defaultLabel: "Outdoor" },
+  { value: "terrarium", icon: <FlaskConical className="w-5 h-5" />, labelKey: "garden.livingSpaceOptions.terrarium", defaultLabel: "Terrarium" },
+  { value: "greenhouse", icon: <Warehouse className="w-5 h-5" />, labelKey: "garden.livingSpaceOptions.greenhouse", defaultLabel: "Greenhouse" },
 ];
 
 export const GardenLivingSpaceEditor: React.FC<{

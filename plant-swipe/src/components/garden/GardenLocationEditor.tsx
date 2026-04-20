@@ -107,11 +107,11 @@ export const GardenLocationEditor: React.FC<GardenLocationEditorProps> = ({
         setTimeout(() => setSaved(false), 2000);
       } else {
         console.error("[location] Save failed:", data.error || "Unknown error");
-        alert(data.error || "Failed to save location");
+        alert(data.error || t("gardenDashboard.settingsSection.saveLocationError", { defaultValue: "Failed to save location" }));
       }
     } catch (err) {
       console.error("[location] Failed to save:", err);
-      alert("Failed to save location. Please try again.");
+      alert(t("gardenDashboard.settingsSection.saveLocationRetry", { defaultValue: "Failed to save location. Please try again." }));
     } finally {
       setSaving(false);
     }
