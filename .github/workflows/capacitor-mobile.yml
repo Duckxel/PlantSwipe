@@ -173,23 +173,52 @@ jobs:
 
       - name: Materialise google-services.json from secret
         # FCM push delivery requires `android/app/google-services.json`, which
-        # is gitignored.  Stored as a base64 GitHub secret
-        # (`GOOGLE_SERVICES_JSON`) so the file lives only on the runner and
-        # never in the repo.  Without the secret the build still completes —
-        # the Gradle `google-services` plugin is applied conditionally and the
-        # runtime stub in `MainActivity.ensureFirebaseAppInitialized()` keeps
-        # the app from crashing — but push notifications won't actually
-        # deliver.
+        # is gitignored.  Stored as a GitHub secret (`GOOGLE_SERVICES_JSON`)
+        # so the file lives only on the runner and never in the repo.
+        #
+        # Accepts either the raw JSON or a base64-encoded blob — whichever
+        # form the operator happened to paste.  Validates the decoded result
+        # is real JSON before handing it to Gradle; the previous version
+        # wrote whatever `base64 -d` produced even when the input was invalid,
+        # which surfaced downstream as a cryptic
+        # `processDebugGoogleServices … EOFException at …android_client_info`.
+        #
+        # Without the secret the build still completes — the Gradle
+        # `google-services` plugin is applied conditionally and the runtime
+        # stub in `MainActivity.ensureFirebaseAppInitialized()` keeps the
+        # app from crashing — push just doesn't deliver.
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         working-directory: plant-swipe/android/app
         run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            echo "$GOOGLE_SERVICES_JSON" | base64 -d > google-services.json
-            echo "google-services.json written ($(wc -c < google-services.json) bytes)"
-          else
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
             echo "::warning::GOOGLE_SERVICES_JSON secret not set — push notifications won't work in this APK"
+            exit 0
           fi
+          tmp=$(mktemp)
+          trimmed=$(printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d '[:space:]')
+          case "$trimmed" in
+            '{'*)
+              # Raw JSON paste — keep whitespace so Gson's error offsets
+              # still line up with the operator's source file.
+              printf '%s' "$GOOGLE_SERVICES_JSON" > "$tmp"
+              echo "Detected raw-JSON secret"
+              ;;
+            *)
+              if ! printf '%s' "$trimmed" | base64 -d > "$tmp" 2>/dev/null; then
+                echo "::error::GOOGLE_SERVICES_JSON is neither valid JSON nor valid base64. Re-encode with: base64 -w0 plant-swipe/android/app/google-services.json"
+                exit 1
+              fi
+              echo "Detected base64 secret"
+              ;;
+          esac
+          if ! jq empty "$tmp" >/dev/null 2>&1; then
+            echo "::error::Decoded GOOGLE_SERVICES_JSON is not valid JSON ($(wc -c < "$tmp") bytes). First 120 chars: $(head -c 120 "$tmp")"
+            exit 1
+          fi
+          mv "$tmp" google-services.json
+          echo "google-services.json written ($(wc -c < google-services.json) bytes, project_number=$(jq -r .project_info.project_number google-services.json))"
 
       - name: Build PWA + cap sync
         run: bun run build:cap
@@ -264,12 +293,32 @@ jobs:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
         working-directory: plant-swipe/android/app
         run: |
-          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
-            echo "$GOOGLE_SERVICES_JSON" | base64 -d > google-services.json
-            echo "google-services.json written ($(wc -c < google-services.json) bytes)"
-          else
+          set -euo pipefail
+          if [ -z "${GOOGLE_SERVICES_JSON:-}" ]; then
             echo "::warning::GOOGLE_SERVICES_JSON secret not set — push notifications won't work in this APK"
+            exit 0
           fi
+          tmp=$(mktemp)
+          trimmed=$(printf '%s' "$GOOGLE_SERVICES_JSON" | tr -d '[:space:]')
+          case "$trimmed" in
+            '{'*)
+              printf '%s' "$GOOGLE_SERVICES_JSON" > "$tmp"
+              echo "Detected raw-JSON secret"
+              ;;
+            *)
+              if ! printf '%s' "$trimmed" | base64 -d > "$tmp" 2>/dev/null; then
+                echo "::error::GOOGLE_SERVICES_JSON is neither valid JSON nor valid base64. Re-encode with: base64 -w0 plant-swipe/android/app/google-services.json"
+                exit 1
+              fi
+              echo "Detected base64 secret"
+              ;;
+          esac
+          if ! jq empty "$tmp" >/dev/null 2>&1; then
+            echo "::error::Decoded GOOGLE_SERVICES_JSON is not valid JSON ($(wc -c < "$tmp") bytes). First 120 chars: $(head -c 120 "$tmp")"
+            exit 1
+          fi
+          mv "$tmp" google-services.json
+          echo "google-services.json written ($(wc -c < google-services.json) bytes, project_number=$(jq -r .project_info.project_number google-services.json))"
 
       - name: Build PWA + cap sync
         run: bun run build:cap
