@@ -576,13 +576,14 @@ export const ScanPage: React.FC = () => {
                   </div>
                 </div>
                 
-                {/* Delete button */}
+                {/* Delete button — always visible on touch devices, hover-reveal on desktop */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
                     setDeleteConfirmId(scan.id)
                   }}
-                  className="absolute top-2 right-2 p-2 rounded-full bg-white/80 dark:bg-stone-800/80 text-stone-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all"
+                  aria-label={t('common.delete', { defaultValue: 'Delete' })}
+                  className="absolute top-2 right-2 h-11 w-11 flex items-center justify-center rounded-full bg-white/80 dark:bg-stone-800/80 text-stone-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 dark:hover:text-red-400 opacity-70 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-all"
                 >
                   <Trash2 className="h-4 w-4" />
                 </button>
