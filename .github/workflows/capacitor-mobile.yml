@@ -1,8 +1,11 @@
 # Capacitor: cache JS + native tooling, build Android + iOS artifacts.
 # Signing keys must NOT be committed — use GitHub Actions secrets for store builds.
+# The Android jobs also materialise `google-services.json` from the
+# `GOOGLE_SERVICES_JSON` secret so FCM push delivery works in CI-built APKs.
 #
 # Optional secrets:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
+#   GOOGLE_SERVICES_JSON (raw or base64-encoded google-services.json)
 #   APPLE_*, MATCH_*, etc.
 
 name: Capacitor mobile
