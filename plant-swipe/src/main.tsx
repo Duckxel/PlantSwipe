@@ -131,19 +131,29 @@ if (typeof window !== 'undefined' && Capacitor.isNativePlatform()) {
   }).catch(() => { /* plugin unavailable */ })
 }
 
-if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+if (typeof window !== 'undefined') {
   const isNativeShell =
     import.meta.env.VITE_APP_NATIVE_BUILD === '1' || Capacitor.isNativePlatform()
   if (isNativeShell) {
-    // Tear down any service worker left over from a previous build (e.g. the
-    // old `sw-native.js` whose `notificationclick` called `clients.openWindow()`
-    // and booted the user into Chrome). Run immediately — a queued push can
-    // fire the stale SW before React mounts, so we can't wait for `load`.
-    navigator.serviceWorker
-      .getRegistrations()
-      .then((regs) => Promise.all((regs || []).map((r) => r.unregister().catch(() => false))))
-      .catch(() => {})
-  } else {
+    if ('serviceWorker' in navigator) {
+      // Tear down any service worker left over from a previous build (e.g. the
+      // old `sw-native.js` whose `notificationclick` called `clients.openWindow()`
+      // and booted the user into Chrome). Run immediately — a queued push can
+      // fire the stale SW before React mounts, so we can't wait for `load`.
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((regs) => Promise.all((regs || []).map((r) => r.unregister().catch(() => false))))
+        .catch(() => {})
+    }
+    // Attach push listeners right now, before React mounts.  Cold-start taps
+    // emit `pushNotificationActionPerformed` during Capacitor bridge init;
+    // the plugin retains the event until a listener shows up, but getting
+    // the handler in place ASAP also gives us a chance to buffer the target
+    // path before React mounts — critical for a crash-free handoff.
+    void import('@/lib/nativePushRegistration')
+      .then((m) => m.initializeNativePushListeners())
+      .catch(() => { /* handled inside */ })
+  } else if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
       navigator.serviceWorker
         .getRegistration()
