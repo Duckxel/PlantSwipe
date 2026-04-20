@@ -171,6 +171,26 @@ jobs:
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Materialise google-services.json from secret
+        # FCM push delivery requires `android/app/google-services.json`, which
+        # is gitignored.  Stored as a base64 GitHub secret
+        # (`GOOGLE_SERVICES_JSON`) so the file lives only on the runner and
+        # never in the repo.  Without the secret the build still completes —
+        # the Gradle `google-services` plugin is applied conditionally and the
+        # runtime stub in `MainActivity.ensureFirebaseAppInitialized()` keeps
+        # the app from crashing — but push notifications won't actually
+        # deliver.
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        working-directory: plant-swipe/android/app
+        run: |
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 -d > google-services.json
+            echo "google-services.json written ($(wc -c < google-services.json) bytes)"
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON secret not set — push notifications won't work in this APK"
+          fi
+
       - name: Build PWA + cap sync
         run: bun run build:cap
         env:
@@ -238,6 +258,18 @@ jobs:
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
+
+      - name: Materialise google-services.json from secret
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        working-directory: plant-swipe/android/app
+        run: |
+          if [ -n "${GOOGLE_SERVICES_JSON:-}" ]; then
+            echo "$GOOGLE_SERVICES_JSON" | base64 -d > google-services.json
+            echo "google-services.json written ($(wc -c < google-services.json) bytes)"
+          else
+            echo "::warning::GOOGLE_SERVICES_JSON secret not set — push notifications won't work in this APK"
+          fi
 
       - name: Build PWA + cap sync
         run: bun run build:cap
