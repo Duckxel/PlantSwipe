@@ -218,6 +218,9 @@ Key dependencies are up-to-date:
 - `react`: 19.1.1
 - `jsonwebtoken`: 9.0.2
 
+#### ✅ Command Injection Remediation (April 2026)
+- Admin **`/api/admin/system-health`** endpoint previously used `child_process.exec()` for disk stats, which was vulnerable to shell injection via crafted input. Replaced with `child_process.execFile()` which bypasses shell interpolation entirely.
+
 #### ⚠️ Potential Concerns
 - No automated dependency vulnerability scanning in CI/CD (recommend adding)
 - `'unsafe-eval'` in CSP (required for some libraries but increases risk)

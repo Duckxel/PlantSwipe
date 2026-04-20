@@ -10,7 +10,7 @@ These align with Capacitor’s own guidance and App Store policy; treat them as 
 2. **Do not assume a Linux server can produce signed iOS builds.** **codesign, provisioning, and App Store distribution require macOS + Xcode** (or a macOS CI runner). Linux can sync web assets and build Android; iOS signing/archives are **mac-only**.
 3. **Do not treat remote web updates as permission to ship major new features without App Store review.** Apple **guideline 2.5.2** limits downloading or executing code that **changes features or functionality** in ways that bypass review. Server-driven **data**, **copy**, and **flags** inside **already-shipped** code paths are fine; **new product surface** shipped only over the wire is not a loophole. Details: `docs/LIVE_UPDATES_STORE_POLICY.md`.
 4. **Do not duplicate app features in separate web vs native implementations** unless there is **no** reasonable way to do it in shared web code (or a tiny native bridge). One React app, one set of routes and business logic.
-5. **Do not add many native plugins early “just in case.”** Add **`@capacitor/*`** plugins when a **concrete** need is proven; otherwise use **`src/platform/`** and web APIs first. Fewer plugins means less maintenance and less App Review surface.
+5. **Do not add native plugins without a concrete need.** Add **`@capacitor/*`** plugins when a proven use case exists; wrap them behind **`src/platform/`** with web-first fallbacks. The current plugin set includes `camera`, `haptics`, `push-notifications`, `share`, `browser`, `dialog`, `geolocation`, `keyboard`, `network`, `status-bar`, and `app` — each justified by a specific native gap. New additions still need the same bar.
 
 ## PWA-first philosophy
 
@@ -43,7 +43,7 @@ Native (or native-adjacent) changes are appropriate when they:
 Avoid:
 
 - Reimplementing screens or API clients in Kotlin/Swift when React can do it.
-- Adding Capacitor plugins “just in case”; prefer `src/platform/` with feature detection. See `package.json` for the current minimal plugin set.
+- Adding Capacitor plugins “just in case”; prefer `src/platform/` with feature detection. See `package.json` for the current plugin set.
 
 ## Hot update rules
 

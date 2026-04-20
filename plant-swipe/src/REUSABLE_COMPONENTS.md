@@ -34,11 +34,13 @@ Use this layer from UI for device capabilities so shared web code stays the defa
 
 | Module | Use for | Behavior |
 |--------|---------|----------|
-| `platformShare` / `isPlatformShareSupported` | Share sheet | Web Share API → clipboard (no Capacitor Share plugin) |
+| `platformShare` / `isPlatformShareSupported` | Share sheet | Native: `@capacitor/share` (OS share sheet); web: Web Share API → clipboard |
 | `platformHapticTap` / `isHapticsAvailable` | Light haptics | `navigator.vibrate` → `@capacitor/haptics` on native |
+| `isHapticsEnabled` / `setHapticsEnabled` | Haptics preference | User-togglable localStorage preference; `platformHapticTap` no-ops when disabled |
 | `platformPickCameraPhoto` / `platformGetCameraStream` | Camera | Native: `@capacitor/camera`; web: getUserMedia / file input |
+| `platformPickCameraPhotoWithOutcome` / `openNativeAppSettings` | Camera (detailed) | Returns `PlatformPhotoOutcome` with `ok`/`cancelled`/`denied`/`error` discriminant; `openNativeAppSettings` opens OS settings for denied permissions |
 | `platformGetCameraStream` / `platformEnumerateVideoDevices` | Camera | `getUserMedia` (same UI on web and typical WebViews) |
-| `isPlatformWebPushSupported` | Web push UI | Service worker + PushManager; `false` on Capacitor native until a native push path exists |
+| `isPlatformWebPushSupported` | Web push UI | Service worker + PushManager on web; always `false` on Capacitor native (native push uses FCM/APNs via `@capacitor/push-notifications`) |
 | `platformStorage` | Key/value | `localStorage` / `sessionStorage` (swap for Preferences later if needed) |
 | `isNativeCapacitor` | Runtime check | `Capacitor.isNativePlatform()` |
 
