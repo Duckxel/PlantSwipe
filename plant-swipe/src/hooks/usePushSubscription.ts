@@ -259,7 +259,9 @@ export function usePushSubscription(userId: string | null) {
       setOptOut(userId, false)
       if (native) {
         const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
-        await registerNativePushForCurrentUser()
+        // Explicit user gesture — clear any previously-recorded failure so a
+        // user who re-enables push after a FCM config fix gets a retry.
+        await registerNativePushForCurrentUser({ force: true })
       } else {
         await requestNotificationPermission()
         await registerPushSubscription()

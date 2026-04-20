@@ -34,6 +34,27 @@ public class MainActivity extends BridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // The distributed APK is built by CI without a `google-services.json`
+        // (the file is gitignored and no CI secret materialises it).  That means
+        // `FirebaseInitProvider` never finishes wiring up a default
+        // `FirebaseApp`, so the first call to `FirebaseMessaging.getInstance()`
+        // — which Capacitor's push plugin makes from `register()` as soon as the
+        // user grants POST_NOTIFICATIONS — throws `IllegalStateException` on
+        // the UI thread and the OS force-closes the app.  From then on every
+        // launch retries the registration (permission is already granted) and
+        // crashes the same way, producing the reported "accept notifications →
+        // crash loop on every open" behaviour.
+        //
+        // We can't ship a real Firebase config without a Firebase project +
+        // CI secret, so instead we prime a *stub* default FirebaseApp with
+        // harmless placeholder credentials.  That keeps `getInstance()` from
+        // throwing; the subsequent `getToken()` still fails — but *asynchronously*
+        // inside FCM, which the Capacitor plugin surfaces as a benign
+        // `registrationError` event on the JS side.  The app stays up; push
+        // delivery simply doesn't work until a real `google-services.json` is
+        // wired in.  Permission grant no longer kills the app.
+        ensureFirebaseAppInitialized();
+
         // Neuter service workers inside the Capacitor WebView before the bridge
         // starts. Earlier builds of the app registered a PWA service worker
         // whose `notificationclick` handler called `clients.openWindow()` — in
@@ -73,6 +94,61 @@ public class MainActivity extends BridgeActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         consumeFcmNotificationExtras(intent);
+    }
+
+    /**
+     * If the Google Services Gradle plugin didn't run (no `google-services.json`
+     * at build time), the `google_app_id` string resource is absent and
+     * `FirebaseInitProvider` silently skips initialisation.  We then register
+     * a stub default app so downstream code that calls
+     * `FirebaseApp.getInstance()` / `FirebaseMessaging.getInstance()` doesn't
+     * throw.  Done reflectively so this source still compiles in environments
+     * where Firebase classes aren't on the compileOnly classpath.
+     */
+    private void ensureFirebaseAppInitialized() {
+        try {
+            Class<?> firebaseAppCls = Class.forName("com.google.firebase.FirebaseApp");
+            // FirebaseApp.getApps(Context) returns any already-initialised apps.
+            Object apps = firebaseAppCls
+                .getMethod("getApps", android.content.Context.class)
+                .invoke(null, getApplicationContext());
+            if (apps instanceof java.util.List && !((java.util.List<?>) apps).isEmpty()) {
+                return;
+            }
+
+            // Platform already wired Firebase up via the Gradle plugin? Nothing to do.
+            int googleAppIdRes = getResources()
+                .getIdentifier("google_app_id", "string", getPackageName());
+            if (googleAppIdRes != 0) {
+                // Resource exists — let FirebaseInitProvider handle it.
+                return;
+            }
+
+            Class<?> optionsCls = Class.forName("com.google.firebase.FirebaseOptions");
+            Class<?> builderCls = Class.forName("com.google.firebase.FirebaseOptions$Builder");
+            Object builder = builderCls.getConstructor().newInstance();
+            // These values are deliberately placeholders — FCM token retrieval
+            // will fail, but `FirebaseApp.getInstance()` and
+            // `FirebaseMessaging.getInstance()` will no longer throw, so the
+            // Capacitor push plugin can report the failure via its normal
+            // `registrationError` channel instead of crashing the app.
+            // Application ID format: 1:<sender>:android:<hash>.
+            builder = builderCls.getMethod("setApplicationId", String.class)
+                .invoke(builder, "1:000000000000:android:0000000000000000");
+            builder = builderCls.getMethod("setApiKey", String.class)
+                .invoke(builder, "AIzaSy_stub_key_do_not_use_for_real_requests");
+            builder = builderCls.getMethod("setProjectId", String.class)
+                .invoke(builder, "aphylia-stub-no-fcm");
+            Object options = builderCls.getMethod("build").invoke(builder);
+
+            firebaseAppCls
+                .getMethod("initializeApp", android.content.Context.class, optionsCls)
+                .invoke(null, getApplicationContext(), options);
+        } catch (Throwable ignored) {
+            // Firebase classes genuinely missing, or init failed for another
+            // reason — nothing we can do here.  Push won't work but the app
+            // will still launch, which is what matters.
+        }
     }
 
     private static void consumeFcmNotificationExtras(Intent intent) {
