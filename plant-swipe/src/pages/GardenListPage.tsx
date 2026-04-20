@@ -1865,10 +1865,11 @@ export const GardenListPage: React.FC = () => {
     }
 
     // Check if progress shows tasks exist
-    const totalDueFromProgress = Object.values(progressByGarden).reduce(
-      (sum, prog) => sum + (prog.due || 0),
-      0,
-    );
+    // ⚡ Bolt: Calculate totalDueFromProgress with a for...in loop instead of Object.values().reduce() to prevent intermediate array allocation
+    let totalDueFromProgress = 0;
+    for (const key in progressByGarden) {
+      totalDueFromProgress += progressByGarden[key]?.due || 0;
+    }
     if (totalDueFromProgress > 0) {
       // Progress shows tasks exist but task list is empty - cache is stale!
       console.warn(
@@ -1933,10 +1934,11 @@ export const GardenListPage: React.FC = () => {
       // Don't trigger if we've already tried recently
       if (mismatchReloadAttemptsRef.current >= 3) return;
 
-      const totalDueFromProgress = Object.values(progressByGarden).reduce(
-        (sum, prog) => sum + (prog.due || 0),
-        0,
-      );
+      // ⚡ Bolt: Calculate totalDueFromProgress with a for...in loop instead of Object.values().reduce() to prevent intermediate array allocation
+      let totalDueFromProgress = 0;
+      for (const key in progressByGarden) {
+        totalDueFromProgress += progressByGarden[key]?.due || 0;
+      }
       if (totalDueFromProgress > 0) {
         console.warn(
           "[GardenList] Periodic mismatch check: progress shows tasks but list is empty - forcing reload",

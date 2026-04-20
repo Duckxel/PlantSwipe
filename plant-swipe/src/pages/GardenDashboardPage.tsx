@@ -4846,7 +4846,15 @@ function OverviewSection({
 
   // Compute max completed value to scale color intensity
   const maxCompleted = React.useMemo(
-    () => dailyStats.reduce((m, d) => Math.max(m, d.completed || 0), 0),
+    () => {
+      // ⚡ Bolt: Find max completed using a simple loop instead of .reduce() to prevent callback allocation
+      let m = 0;
+      for (let i = 0; i < dailyStats.length; i++) {
+        const val = dailyStats[i].completed || 0;
+        if (val > m) m = val;
+      }
+      return m;
+    },
     [dailyStats],
   );
 
