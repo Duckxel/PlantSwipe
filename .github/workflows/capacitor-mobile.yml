@@ -5,7 +5,7 @@
 #
 # Optional secrets:
 #   ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD
-#   GOOGLE_SERVICES_JSON (raw or base64-encoded google-services.json)
+#   GOOGLE_SERVICES_JSON (raw or base64-encoded google-services.json — the file must register package `app.aphylia` in Firebase)
 #   APPLE_*, MATCH_*, etc.
 
 name: Capacitor mobile
