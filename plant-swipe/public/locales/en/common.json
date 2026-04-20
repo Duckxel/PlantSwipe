@@ -797,6 +797,7 @@
     "signInDescription": "Please log in to identify plants and save your scan history.",
     "newScanTitle": "Identify a Plant",
     "newScanHint": "Take a clear photo of a leaf, flower, or the whole plant for best results.",
+    "poweredByKindwise": "Powered by Kindwise",
     "takePhoto": "Take Photo",
     "uploadImage": "Upload",
     "identifying": "Identifying plant...",
