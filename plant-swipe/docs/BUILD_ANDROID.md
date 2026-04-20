@@ -2,7 +2,7 @@
 
 Prerequisites: **JDK 21** (CI uses Temurin 21; source/target compatibility remains Java 17 in Gradle), **Android SDK**, **`ANDROID_HOME`** or **`ANDROID_SDK_ROOT`** pointing at the SDK root, **Bun**, **Node** (for `npx cap`).
 
-**Push (FCM):** Place **`google-services.json`** from the Firebase console in **`android/app/`** (gitignored) so Gradle applies the Google Services plugin. The server needs **`FCM_LEGACY_SERVER_KEY`** (or equivalent) to deliver to Android tokens stored in **`user_fcm_tokens`**.
+**Push (FCM):** Place **`google-services.json`** from the Firebase console in **`android/app/`** (gitignored) so Gradle applies the Google Services plugin. The server needs **`FCM_SERVICE_ACCOUNT_JSON`** (the service-account JSON from Firebase console → Project settings → Service accounts → Generate new private key) to deliver via the FCM HTTP v1 API to Android tokens stored in **`user_fcm_tokens`**. The legacy `FCM_LEGACY_SERVER_KEY` endpoint was turned down by Google on 2024-06-20 and is no longer supported.
 
 ## One-time / occasional
 

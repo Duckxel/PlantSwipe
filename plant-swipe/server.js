@@ -1398,14 +1398,72 @@ if (vapidPublicKey && vapidPrivateKey) {
   if (!vapidPrivateKey) console.warn('[notifications]   Missing: VAPID_PRIVATE_KEY')
 }
 
-/** FCM legacy HTTP API (server key) for Capacitor native tokens; optional. See https://firebase.google.com/docs/cloud-messaging/http-server-ref */
+/**
+ * FCM HTTP v1 for Capacitor native tokens.
+ *
+ * The legacy `/fcm/send` endpoint + server-key auth was permanently turned
+ * down by Google on 2024-06-20, so we authenticate with a service-account
+ * JSON and mint a short-lived OAuth2 access token against
+ * `https://fcm.googleapis.com/v1/projects/<project>/messages:send` instead.
+ *
+ * Configuration — set **one** of the following env vars to the contents of
+ * the service-account JSON downloaded from Firebase console → Project
+ * settings → Service accounts → Generate new private key:
+ *
+ *   - `FCM_SERVICE_ACCOUNT_JSON`      raw JSON (multi-line secret)
+ *   - `FCM_SERVICE_ACCOUNT_JSON_B64`  base64-encoded JSON (single line, friendlier for CI)
+ *   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` alias accepted so deployments
+ *     that already use the Google Cloud convention don't need a second var.
+ *
+ * Optional:
+ *
+ *   - `FCM_PROJECT_ID`  overrides `project_id` from the JSON (rarely needed).
+ *
+ * Legacy `FCM_LEGACY_SERVER_KEY` is still read but only logs a deprecation
+ * warning — the endpoint it talks to is dead.
+ *
+ * Docs: https://firebase.google.com/docs/cloud-messaging/migrate-v1
+ */
+function loadFcmServiceAccount() {
+  const rawJson = process.env.FCM_SERVICE_ACCOUNT_JSON
+    || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
+    || ''
+  const b64Json = process.env.FCM_SERVICE_ACCOUNT_JSON_B64 || ''
+  let text = rawJson.trim()
+  if (!text && b64Json) {
+    try { text = Buffer.from(b64Json.trim(), 'base64').toString('utf8') } catch { text = '' }
+  }
+  if (!text) return null
+  try {
+    const sa = JSON.parse(text)
+    if (!sa.client_email || !sa.private_key) {
+      console.warn('[notifications] FCM service account JSON missing client_email or private_key')
+      return null
+    }
+    return {
+      clientEmail: String(sa.client_email),
+      // Env vars often arrive with escaped newlines — normalise so jsonwebtoken can parse the PEM.
+      privateKey: String(sa.private_key).replace(/\\n/g, '\n'),
+      projectId: String(process.env.FCM_PROJECT_ID || sa.project_id || '').trim(),
+      tokenUri: String(sa.token_uri || 'https://oauth2.googleapis.com/token'),
+    }
+  } catch (err) {
+    console.warn('[notifications] FCM service account JSON parse failed:', err?.message || err)
+    return null
+  }
+}
+
+const fcmServiceAccount = loadFcmServiceAccount()
 const fcmLegacyServerKey =
   process.env.FCM_LEGACY_SERVER_KEY || process.env.FIREBASE_SERVER_KEY || process.env.GCM_API_KEY || ''
-let fcmNativePushEnabled = Boolean(fcmLegacyServerKey)
+
+let fcmNativePushEnabled = Boolean(fcmServiceAccount && fcmServiceAccount.projectId)
 if (fcmNativePushEnabled) {
-  console.log('[notifications] ✓ FCM legacy server key present — native (Capacitor) push delivery ENABLED')
+  console.log(`[notifications] ✓ FCM v1 service account loaded — project ${fcmServiceAccount.projectId} — native push ENABLED`)
+} else if (fcmLegacyServerKey) {
+  console.warn('[notifications] FCM_LEGACY_SERVER_KEY is set but the legacy /fcm/send endpoint was turned down on 2024-06-20. Migrate to FCM_SERVICE_ACCOUNT_JSON (HTTP v1).')
 } else {
-  console.warn('[notifications] FCM_LEGACY_SERVER_KEY not set — native app tokens stored but server will not send FCM until configured')
+  console.warn('[notifications] No FCM service account — native tokens will be stored but push delivery is disabled until FCM_SERVICE_ACCOUNT_JSON is configured')
 }
 
 /**
@@ -1415,44 +1473,135 @@ if (fcmNativePushEnabled) {
  */
 const FCM_ANDROID_CHANNEL_ID = 'aphylia_priority'
 
-async function sendFcmLegacyToToken(token, { title, body, data }) {
-  if (!fcmLegacyServerKey || !token) return { ok: false }
+/**
+ * Cache the OAuth2 access token for the lifetime the token server gives us
+ * (typically 1 h), minus a 60 s safety margin.  A stale token would just
+ * return 401 on the next send; refreshing proactively avoids that round trip.
+ */
+let fcmAccessTokenCache = { token: '', exp: 0 }
+
+async function getFcmV1AccessToken() {
+  if (!fcmServiceAccount) return null
+  const nowSec = Math.floor(Date.now() / 1000)
+  if (fcmAccessTokenCache.token && fcmAccessTokenCache.exp > nowSec + 60) {
+    return fcmAccessTokenCache.token
+  }
+  let assertion
+  try {
+    assertion = jwt.sign(
+      {
+        iss: fcmServiceAccount.clientEmail,
+        scope: 'https://www.googleapis.com/auth/firebase.messaging',
+        aud: fcmServiceAccount.tokenUri,
+        iat: nowSec,
+        exp: nowSec + 3600,
+      },
+      fcmServiceAccount.privateKey,
+      { algorithm: 'RS256' },
+    )
+  } catch (err) {
+    console.warn('[notifications] FCM JWT sign failed:', err?.message || err)
+    return null
+  }
+  let res
+  try {
+    res = await fetch(fcmServiceAccount.tokenUri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+        assertion,
+      }).toString(),
+    })
+  } catch (err) {
+    console.warn('[notifications] FCM token exchange network error:', err?.message || err)
+    return null
+  }
+  if (!res.ok) {
+    const body = await res.text().catch(() => '')
+    console.warn('[notifications] FCM token exchange failed:', res.status, body.slice(0, 500))
+    return null
+  }
+  const json = await res.json().catch(() => null)
+  if (!json?.access_token) return null
+  fcmAccessTokenCache = {
+    token: String(json.access_token),
+    exp: nowSec + (Number(json.expires_in) || 3600),
+  }
+  return fcmAccessTokenCache.token
+}
+
+async function sendFcmToToken(token, { title, body, data }) {
+  if (!fcmServiceAccount?.projectId || !token) return { ok: false, error: 'fcm_not_configured' }
+  const access = await getFcmV1AccessToken()
+  if (!access) return { ok: false, error: 'fcm_no_access_token' }
+
+  // The v1 API requires every `data` value to be a string.
   const dataStrings = {}
   if (data && typeof data === 'object') {
     for (const [k, v] of Object.entries(data)) {
       dataStrings[k] = v === undefined || v === null ? '' : String(v)
     }
   }
-  const res = await fetch('https://fcm.googleapis.com/fcm/send', {
-    method: 'POST',
-    headers: {
-      Authorization: `key=${fcmLegacyServerKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      to: token,
-      priority: 'high',
-      // `content_available: true` wakes iOS apps from background so the APNs
-      // path can hand off to the Capacitor push listener.  Ignored on Android.
-      content_available: true,
+
+  const message = {
+    token,
+    notification: { title, body },
+    data: dataStrings,
+    android: {
+      priority: 'HIGH',
       // Best-effort delivery window — Doze-mode reminders shouldn't linger
       // more than a day past their schedule.
-      time_to_live: 60 * 60 * 24,
+      ttl: '86400s',
       notification: {
-        title,
-        body,
-        android_channel_id: FCM_ANDROID_CHANNEL_ID,
+        channel_id: FCM_ANDROID_CHANNEL_ID,
         sound: 'default',
       },
-      data: dataStrings,
-    }),
-  })
+    },
+    apns: {
+      headers: { 'apns-priority': '10' },
+      payload: {
+        aps: {
+          alert: { title, body },
+          sound: 'default',
+          // `content-available: 1` wakes an iOS app in the background so the
+          // Capacitor push listener can fire.  The primary iOS path is
+          // `sendApnsToDevice()` below; this only matters if an iOS token
+          // somehow gets routed through FCM.
+          'content-available': 1,
+        },
+      },
+    },
+  }
+
+  const endpoint = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(fcmServiceAccount.projectId)}/messages:send`
+  let res
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${access}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ message }),
+    })
+  } catch (err) {
+    return { ok: false, error: `network:${err?.message || 'unknown'}` }
+  }
   const json = await res.json().catch(() => ({}))
-  if (!res.ok || json.failure === 1 || json.failure === '1') {
-    return { ok: false, error: json?.results?.[0]?.error || json?.error || res.statusText }
+  if (!res.ok) {
+    // v1 errors: { error: { code, message, status, details: [{ errorCode: 'UNREGISTERED' | … }] } }
+    const errorCode = json?.error?.details?.find?.((d) => d?.errorCode)?.errorCode
+      || json?.error?.status
+      || json?.error?.message
+      || res.statusText
+    return { ok: false, error: String(errorCode) }
   }
   return { ok: true }
 }
+
+// Back-compat alias — older call sites still reference the legacy name.
+const sendFcmLegacyToToken = sendFcmToToken
 
 const apnsKeyId = process.env.APNS_KEY_ID || ''
 const apnsTeamId = process.env.APNS_TEAM_ID || ''
@@ -26139,7 +26288,7 @@ app.post('/api/push/instant', async (req, res) => {
         ok = r.ok
         errMsg = String(r.error || '')
       } else {
-        const r = await sendFcmLegacyToToken(token, {
+        const r = await sendFcmToToken(token, {
           title,
           body,
           data: { ...pushData, tag: notificationTag },
@@ -26151,7 +26300,10 @@ app.post('/api/push/instant', async (req, res) => {
         sent = true
         successCount += 1
       } else {
-        if (/NotRegistered|InvalidRegistration|MismatchSenderId|BadDeviceToken|Unregistered/i.test(errMsg)) {
+        // Covers both legacy and v1 error vocabularies: `NotRegistered` /
+        // `InvalidRegistration` (legacy) and `UNREGISTERED` /
+        // `INVALID_ARGUMENT` / `SENDER_ID_MISMATCH` (v1).
+        if (/NotRegistered|InvalidRegistration|MismatchSenderId|BadDeviceToken|Unregistered|UNREGISTERED|INVALID_ARGUMENT|SENDER_ID_MISMATCH/i.test(errMsg)) {
           staleFcmTokens.push(token)
         }
         console.warn(`[push/instant] native push failed …${token.slice(-8)} (${plat}):`, errMsg)
