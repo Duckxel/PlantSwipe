@@ -2607,6 +2607,13 @@ if [[ ! -f "$NODE_DIR/ga4_keyfile.json" ]]; then
   log "       Then set GA4_PROPERTY_ID in .env.server"
 fi
 
+if [[ ! -f "$NODE_DIR/fcm_keyfile.json" ]]; then
+  log "[WARN] Missing $NODE_DIR/fcm_keyfile.json — Android (Capacitor) push notifications will not deliver."
+  log "       To enable: Firebase console → Project settings → Service accounts →"
+  log "       Generate new private key, and place the downloaded JSON at"
+  log "       $NODE_DIR/fcm_keyfile.json (no env var needed — auto-detected)."
+fi
+
 # --- Post-setup: Capacitor / mobile pipeline report ---
 print_capacitor_setup_report() {
   local web_disk android_disk ios_disk
@@ -2668,7 +2675,11 @@ Next steps:
    - Add to plant-swipe/.env.server:
      GA4_PROPERTY_ID=<your-numeric-property-id>
      GOOGLE_APPLICATION_CREDENTIALS=./ga4_keyfile.json
-4) Then run:
+4) Android push notifications (optional, required for Capacitor FCM):
+   - Place your Firebase service account key at plant-swipe/fcm_keyfile.json
+     (Firebase console → Project settings → Service accounts → Generate new private key)
+   - The server auto-detects the file; no env var required.
+5) Then run:
    sudo bash scripts/refresh-plant-swipe.sh
 
 Admin API endpoints are proxied at /admin/* per nginx snippet.

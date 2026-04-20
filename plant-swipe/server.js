@@ -1406,38 +1406,77 @@ if (vapidPublicKey && vapidPrivateKey) {
  * JSON and mint a short-lived OAuth2 access token against
  * `https://fcm.googleapis.com/v1/projects/<project>/messages:send` instead.
  *
- * Configuration — set **one** of the following env vars to the contents of
- * the service-account JSON downloaded from Firebase console → Project
- * settings → Service accounts → Generate new private key:
+ * Configuration — same pattern as GA4's `ga4_keyfile.json`:
  *
- *   - `FCM_SERVICE_ACCOUNT_JSON`      raw JSON (multi-line secret)
- *   - `FCM_SERVICE_ACCOUNT_JSON_B64`  base64-encoded JSON (single line, friendlier for CI)
- *   - `GOOGLE_APPLICATION_CREDENTIALS_JSON` alias accepted so deployments
- *     that already use the Google Cloud convention don't need a second var.
+ *   1. Drop the service-account JSON (Firebase console → Project settings →
+ *      Service accounts → Generate new private key) into
+ *      `plant-swipe/fcm_keyfile.json`.  The file is gitignored.
+ *   2. That's it.  The server auto-detects `./fcm_keyfile.json` relative to
+ *      `server.js` on startup.
  *
- * Optional:
+ * Overrides (rarely needed):
  *
- *   - `FCM_PROJECT_ID`  overrides `project_id` from the JSON (rarely needed).
+ *   - `FCM_SERVICE_ACCOUNT_FILE`   path to the JSON file (absolute or
+ *                                   relative to `server.js`).  Useful if the
+ *                                   file lives outside the repo — e.g.
+ *                                   `/etc/aphylia/fcm_keyfile.json`.
+ *   - `FCM_SERVICE_ACCOUNT_JSON`        raw JSON (multi-line secret), for
+ *                                        hosts that can't mount files.
+ *   - `FCM_SERVICE_ACCOUNT_JSON_B64`    base64 of the raw JSON.
+ *   - `GOOGLE_APPLICATION_CREDENTIALS_JSON`  alias of the inline form.
+ *   - `FCM_PROJECT_ID`             overrides `project_id` from the JSON.
  *
  * Legacy `FCM_LEGACY_SERVER_KEY` is still read but only logs a deprecation
  * warning — the endpoint it talks to is dead.
  *
  * Docs: https://firebase.google.com/docs/cloud-messaging/migrate-v1
  */
+const FCM_DEFAULT_KEYFILE = 'fcm_keyfile.json'
+
 function loadFcmServiceAccount() {
-  const rawJson = process.env.FCM_SERVICE_ACCOUNT_JSON
-    || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
-    || ''
-  const b64Json = process.env.FCM_SERVICE_ACCOUNT_JSON_B64 || ''
-  let text = rawJson.trim()
-  if (!text && b64Json) {
-    try { text = Buffer.from(b64Json.trim(), 'base64').toString('utf8') } catch { text = '' }
+  let text = ''
+  let source = ''
+
+  // 1. File on disk — preferred, matches the `ga4_keyfile.json` convention.
+  //    Explicit path wins; otherwise check for the default filename next to
+  //    server.js.  `__dirname` is already defined higher up in this file.
+  const explicitPath = (process.env.FCM_SERVICE_ACCOUNT_FILE || '').trim()
+  const candidatePath = explicitPath
+    ? (path.isAbsolute(explicitPath) ? explicitPath : path.resolve(__dirname, explicitPath))
+    : path.resolve(__dirname, FCM_DEFAULT_KEYFILE)
+  try {
+    if (fsSync.existsSync(candidatePath)) {
+      text = fsSync.readFileSync(candidatePath, 'utf8')
+      source = candidatePath
+    }
+  } catch (err) {
+    console.warn('[notifications] Failed to read FCM keyfile at', candidatePath, '—', err?.message || err)
   }
+
+  // 2. Inline env vars — fallback for platforms that only expose secrets as
+  //    environment variables (Vercel, some Heroku-style PaaS).
+  if (!text) {
+    const rawJson = process.env.FCM_SERVICE_ACCOUNT_JSON
+      || process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON
+      || ''
+    const b64Json = process.env.FCM_SERVICE_ACCOUNT_JSON_B64 || ''
+    text = rawJson.trim()
+    if (text) source = 'FCM_SERVICE_ACCOUNT_JSON env'
+    if (!text && b64Json) {
+      try {
+        text = Buffer.from(b64Json.trim(), 'base64').toString('utf8')
+        source = 'FCM_SERVICE_ACCOUNT_JSON_B64 env'
+      } catch {
+        text = ''
+      }
+    }
+  }
+
   if (!text) return null
   try {
     const sa = JSON.parse(text)
     if (!sa.client_email || !sa.private_key) {
-      console.warn('[notifications] FCM service account JSON missing client_email or private_key')
+      console.warn(`[notifications] FCM service account (${source}) missing client_email or private_key`)
       return null
     }
     return {
@@ -1446,9 +1485,10 @@ function loadFcmServiceAccount() {
       privateKey: String(sa.private_key).replace(/\\n/g, '\n'),
       projectId: String(process.env.FCM_PROJECT_ID || sa.project_id || '').trim(),
       tokenUri: String(sa.token_uri || 'https://oauth2.googleapis.com/token'),
+      source,
     }
   } catch (err) {
-    console.warn('[notifications] FCM service account JSON parse failed:', err?.message || err)
+    console.warn(`[notifications] FCM service account (${source}) parse failed:`, err?.message || err)
     return null
   }
 }
@@ -1459,11 +1499,11 @@ const fcmLegacyServerKey =
 
 let fcmNativePushEnabled = Boolean(fcmServiceAccount && fcmServiceAccount.projectId)
 if (fcmNativePushEnabled) {
-  console.log(`[notifications] ✓ FCM v1 service account loaded — project ${fcmServiceAccount.projectId} — native push ENABLED`)
+  console.log(`[notifications] ✓ FCM v1 service account loaded from ${fcmServiceAccount.source} — project ${fcmServiceAccount.projectId} — native push ENABLED`)
 } else if (fcmLegacyServerKey) {
-  console.warn('[notifications] FCM_LEGACY_SERVER_KEY is set but the legacy /fcm/send endpoint was turned down on 2024-06-20. Migrate to FCM_SERVICE_ACCOUNT_JSON (HTTP v1).')
+  console.warn('[notifications] FCM_LEGACY_SERVER_KEY is set but the legacy /fcm/send endpoint was turned down on 2024-06-20. Drop a service-account JSON at plant-swipe/fcm_keyfile.json (HTTP v1).')
 } else {
-  console.warn('[notifications] No FCM service account — native tokens will be stored but push delivery is disabled until FCM_SERVICE_ACCOUNT_JSON is configured')
+  console.warn('[notifications] No FCM service account — native tokens will be stored but push delivery is disabled. Place the service-account JSON at plant-swipe/fcm_keyfile.json.')
 }
 
 /**
