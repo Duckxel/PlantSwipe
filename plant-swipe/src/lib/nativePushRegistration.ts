@@ -28,7 +28,12 @@
  * MainActivity.java and src/sw.ts for the belt-and-braces blockers).
  */
 import { Capacitor } from '@capacitor/core'
-import { supabase } from '@/lib/supabaseClient'
+// `supabaseClient` is imported lazily inside `postFcmToken` because this module
+// is dynamically imported from `main.tsx` before the runtime env-loader has
+// populated `window.__ENV__`.  A top-level import would evaluate
+// `supabaseClient.ts` immediately, causing `createClient('', '', …)` to throw
+// "supabaseUrl is required" — which then poisons the module cache so the later
+// static import from `App.tsx` also fails, aborting bootstrap.
 
 /** Last FCM/APNs token the plugin handed us — used for unregister + retry. */
 export let lastNativePushToken: string | null = null
@@ -135,6 +140,7 @@ function readCachedFcmToken(): string | null {
 async function postFcmToken(token: string, attempt = 0): Promise<void> {
   const MAX_ATTEMPTS = 6
   try {
+    const { supabase } = await import('@/lib/supabaseClient')
     const session = (await supabase.auth.getSession()).data.session
     const auth = session?.access_token
     // No session yet? Cache the token and retry when the user signs in.
