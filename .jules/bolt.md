@@ -35,3 +35,6 @@
 ## 2026-04-03 - Combine multiple aggregations in single-pass loops
 **Learning:** Performing multiple `.reduce()` or chained `.filter().length` operations over the same array to calculate related metrics (e.g., total required tasks and total completed tasks) increases time complexity to O(2N) and adds unnecessary function call overhead.
 **Action:** Replace multiple `.reduce()` calls or `.filter().length` chains on the same array with a single-pass `for` loop that computes all required aggregates simultaneously, avoiding intermediate array allocations and reducing loop overhead.
+## 2024-05-18 - Replacing multiple reduce calls with single-pass for loops
+**Learning:** In data processing functions that iterate over an array multiple times to calculate aggregate values (e.g., maximum required count and sum of completed tasks), using multiple `.reduce()` calls adds unnecessary function call overhead and time complexity.
+**Action:** Use a single-pass `for` loop to compute multiple aggregates simultaneously to avoid intermediate loop allocations and overhead.

@@ -2015,10 +2015,17 @@ export async function resyncTaskOccurrencesForGarden(gardenId: string, startIso:
     }
     // Merge counts across duplicates
     const exp = expectedByKey.get(key)
-    const maxRequiredFromExisting = rows.reduce((m, r) => Math.max(m, Number(r.requiredCount || 1)), 1)
+    // ⚡ Bolt: Calculate maxRequiredFromExisting and sumCompleted in a single-pass loop instead of two .reduce() calls
+    let maxRequiredFromExisting = 1;
+    let sumCompleted = 0;
+    for (let i = 0; i < rows.length; i++) {
+      const r = rows[i];
+      const req = Number(r.requiredCount || 1);
+      if (req > maxRequiredFromExisting) maxRequiredFromExisting = req;
+      sumCompleted += Math.min(req, Number(r.completedCount || 0));
+    }
     const expectedRequired = exp ? Math.max(1, Number(exp.requiredCount || 1)) : 1
     const mergedRequired = Math.max(maxRequiredFromExisting, expectedRequired)
-    const sumCompleted = rows.reduce((s, r) => s + Math.min(Number(r.requiredCount || 1), Number(r.completedCount || 0)), 0)
     const mergedCompleted = Math.min(mergedRequired, sumCompleted)
     // Choose keeper: the one with highest completedCount, fallback to first
     const keeper = rows.slice().sort((a, b) => (b.completedCount - a.completedCount) || (b.requiredCount - a.requiredCount))[0]
