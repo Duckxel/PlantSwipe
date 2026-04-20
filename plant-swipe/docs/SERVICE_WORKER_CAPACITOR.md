@@ -22,7 +22,7 @@ That limits cross-version mismatches after a normal PWA refresh/update cycle.
 
 `ServiceWorkerToast` listens for **dynamic import / chunk load failures** (typical when HTML points at new hashed chunks but an old cache or SW still serves an older graph). It shows **“Clear cache & reload”**, which unregisters any service workers, deletes `CacheStorage` entries, and reloads.
 
-On **native store builds**, if a developer-installed SW remains from a previous dev build, the app attempts to **unregister** registrations on startup so nothing intercepts `capacitor://` requests.
+On **native store builds**, if a developer-installed SW remains from a previous dev build, the app attempts to **unregister** registrations on startup so nothing intercepts `capacitor://` requests. The startup code also proactively **deletes stale `sw-native.js`** files via `Cache.delete` to prevent upgraded apps from serving an old service worker that redirects notification taps to Chrome instead of handling them in-app.
 
 ## Operational notes
 

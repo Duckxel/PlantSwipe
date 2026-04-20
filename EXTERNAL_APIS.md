@@ -1,7 +1,7 @@
 # External APIs Used in Aphylia
 
 > **Comprehensive list of all third-party services and APIs**  
-> Last updated: February 16, 2026
+> Last updated: April 20, 2026
 
 ---
 
@@ -266,6 +266,7 @@ const response = await openaiClient.responses.create({
 - Dynamic loading after cookie consent
 - Graceful fallback when consent not given
 - v3 invisible captcha (no user interaction)
+- **Skipped entirely on native Capacitor apps** — native builds bypass reCAPTCHA since bot risk is lower in store-distributed binaries
 
 **API Endpoints:**
 ```
@@ -667,4 +668,4 @@ For API-related questions:
 
 ---
 
-*Last updated: February 16, 2026*
+*Last updated: April 20, 2026*

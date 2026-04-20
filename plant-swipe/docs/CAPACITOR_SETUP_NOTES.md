@@ -31,7 +31,7 @@ Order is fixed in `setup.sh`:
 8. **`npx cap add android`** if **`android/`** is missing.
 9. **`npx cap add ios`** — **macOS only** if **`ios/`** is missing; skipped on Linux with a log line.
 10. **Ownership** — If **`SERVICE_USER`** is set and not `root`, **`chown -R`** on `android/` and `ios/` to that user.
-11. **`node scripts/assert-capacitor-store-bundle.mjs && node scripts/sync-native-version.mjs && npx cap sync`** with `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported to the resolved SDK.
+11. **`node scripts/assert-capacitor-store-bundle.mjs && node scripts/sync-native-version.mjs && npx cap sync && node scripts/normalize-capacitor-generated-files.mjs`** with `ANDROID_HOME`/`ANDROID_SDK_ROOT` exported to the resolved SDK.
 
 After this block, if the Capacitor pipeline ran, the main PlantSwipe web build later in `setup.sh` is **skipped** (“already built during Capacitor pipeline”).
 

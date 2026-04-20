@@ -1,6 +1,6 @@
 # Building the Android app (Capacitor)
 
-Prerequisites: **JDK 17** (match `android/` Gradle config), **Android SDK**, **`ANDROID_HOME`** or **`ANDROID_SDK_ROOT`** pointing at the SDK root, **Bun**, **Node** (for `npx cap`).
+Prerequisites: **JDK 21** (CI uses Temurin 21; source/target compatibility remains Java 17 in Gradle), **Android SDK**, **`ANDROID_HOME`** or **`ANDROID_SDK_ROOT`** pointing at the SDK root, **Bun**, **Node** (for `npx cap`).
 
 **Push (FCM):** Place **`google-services.json`** from the Firebase console in **`android/app/`** (gitignored) so Gradle applies the Google Services plugin. The server needs **`FCM_LEGACY_SERVER_KEY`** (or equivalent) to deliver to Android tokens stored in **`user_fcm_tokens`**.
 
@@ -53,6 +53,8 @@ cd android
 # or
 ./gradlew bundleRelease      # AAB for Play Console (if configured in project)
 ```
+
+**Release builds** enable **R8 minification** (`minifyEnabled true`, `shrinkResources true`) with `proguard-android-optimize.txt`. Verify your ProGuard rules cover any reflection-based libraries before your first signed release.
 
 **Signing:** Keystores and passwords must **not** be committed. Use Play App Signing and CI secrets, or local `~/.gradle` / env-injected signing config per your org.
 
