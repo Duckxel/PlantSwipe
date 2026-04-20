@@ -437,9 +437,24 @@ export const ScanPage: React.FC = () => {
             <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-6">
               {t('scan.newScanHint', { defaultValue: 'Take a clear photo of a leaf, flower, or the whole plant for best results.' })}
             </p>
-            
+
+            <a
+              href="https://www.kindwise.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mb-3"
+              aria-label={t('scan.poweredByKindwise', { defaultValue: 'Powered by Kindwise' })}
+            >
+              <Badge
+                variant="secondary"
+                className="rounded-full px-3 py-1 text-[11px] font-medium tracking-wide text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-[#2d2d30]/80 border border-stone-200/70 dark:border-[#3e3e42]/70"
+              >
+                {t('scan.poweredByKindwise', { defaultValue: 'Powered by Kindwise' })}
+              </Badge>
+            </a>
+
             <div className="flex gap-3">
-              <Button 
+              <Button
                 onClick={() => setCameraOpen(true)}
                 className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
               >
