@@ -34,6 +34,7 @@ import {
 import { cn } from '@/lib/utils'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
+import { ImageSourcePicker } from '@/components/ui/image-source-picker'
 import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import { 
   uploadAndIdentifyPlant, 
@@ -75,6 +76,7 @@ export const ScanPage: React.FC = () => {
   
   // Scan flow state
   const [cameraOpen, setCameraOpen] = React.useState(false)
+  const [sourcePickerOpen, setSourcePickerOpen] = React.useState(false)
   const [, setSelectedFile] = React.useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = React.useState<string | null>(null)
   const [isIdentifying, setIsIdentifying] = React.useState(false)
@@ -385,7 +387,27 @@ export const ScanPage: React.FC = () => {
       </div>
       
       {/* New Scan Card */}
-      <Card data-tutorial="scan-card" className="mb-8 p-6 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10">
+      <Card
+        data-tutorial="scan-card"
+        role={!isIdentifying && !identifyError ? 'button' : undefined}
+        tabIndex={!isIdentifying && !identifyError ? 0 : undefined}
+        onClick={() => {
+          if (isIdentifying || identifyError) return
+          setSourcePickerOpen(true)
+        }}
+        onKeyDown={(e) => {
+          if (isIdentifying || identifyError) return
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            setSourcePickerOpen(true)
+          }
+        }}
+        className={cn(
+          'mb-8 p-4 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10 transition-colors',
+          !isIdentifying && !identifyError &&
+            'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+        )}
+      >
         {isIdentifying ? (
           // Loading state
           <div className="flex flex-col items-center justify-center py-8">
@@ -426,23 +448,20 @@ export const ScanPage: React.FC = () => {
             </Button>
           </div>
         ) : (
-          // Ready state
-          <div className="flex flex-col items-center justify-center py-4">
-            <div className="w-20 h-20 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mb-6">
-              <Leaf className="h-10 w-10 text-emerald-600 dark:text-emerald-400" />
+          // Ready state — whole card is clickable, opens the shared picker
+          <div className="flex flex-col items-center justify-center py-2 gap-3">
+            <div className="w-14 h-14 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center">
+              <Camera className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
             </div>
-            <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
+            <h3 className="text-base font-semibold text-stone-900 dark:text-white">
               {t('scan.newScanTitle', { defaultValue: 'Identify a Plant' })}
             </h3>
-            <p className="text-sm text-stone-500 dark:text-stone-400 text-center max-w-xs mb-6">
-              {t('scan.newScanHint', { defaultValue: 'Take a clear photo of a leaf, flower, or the whole plant for best results.' })}
-            </p>
 
             <a
               href="https://www.kindwise.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="mb-3"
+              onClick={(e) => e.stopPropagation()}
               aria-label={t('scan.poweredByKindwise', { defaultValue: 'Powered by Kindwise' })}
             >
               <Badge
@@ -453,25 +472,17 @@ export const ScanPage: React.FC = () => {
               </Badge>
             </a>
 
-            <div className="flex gap-3">
-              <Button
-                onClick={() => setCameraOpen(true)}
-                className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-              >
-                <Camera className="h-5 w-5" />
-                {t('scan.takePhoto', { defaultValue: 'Take Photo' })}
-              </Button>
-              
-              <Button 
-                onClick={() => fileInputRef.current?.click()}
-                variant="outline"
-                className="rounded-full gap-2"
-              >
-                <Upload className="h-5 w-5" />
-                {t('scan.uploadImage', { defaultValue: 'Upload' })}
-              </Button>
-            </div>
-            
+            <Button
+              onClick={(e) => {
+                e.stopPropagation()
+                setSourcePickerOpen(true)
+              }}
+              className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+            >
+              <Upload className="h-5 w-5" />
+              {t('scan.uploadImage', { defaultValue: 'Upload' })}
+            </Button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -633,8 +644,16 @@ export const ScanPage: React.FC = () => {
         </>
       )}
       
+      {/* Camera vs library source picker */}
+      <ImageSourcePicker
+        open={sourcePickerOpen}
+        onOpenChange={setSourcePickerOpen}
+        onCamera={() => setCameraOpen(true)}
+        onLibrary={() => fileInputRef.current?.click()}
+      />
+
       {/* Camera Dialog */}
-      <CameraCapture 
+      <CameraCapture
         open={cameraOpen}
         onOpenChange={setCameraOpen}
         onCapture={handleCameraCapture}
