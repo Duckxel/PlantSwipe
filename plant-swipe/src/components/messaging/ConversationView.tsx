@@ -467,7 +467,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       // If there's a pending image, upload it and send as image message
       if (pendingImage) {
         const { url } = await uploadMessageImage(pendingImage.file)
-        await sendImageMessage(conversationId, url, content || '', replyingTo?.id)
+        const imageMsg = await sendImageMessage(conversationId, url, content || '', replyingTo?.id)
         
         // Clean up preview URL
         URL.revokeObjectURL(pendingImage.previewUrl)
@@ -485,13 +485,17 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
         // Broadcast to other devices
         broadcastEvent('message', { type: 'image' })
         
-        // Send push notification to recipient (fire and forget but log result)
+        // Send push notification to recipient (fire and forget but log result).
+        // Passing messageId + senderId lets the recipient's foreground in-app
+        // toast dedup against the matching Supabase realtime INSERT.
         sendMessagePushNotification(
           otherUser.id,
           currentUserDisplayName || 'Someone',
           '📷 ' + t('messages.sentImage', { defaultValue: 'Sent an image' }),
           conversationId,
-          recipientLanguage
+          recipientLanguage,
+          imageMsg?.id,
+          currentUserId
         ).then(result => {
           if (!result.sent) {
             console.log('[conversation] Push notification not delivered:', result.reason)
@@ -534,13 +538,17 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
       // Broadcast to other devices
       broadcastEvent('message', { messageId: msg.id })
       
-      // Send push notification to recipient (fire and forget but log result)
+      // Send push notification to recipient (fire and forget but log result).
+      // Passing messageId + senderId lets the recipient's foreground in-app
+      // toast dedup against the matching Supabase realtime INSERT.
       sendMessagePushNotification(
         otherUser.id,
         currentUserDisplayName || 'Someone',
         content.slice(0, 50),
         conversationId,
-        recipientLanguage
+        recipientLanguage,
+        msg?.id,
+        currentUserId
       ).then(result => {
         if (!result.sent) {
           console.log('[conversation] Push notification not delivered:', result.reason)
