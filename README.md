@@ -9,11 +9,11 @@
 ![Vite](https://img.shields.io/badge/Vite-7.1.2-646cff?style=flat-square&logo=vite)
 ![Supabase](https://img.shields.io/badge/Supabase-2.57.2-3ecf8e?style=flat-square&logo=supabase)
 
-**PlantSwipe transforms plant discovery into a joyful, visual, swipe-first experience — while giving serious growers structured data, care guidance, and collaboration tools. It's where curiosity meets craftsmanship.** 🌱✨
+**Aphylia transforms plant discovery into a joyful, visual, swipe-first experience — while giving serious growers structured data, care guidance, and collaboration tools. It's where curiosity meets craftsmanship.** 🌱✨
 
 [**Features**](#-feature-overview) • [**Quick Start**](#-quick-start) • [**Tech Stack**](#-tech-stack) • [**Roadmap**](#️-roadmap)
 
-Made with care by **Neolite** & **Five**
+Made with care by **FIVE**, **Neolite** & **Lau**
 
 </div>
 
@@ -647,7 +647,7 @@ Aphylia provides comprehensive SEO and crawler support:
 
 ## 👩‍🎨 Creators
 
-Made with love by **Neolite** and **Five** — a duo obsessed with playful UX, clear architecture, and tools that help communities grow. 🌿💚
+Made with love by **FIVE**, **Neolite** and **Lau** — a trio obsessed with playful UX, clear architecture, and tools that help communities grow. 🌿💚
 
 ---
 
