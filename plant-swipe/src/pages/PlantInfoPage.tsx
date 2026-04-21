@@ -23,6 +23,7 @@ import { usePageMetadata } from '@/hooks/usePageMetadata'
 import { EasterEgg } from '@events/2026_EASTER'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronLeft,
   ChevronRight,
@@ -1701,10 +1702,9 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
             <div className="flex flex-col gap-3 sm:gap-4">
               {showPalette && (
                 <section
-                  className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3"
+                  className="relative rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)] p-2.5 sm:p-3"
                 >
-                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
-                  <div className="relative space-y-1.5 sm:space-y-2">
+                  <div className="space-y-1.5 sm:space-y-2">
                     <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
                       <Palette className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                       <span className="text-[9px] sm:text-[10px] uppercase tracking-widest">{t('plantInfo:palette.title')}</span>
@@ -3002,15 +3002,57 @@ const InfoItem: React.FC<{ label: string; value?: React.ReactNode; icon?: React.
 const ColorSwatch: React.FC<{ color: PlantColor }> = ({ color }) => {
   const label = color.name || 'Color'
   const tone = color.hexCode || '#16a34a'
+  const [open, setOpen] = React.useState(false)
+  const wrapperRef = React.useRef<HTMLDivElement | null>(null)
+
+  React.useEffect(() => {
+    if (!open) return
+    const handleOutside = (e: MouseEvent | TouchEvent) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleOutside)
+    document.addEventListener('touchstart', handleOutside)
+    return () => {
+      document.removeEventListener('mousedown', handleOutside)
+      document.removeEventListener('touchstart', handleOutside)
+    }
+  }, [open])
+
   return (
-    <div className="group relative">
-      <div
-        className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10 cursor-pointer transition-transform group-hover:scale-110"
+    <div
+      ref={wrapperRef}
+      className="relative inline-flex"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        type="button"
+        aria-label={label}
+        onClick={() => setOpen((prev) => !prev)}
+        className="h-8 w-8 sm:h-9 sm:w-9 rounded-lg flex-shrink-0 shadow-inner border border-white/20 dark:border-white/10 cursor-pointer transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
         style={{ backgroundColor: tone }}
       />
-      <div className="pointer-events-none absolute -top-8 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 whitespace-nowrap rounded-md bg-stone-900/90 dark:bg-stone-100/90 px-2 py-0.5 text-[9px] sm:text-[10px] font-medium text-white dark:text-stone-900 shadow-lg">
-        {label}
-      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 4 }}
+            transition={{ duration: 0.15 }}
+            className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50"
+          >
+            <div
+              role="tooltip"
+              className="relative whitespace-nowrap rounded-lg bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900 px-2.5 py-1 text-[11px] font-medium shadow-lg"
+            >
+              {label}
+              <div className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-[5px] border-x-transparent border-t-[5px] border-t-stone-900 dark:border-t-stone-100" />
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

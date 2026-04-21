@@ -167,7 +167,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   return (
     <div className="max-w-6xl mx-auto mt-2 lg:mt-8 px-2 md:px-4 pb-16 space-y-6">
       {/* 2-column grid on mobile, 2-column on desktop */}
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-start md:items-stretch">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
         {visiblePlants.map((p) => {
           // Check if plant is "in progress"
           const statusStr = (typeof p.status === 'string' ? p.status : typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
@@ -204,7 +204,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
           return (
             <Card
               key={p.id}
-              className={`${cardSurface} md:h-full`}
+              className={`${cardSurface} h-full`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
@@ -213,7 +213,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
               }}
             >
               {/* Mobile: Compact vertical card */}
-              <div className="flex flex-col md:hidden">
+              <div className="flex flex-col h-full md:hidden">
                 <div className="relative w-full aspect-[4/5] flex-shrink-0 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                   {p.image ? (
                     <img
@@ -278,7 +278,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                 </div>
-                <div className="px-3 py-2.5 min-w-0 space-y-0.5">
+                <div className="px-3 py-2.5 min-w-0 space-y-0.5 flex-1">
                   <ScrollingTitle className="font-semibold text-sm leading-snug">{p.name}</ScrollingTitle>
                   {p.variety && (
                     <ScrollingTitle className="font-extrabold text-[13px] bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight leading-snug">

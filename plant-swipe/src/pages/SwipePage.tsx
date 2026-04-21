@@ -429,14 +429,13 @@ export const SwipePage = React.memo<SwipePageProps>(({
         <div
           className="relative w-full swipe-card-container px-2"
           style={{
-            // Reserve top chrome (~120px for TopBar + status bar) AND the fixed
-            // MobileNavBar (5.5rem tall + safe-area-inset-bottom). Without the
-            // nav subtraction, `100dvh` extends behind the bottom nav on Android
-            // Capacitor so the bottom of the card (badges, Info button) sits
-            // under the nav bar.
-            height: 'calc(100dvh - 120px - 5.5rem - env(safe-area-inset-bottom, 0px))',
+            // TopBar is hidden on mobile (`hidden lg:flex`), so the only top
+            // chrome is the outer container's pt-2 (8px) + the grid wrapper's
+            // mt-2 (8px) = 16px. Body handles the status-bar safe area via
+            // padding-top, so we subtract env(safe-area-inset-top) here as
+            // well. The fixed MobileNavBar takes 5.5rem + safe-area-inset-bottom.
+            height: 'calc(100dvh - 16px - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
             minHeight: '380px',
-            marginBottom: '8px',
           }}
         >
           {/* Info reveal panel — sits behind the card, visible on swipe left */}

@@ -1516,19 +1516,11 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     ) : (
                       <Globe className="w-5 h-5 text-emerald-500" />
                     )}
-                    <div>
-                      <div className="font-medium text-sm">
-                        {entryIsPrivate 
-                          ? t("gardenDashboard.journalSection.privateEntry", "Private entry")
-                          : t("gardenDashboard.journalSection.sharedEntry", "Shared with garden members")
-                        }
-                      </div>
-                      <div className="text-xs text-muted-foreground">
-                        {entryIsPrivate 
-                          ? t("gardenDashboard.journalSection.privateDesc", "Only you can see this entry")
-                          : t("gardenDashboard.journalSection.sharedDesc", "Other garden members can read this")
-                        }
-                      </div>
+                    <div className="font-medium text-sm">
+                      {entryIsPrivate
+                        ? t("gardenDashboard.journalSection.privateEntry", "Private")
+                        : t("gardenDashboard.journalSection.sharedEntry", "Shared")
+                      }
                     </div>
                   </div>
                   <Button
