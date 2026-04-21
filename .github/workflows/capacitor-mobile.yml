@@ -46,6 +46,15 @@ concurrency:
   group: capacitor-mobile-${{ github.ref }}
   cancel-in-progress: true
 
+# Opt every JavaScript action in this workflow into the Node.js 24 runtime ahead
+# of the June 2026 runner default. The actions we use (checkout, setup-node,
+# setup-java, cache, upload/download-artifact, setup-android, action-gh-release)
+# still ship Node 20 entrypoints at the pinned versions; this env var tells the
+# runner to execute them on Node 24 so GitHub stops emitting deprecation warnings.
+# See: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
+
 jobs:
   cap-sync-and-web:
     name: Web build + cap sync (CI-safe)
