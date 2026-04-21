@@ -9,6 +9,7 @@ import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Switch } from "@/components/ui/switch"
+import { FileDropZone } from "@/components/ui/file-drop-zone"
 import {
   Dialog,
   DialogContent,
@@ -643,14 +644,13 @@ export const AdminUploadPanel: React.FC = () => {
   const [uploadTargetPath, setUploadTargetPath] = React.useState<string | null>(null)
 
   // Upload state
-  const [dragActive, setDragActive] = React.useState(false)
   const [uploading, setUploading] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
   const [results, setResults] = React.useState<UploadResult[]>([])
   const [fileQueue, setFileQueue] = React.useState<FileUploadStatus[]>([])
   const [copiedField, setCopiedField] = React.useState<string | null>(null)
   const [optimize, setOptimize] = React.useState(true)
-  const inputRef = React.useRef<HTMLInputElement | null>(null)
+  const dropZoneRef = React.useRef<React.ComponentRef<typeof FileDropZone>>(null)
 
   // Sync upload target with explorer navigation
   const handleNavigate = React.useCallback((path: string) => {
@@ -767,28 +767,6 @@ export const AdminUploadPanel: React.FC = () => {
     [uploadSingleFile],
   )
 
-  const handleDrop = React.useCallback(
-    (event: React.DragEvent<HTMLDivElement>) => {
-      event.preventDefault()
-      event.stopPropagation()
-      setDragActive(false)
-      void handleFiles(Array.from(event.dataTransfer.files || []))
-    },
-    [handleFiles],
-  )
-
-  const handleBrowseClick = React.useCallback(() => {
-    inputRef.current?.click()
-  }, [])
-
-  const handleFileChange = React.useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      void handleFiles(Array.from(event.target.files || []))
-      if (inputRef.current) inputRef.current.value = ""
-    },
-    [handleFiles],
-  )
-
   const displayedTarget =
     uploadTargetPath === null
       ? `UTILITY/${ADMIN_UPLOAD_PREFIX} (default)`
@@ -871,55 +849,47 @@ export const AdminUploadPanel: React.FC = () => {
       </div>
 
       {/* Drop Zone */}
-      <div
-        onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); if (!dragActive) setDragActive(true) }}
-        onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(true) }}
-        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false) }}
-        onDrop={handleDrop}
+      <FileDropZone
+        ref={dropZoneRef}
+        onFiles={(files) => void handleFiles(files)}
+        acceptInput={ACCEPT_STRING}
+        multiple
+        disabled={uploading}
         className={cn(
-          "relative rounded-2xl border-2 border-dashed p-10 text-center transition-all cursor-pointer",
-          dragActive
-            ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-500/10 scale-[1.01]"
-            : "border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800",
+          "relative rounded-2xl border-2 border-dashed p-10 text-center transition-all cursor-pointer border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] hover:border-emerald-300 dark:hover:border-emerald-800",
           uploading && "opacity-70 pointer-events-none",
         )}
-        onClick={handleBrowseClick}
+        dragActiveClassName="!border-emerald-500 bg-emerald-50/70 dark:bg-emerald-500/10 scale-[1.01]"
         aria-disabled={uploading}
       >
-        <input
-          ref={inputRef}
-          type="file"
-          accept={ACCEPT_STRING}
-          multiple
-          hidden
-          onChange={handleFileChange}
-          disabled={uploading}
-        />
+        {({ isDragging }) => (
+          <>
+            <div className={cn(
+              "mx-auto mb-4 w-16 h-16 rounded-2xl flex items-center justify-center transition-colors",
+              isDragging
+                ? "bg-emerald-500 text-white"
+                : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 text-emerald-600 dark:text-emerald-400",
+            )}>
+              {uploading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UploadCloud className="h-8 w-8" />}
+            </div>
 
-        <div className={cn(
-          "mx-auto mb-4 w-16 h-16 rounded-2xl flex items-center justify-center transition-colors",
-          dragActive
-            ? "bg-emerald-500 text-white"
-            : "bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30 text-emerald-600 dark:text-emerald-400",
-        )}>
-          {uploading ? <Loader2 className="h-8 w-8 animate-spin" /> : <UploadCloud className="h-8 w-8" />}
-        </div>
+            <div className="text-base font-semibold text-stone-900 dark:text-white mb-1.5">
+              {isDragging ? "Drop your files here" : uploading ? "Uploading..." : (
+                <>Drag & drop files or <span className="text-emerald-600 dark:text-emerald-400">browse</span></>
+              )}
+            </div>
 
-        <div className="text-base font-semibold text-stone-900 dark:text-white mb-1.5">
-          {dragActive ? "Drop your files here" : uploading ? "Uploading..." : (
-            <>Drag & drop files or <span className="text-emerald-600 dark:text-emerald-400">browse</span></>
-          )}
-        </div>
-
-        <p className="text-sm text-stone-500 dark:text-stone-400 max-w-md mx-auto">
-          Images, PDF, video, audio, CSV, JSON, TXT, ZIP, OBJ. Max {DEFAULT_MAX_MB} MB per file.
-          <br />
-          <span className="text-emerald-600 dark:text-emerald-400">Multiple files supported</span>
-          {optimize && (
-            <> {"\u00b7"} <span className="text-emerald-600 dark:text-emerald-400">Auto-optimization enabled</span></>
-          )}
-        </p>
-      </div>
+            <p className="text-sm text-stone-500 dark:text-stone-400 max-w-md mx-auto">
+              Images, PDF, video, audio, CSV, JSON, TXT, ZIP, OBJ. Max {DEFAULT_MAX_MB} MB per file.
+              <br />
+              <span className="text-emerald-600 dark:text-emerald-400">Multiple files supported</span>
+              {optimize && (
+                <> {"\u00b7"} <span className="text-emerald-600 dark:text-emerald-400">Auto-optimization enabled</span></>
+              )}
+            </p>
+          </>
+        )}
+      </FileDropZone>
 
       {/* Error */}
       {error && (
@@ -1011,7 +981,7 @@ export const AdminUploadPanel: React.FC = () => {
             onClick={() => {
               setResults([])
               setFileQueue([])
-              inputRef.current?.click()
+              dropZoneRef.current?.openFilePicker()
             }}
           >
             <UploadCloud className="mr-2 h-4 w-4" />
