@@ -1081,16 +1081,37 @@ export function GardenPlantManageButton({
                   <div className="min-w-[430px] space-y-1.5">
                     <div className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
                       <div />
-                      {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label) => (
+                      {[
+                        t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
+                        t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
+                        t("gardenDashboard.taskDialog.dayLabels.wed", "Wed"),
+                        t("gardenDashboard.taskDialog.dayLabels.thu", "Thu"),
+                        t("gardenDashboard.taskDialog.dayLabels.fri", "Fri"),
+                        t("gardenDashboard.taskDialog.dayLabels.sat", "Sat"),
+                        t("gardenDashboard.taskDialog.dayLabels.sun", "Sun"),
+                      ].map((label) => (
                         <div key={label} className="text-center text-[10px] font-medium text-stone-400 dark:text-stone-500">
                           {label}
                         </div>
                       ))}
                     </div>
-                    {["1st", "2nd", "3rd", "4th"].map((weekName, rowIndex) => (
+                    {[
+                      t("gardenDashboard.taskDialog.weekOrdinals.1", "1st"),
+                      t("gardenDashboard.taskDialog.weekOrdinals.2", "2nd"),
+                      t("gardenDashboard.taskDialog.weekOrdinals.3", "3rd"),
+                      t("gardenDashboard.taskDialog.weekOrdinals.4", "4th"),
+                    ].map((weekName, rowIndex) => (
                       <div key={weekName} className="grid grid-cols-[40px_repeat(7,minmax(0,1fr))] gap-1.5 items-center">
                         <div className="text-center text-xs font-medium text-stone-400 dark:text-stone-500">{weekName}</div>
-                        {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((label, index) => {
+                        {[
+                          t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
+                          t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
+                          t("gardenDashboard.taskDialog.dayLabels.wed", "Wed"),
+                          t("gardenDashboard.taskDialog.dayLabels.thu", "Thu"),
+                          t("gardenDashboard.taskDialog.dayLabels.fri", "Fri"),
+                          t("gardenDashboard.taskDialog.dayLabels.sat", "Sat"),
+                          t("gardenDashboard.taskDialog.dayLabels.sun", "Sun"),
+                        ].map((label, index) => {
                           const key = `${rowIndex + 1}-${MONDAY_FIRST_MAP[index]}`;
                           const selected = monthlyNthWeekdays.includes(key);
                           return (
@@ -1231,9 +1252,36 @@ function InlineYearlyPicker({
   onRemove: (key: string) => void;
   disabledMore: boolean;
 }) {
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const dayLabels = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
-  const weekLabels = ["1st", "2nd", "3rd", "4th"];
+  const { t } = useTranslation("common");
+  const months = [
+    t("gardenDashboard.taskDialog.monthNames.jan", "Jan"),
+    t("gardenDashboard.taskDialog.monthNames.feb", "Feb"),
+    t("gardenDashboard.taskDialog.monthNames.mar", "Mar"),
+    t("gardenDashboard.taskDialog.monthNames.apr", "Apr"),
+    t("gardenDashboard.taskDialog.monthNames.may", "May"),
+    t("gardenDashboard.taskDialog.monthNames.jun", "Jun"),
+    t("gardenDashboard.taskDialog.monthNames.jul", "Jul"),
+    t("gardenDashboard.taskDialog.monthNames.aug", "Aug"),
+    t("gardenDashboard.taskDialog.monthNames.sep", "Sep"),
+    t("gardenDashboard.taskDialog.monthNames.oct", "Oct"),
+    t("gardenDashboard.taskDialog.monthNames.nov", "Nov"),
+    t("gardenDashboard.taskDialog.monthNames.dec", "Dec"),
+  ];
+  const dayLabels = [
+    t("gardenDashboard.taskDialog.dayLabels.mon", "Mon"),
+    t("gardenDashboard.taskDialog.dayLabels.tue", "Tue"),
+    t("gardenDashboard.taskDialog.dayLabels.wed", "Wed"),
+    t("gardenDashboard.taskDialog.dayLabels.thu", "Thu"),
+    t("gardenDashboard.taskDialog.dayLabels.fri", "Fri"),
+    t("gardenDashboard.taskDialog.dayLabels.sat", "Sat"),
+    t("gardenDashboard.taskDialog.dayLabels.sun", "Sun"),
+  ];
+  const weekLabels = [
+    t("gardenDashboard.taskDialog.weekOrdinals.1", "1st"),
+    t("gardenDashboard.taskDialog.weekOrdinals.2", "2nd"),
+    t("gardenDashboard.taskDialog.weekOrdinals.3", "3rd"),
+    t("gardenDashboard.taskDialog.weekOrdinals.4", "4th"),
+  ];
   const weekdayToUi: Record<number, number> = { 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 0: 6 };
   const [activeMonth, setActiveMonth] = React.useState<number | null>(null);
 

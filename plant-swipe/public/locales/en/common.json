@@ -887,6 +887,8 @@
     "today": "Today",
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
+    "reloadTasks": "Reload Tasks",
+    "reloadAttempt": "Reload attempt {{count}}/3",
     "noTasksToday": "No tasks due today. 🌿",
     "done": "done",
     "complete": "Complete",
@@ -1468,6 +1470,7 @@
     "journalSection": {
       "title": "Garden Journal",
       "subtitle": "Record your observations, track plant progress, and reflect on your gardening journey",
+      "entry": "entry",
       "entries": "entries",
       "photos": "photos",
       "loggedToday": "Logged today!",
@@ -1828,6 +1831,12 @@
         "oct": "Oct",
         "nov": "Nov",
         "dec": "Dec"
+      },
+      "weekOrdinals": {
+        "1": "1st",
+        "2": "2nd",
+        "3": "3rd",
+        "4": "4th"
       }
     }
   },

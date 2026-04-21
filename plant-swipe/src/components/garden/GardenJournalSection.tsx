@@ -910,7 +910,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     </div>
                   )}
                   <span className="text-[10px] text-stone-400 dark:text-stone-500 ml-1.5">
-                    {bucket.count} {bucket.count === 1 ? "entry" : "entries"}
+                    {bucket.count} {bucket.count === 1
+                      ? t("gardenDashboard.journalSection.entry", { defaultValue: "entry" })
+                      : t("gardenDashboard.journalSection.entries", { defaultValue: "entries" })}
                   </span>
                 </div>
               );

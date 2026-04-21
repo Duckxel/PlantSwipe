@@ -887,6 +887,8 @@
     "today": "Aujourd'hui",
     "markAllCompleted": "TOUT MARQUER COMME TERMINÉ",
     "loadingTasks": "Chargement des tâches...",
+    "reloadTasks": "Recharger les tâches",
+    "reloadAttempt": "Tentative de rechargement {{count}}/3",
     "noTasksToday": "Aucune tâche due aujourd'hui. 🌿",
     "done": "fait",
     "complete": "Compléter",
@@ -1468,6 +1470,7 @@
     "journalSection": {
       "title": "Journal de jardin",
       "subtitle": "Notez vos observations, suivez la croissance de vos plantes et réfléchissez à votre parcours de jardinage",
+      "entry": "entrée",
       "entries": "entrées",
       "photos": "photos",
       "loggedToday": "Noté aujourd'hui !",
@@ -1828,6 +1831,12 @@
         "oct": "Oct",
         "nov": "Nov",
         "dec": "Déc"
+      },
+      "weekOrdinals": {
+        "1": "1re",
+        "2": "2e",
+        "3": "3e",
+        "4": "4e"
       }
     }
   },
