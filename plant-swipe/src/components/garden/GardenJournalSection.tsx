@@ -6,6 +6,8 @@ import { ErrorBanner } from "@/components/ui/error-banner";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
 import { ImageUploadArea } from "@/components/ui/image-upload-area";
+import { ImageSourcePicker } from "@/components/ui/image-source-picker";
+import { CameraCapture } from "@/components/messaging/CameraCapture";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
@@ -171,6 +173,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const [entryHealthStatus, setEntryHealthStatus] = React.useState<string | null>(null);
   // Shared image upload hook – handles file picking, validation, preview & upload
   const imageUpload = useImageUpload({ maxFiles: 10, multiple: true });
+  // Shared source picker (camera vs library)
+  const [sourcePickerOpen, setSourcePickerOpen] = React.useState(false);
+  const [cameraOpen, setCameraOpen] = React.useState(false);
 
   // Get today's entry if exists
   const todayEntry = React.useMemo(() => {
@@ -1477,7 +1482,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                       pending={imageUpload.pending}
                       uploading={imageUpload.uploading}
                       error={imageUpload.error}
-                      onAdd={imageUpload.openFilePicker}
+                      onAdd={() => setSourcePickerOpen(true)}
                       onRemove={imageUpload.removePending}
                       onClearError={imageUpload.clearError}
                       addLabel={t("gardenDashboard.journalSection.addPhoto", "Add")}
@@ -1487,6 +1492,21 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     <input {...imageUpload.inputProps} />
                   </div>
                 </div>
+                {/* Camera vs library source picker */}
+                <ImageSourcePicker
+                  open={sourcePickerOpen}
+                  onOpenChange={setSourcePickerOpen}
+                  onCamera={() => setCameraOpen(true)}
+                  onLibrary={imageUpload.openFilePicker}
+                />
+                <CameraCapture
+                  open={cameraOpen}
+                  onOpenChange={setCameraOpen}
+                  onCapture={(file) => {
+                    imageUpload.addFile(file);
+                    setCameraOpen(false);
+                  }}
+                />
 
                 {/* Privacy toggle */}
                 <div className="flex items-center justify-between p-4 rounded-xl bg-stone-50 dark:bg-stone-800/50">
