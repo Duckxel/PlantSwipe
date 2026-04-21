@@ -13,7 +13,7 @@
 
 [**Features**](#-feature-overview) • [**Quick Start**](#-quick-start) • [**Tech Stack**](#-tech-stack) • [**Roadmap**](#️-roadmap)
 
-Made with care by **Neolite** & **Five**
+Made with care by **FIVE**, **Neolite** & **Lau**
 
 </div>
 
@@ -647,7 +647,7 @@ Aphylia provides comprehensive SEO and crawler support:
 
 ## 👩‍🎨 Creators
 
-Made with love by **Neolite** and **Five** — a duo obsessed with playful UX, clear architecture, and tools that help communities grow. 🌿💚
+Made with love by **FIVE**, **Neolite** and **Lau** — a trio obsessed with playful UX, clear architecture, and tools that help communities grow. 🌿💚
 
 ---
 

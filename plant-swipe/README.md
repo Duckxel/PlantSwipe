@@ -1229,7 +1229,7 @@ caches.keys().then(names => names.forEach(name => caches.delete(name)))
 
 <div align="center">
 
-**Built with ❤️ by Neolite & Five**
+**Built with ❤️ by FIVE, Neolite & Lau**
 
 [**Main README**](../README.md) • [**Features**](../README.md#-feature-overview) • [**Quick Start**](../README.md#-quick-start)
 
