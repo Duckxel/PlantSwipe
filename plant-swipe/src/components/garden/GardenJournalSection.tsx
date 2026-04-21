@@ -527,7 +527,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       
     } catch (err) {
       console.error('Failed to generate video:', err);
-      alert('Failed to generate video. Your browser may not support this feature.');
+      alert(t("gardenDashboard.journalSection.videoExportError", { defaultValue: "Failed to generate video. Your browser may not support this feature." }));
     } finally {
       setExporting(null);
       setShowExportMenu(false);
@@ -684,12 +684,12 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
         const errMsg = data?.error || `HTTP ${resp.status}`;
         const detail = [data?.code, data?.detail, data?.hint].filter(Boolean).join(" | ");
         const fullErr = detail ? `${errMsg} (${detail})` : errMsg;
-        alert(`Failed to save entry: ${fullErr}`);
+        alert(t("gardenDashboard.journalSection.saveEntryError", { defaultValue: "Failed to save entry: {{error}}", error: fullErr }));
         console.error("[Journal] Save error:", data);
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Network error";
-      alert(`Failed to save entry: ${msg}`);
+      const msg = err instanceof Error ? err.message : t("common.networkError", { defaultValue: "Network error" });
+      alert(t("gardenDashboard.journalSection.saveEntryError", { defaultValue: "Failed to save entry: {{error}}", error: msg }));
       console.warn("[Journal] Failed to save entry:", err);
     } finally {
       setSaving(false);
@@ -744,7 +744,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       if (resp.ok && data?.ok) {
         fetchEntries();
       } else {
-        alert(data?.error || "Failed to delete photo");
+        alert(data?.error || t("gardenDashboard.journalSection.deletePhotoError", { defaultValue: "Failed to delete photo" }));
       }
     } catch (err) {
       console.warn("[Journal] Failed to delete photo:", err);
@@ -910,7 +910,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                     </div>
                   )}
                   <span className="text-[10px] text-stone-400 dark:text-stone-500 ml-1.5">
-                    {bucket.count} {bucket.count === 1 ? "entry" : "entries"}
+                    {bucket.count} {bucket.count === 1
+                      ? t("gardenDashboard.journalSection.entry", { defaultValue: "entry" })
+                      : t("gardenDashboard.journalSection.entries", { defaultValue: "entries" })}
                   </span>
                 </div>
               );

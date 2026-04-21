@@ -193,7 +193,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
             {t("garden.loadingTasks")}
             {mismatchReloadAttempts > 0 && (
               <div className="text-xs opacity-60 mt-1">
-                Reload attempt {mismatchReloadAttempts}/3
+                {t("garden.reloadAttempt", { defaultValue: "Reload attempt {{count}}/3", count: mismatchReloadAttempts })}
               </div>
             )}
           </Card>
@@ -215,7 +215,7 @@ const GardenListSidebarComponent: React.FC<GardenListSidebarProps> = ({
                   onClick={onReloadTasks}
                 >
                   <RefreshCw className="h-4 w-4 mr-2" />
-                  Reload Tasks
+                  {t("garden.reloadTasks", { defaultValue: "Reload Tasks" })}
                 </Button>
               )}
             </Card>

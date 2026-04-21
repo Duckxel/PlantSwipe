@@ -1565,7 +1565,7 @@ export const GardenListPage: React.FC = () => {
         await Promise.all(promises);
 
         // Log activity for completing all garden tasks (fire and forget)
-        const gardenName = gardensById[gardenId]?.name || t("garden.garden");
+        const gardenName = gardensById[gardenId]?.name || t("garden.garden", { defaultValue: "Garden" });
         logGardenActivity({
           gardenId,
           kind: "task_completed" as any,
@@ -1822,7 +1822,7 @@ export const GardenListPage: React.FC = () => {
       // Navigate to the new garden dashboard
       navigate(`/garden/${garden.id}`);
     } catch (e: any) {
-      setError(e?.message || "Failed to create garden");
+      setError(e?.message || t("garden.createFailed", { defaultValue: "Failed to create garden" }));
     } finally {
       setSubmitting(false);
     }
@@ -2452,16 +2452,16 @@ export const GardenListPage: React.FC = () => {
                 </div>
                 {gardenType !== "seedling" && (
                 <div className="grid gap-2">
-                  <Label>{t("garden.livingSpace", { defaultValue: "Living Space" })}</Label>
+                  <Label>{t("garden.livingSpaceLabel", { defaultValue: "Living Space" })}</Label>
                   <p className="text-xs text-muted-foreground -mt-1">
                     {t("garden.livingSpaceHint", { defaultValue: "Where will your plants grow? Select all that apply." })}
                   </p>
                   <div className="grid grid-cols-2 gap-2">
                     {([
-                      { value: "indoor" as const, icon: <Home className="h-4 w-4" />, label: t("garden.livingSpace.indoor", { defaultValue: "Indoor" }) },
-                      { value: "outdoor" as const, icon: <Trees className="h-4 w-4" />, label: t("garden.livingSpace.outdoor", { defaultValue: "Outdoor" }) },
-                      { value: "terrarium" as const, icon: <FlaskConical className="h-4 w-4" />, label: t("garden.livingSpace.terrarium", { defaultValue: "Terrarium" }) },
-                      { value: "greenhouse" as const, icon: <Warehouse className="h-4 w-4" />, label: t("garden.livingSpace.greenhouse", { defaultValue: "Greenhouse" }) },
+                      { value: "indoor" as const, icon: <Home className="h-4 w-4" />, label: t("garden.livingSpaceOptions.indoor", { defaultValue: "Indoor" }) },
+                      { value: "outdoor" as const, icon: <Trees className="h-4 w-4" />, label: t("garden.livingSpaceOptions.outdoor", { defaultValue: "Outdoor" }) },
+                      { value: "terrarium" as const, icon: <FlaskConical className="h-4 w-4" />, label: t("garden.livingSpaceOptions.terrarium", { defaultValue: "Terrarium" }) },
+                      { value: "greenhouse" as const, icon: <Warehouse className="h-4 w-4" />, label: t("garden.livingSpaceOptions.greenhouse", { defaultValue: "Greenhouse" }) },
                     ]).map((opt) => {
                       const active = livingSpace.includes(opt.value);
                       return (

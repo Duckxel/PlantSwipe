@@ -20,6 +20,7 @@
     "loading": "Loading...",
     "error": "Error",
     "success": "Success",
+    "networkError": "Network error",
     "cancel": "Cancel",
     "save": "Save",
     "delete": "Delete",
@@ -797,6 +798,7 @@
     "signInDescription": "Please log in to identify plants and save your scan history.",
     "newScanTitle": "Identify a Plant",
     "newScanHint": "Take a clear photo of a leaf, flower, or the whole plant for best results.",
+    "poweredByKindwise": "Powered by Kindwise",
     "takePhoto": "Take Photo",
     "uploadImage": "Upload",
     "identifying": "Identifying plant...",
@@ -885,6 +887,8 @@
     "today": "Today",
     "markAllCompleted": "MARK ALL AS COMPLETED",
     "loadingTasks": "Loading tasks...",
+    "reloadTasks": "Reload Tasks",
+    "reloadAttempt": "Reload attempt {{count}}/3",
     "noTasksToday": "No tasks due today. 🌿",
     "done": "done",
     "complete": "Complete",
@@ -905,7 +909,20 @@
     "plant": "plant",
     "plants": "plants",
     "streak": "streak",
-    "failedToLoad": "Failed to load gardens"
+    "failedToLoad": "Failed to load gardens",
+    "garden": "Garden",
+    "createFailed": "Failed to create garden",
+    "switchGarden": "Switch garden",
+    "loading": "Loading...",
+    "noOtherGardens": "No other gardens",
+    "livingSpaceLabel": "Living Space",
+    "livingSpaceHint": "Where will your plants grow? Select all that apply.",
+    "livingSpaceOptions": {
+      "indoor": "Indoor",
+      "outdoor": "Outdoor",
+      "terrarium": "Terrarium",
+      "greenhouse": "Greenhouse"
+    }
   },
   "gardens": {
     "publicGardensTitle": "Public Gardens",
@@ -1453,6 +1470,7 @@
     "journalSection": {
       "title": "Garden Journal",
       "subtitle": "Record your observations, track plant progress, and reflect on your gardening journey",
+      "entry": "entry",
       "entries": "entries",
       "photos": "photos",
       "loggedToday": "Logged today!",
@@ -1507,7 +1525,16 @@
       "aiFeedback": "AI Gardener Feedback",
       "generating": "Generating...",
       "getAIFeedback": "Get AI Feedback",
-      "photosAnalyzed": "{{count}} photo(s) analyzed"
+      "photosAnalyzed": "{{count}} photo(s) analyzed",
+      "videoExportError": "Failed to generate video. Your browser may not support this feature.",
+      "saveEntryError": "Failed to save entry: {{error}}",
+      "deletePhotoError": "Failed to delete photo"
+    },
+    "membersSection": {
+      "viewProfile": "View profile",
+      "openMemberActions": "Open member actions",
+      "addMemberFailed": "Failed to add member",
+      "noAccountFound": "No account found"
     },
     "routineSection": {
       "thisWeek": "This week",
@@ -1557,6 +1584,9 @@
       "importingPlants": "Importing plants...",
       "plantsImported": "{{count}} plant(s) imported successfully",
       "importFailed": "Failed to import plants",
+      "addPlantFailed": "Failed to add plant",
+      "saveScheduleFailed": "Failed to save schedule",
+      "logWateringFailed": "Failed to log watering",
       "onHand": "On hand:",
       "tasks": "Tasks:",
       "dueToday": "Due today:",
@@ -1625,6 +1655,11 @@
       "adviceLanguageDescription": "Choose the language for your personalized gardening advice.",
       "selectLanguage": "Select Language",
       "adviceWillBeIn": "Your gardening advice will be in {{language}}",
+      "saveLocationError": "Failed to save location",
+      "saveLocationRetry": "Failed to save location. Please try again.",
+      "saveLanguageError": "Failed to save language preference",
+      "saveLanguageRetry": "Failed to save language preference. Please try again.",
+      "saveGardenFailed": "Failed to save garden",
       "gardenName": "Garden name",
       "coverImageUrl": "Cover image URL",
       "coverUploadButton": "Upload image",
@@ -1796,6 +1831,12 @@
         "oct": "Oct",
         "nov": "Nov",
         "dec": "Dec"
+      },
+      "weekOrdinals": {
+        "1": "1st",
+        "2": "2nd",
+        "3": "3rd",
+        "4": "4th"
       }
     }
   },

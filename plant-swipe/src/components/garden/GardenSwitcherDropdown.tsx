@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Sprout } from "lucide-react";
 import {
   DropdownMenu,
@@ -23,6 +24,7 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
   onSwitch,
   children,
 }) => {
+  const { t } = useTranslation("common");
   const [gardens, setGardens] = React.useState<Garden[]>([]);
   const [loaded, setLoaded] = React.useState(false);
 
@@ -43,7 +45,7 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
   const defaultTrigger = (
     <button
       className="hidden md:flex items-center gap-1.5 text-xl font-semibold text-left hover:opacity-80 transition-opacity cursor-pointer bg-transparent border-none outline-none p-0"
-      aria-label="Switch garden"
+      aria-label={t("garden.switchGarden", { defaultValue: "Switch garden" })}
     >
       <span className="truncate max-w-[160px]">{currentGarden.name}</span>
       <ChevronDown className="w-4 h-4 flex-shrink-0 opacity-60" />
@@ -67,12 +69,12 @@ export const GardenSwitcherDropdown: React.FC<GardenSwitcherDropdownProps> = ({
         {/* Other gardens */}
         {!loaded && (
           <DropdownMenuItem disabled className="text-xs opacity-60">
-            Loading...
+            {t("garden.loading", { defaultValue: "Loading..." })}
           </DropdownMenuItem>
         )}
         {loaded && otherGardens.length === 0 && (
           <DropdownMenuItem disabled className="text-xs opacity-60">
-            No other gardens
+            {t("garden.noOtherGardens", { defaultValue: "No other gardens" })}
           </DropdownMenuItem>
         )}
         {loaded &&

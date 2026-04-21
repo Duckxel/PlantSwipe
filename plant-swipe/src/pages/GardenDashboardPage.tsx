@@ -2386,8 +2386,8 @@ export const GardenDashboardPage: React.FC = () => {
     if (!res.ok) {
       setInviteError(
         res.reason === "no_account"
-          ? "No account found"
-          : "Failed to add member",
+          ? t("gardenDashboard.membersSection.noAccountFound", { defaultValue: "No account found" })
+          : t("gardenDashboard.membersSection.addMemberFailed", { defaultValue: "Failed to add member" }),
       );
       return;
     }
@@ -2475,7 +2475,7 @@ export const GardenDashboardPage: React.FC = () => {
       }
       return;
     } catch (e: unknown) {
-      setError(e?.message || "Failed to add plant");
+      setError(e?.message || t("gardenDashboard.plantsSection.addPlantFailed", { defaultValue: "Failed to add plant" }));
     } finally {
       setAdding(false);
     }
@@ -2661,7 +2661,7 @@ export const GardenDashboardPage: React.FC = () => {
       if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: unknown) {
-      setError(e?.message || "Failed to save schedule");
+      setError(e?.message || t("gardenDashboard.plantsSection.saveScheduleFailed", { defaultValue: "Failed to save schedule" }));
       throw e;
     } finally {
       setPendingGardenPlantId(null);
@@ -2717,7 +2717,7 @@ export const GardenDashboardPage: React.FC = () => {
       if (id) navigate(`/garden/${id}/tasks`);
       emitGardenRealtime("tasks");
     } catch (e: unknown) {
-      setError(e?.message || "Failed to log watering");
+      setError(e?.message || t("gardenDashboard.plantsSection.logWateringFailed", { defaultValue: "Failed to log watering" }));
     }
   };
 
@@ -6455,7 +6455,7 @@ function MemberCard({
             variant="secondary"
             size="icon"
             className="rounded-full h-8 w-8"
-            aria-label="View profile"
+            aria-label={t("gardenDashboard.membersSection.viewProfile", { defaultValue: "View profile" })}
             onClick={(e) => {
               e.stopPropagation();
               navigate(`/u/${encodeURIComponent(member.displayName!)}`);
@@ -6472,7 +6472,7 @@ function MemberCard({
                 size="icon"
                 className="rounded-full h-8 w-8"
                 onClick={(e: React.MouseEvent) => e.stopPropagation()}
-                aria-label="Open member actions"
+                aria-label={t("gardenDashboard.membersSection.openMemberActions", { defaultValue: "Open member actions" })}
               >
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
@@ -6731,7 +6731,7 @@ function GardenDetailsEditor({
         })
         .eq("id", garden.id);
       if (error) {
-        setErr(error.message || "Failed to save garden");
+        setErr(error.message || t("gardenDashboard.settingsSection.saveGardenFailed", { defaultValue: "Failed to save garden" }));
         return;
       }
       setErr(null);
@@ -6803,7 +6803,7 @@ function GardenDetailsEditor({
             setUploadError(null);
             setUploadStatus(null);
           }}
-          placeholder="https://?"
+          placeholder={t("garden.coverImageUrlPlaceholder", { defaultValue: "https://?" })}
           disabled={!canEdit || uploadingCover}
         />
         <input

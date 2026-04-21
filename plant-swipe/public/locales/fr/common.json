@@ -20,6 +20,7 @@
     "loading": "Chargement...",
     "error": "Erreur",
     "success": "Succès",
+    "networkError": "Erreur réseau",
     "cancel": "Annuler",
     "save": "Enregistrer",
     "delete": "Supprimer",
@@ -797,6 +798,7 @@
     "signInDescription": "Veuillez vous connecter pour identifier les plantes et sauvegarder votre historique de scans.",
     "newScanTitle": "Identifier une Plante",
     "newScanHint": "Prenez une photo nette d'une feuille, d'une fleur ou de la plante entière pour de meilleurs résultats.",
+    "poweredByKindwise": "Propulsé par Kindwise",
     "takePhoto": "Prendre une Photo",
     "uploadImage": "Télécharger",
     "identifying": "Identification en cours...",
@@ -885,6 +887,8 @@
     "today": "Aujourd'hui",
     "markAllCompleted": "TOUT MARQUER COMME TERMINÉ",
     "loadingTasks": "Chargement des tâches...",
+    "reloadTasks": "Recharger les tâches",
+    "reloadAttempt": "Tentative de rechargement {{count}}/3",
     "noTasksToday": "Aucune tâche due aujourd'hui. 🌿",
     "done": "fait",
     "complete": "Compléter",
@@ -905,7 +909,20 @@
     "plant": "plante",
     "plants": "plantes",
     "streak": "série",
-    "failedToLoad": "Échec du chargement des jardins"
+    "failedToLoad": "Échec du chargement des jardins",
+    "garden": "Jardin",
+    "createFailed": "Échec de la création du jardin",
+    "switchGarden": "Changer de jardin",
+    "loading": "Chargement...",
+    "noOtherGardens": "Aucun autre jardin",
+    "livingSpaceLabel": "Espace de vie",
+    "livingSpaceHint": "Où vos plantes vont-elles pousser ? Sélectionnez toutes les options qui s'appliquent.",
+    "livingSpaceOptions": {
+      "indoor": "Intérieur",
+      "outdoor": "Extérieur",
+      "terrarium": "Terrarium",
+      "greenhouse": "Serre"
+    }
   },
   "gardens": {
     "publicGardensTitle": "Jardins publics",
@@ -1453,6 +1470,7 @@
     "journalSection": {
       "title": "Journal de jardin",
       "subtitle": "Notez vos observations, suivez la croissance de vos plantes et réfléchissez à votre parcours de jardinage",
+      "entry": "entrée",
       "entries": "entrées",
       "photos": "photos",
       "loggedToday": "Noté aujourd'hui !",
@@ -1507,7 +1525,16 @@
       "aiFeedback": "Conseils IA du jardinier",
       "generating": "Génération...",
       "getAIFeedback": "Obtenir des conseils IA",
-      "photosAnalyzed": "{{count}} photo(s) analysée(s)"
+      "photosAnalyzed": "{{count}} photo(s) analysée(s)",
+      "videoExportError": "Échec de la génération de la vidéo. Votre navigateur ne prend peut-être pas en charge cette fonctionnalité.",
+      "saveEntryError": "Échec de l'enregistrement de l'entrée : {{error}}",
+      "deletePhotoError": "Échec de la suppression de la photo"
+    },
+    "membersSection": {
+      "viewProfile": "Voir le profil",
+      "openMemberActions": "Ouvrir les actions du membre",
+      "addMemberFailed": "Échec de l'ajout du membre",
+      "noAccountFound": "Aucun compte trouvé"
     },
     "routineSection": {
       "thisWeek": "Cette semaine",
@@ -1557,6 +1584,9 @@
       "importingPlants": "Importation des plantes...",
       "plantsImported": "{{count}} plante(s) importée(s) avec succès",
       "importFailed": "Échec de l'importation des plantes",
+      "addPlantFailed": "Échec de l'ajout de la plante",
+      "saveScheduleFailed": "Échec de l'enregistrement du calendrier",
+      "logWateringFailed": "Échec de l'enregistrement de l'arrosage",
       "onHand": "En stock :",
       "tasks": "Tâches :",
       "dueToday": "Dû aujourd'hui :",
@@ -1625,6 +1655,11 @@
       "adviceLanguageDescription": "Choisissez la langue de vos conseils de jardinage personnalisés.",
       "selectLanguage": "Sélectionner la langue",
       "adviceWillBeIn": "Vos conseils de jardinage seront en {{language}}",
+      "saveLocationError": "Échec de l'enregistrement de la localisation",
+      "saveLocationRetry": "Échec de l'enregistrement de la localisation. Veuillez réessayer.",
+      "saveLanguageError": "Échec de l'enregistrement de la préférence de langue",
+      "saveLanguageRetry": "Échec de l'enregistrement de la préférence de langue. Veuillez réessayer.",
+      "saveGardenFailed": "Échec de l'enregistrement du jardin",
       "gardenName": "Nom du jardin",
       "coverImageUrl": "URL de l'image de couverture",
       "coverUploadButton": "Téléverser une image",
@@ -1796,6 +1831,12 @@
         "oct": "Oct",
         "nov": "Nov",
         "dec": "Déc"
+      },
+      "weekOrdinals": {
+        "1": "1re",
+        "2": "2e",
+        "3": "3e",
+        "4": "4e"
       }
     }
   },
