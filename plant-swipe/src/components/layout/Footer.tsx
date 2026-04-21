@@ -2,6 +2,7 @@ import React from "react"
 import { Link } from "@/components/i18n/Link"
 import { Youtube, Twitter, Instagram, ChevronDown } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { usePathWithoutLanguage } from "@/lib/i18nRouting"
 
 const footerLinks = [
   { to: '/about', labelKey: 'about', fallback: 'About' },
@@ -17,6 +18,8 @@ const legalLinks = [
 
 const FooterComponent: React.FC = () => {
   const { t } = useTranslation('common')
+  const pathWithoutLang = usePathWithoutLanguage()
+  const isSettingsPage = pathWithoutLang === '/settings' || pathWithoutLang.startsWith('/settings/')
   const currentYear = new Date().getFullYear()
   const [legalOpen, setLegalOpen] = React.useState(false)
   const legalRef = React.useRef<HTMLDivElement>(null)
@@ -33,7 +36,7 @@ const FooterComponent: React.FC = () => {
   }, [])
 
   return (
-    <footer className="hidden lg:block max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
+    <footer className={`${isSettingsPage ? 'block' : 'hidden lg:block'} max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]`}>
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Social Media Icons */}
           <div className="flex items-center gap-4">
