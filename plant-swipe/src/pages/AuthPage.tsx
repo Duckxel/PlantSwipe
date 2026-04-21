@@ -311,11 +311,23 @@ export function AuthPage({ mode: initialMode = "login" }: AuthPageProps) {
   const privacyPath = "/privacy"
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#1a1a1c] dark:to-[#141415] px-4 py-8 overflow-hidden relative">
+    <div
+      className="relative flex min-h-[100dvh] w-full flex-col overflow-x-hidden overflow-y-auto bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#1a1a1c] dark:to-[#141415] px-4 pt-8"
+      style={{
+        // When the on-screen keyboard opens we run with `Keyboard.resize: none`,
+        // so the WebView stays full-height and the form would be hidden behind
+        // the keyboard. Padding the bottom by the live keyboard height lets the
+        // form scroll into the visible area above the keys (and icon strip).
+        paddingBottom: "calc(2rem + var(--keyboard-height, 0px))",
+      }}
+    >
       {/* Decorative background glow */}
       <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-emerald-500/8 dark:bg-emerald-500/5 rounded-full blur-[100px] pointer-events-none" />
 
-      <div className="w-full max-w-sm space-y-6 relative z-10">
+      {/* `my-auto` + flex column centers the form vertically when it fits the
+          viewport, but lets it top-align (scrollable) once the keyboard opens
+          and the remaining space is smaller than the form's natural height. */}
+      <div className="relative z-10 my-auto mx-auto w-full max-w-sm space-y-6">
         {/* Logo / Branding */}
         <motion.div
           initial={{ opacity: 0, y: -10 }}
@@ -376,10 +388,11 @@ export function AuthPage({ mode: initialMode = "login" }: AuthPageProps) {
                     {t("auth.displayName")}
                   </Label>
                   <div className="relative">
-                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-stone-500 pointer-events-none" />
+                    <User className="pointer-events-none absolute left-3.5 top-[calc(1.25rem-1px)] z-10 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-stone-300" />
                     <ValidatedInput
                       id="auth-name"
                       type="text"
+                      autoComplete="username"
                       placeholder={t("auth.displayNamePlaceholder")}
                       value={displayName}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -399,10 +412,12 @@ export function AuthPage({ mode: initialMode = "login" }: AuthPageProps) {
                   {t("auth.email")}
                 </Label>
                 <div className="relative">
-                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-stone-500 pointer-events-none" />
+                  <Mail className="pointer-events-none absolute left-3.5 top-[calc(1.25rem-1px)] z-10 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-stone-300" />
                   <ValidatedInput
                     id="auth-email"
                     type="email"
+                    autoComplete="email"
+                    inputMode="email"
                     placeholder={t("auth.emailPlaceholder")}
                     value={email}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -427,10 +442,11 @@ export function AuthPage({ mode: initialMode = "login" }: AuthPageProps) {
                   {t("auth.password")}
                 </Label>
                 <div className="relative">
-                  <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-stone-500 pointer-events-none" />
+                  <Lock className="pointer-events-none absolute left-3.5 top-[calc(1.25rem-1px)] z-10 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-stone-300" />
                   <ValidatedInput
                     id="auth-password"
                     type="password"
+                    autoComplete={isSignup ? "new-password" : "current-password"}
                     placeholder={t("auth.passwordPlaceholder")}
                     value={password}
                     onChange={(e: React.ChangeEvent<HTMLInputElement>) =>
@@ -459,10 +475,11 @@ export function AuthPage({ mode: initialMode = "login" }: AuthPageProps) {
                     {t("auth.confirmPassword")}
                   </Label>
                   <div className="relative">
-                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-stone-400 dark:text-stone-500 pointer-events-none" />
+                    <Lock className="pointer-events-none absolute left-3.5 top-[calc(1.25rem-1px)] z-10 h-4 w-4 -translate-y-1/2 text-stone-500 dark:text-stone-300" />
                     <ValidatedInput
                       id="auth-confirm"
                       type="password"
+                      autoComplete="new-password"
                       placeholder={t("auth.confirmPasswordPlaceholder")}
                       value={password2}
                       onChange={(e: React.ChangeEvent<HTMLInputElement>) =>

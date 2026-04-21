@@ -1388,7 +1388,9 @@ export async function sendMessagePushNotification(
   senderDisplayName: string,
   messagePreview: string,
   conversationId: string,
-  language: string = 'en'
+  language: string = 'en',
+  messageId?: string,
+  senderId?: string
 ): Promise<{ sent: boolean; reason?: string; devicesReached?: number }> {
   const translations: Record<string, { title: string; body: string }> = {
     en: {
@@ -1432,12 +1434,14 @@ export async function sendMessagePushNotification(
         body: t.body,
         tag: `message-${conversationId}`, // Group notifications by conversation
         renotify: true, // Show new notification even if one exists with same tag
-        data: { 
-          conversationId, 
+        data: {
+          conversationId,
           senderDisplayName,
           type: 'new_message',
           url: conversationUrl,
-          ctaUrl: conversationUrl
+          ctaUrl: conversationUrl,
+          ...(messageId ? { messageId } : {}),
+          ...(senderId ? { senderId } : {}),
         }
       })
     })

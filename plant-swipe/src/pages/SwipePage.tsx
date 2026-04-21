@@ -426,11 +426,16 @@ export const SwipePage = React.memo<SwipePageProps>(({
     // ==================== MOBILE LAYOUT ====================
     if (!isDesktop) {
       return (
-        <div 
+        <div
           className="relative w-full swipe-card-container px-2"
-          style={{ 
-            height: 'calc(100dvh - 120px)',
-            minHeight: '450px',
+          style={{
+            // Reserve top chrome (~120px for TopBar + status bar) AND the fixed
+            // MobileNavBar (5.5rem tall + safe-area-inset-bottom). Without the
+            // nav subtraction, `100dvh` extends behind the bottom nav on Android
+            // Capacitor so the bottom of the card (badges, Info button) sits
+            // under the nav bar.
+            height: 'calc(100dvh - 120px - 5.5rem - env(safe-area-inset-bottom, 0px))',
+            minHeight: '380px',
             marginBottom: '8px',
           }}
         >
