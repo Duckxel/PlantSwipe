@@ -2501,8 +2501,13 @@ export default function PlantSwipe() {
               {/* Sticky search bar for search view - hides on scroll down on mobile */}
               {currentView === "search" && (
                 <div
-                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl transition-all duration-300 ${
-                    searchBarVisible ? 'top-0 opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
+                  style={
+                    searchBarVisible
+                      ? { top: 'env(safe-area-inset-top, 0px)' }
+                      : undefined
+                  }
+                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-all duration-300 ${
+                    searchBarVisible ? 'opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
                   }`}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
