@@ -35,6 +35,7 @@ import { cn } from '@/lib/utils'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { ImageSourcePicker } from '@/components/ui/image-source-picker'
+import { FileDropZone } from '@/components/ui/file-drop-zone'
 import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
 import { 
   uploadAndIdentifyPlant, 
@@ -386,28 +387,42 @@ export const ScanPage: React.FC = () => {
         </p>
       </div>
       
-      {/* New Scan Card */}
-      <Card
-        data-tutorial="scan-card"
-        role={!isIdentifying && !identifyError ? 'button' : undefined}
-        tabIndex={!isIdentifying && !identifyError ? 0 : undefined}
-        onClick={() => {
-          if (isIdentifying || identifyError) return
-          setSourcePickerOpen(true)
+      {/* New Scan Card — supports click (opens source picker) and drag-and-drop */}
+      <FileDropZone
+        onFiles={(files) => {
+          const file = files[0]
+          if (file) void processSelectedFile(file)
         }}
-        onKeyDown={(e) => {
-          if (isIdentifying || identifyError) return
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault()
-            setSourcePickerOpen(true)
-          }
-        }}
-        className={cn(
-          'mb-8 p-4 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10 transition-colors',
-          !isIdentifying && !identifyError &&
-            'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
-        )}
+        accept={['image/']}
+        acceptInput="image/*"
+        clickToBrowse={false}
+        disabled={isIdentifying || !!identifyError}
+        className="mb-8 rounded-3xl"
       >
+        {({ isDragging }) => (
+        <Card
+          data-tutorial="scan-card"
+          role={!isIdentifying && !identifyError ? 'button' : undefined}
+          tabIndex={!isIdentifying && !identifyError ? 0 : undefined}
+          onClick={() => {
+            if (isIdentifying || identifyError) return
+            setSourcePickerOpen(true)
+          }}
+          onKeyDown={(e) => {
+            if (isIdentifying || identifyError) return
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setSourcePickerOpen(true)
+            }
+          }}
+          className={cn(
+            'p-4 rounded-3xl border-2 border-dashed border-emerald-200 dark:border-emerald-800/50 bg-gradient-to-br from-emerald-50/50 to-teal-50/50 dark:from-emerald-900/10 dark:to-teal-900/10 transition-all',
+            !isIdentifying && !identifyError &&
+              'cursor-pointer hover:border-emerald-400 dark:hover:border-emerald-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500',
+            isDragging &&
+              'border-emerald-500 dark:border-emerald-500 bg-emerald-100/70 dark:bg-emerald-500/10 scale-[1.01] shadow-lg',
+          )}
+        >
         {isIdentifying ? (
           // Loading state
           <div className="flex flex-col items-center justify-center py-8">
@@ -454,7 +469,9 @@ export const ScanPage: React.FC = () => {
               <Camera className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
             </div>
             <h3 className="text-base font-semibold text-stone-900 dark:text-white">
-              {t('scan.newScanTitle', { defaultValue: 'Identify a Plant' })}
+              {isDragging
+                ? t('scan.dropHere', { defaultValue: 'Drop your image to scan' })
+                : t('scan.newScanTitle', { defaultValue: 'Identify a Plant' })}
             </h3>
 
             <a
@@ -483,6 +500,10 @@ export const ScanPage: React.FC = () => {
               {t('scan.uploadImage', { defaultValue: 'Upload' })}
             </Button>
 
+            <p className="text-xs text-stone-500 dark:text-stone-400 text-center">
+              {t('scan.orDragAndDrop', { defaultValue: 'or drag and drop an image' })}
+            </p>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -492,8 +513,10 @@ export const ScanPage: React.FC = () => {
             />
           </div>
         )}
-      </Card>
-      
+        </Card>
+        )}
+      </FileDropZone>
+
       {/* Scan History */}
       <div className="mb-4 flex items-center gap-2">
         <History className="h-5 w-5 text-stone-400" />

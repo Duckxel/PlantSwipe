@@ -626,6 +626,65 @@ const images = photos.map(p => ({ src: p.url, alt: p.name }))
 
 ---
 
+### `FileDropZone`
+
+**File:** `src/components/ui/file-drop-zone.tsx`
+
+Shared drag-and-drop upload zone. Wraps any content with drag/drop handlers plus an optional click-to-browse hidden file input. Consumers own the visuals and read drag state via a render prop or `data-dragging` attribute. Behavior is built on top of the `useFileDrop` hook; drag-and-drop is auto-disabled on native Capacitor.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `onFiles` | `(files: File[]) => void` | — | Receives files that passed `accept` / `maxBytes` filters |
+| `accept` | `string[]` | — | MIME-type prefixes for drop filter (e.g. `["image/"]`) |
+| `acceptInput` | `string` | — | `accept` attribute for the hidden `<input type="file">` |
+| `maxBytes` | `number` | — | Max size per file (oversize files are silently skipped) |
+| `multiple` | `boolean` | `false` | Allow multi-file selection in the picker |
+| `disabled` | `boolean` | `false` | Disable drag and click interactions |
+| `dragEnabled` | `boolean` | `!isNativeCapacitor()` | Force-enable or disable drag handlers |
+| `clickToBrowse` | `boolean` | `true` | Clicking the zone opens the file picker |
+| `dragActiveClassName` | `string` | — | Extra classes applied while a drag is active |
+| `children` | `ReactNode \| (state) => ReactNode` | — | Node or render prop receiving `{ isDragging, openFilePicker }` |
+
+**Imperative handle:** `{ openFilePicker(): void }` (via `ref`).
+
+**Example (render prop):**
+
+```tsx
+import { FileDropZone } from "@/components/ui/file-drop-zone"
+
+<FileDropZone
+  onFiles={(files) => handleUpload(files[0])}
+  accept={["image/"]}
+  acceptInput="image/*"
+  dragActiveClassName="border-emerald-500 bg-emerald-50"
+>
+  {({ isDragging, openFilePicker }) => (
+    <div>
+      <p>{isDragging ? "Drop here" : "Drag a file"}</p>
+      <button onClick={openFilePicker}>Browse</button>
+    </div>
+  )}
+</FileDropZone>
+```
+
+**Example (programmatic picker):**
+
+```tsx
+const ref = React.useRef<FileDropZoneHandle>(null)
+
+<FileDropZone ref={ref} clickToBrowse={false} onFiles={upload}>
+  <Card>…</Card>
+</FileDropZone>
+
+<Button onClick={() => ref.current?.openFilePicker()}>Upload more</Button>
+```
+
+**Used in:** ScanPage (green scan card), AdminUploadPanel (admin media upload).
+
+---
+
 ## Layout Components
 
 ### `TopBar` / `BottomBar` / `MobileNavBar` / `Footer`
