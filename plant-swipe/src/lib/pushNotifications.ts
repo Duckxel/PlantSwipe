@@ -69,7 +69,7 @@ async function syncSubscriptionWithServer(subscription: PushSubscription): Promi
 export async function registerPushSubscription(force = false): Promise<PushSubscription> {
   if (Capacitor.isNativePlatform()) {
     const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
-    await registerNativePushForCurrentUser()
+    await registerNativePushForCurrentUser({ force })
     return null as unknown as PushSubscription
   }
   if (typeof window === 'undefined' || !isPlatformWebPushSupported()) {

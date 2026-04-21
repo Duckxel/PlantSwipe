@@ -417,7 +417,9 @@ export function SetupPage() {
       if (isNativeCapacitor()) {
         // Use Capacitor native push API — Web Notification API doesn't control native notifications
         const { registerNativePushForCurrentUser } = await import('@/lib/nativePushRegistration')
-        await registerNativePushForCurrentUser()
+        // Setup is the first explicit user gesture to enable push; treat it
+        // as a fresh opt-in so any previously-recorded failure is cleared.
+        await registerNativePushForCurrentUser({ force: true })
         console.log('[setup] Native push registration completed')
       } else if ('Notification' in window) {
         const permission = await Notification.requestPermission()

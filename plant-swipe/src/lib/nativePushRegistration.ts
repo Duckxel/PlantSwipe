@@ -51,6 +51,16 @@ const PENDING_TAP_KEY = 'plantswipe.push.pendingTap'
 const PENDING_TAP_TTL_MS = 10 * 60 * 1000 // 10 minutes — enough for a crash-restart
 const FCM_TOKEN_CACHE_KEY = 'plantswipe.push.lastFcmToken'
 const ANDROID_CHANNEL_ID = 'aphylia_priority'
+/**
+ * When `PushNotifications.register()` throws (e.g. the APK was built without a
+ * `google-services.json`, so FCM can't hand us a token), we mark the device as
+ * unsupported and skip every future automatic `register()` call.  Without this
+ * flag the `AuthContext` effect would re-enter the failing path on every cold
+ * launch, which on Android 13+ re-trips whatever native-side instability
+ * caused the first crash.  Cleared if the user explicitly re-enables push
+ * from Settings — see `registerNativePushForCurrentUser({ force: true })`.
+ */
+const PUSH_DISABLED_KEY = 'plantswipe.push.disabledReason'
 
 /**
  * De-duplicate tap events. Android's push plugin reads the FCM extras during
@@ -129,6 +139,36 @@ function readCachedFcmToken(): string | null {
     return v && v.length > 0 ? v : null
   } catch {
     return null
+  }
+}
+
+function markPushDisabled(reason: string): void {
+  const store = safeLocalStorage()
+  if (!store) return
+  try {
+    store.setItem(PUSH_DISABLED_KEY, reason.slice(0, 256))
+  } catch {
+    /* ignore */
+  }
+}
+
+function isPushDisabled(): boolean {
+  const store = safeLocalStorage()
+  if (!store) return false
+  try {
+    return store.getItem(PUSH_DISABLED_KEY) !== null
+  } catch {
+    return false
+  }
+}
+
+function clearPushDisabled(): void {
+  const store = safeLocalStorage()
+  if (!store) return
+  try {
+    store.removeItem(PUSH_DISABLED_KEY)
+  } catch {
+    /* ignore */
   }
 }
 
@@ -337,6 +377,17 @@ export async function initializeNativePushListeners(): Promise<void> {
 
     await PushNotifications.addListener('registrationError', (err) => {
       if (import.meta.env.DEV) console.warn('[native push] registration error', err)
+      // FCM couldn't issue a token — typically because the APK was built
+      // without a valid `google-services.json`. Trip the kill switch so we
+      // don't re-enter `register()` on the next launch (where the same
+      // failure historically crashed the app inside the native Firebase
+      // pipeline on Android 13+).
+      try {
+        const msg = (err as { error?: unknown })?.error
+        markPushDisabled(typeof msg === 'string' ? msg : 'registration-error')
+      } catch {
+        markPushDisabled('registration-error')
+      }
     })
 
     await PushNotifications.addListener('pushNotificationReceived', (notification) => {
@@ -381,11 +432,31 @@ export async function initializeNativePushListeners(): Promise<void> {
  * Register the device with FCM/APNs and upload the token for the signed-in
  * user.  Called from AuthContext after auth resolves.  Safe to call multiple
  * times — the plugin dedupes its own registration internally.
+ *
+ * Pass `{ force: true }` from an explicit user gesture (e.g. toggling the
+ * Settings switch) to clear any previously-recorded registration failure.
+ * Automatic call sites should leave `force` unset so we don't re-trigger a
+ * failing `register()` on every launch.
  */
-export async function registerNativePushForCurrentUser(): Promise<void> {
+export async function registerNativePushForCurrentUser(
+  options: { force?: boolean } = {},
+): Promise<void> {
   if (!Capacitor.isNativePlatform()) return
   // Listeners must be attached before `register()` fires an event.
   await initializeNativePushListeners()
+
+  if (options.force) {
+    clearPushDisabled()
+  } else if (isPushDisabled()) {
+    // A previous attempt errored out (most commonly: the APK shipped without a
+    // real `google-services.json`, so FCM can't mint a token).  Re-entering
+    // `register()` is what crashed the app on every subsequent launch, so
+    // stay out of that path until the user explicitly re-enables push.
+    if (import.meta.env.DEV) {
+      console.info('[native push] skipping register — previously disabled after error')
+    }
+    return
+  }
 
   try {
     const { PushNotifications } = await import('@capacitor/push-notifications')
@@ -395,7 +466,17 @@ export async function registerNativePushForCurrentUser(): Promise<void> {
       const req = await PushNotifications.requestPermissions()
       if (req.receive !== 'granted') return
     }
-    await PushNotifications.register()
+    try {
+      await PushNotifications.register()
+    } catch (registerErr) {
+      // `register()` rejected synchronously (native plugin threw before
+      // dispatching to FCM).  Record the failure so we don't loop back in
+      // here on the next cold launch.
+      markPushDisabled(
+        (registerErr as Error)?.message || 'register-threw',
+      )
+      throw registerErr
+    }
     pushRegisteredForUser = true
 
     // If we cached a token earlier (e.g. before the user signed in) push it
