@@ -2414,9 +2414,16 @@ export default function PlantSwipe() {
       )
     }
 
+    const isDiscoveryView = currentView === "discovery"
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
-          <div className="min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pb-4 max-lg:pb-6 pt-2 md:px-8 md:pt-4 lg:pb-8 overflow-y-visible">
+          <div
+            className={`min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pt-2 md:px-8 md:pt-4 ${
+              isDiscoveryView
+                ? "pb-0 lg:pb-8 max-lg:overflow-hidden"
+                : "pb-4 max-lg:pb-6 lg:pb-8 overflow-y-visible"
+            }`}
+          >
           <div className="overflow-y-visible">
           <TopBar
             openLogin={openLogin}
@@ -2503,7 +2510,10 @@ export default function PlantSwipe() {
                 <div
                   style={
                     searchBarVisible
-                      ? { top: 'env(safe-area-inset-top, 0px)' }
+                      ? {
+                          top: 0,
+                          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 0.75rem)',
+                        }
                       : undefined
                   }
                   className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-all duration-300 ${
