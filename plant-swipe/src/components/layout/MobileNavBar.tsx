@@ -296,7 +296,7 @@ const MobileNavBarComponent: React.FC<MobileNavBarProps> = ({ canCreate, onProfi
               <div className="grid grid-cols-4 gap-2">
                 <QuickActionButton
                   icon={<ScanLine className="h-5 w-5" />}
-                  label={t("scan.title", { defaultValue: "Scan" })}
+                  label={t("scan.shortLabel", { defaultValue: "Scan" })}
                   onClick={() => {
                     setProfileMenuOpen(false)
                     navigate("/scan")
@@ -553,9 +553,9 @@ function QuickActionButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex flex-col items-center gap-2 p-3 rounded-2xl active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
-        highlight 
-          ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30' 
+      className={`flex h-[84px] flex-col items-center justify-center gap-2 px-2 py-3 rounded-2xl active:scale-95 transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+        highlight
+          ? 'bg-emerald-50 dark:bg-emerald-900/20 hover:bg-emerald-100 dark:hover:bg-emerald-900/30'
           : 'bg-stone-50 dark:bg-[#2a2a2d] hover:bg-stone-100 dark:hover:bg-[#333336]'
       }`}
     >
@@ -570,7 +570,7 @@ function QuickActionButton({
           </span>
         )}
       </div>
-      <span className={`text-[11px] font-medium ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
+      <span className={`text-[11px] font-medium leading-tight text-center line-clamp-2 ${highlight ? 'text-emerald-600 dark:text-emerald-400' : 'text-stone-600 dark:text-stone-300'}`}>{label}</span>
     </button>
   )
 }

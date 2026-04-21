@@ -33,7 +33,7 @@ const FooterComponent: React.FC = () => {
   }, [])
 
   return (
-    <footer className="max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
+    <footer className="hidden lg:block max-w-6xl mx-auto mt-10 pt-8 pb-6 px-2 border-t border-stone-300 dark:border-[#3e3e42]">
       <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Social Media Icons */}
           <div className="flex items-center gap-4">

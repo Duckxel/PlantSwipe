@@ -962,11 +962,11 @@ const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-4 sm:pt-5 pb-12 sm:pb-14 space-y-4 sm:space-y-5">
+    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-2 sm:pt-5 pb-12 sm:pb-14 space-y-3 sm:space-y-5">
       {/* Easter Egg Hunt */}
       {id && <EasterEgg pagePath={`/plants/${id}`} />}
 
-      <div className="flex items-center gap-2 justify-between">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-2 justify-between">
         <Button
           type="button"
           variant="ghost"
@@ -977,7 +977,7 @@ const PlantInfoPage: React.FC = () => {
         >
           <ChevronLeft className="h-5 w-5" />
         </Button>
-        <div className="flex items-center gap-1.5 sm:gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           {/* Admin stats badge — next to Share */}
           {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
             <Badge
