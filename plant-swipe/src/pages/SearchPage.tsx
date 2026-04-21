@@ -167,7 +167,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   return (
     <div className="max-w-6xl mx-auto mt-2 lg:mt-8 px-2 md:px-4 pb-16 space-y-6">
       {/* 2-column grid on mobile, 2-column on desktop */}
-      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-stretch">
+      <div className="grid grid-cols-2 md:grid-cols-2 gap-3 md:gap-6 items-start md:items-stretch">
         {visiblePlants.map((p) => {
           // Check if plant is "in progress"
           const statusStr = (typeof p.status === 'string' ? p.status : typeof p.meta?.status === 'string' ? p.meta.status : '').toLowerCase()
@@ -204,7 +204,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
           return (
             <Card
               key={p.id}
-              className={`${cardSurface} h-full`}
+              className={`${cardSurface} md:h-full`}
               onClick={() => openInfo(p)}
               role="button"
               tabIndex={0}
@@ -213,8 +213,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
               }}
             >
               {/* Mobile: Compact vertical card */}
-              <div className="flex flex-col h-full md:hidden">
-                <div className="relative w-full aspect-square flex-shrink-0 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
+              <div className="flex flex-col md:hidden">
+                <div className="relative w-full aspect-[4/5] flex-shrink-0 rounded-t-[28px] overflow-hidden bg-gradient-to-br from-stone-100 via-white to-stone-200 dark:from-[#2d2d30] dark:via-[#2a2a2e] dark:to-[#1f1f1f]">
                   {p.image ? (
                     <img
                       src={p.image}
@@ -229,6 +229,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                       <Sprout className="h-10 w-10 text-emerald-400/50 dark:text-emerald-500/40" />
                     </div>
                   )}
+                  {/* Gradient for legibility of overlay buttons */}
+                  <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-black/40 to-transparent" aria-hidden="true" />
                   {highlightBadges.length > 0 && (
                     <div className="absolute top-2 left-2 z-10 flex flex-col gap-1">
                       {highlightBadges.slice(0, 1).map((badge) => (
@@ -238,6 +240,29 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                       ))}
                     </div>
                   )}
+                  {/* Action buttons overlay on image */}
+                  <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={(e) => handleLike(e, p.id)}
+                      className={`h-8 w-8 rounded-full flex items-center justify-center backdrop-blur-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 ${
+                        isLiked
+                          ? "bg-rose-500/95 text-white"
+                          : "bg-black/40 text-white hover:bg-black/55"
+                      }`}
+                      aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
+                    >
+                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={(e) => handleBookmark(e, p.id)}
+                      className="h-8 w-8 rounded-full flex items-center justify-center bg-black/40 text-white hover:bg-black/55 backdrop-blur-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                      aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
+                    >
+                      <Bookmark className="h-4 w-4" />
+                    </button>
+                  </div>
                   {isInProgress && (
                     <div className="absolute bottom-2 right-2 z-10">
                       <Badge className="rounded-full p-1.5 bg-amber-400 dark:bg-amber-500/80 text-amber-900 dark:text-amber-100">
@@ -253,35 +278,14 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                 </div>
-                <div className="p-3 flex flex-col flex-1 min-w-0">
-                  <div className="flex-1 min-w-0 space-y-0.5 min-h-[4.5rem]">
-                    <ScrollingTitle className="font-semibold text-sm">{p.name}</ScrollingTitle>
-                    {p.variety && (
-                      <ScrollingTitle className="font-extrabold text-sm bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight">
-                        &lsquo;{p.variety}&rsquo;
-                      </ScrollingTitle>
-                    )}
-                    <ScrollingTitle className="text-[10px] italic opacity-60">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
-                    {p.family && <ScrollingTitle className="text-[10px] opacity-50">{p.family}</ScrollingTitle>}
-                  </div>
-                  <div className="flex items-center justify-end gap-1 mt-2">
-                    <button
-                      type="button"
-                      onClick={(e) => handleLike(e, p.id)}
-                      className={`${actionBtnBase} ${isLiked ? "text-rose-500 bg-rose-50 dark:bg-rose-500/10" : "text-stone-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10"}`}
-                      aria-label={isLiked ? t("plant.unlike", { defaultValue: "Unlike" }) : t("plant.like", { defaultValue: "Like" })}
-                    >
-                      <Heart className={`h-4 w-4 ${isLiked ? "fill-current" : ""}`} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={(e) => handleBookmark(e, p.id)}
-                      className={`${actionBtnBase} text-stone-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10`}
-                      aria-label={t("plant.addToBookmark", { defaultValue: "Add to bookmark" })}
-                    >
-                      <Bookmark className="h-4 w-4" />
-                    </button>
-                  </div>
+                <div className="px-3 py-2.5 min-w-0 space-y-0.5">
+                  <ScrollingTitle className="font-semibold text-sm leading-snug">{p.name}</ScrollingTitle>
+                  {p.variety && (
+                    <ScrollingTitle className="font-extrabold text-[13px] bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight leading-snug">
+                      &lsquo;{p.variety}&rsquo;
+                    </ScrollingTitle>
+                  )}
+                  <ScrollingTitle className="text-[11px] italic opacity-60 leading-snug">{p.scientificNameSpecies || p.scientificName}</ScrollingTitle>
                 </div>
               </div>
 
@@ -393,7 +397,8 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
         onClick={scrollToTop}
         size="icon"
         aria-label={t("common.scrollToTop", { defaultValue: "Scroll to top" })}
-        className={`fixed bottom-20 right-4 z-50 h-12 w-12 rounded-full shadow-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white transition-all duration-300 ${
+        style={{ bottom: 'calc(5.5rem + env(safe-area-inset-bottom, 0px) + 0.5rem)' }}
+        className={`fixed lg:!bottom-8 right-4 z-50 h-12 w-12 rounded-full shadow-lg bg-emerald-600 hover:bg-emerald-700 dark:bg-emerald-500 dark:hover:bg-emerald-600 text-white transition-all duration-300 ${
           showScrollTop
             ? "opacity-100 translate-y-0"
             : "opacity-0 translate-y-4 pointer-events-none"

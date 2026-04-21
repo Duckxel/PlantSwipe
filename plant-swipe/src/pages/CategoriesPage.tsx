@@ -405,8 +405,8 @@ export default function CategoriesPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <div className="mb-8 text-center">
+    <div className="mx-auto max-w-3xl px-4 pt-4 pb-8 lg:py-8">
+      <div className="mb-6 lg:mb-8 text-center">
         <h1 className="text-3xl font-bold tracking-tight">
           {t("categories.title", { defaultValue: "Categories" })}
         </h1>
@@ -421,7 +421,7 @@ export default function CategoriesPage() {
       </div>
 
       {/* Search bar — matches Search page backdrop style */}
-      <div className="sticky top-0 z-30 -mx-4 px-4 py-3 mb-6 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-0 lg:rounded-2xl lg:px-4">
+      <div className="sticky -top-px z-30 -mx-4 px-4 pt-3 pb-3 mb-6 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl">
         <form onSubmit={handleSearchSubmit}>
           <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
             <div className="flex flex-1 items-center gap-2">

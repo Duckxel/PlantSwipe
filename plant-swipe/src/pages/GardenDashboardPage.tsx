@@ -97,6 +97,31 @@ const TransplantToGardenDialog = React.lazy(() => import("@/components/seedling-
 import type { SeedlingTrayCell } from "@/types/garden";
 import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
+/**
+ * Convert any thrown value into a human-readable string so we never render
+ * "[object Object]" in the UI. Supabase/PostgREST errors are plain objects
+ * with `message`/`error`/`error_description` fields, which `String(e)`
+ * stringifies as "[object Object]".
+ */
+function formatUnknownError(e: unknown): string {
+  if (e == null) return "Unknown error";
+  if (typeof e === "string") return e;
+  if (e instanceof Error) return e.message || "Unknown error";
+  if (typeof e === "object") {
+    const obj = e as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message) return obj.message;
+    if (typeof obj.error === "string" && obj.error) return obj.error;
+    if (typeof obj.error_description === "string" && obj.error_description) return obj.error_description;
+    if (typeof obj.details === "string" && obj.details) return obj.details;
+    try {
+      return JSON.stringify(e);
+    } catch {
+      return "Unknown error";
+    }
+  }
+  return String(e);
+}
+
 type TabKey = "overview" | "plants" | "tasks" | "journal" | "analytics" | "settings" | "tray";
 
 const GARDEN_TAB_ICONS: Record<TabKey, React.FC<{ className?: string }>> = {
@@ -976,7 +1001,7 @@ export const GardenDashboardPage: React.FC = () => {
         if (suppressError) {
           console.warn("[GardenDashboard] Silent load failed:", e);
         } else {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(formatUnknownError(e));
         }
       } finally {
         if (!silent) setLoading(false);
@@ -1269,7 +1294,7 @@ export const GardenDashboardPage: React.FC = () => {
         if (opts?.suppressError) {
           console.warn("[GardenDashboard] Silent heavy load failed:", e);
         } else {
-          setError(e instanceof Error ? e.message : String(e));
+          setError(formatUnknownError(e));
         }
       } finally {
         setHeavyLoading(false);

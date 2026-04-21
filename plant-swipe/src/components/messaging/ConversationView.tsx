@@ -727,7 +727,7 @@ export const ConversationView: React.FC<ConversationViewProps> = ({
   return (
     <div className="fixed inset-0 z-50 md:z-auto md:relative md:inset-auto flex flex-col bg-stone-50 dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:h-[calc(100vh-12rem)]">
       {/* Header */}
-      <header className="flex-shrink-0 flex items-center px-2 py-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
+      <header className="flex-shrink-0 flex items-center px-2 py-3 pt-[max(env(safe-area-inset-top),12px)] md:pt-3 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl border-b border-stone-200/50 dark:border-[#2a2a2d]/50 md:rounded-t-2xl md:border md:border-b-0">
         {/* Back button - left aligned */}
         <Button
           variant="ghost"

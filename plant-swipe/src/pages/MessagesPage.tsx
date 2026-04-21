@@ -212,7 +212,7 @@ export const MessagesPage: React.FC = () => {
   return (
     <div className="fixed inset-0 md:relative md:inset-auto flex flex-col bg-white dark:bg-[#0f0f10] md:bg-transparent md:dark:bg-transparent md:max-w-4xl md:mx-auto md:mt-8 md:px-4 md:pb-16">
       {/* Header */}
-      <header className="flex-shrink-0 px-4 pt-4 pb-2 md:px-0">
+      <header className="flex-shrink-0 px-4 pt-[max(env(safe-area-inset-top),1rem)] md:pt-4 pb-2 md:px-0">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-3xl font-bold text-stone-900 dark:text-white">
             {t('messages.title', { defaultValue: 'Messages' })}
