@@ -48,7 +48,7 @@ function isMissingColumnError(message?: string | null) {
 function formatTranslationError(message: string) {
   if (isMissingColumnError(message)) {
     return new Error(
-      `${message}. The database schema appears to be outdated. Please run the admin "Sync Schema" task or restart the PlantSwipe services to apply migrations.`
+      `${message}. The database schema appears to be outdated. Please run the admin "Sync Schema" task or restart the Aphylia services to apply migrations.`
     )
   }
   return new Error(message)

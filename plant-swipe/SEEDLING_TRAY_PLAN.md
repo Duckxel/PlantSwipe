@@ -2,7 +2,7 @@
 
 ## Overview
 
-Add a **"Seedling"** garden type to PlantSwipe for managing seedling trays. Users configure a tray grid (rows × columns) at creation time, then manage individual cells — each representing a slot in the physical tray — with growth stage tracking, watering, and notes.
+Add a **"Seedling"** garden type to Aphylia for managing seedling trays. Users configure a tray grid (rows × columns) at creation time, then manage individual cells — each representing a slot in the physical tray — with growth stage tracking, watering, and notes.
 
 **Design decisions (confirmed with user):**
 - Plant species are selected from the **real plant catalog** (Supabase `plants` table)
