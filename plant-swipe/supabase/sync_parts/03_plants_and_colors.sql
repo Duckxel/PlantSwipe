@@ -2178,7 +2178,8 @@ end $$;
 
 -- ========== Plant change history ==========
 -- Per-plant audit log written by admins on edits, translations, AI fills, and note actions.
--- Intentionally compact: one row per discrete action with short summary + optional old/new snippets.
+-- Intentionally compact: one row per discrete action with a short summary.
+-- We DO NOT store the old/new field values — only who changed what, when.
 -- The author's display_name is NOT stored — always resolved from profiles at read time.
 create table if not exists public.plant_history (
   id uuid primary key default gen_random_uuid(),
@@ -2189,13 +2190,13 @@ create table if not exists public.plant_history (
   )),
   field text,
   summary text,
-  old_value text,
-  new_value text,
   created_at timestamptz not null default now()
 );
 comment on table public.plant_history is 'Per-plant admin change log: field edits, translations, AI fills, note actions.';
--- Drop legacy snapshot column if present from an earlier schema revision.
+-- Drop columns left over from earlier schema revisions.
 alter table public.plant_history drop column if exists author_name;
+alter table public.plant_history drop column if exists old_value;
+alter table public.plant_history drop column if exists new_value;
 create index if not exists plant_history_plant_time_idx on public.plant_history (plant_id, created_at desc);
 create index if not exists plant_history_author_idx on public.plant_history (author_id, created_at desc);
 

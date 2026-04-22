@@ -3,14 +3,6 @@ import type { PlantHistoryAction, PlantHistoryEntry } from '@/types/plantHistory
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic supabase rows */
 
-const MAX_SNIPPET_LEN = 240
-
-const clip = (s: string | null | undefined): string | null => {
-  if (s == null) return null
-  if (s.length <= MAX_SNIPPET_LEN) return s
-  return s.slice(0, MAX_SNIPPET_LEN - 1) + '…'
-}
-
 const rowToEntry = (row: any): PlantHistoryEntry => ({
   id: row.id,
   plantId: row.plant_id,
@@ -18,8 +10,6 @@ const rowToEntry = (row: any): PlantHistoryEntry => ({
   action: row.action as PlantHistoryAction,
   field: row.field ?? null,
   summary: row.summary ?? null,
-  oldValue: row.old_value ?? null,
-  newValue: row.new_value ?? null,
   createdAt: row.created_at,
 })
 
@@ -29,8 +19,6 @@ export interface LogPlantHistoryInput {
   action: PlantHistoryAction
   field?: string | null
   summary?: string | null
-  oldValue?: string | null
-  newValue?: string | null
 }
 
 export async function logPlantHistory(input: LogPlantHistoryInput): Promise<void> {
@@ -40,9 +28,7 @@ export async function logPlantHistory(input: LogPlantHistoryInput): Promise<void
     author_id: input.authorId ?? null,
     action: input.action,
     field: input.field ?? null,
-    summary: clip(input.summary),
-    old_value: clip(input.oldValue),
-    new_value: clip(input.newValue),
+    summary: input.summary ?? null,
   }
   const { error } = await supabase.from('plant_history').insert(payload)
   if (error) {
@@ -58,9 +44,7 @@ export async function logPlantHistoryBatch(entries: LogPlantHistoryInput[]): Pro
     author_id: e.authorId ?? null,
     action: e.action,
     field: e.field ?? null,
-    summary: clip(e.summary),
-    old_value: clip(e.oldValue),
-    new_value: clip(e.newValue),
+    summary: e.summary ?? null,
   }))
   const { error } = await supabase.from('plant_history').insert(payload)
   if (error) {

@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import { translateBatch } from "@/lib/deepl"
+import { logPlantHistory } from "@/lib/plantHistory"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
@@ -455,7 +456,8 @@ export async function processPlantRequest(
   plantName: string,
   requestId: string,
   createdBy: string | undefined,
-  callbacks?: AiPrefillCallbacks
+  callbacks?: AiPrefillCallbacks,
+  authorId?: string | null,
 ): Promise<{ success: boolean; plantId?: string; error?: string; cancelled?: boolean }> {
   const { onProgress, onFieldComplete, onFieldStart, onImageSourceStart, onImageSourceDone, onImageUploadProgress, onError, signal } = callbacks || {}
   
@@ -1215,9 +1217,17 @@ export async function processPlantRequest(
       console.error('Failed to delete plant request:', deleteError)
       // Don't fail - the plant was created successfully
     }
-    
+
+    // Plant-history entry: creation via AI Plant Request.
+    await logPlantHistory({
+      plantId,
+      authorId: authorId ?? null,
+      action: 'create',
+      summary: `Created plant via AI Plant Request ("${plantName}")`,
+    })
+
     return { success: true, plantId }
-    
+
   } catch (error) {
     // Don't report cancellation errors as failures - they're intentional
     if (isCancellationError(error)) {
@@ -1239,7 +1249,8 @@ export async function processAllPlantRequests(
   callbacks?: AiPrefillCallbacks & {
     onPlantProgress?: (info: { current: number; total: number; plantName: string }) => void
     onPlantComplete?: (info: { plantName: string; requestId: string; success: boolean; error?: string }) => void
-  }
+  },
+  authorId?: string | null,
 ): Promise<{ processed: number; failed: number; cancelled: boolean }> {
   const { onPlantProgress, onPlantComplete, signal } = callbacks || {}
   
@@ -1259,7 +1270,8 @@ export async function processAllPlantRequests(
       request.plant_name,
       request.id,
       createdBy,
-      callbacks
+      callbacks,
+      authorId,
     )
     
     // If the operation was cancelled, stop processing and don't count as failure

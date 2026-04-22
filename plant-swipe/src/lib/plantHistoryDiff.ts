@@ -170,21 +170,6 @@ const equal = (a: any, b: any): boolean => {
   return false
 }
 
-const MAX_SNIPPET = 180
-
-const shortRepr = (v: any): string | null => {
-  const n = normalize(v)
-  if (n == null) return null
-  let s: string
-  if (typeof n === 'string') s = n
-  else if (Array.isArray(n)) s = n.map((x) => (typeof x === 'string' ? x : JSON.stringify(x))).join(', ')
-  else if (typeof n === 'object') {
-    try { s = JSON.stringify(n) } catch { s = String(n) }
-  } else s = String(n)
-  if (s.length > MAX_SNIPPET) return s.slice(0, MAX_SNIPPET - 1) + '…'
-  return s
-}
-
 export interface DiffActor {
   authorId?: string | null
 }
@@ -219,8 +204,6 @@ export function buildPlantFieldDiff(
       action,
       field: key,
       summary: `Changed ${label}`,
-      oldValue: shortRepr(before),
-      newValue: shortRepr(after),
     })
   }
   return result

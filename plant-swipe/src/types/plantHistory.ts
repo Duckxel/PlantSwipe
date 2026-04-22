@@ -15,8 +15,6 @@ export interface PlantHistoryEntry {
   action: PlantHistoryAction
   field: string | null
   summary: string | null
-  oldValue: string | null
-  newValue: string | null
   createdAt: string
 }
 

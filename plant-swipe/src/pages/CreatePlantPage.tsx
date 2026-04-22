@@ -2070,7 +2070,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               authorId: historyActor.authorId,
               action: 'create',
               summary: `Created plant "${trimmedName}"`,
-              newValue: trimmedName,
             })
           } else if (options?.skipHistoryDiff) {
             // Caller will log its own summary entry (e.g. AI Fill).
@@ -2651,8 +2650,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           plantId: plant.id,
           authorId: profile?.id || null,
           action: 'translate',
-          summary: `Launched DeepL translation (${targets.length} ${targets.length === 1 ? 'language' : 'languages'})`,
-          newValue: targets.join(', '),
+          summary: `Launched DeepL translation (${targets.length === 1 ? targets[0].toUpperCase() : `${targets.length} languages`})`,
         })
         bumpHistoryVersion()
       }

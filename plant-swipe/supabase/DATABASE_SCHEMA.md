@@ -1064,7 +1064,7 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
 ### `plant_history`
 
-Per-plant audit log. One row per discrete admin action on the Create/Edit Plant page. Intentionally compact — short summary + optional old/new snippets. Insert-only for admins; no UPDATE or DELETE policy. The author's display name is **not** stored — the UI resolves it from `profiles` at read time via a batched lookup.
+Per-plant audit log. One row per discrete admin action across the Create/Edit Plant page, the AI Plant Request flow, and the Quick Actions on the plant admin listing. Intentionally compact — author, action, field, short summary. **Old/new field values are deliberately not stored** (only who changed what, when). Insert-only for admins; no UPDATE or DELETE policy. The author's display name is **not** stored — the UI resolves it from `profiles` at read time via a batched lookup.
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
@@ -1073,8 +1073,6 @@ author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
 action          TEXT NOT NULL CHECK (action IN ('field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'))
 field           TEXT                    -- Plant field key for field_change/status_change; 'translation:<lang>' for translation saves
 summary         TEXT                    -- Human-readable summary, e.g. "Changed Watering type"
-old_value       TEXT                    -- Clipped to 240 chars
-new_value       TEXT                    -- Clipped to 240 chars
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
 

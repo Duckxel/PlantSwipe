@@ -56,7 +56,6 @@ export async function createPlantAdminNote(
     authorId: actor.authorId,
     action: 'note_add',
     summary: 'Added note',
-    newValue: trimmed,
   })
   return rowToNote(data)
 }
@@ -84,8 +83,6 @@ export async function updatePlantAdminNote(
     authorId: actor.authorId,
     action: 'note_edit',
     summary: ownEdit ? 'Edited own note' : 'Edited another admin’s note',
-    oldValue: note.body,
-    newValue: trimmed,
   })
   return rowToNote(data)
 }
@@ -108,7 +105,6 @@ export async function deletePlantAdminNote(
     authorId: actor.authorId,
     action: 'note_delete',
     summary: ownDelete ? 'Deleted own note' : 'Deleted another admin’s note',
-    oldValue: note.body,
   })
   return true
 }
