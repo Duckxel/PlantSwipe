@@ -3545,6 +3545,7 @@ async function generateFieldData(options) {
     },
     { timeout }
   )
+  logAiUsage({ feature: 'admin_plant_fill_field', model: openaiModel, response, metadata: { fieldKey } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3607,6 +3608,7 @@ async function verifyPlantNameCandidate(plantName) {
     },
     { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
+  logAiUsage({ feature: 'admin_plant_verify', model: openaiModelNano, response, metadata: { plantName } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3764,6 +3766,50 @@ postgresOptions.idle_timeout = parseInt(process.env.PG_IDLE_TIMEOUT || '20', 10)
 postgresOptions.connect_timeout = parseInt(process.env.PG_CONNECT_TIMEOUT || '10', 10) // seconds to wait for new conn
 
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
+
+// Usage monitoring helpers. These are best-effort: any failure is logged and
+// swallowed so that instrumentation never breaks a user request. No limits
+// are enforced yet — these writes feed admin/analytics queries.
+function isUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+async function logAiUsage({ userId = null, feature, model = null, provider = 'openai', response = null, metadata = null } = {}) {
+  if (!sql || !feature) return
+  try {
+    const usage = response?.usage || {}
+    // OpenAI Responses API returns input_tokens/output_tokens; Chat Completions
+    // returns prompt_tokens/completion_tokens. Accept either shape.
+    const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0
+    const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0
+    const totalTokens = Number(usage.total_tokens ?? (promptTokens + completionTokens)) || 0
+    const requestId = typeof response?.id === 'string' ? response.id : null
+    const safeUserId = isUuid(userId) ? userId : null
+    await sql`
+      insert into public.ai_usage_events
+        (user_id, feature, provider, model, prompt_tokens, completion_tokens, total_tokens, request_id, metadata)
+      values
+        (${safeUserId}, ${feature}, ${provider}, ${model}, ${promptTokens}, ${completionTokens}, ${totalTokens}, ${requestId}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[ai-usage] failed to record event', feature, err?.message || err)
+  }
+}
+
+async function logScanUsage({ userId, scanId = null, provider = 'kindwise', tokens = 1, classificationLevel = null, success = true, metadata = null } = {}) {
+  if (!sql) return
+  if (!isUuid(userId)) return
+  try {
+    await sql`
+      insert into public.scan_usage_events
+        (user_id, scan_id, provider, tokens, classification_level, success, metadata)
+      values
+        (${userId}, ${isUuid(scanId) ? scanId : null}, ${provider}, ${tokens}, ${classificationLevel}, ${success}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[scan-usage] failed to record event', err?.message || err)
+  }
+}
 
 let adminMediaUploadsEnsured = false
 async function ensureAdminMediaUploadsTable() {
@@ -4925,6 +4971,7 @@ Examples:
       instructions,
       input: prompt,
     })
+    logAiUsage({ userId: caller, feature: 'admin_plant_fill_name', model: openaiModelNano, response, metadata: { plantName } })
 
     const outputText = (response.output_text || '').trim()
 
@@ -8601,6 +8648,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         },
         { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
       )
+      logAiUsage({ userId: adminPrincipal, feature: 'blog_metadata', model: openaiModel, response, metadata: { title } })
       const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
       // Parse the JSON response, handling potential markdown code blocks
       let parsed = {}
@@ -8647,6 +8695,7 @@ app.post('/api/blog/summarize', async (req, res) => {
       },
       { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
+    logAiUsage({ userId: adminPrincipal, feature: 'blog_summary', model: openaiModel, response, metadata: { title } })
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
   } catch (err) {
@@ -21363,6 +21412,16 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
 
         identificationResult = await apiResponse.json()
         console.log('[scan] Kindwise API success, status:', identificationResult.status)
+        logScanUsage({
+          userId: user.id,
+          classificationLevel: sanitizedClassificationLevel,
+          success: true,
+          metadata: {
+            status: identificationResult?.status || null,
+            hasLocation: latitude !== undefined && longitude !== undefined,
+            accessToken: identificationResult?.access_token || null,
+          },
+        })
       } catch (apiErr) {
         console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
         res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
@@ -23948,6 +24007,7 @@ Include specific observations from the photos in your advice.`
           },
           { timeout: 300000 }
         )
+        logAiUsage({ userId: user?.id, feature: 'garden_advice', model: openaiModel, response, metadata: { gardenId } })
 
         aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
         tokensUsed = response.usage?.total_tokens || 0
@@ -25390,15 +25450,17 @@ Be specific and reference what you actually see in the images. If you notice any
     }
 
     // Use Responses API for both text and vision
+    const journalModel = photos.length > 0 ? openaiModel : openaiModelNano
     const response = await openaiClient.responses.create(
       {
-        model: photos.length > 0 ? openaiModel : openaiModelNano, // Use larger model for vision
+        model: journalModel, // Use larger model for vision
         reasoning: { effort: photos.length > 0 ? 'medium' : 'low' },
         instructions: journalInstructions,
         input: [{ role: 'user', content: inputContent }],
       },
       { timeout: photos.length > 0 ? 120000 : 60000 }
     )
+    logAiUsage({ userId: user?.id, feature: 'garden_journal_feedback', model: journalModel, response, metadata: { gardenId, entryId, hasPhotos: photos.length > 0 } })
 
     feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     tokensUsed = response.usage?.total_tokens || 0
@@ -29005,7 +29067,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             },
             { timeout: 60000 }
           )
-          
+          logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'stream' } })
+
           // Check if response contains tool calls
           if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
             const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
@@ -29045,7 +29108,9 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         let fullContent = ''
         let totalTokens = 0
-        
+        let streamUsage = null
+        let streamResponseId = null
+
         for await (const event of streamResponse) {
           // Handle different event types from the Responses API stream
           if (event.type === 'response.output_text.delta') {
@@ -29057,9 +29122,18 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           } else if (event.type === 'response.completed' || event.type === 'response.done') {
             if (event.response?.usage) {
               totalTokens = event.response.usage.total_tokens || 0
+              streamUsage = event.response.usage
+              streamResponseId = event.response.id || null
             }
           }
         }
+        logAiUsage({
+          userId: user?.id,
+          feature: 'garden_chat_stream',
+          model: openaiModelNano,
+          response: { usage: streamUsage, id: streamResponseId },
+          metadata: { gardenId: gardenIdForTools || null, mode: 'stream' },
+        })
         
         // Send done event with complete message
         const messageId = crypto.randomUUID()
@@ -29100,14 +29174,15 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           },
           { timeout: 60000 }
         )
-        
+        logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'sync' } })
+
         // Check if response contains tool calls
         if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
           const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
           if (toolUseOutputs.length > 0) {
             const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
             toolCallsExecuted = executed
-            
+
             // Pass tool calls and results as structured Responses API input items.
             // See streaming path comment for full rationale on why we avoid plain
             // text concatenation of tool results (prompt injection prevention).
@@ -29119,7 +29194,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           }
         }
       }
-      
+
       // Final response using Responses API
       const response = await openaiClient.responses.create(
         {
@@ -29130,7 +29205,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         },
         { timeout: 120000 }
       )
-      
+      logAiUsage({ userId: user?.id, feature: 'garden_chat', model: openaiModelNano, response, metadata: { gardenId: gardenIdForTools || null, mode: 'sync' } })
+
       const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
       const messageId = crypto.randomUUID()
       
