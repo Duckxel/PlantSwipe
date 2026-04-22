@@ -689,7 +689,7 @@ export const ScanPage: React.FC = () => {
           resetScanFlow()
         }
       }}>
-        <DialogContent className="sm:max-w-[500px] rounded-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="sm:max-w-[500px] rounded-3xl max-h-[90vh] flex flex-col overflow-hidden">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="h-5 w-5 text-emerald-600" />
@@ -699,16 +699,17 @@ export const ScanPage: React.FC = () => {
               {t('scan.resultDescription', { defaultValue: 'Here\'s what we found based on your image.' })}
             </DialogDescription>
           </DialogHeader>
-          
+
           {currentResult && (
-            <div className="space-y-6 mt-2">
+            <div className="flex flex-col min-h-0 flex-1">
+            <div className="space-y-6 mt-2 overflow-y-auto flex-1 min-h-0 pb-2">
               {/* Scanned image - clickable to view fullscreen */}
               {currentResult.imageUrl && (
-                <div 
+                <div
                   className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group"
                   onClick={() => imageViewer.open(currentResult.imageUrl!)}
                 >
-                  <img 
+                  <img
                     src={currentResult.imageUrl}
                     alt="Scanned plant"
                     className="w-full h-48 object-cover"
@@ -943,8 +944,9 @@ export const ScanPage: React.FC = () => {
                 </div>
               )}
               
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t border-stone-200 dark:border-stone-700">
+            </div>
+              {/* Sticky actions — always visible at the bottom of the dialog */}
+              <div className="flex gap-3 pt-4 pb-1 border-t border-stone-200 dark:border-stone-700 bg-background shrink-0">
                 <Button
                   onClick={() => {
                     setShowResultDialog(false)
