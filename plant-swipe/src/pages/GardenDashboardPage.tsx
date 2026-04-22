@@ -4958,7 +4958,6 @@ function OverviewSection({
         variety: gp.plant?.variety || null,
         imageUrl: primaryImageUrl,
         plantId: gp.plant?.id,
-        gp,
         plantsOnHand: Number(gp.plantsOnHand || 0),
         healthStatus: gp.healthStatus || null,
         taskCount: taskInfo.total,
