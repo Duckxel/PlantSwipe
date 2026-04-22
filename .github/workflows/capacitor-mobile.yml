@@ -509,6 +509,7 @@ jobs:
           done
 
       - name: Create or update GitHub Release
+        id: release
         uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ steps.version.outputs.tag }}
@@ -530,3 +531,18 @@ jobs:
           files: |
             artifacts/PlantSwipe-*.apk
           make_latest: true
+
+      # Keep the 10 most recent releases so rollbacks are cheap, but prune the
+      # rest so the releases page doesn't grow unbounded. Tags are preserved
+      # (`delete_tags: false`) so `git describe` and historical checkouts still
+      # resolve every version that's ever shipped. Only runs when the release
+      # step above actually succeeded — we don't want to prune history if the
+      # new release never landed.
+      - name: Prune old releases (keep last 10)
+        if: success() && steps.release.outcome == 'success'
+        uses: dev-drprasad/delete-older-releases@v0.3.4
+        with:
+          keep_latest: 10
+          delete_tags: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
