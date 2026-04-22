@@ -197,6 +197,60 @@ end $$;
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.profiles TO authenticated;
 GRANT SELECT ON public.profiles TO anon;
 
+-- Column-level protection: RLS is row-based only, so a user could otherwise
+-- call .update({ is_admin: true }) directly on their own row and escalate to
+-- admin. The trigger below blocks any non-admin caller from changing is_admin
+-- or adding 'admin' to their roles array. Service-role/server calls (auth.uid()
+-- is null) and existing admins are allowed through so the promote/demote
+-- endpoints keep working.
+create or replace function public.prevent_self_admin_escalation()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  caller uuid := auth.uid();
+  old_has_admin_role boolean;
+  new_has_admin_role boolean;
+begin
+  if caller is null then
+    return new;
+  end if;
+  if public.is_admin_user(caller) then
+    return new;
+  end if;
+
+  if tg_op = 'INSERT' then
+    if coalesce(new.is_admin, false) is distinct from false then
+      raise exception 'Only admins can set is_admin' using errcode = '42501';
+    end if;
+  elsif tg_op = 'UPDATE' then
+    if new.is_admin is distinct from old.is_admin then
+      raise exception 'Only admins can modify is_admin' using errcode = '42501';
+    end if;
+  end if;
+
+  old_has_admin_role := case
+    when tg_op = 'UPDATE' then 'admin' = any(coalesce(old.roles, '{}'))
+    else false
+  end;
+  new_has_admin_role := 'admin' = any(coalesce(new.roles, '{}'));
+
+  if new_has_admin_role and not old_has_admin_role then
+    raise exception 'Only admins can grant the admin role' using errcode = '42501';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists profiles_prevent_self_admin_escalation on public.profiles;
+create trigger profiles_prevent_self_admin_escalation
+  before insert or update on public.profiles
+  for each row
+  execute function public.prevent_self_admin_escalation();
+
 -- Aggregated like counts from bookmarks (security definer to bypass RLS)
 create or replace function public.top_liked_plants(limit_count integer default 5)
 returns table (plant_id text, likes bigint)
