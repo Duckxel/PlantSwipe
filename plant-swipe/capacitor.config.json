@@ -2,7 +2,7 @@
 	"appId": "app.aphylia",
 	"appName": "Aphylia",
 	"webDir": "dist",
-	"version": "6.4.25",
+	"version": "6.4.26",
 	"backgroundColor": "#1a1a1c",
 	"android": {
 		"allowMixedContent": false,
