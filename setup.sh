@@ -308,7 +308,7 @@ if command -v apt-get >/dev/null 2>&1; then
   PM_UPDATE="$SUDO apt-get update -y"
   PM_INSTALL="$SUDO apt-get install -y"
 else
-  echo "[ERROR] Unsupported distro. Please install nginx, python3-venv, pip, git, curl, and Node.js 20+ manually." >&2
+  echo "[ERROR] Unsupported distro. Please install nginx, python3-venv, pip, git, curl, and Node.js 24+ manually." >&2
   exit 1
 fi
 
@@ -609,9 +609,11 @@ render_service_env() {
 log "Rendering service environment from $NODE_DIR/.env(.server)…"
 render_service_env "$SERVICE_ENV_FILE"
 
-# Install/upgrade Bun (preferred runtime) and Node.js (for compatibility)
-need_bun_install=false
-need_node_install=false
+# Install/upgrade Bun (preferred runtime) and Node.js (for compatibility).
+# Both installers are re-run on every setup.sh pass so minor/patch security
+# fixes land without requiring anyone to touch this script. The previous
+# "skip if already installed" gates meant a box on Bun 1.1.0 or Node 24.0.0
+# silently stayed there even when upstream shipped CVE patches.
 
 # Check for Bun - look in multiple locations
 BUN_SYSTEM_PATH="/usr/local/bin/bun"
@@ -636,68 +638,62 @@ find_bun() {
   return 1
 }
 
-BUN_BIN="$(find_bun || true)"
-if [[ -z "$BUN_BIN" ]]; then
-  need_bun_install=true
+# Always refresh Bun. The bun.sh installer is idempotent — if the local
+# version already matches latest stable it's a cheap no-op; when upstream
+# has a newer build (bugfix / security), it gets installed.
+BUN_BIN_PRE="$(find_bun || true)"
+if [[ -n "$BUN_BIN_PRE" ]]; then
+  BUN_VER_PRE="$("$BUN_BIN_PRE" --version 2>/dev/null || echo unknown)"
+  log "Refreshing Bun (currently v$BUN_VER_PRE at $BUN_BIN_PRE)…"
 else
-  bun_ver_raw="$("$BUN_BIN" --version 2>/dev/null || echo 0.0.0)"
-  bun_major="${bun_ver_raw%%.*}"
-  if [[ -z "$bun_major" || "$bun_major" -lt 1 ]]; then
-    need_bun_install=true
-  else
-    log "Bun is already installed (v$bun_ver_raw) at $BUN_BIN."
+  log "Installing Bun (fast JavaScript runtime and package manager)…"
+fi
+
+# Install/refresh Bun for root user first
+if ! curl -fsSL https://bun.sh/install | bash; then
+  log "[WARN] Bun installation for root failed. Retrying with BUN_INSTALL set…"
+  export BUN_INSTALL="$HOME/.bun"
+  curl -fsSL https://bun.sh/install | BUN_INSTALL="$HOME/.bun" bash || true
+fi
+
+# Add Bun to PATH for current session
+export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
+export PATH="$BUN_INSTALL/bin:$PATH"
+
+# Install/refresh Bun for service user (important for running bun as www-data)
+if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
+  log "Refreshing Bun for service user $SERVICE_USER…"
+  # Create .bun directory with correct permissions
+  $SUDO mkdir -p "$SERVICE_HOME/.bun"
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+
+  # Install Bun as service user
+  if ! sudo -u "$SERVICE_USER" -H bash -c "export BUN_INSTALL='$SERVICE_HOME/.bun' && curl -fsSL https://bun.sh/install | bash"; then
+    log "[WARN] Bun installation for $SERVICE_USER failed. Copying from root installation…"
+    # Fallback: copy root's bun to service user
+    if [[ -x "$HOME/.bun/bin/bun" ]]; then
+      $SUDO mkdir -p "$SERVICE_HOME/.bun/bin"
+      $SUDO cp "$HOME/.bun/bin/bun" "$SERVICE_HOME/.bun/bin/bun"
+      $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
+      $SUDO chmod +x "$SERVICE_HOME/.bun/bin/bun"
+      log "Copied Bun to $SERVICE_HOME/.bun/bin/bun"
+    fi
   fi
 fi
 
-# Install Bun if needed
-if $need_bun_install; then
-  log "Installing Bun (fast JavaScript runtime and package manager)…"
-  
-  # Install Bun for root user first
-  if ! curl -fsSL https://bun.sh/install | bash; then
-    log "[WARN] Bun installation for root failed. Retrying with BUN_INSTALL set…"
-    export BUN_INSTALL="$HOME/.bun"
-    curl -fsSL https://bun.sh/install | BUN_INSTALL="$HOME/.bun" bash || true
-  fi
-  
-  # Add Bun to PATH for current session
-  export BUN_INSTALL="${BUN_INSTALL:-$HOME/.bun}"
-  export PATH="$BUN_INSTALL/bin:$PATH"
-  
-  # Install Bun for service user (important for running bun as www-data)
-  if [[ -n "$SERVICE_USER" && "$SERVICE_USER" != "root" ]]; then
-    log "Installing Bun for service user $SERVICE_USER…"
-    # Create .bun directory with correct permissions
-    $SUDO mkdir -p "$SERVICE_HOME/.bun"
-    $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
-    
-    # Install Bun as service user
-    if ! sudo -u "$SERVICE_USER" -H bash -c "export BUN_INSTALL='$SERVICE_HOME/.bun' && curl -fsSL https://bun.sh/install | bash"; then
-      log "[WARN] Bun installation for $SERVICE_USER failed. Copying from root installation…"
-      # Fallback: copy root's bun to service user
-      if [[ -x "$HOME/.bun/bin/bun" ]]; then
-        $SUDO mkdir -p "$SERVICE_HOME/.bun/bin"
-        $SUDO cp "$HOME/.bun/bin/bun" "$SERVICE_HOME/.bun/bin/bun"
-        $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$SERVICE_HOME/.bun"
-        $SUDO chmod +x "$SERVICE_HOME/.bun/bin/bun"
-        log "Copied Bun to $SERVICE_HOME/.bun/bin/bun"
-      fi
-    fi
-  fi
-  
-  # Also install Bun system-wide for easier access
-  if [[ -x "$HOME/.bun/bin/bun" && ! -x "$BUN_SYSTEM_PATH" ]]; then
-    log "Creating system-wide Bun symlink at $BUN_SYSTEM_PATH…"
-    $SUDO ln -sf "$HOME/.bun/bin/bun" "$BUN_SYSTEM_PATH" || true
-  fi
-  
-  # Re-find Bun after installation
-  BUN_BIN="$(find_bun || true)"
-  if [[ -n "$BUN_BIN" ]]; then
-    log "Bun installed successfully at $BUN_BIN"
-  else
-    log "[WARN] Bun installation may have issues. Will check again during build."
-  fi
+# Refresh the system-wide Bun symlink so `/usr/local/bin/bun` always points at
+# the just-installed root copy, even when it already existed (older install).
+if [[ -x "$HOME/.bun/bin/bun" ]]; then
+  log "Updating system-wide Bun symlink at $BUN_SYSTEM_PATH…"
+  $SUDO ln -sf "$HOME/.bun/bin/bun" "$BUN_SYSTEM_PATH" || true
+fi
+
+# Re-find Bun after installation and log the post-install version
+BUN_BIN="$(find_bun || true)"
+if [[ -n "$BUN_BIN" ]]; then
+  log "Bun installed at $BUN_BIN (v$("$BUN_BIN" --version 2>/dev/null || echo unknown))"
+else
+  log "[WARN] Bun installation may have issues. Will check again during build."
 fi
 
 # Ensure Bun is in PATH for current session
@@ -708,28 +704,24 @@ if [[ -d "$SERVICE_HOME/.bun/bin" ]]; then
   export PATH="$SERVICE_HOME/.bun/bin:$PATH"
 fi
 
-# Check for Node.js (still needed for some tools and compatibility)
-if ! command -v node >/dev/null 2>&1; then
-  need_node_install=true
+# Node.js — align servers with the Node major used in CI + local dev.
+# Change NODE_TARGET_MAJOR when you decide to move to the next major; every
+# re-run of setup.sh will then migrate servers onto it. Patch-level updates
+# within the current major also flow in on every run because we always
+# re-run the NodeSource script (which pins apt to setup_${MAJOR}.x) and then
+# unconditionally reinstall/upgrade the `nodejs` package. Without that final
+# step, CVE fixes in e.g. 24.x.y-1 → 24.x.y would silently be skipped on
+# hosts that already had any Node ${NODE_TARGET_MAJOR}.*.
+NODE_TARGET_MAJOR=24
+NODE_VER_PRE="$(node -v 2>/dev/null || echo none)"
+log "Refreshing NodeSource apt source for Node ${NODE_TARGET_MAJOR}.x (currently: $NODE_VER_PRE)…"
+if [[ -n "$SUDO" ]]; then
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_TARGET_MAJOR}.x" | $SUDO bash -
 else
-  node_ver_raw="$(node -v 2>/dev/null || echo v0.0.0)"
-  node_major="${node_ver_raw#v}"
-  node_major="${node_major%%.*}"
-  if [[ -z "$node_major" || "$node_major" -lt 20 ]]; then
-    need_node_install=true
-  fi
+  curl -fsSL "https://deb.nodesource.com/setup_${NODE_TARGET_MAJOR}.x" | bash -
 fi
-if $need_node_install; then
-  log "Installing/upgrading Node.js to 22.x (for compatibility)…"
-  if [[ -n "$SUDO" ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
-  else
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-  fi
-  $PM_INSTALL nodejs
-else
-  log "Node.js is sufficiently new ($(node -v))."
-fi
+$PM_INSTALL nodejs
+log "Node.js now at $(node -v 2>/dev/null || echo 'install failed')."
 
 log "Using Bun $(bun --version 2>/dev/null || echo 'version unknown') as primary package manager."
 
