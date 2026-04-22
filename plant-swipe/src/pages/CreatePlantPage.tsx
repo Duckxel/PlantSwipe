@@ -165,7 +165,13 @@ const hasMeaningfulContent = (value: unknown): boolean => {
   if (typeof value === 'boolean') return value === true
   if (Array.isArray(value)) return value.some((entry) => hasMeaningfulContent(entry))
   if (typeof value === 'object') {
-    return Object.values(value as Record<string, unknown>).some((entry) => hasMeaningfulContent(entry))
+    // ⚡ Bolt: Replace Object.values().some() with a for...in loop to avoid intermediate array allocation
+    for (const key in value as Record<string, unknown>) {
+      if (hasMeaningfulContent((value as Record<string, unknown>)[key])) {
+        return true
+      }
+    }
+    return false
   }
   return false
 }
