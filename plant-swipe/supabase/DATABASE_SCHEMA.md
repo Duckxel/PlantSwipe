@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Apr 22, 2026:** **Plant change history + admin notes thread.** New `plant_history` table logs per-plant admin actions (field edits, translations, AI fills, note add/edit/delete) — insert-only, admin/editor select. New `plant_admin_notes` table replaces the legacy `plants.admin_commentary` textarea with a chat-style thread (any admin can add/edit/delete any note; all mutations mirrored into `plant_history`). Schema file: `03_plants_and_colors.sql`.
 - **Apr 13, 2026:** **Native push tokens, tutorial, GDPR expansion, companion cleanup.** Added `user_fcm_tokens` table for native (Capacitor) FCM/APNs device tokens. Added `tutorial_completed` boolean column to `profiles` for onboarding tutorial persistence. Migration `20260408000000_clean_bad_companion_data.sql` bulk-cleans bad AI-filled companion data from `plants` table. Migration `20260408100000_fix_admin_event_notifications_rls.sql` fixes RLS so non-admin users can receive event notifications. GDPR delete handlers expanded to 10 additional tables (`15_gdpr_and_preferences.sql`). Schema files: `01_extensions_and_setup.sql`, `11_notifications_and_tasks.sql`, `15_gdpr_and_preferences.sql`, `17_admin_event_notifications.sql`.
 - **Apr 6, 2026:** **Events & Badges schema files.** Added `19_badges.sql` (badge catalog, translations, user badges) and `20_events.sql` (events, items, translations, registrations, user progress) to `sync_parts/`. Added `conservation_status` values `protected` and `protected_in_some_regions`. Unified `plant_part` and `edible_part` to share 12 items (added `tubers`). Fixed Phase 3 sync constraints for `conservation_status` and `plant_part`. Schema files: `03_plants_and_colors.sql`, `19_badges.sql`, `20_events.sql`.
 - **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
@@ -99,6 +100,8 @@ The schema is split into 20 files in `supabase/sync_parts/` for easier managemen
 | `plant_recipes` | Structured recipe ideas with category and time |
 | `plant_contributors` | Contributor names per plant (admin/editor write only) |
 | `plant_reports` | User-submitted reports about incorrect/outdated plant info |
+| `plant_history` | Per-plant admin change log (field edits, translations, AI fills, note actions). Insert-only; admin/editor select. |
+| `plant_admin_notes` | Chat-style editorial notes per plant. Any admin can add/edit/delete any note. Mutations mirrored into `plant_history`. |
 | `plant_pro_advices` | Professional growing tips |
 | `plant_images` | Plant image gallery |
 | `colors` | Color catalog |
@@ -1058,6 +1061,41 @@ note            TEXT NOT NULL
 image_url       TEXT
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 ```
+
+### `plant_history`
+
+Per-plant audit log. One row per discrete admin action on the Create/Edit Plant page. Intentionally compact — short summary + optional old/new snippets. Insert-only for admins; no UPDATE or DELETE policy.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
+author_name     TEXT
+action          TEXT NOT NULL CHECK (action IN ('field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'))
+field           TEXT                    -- Plant field key for field_change/status_change; 'translation:<lang>' for translation saves
+summary         TEXT                    -- Human-readable summary, e.g. "Changed Watering type"
+old_value       TEXT                    -- Clipped to 240 chars
+new_value       TEXT                    -- Clipped to 240 chars
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** SELECT and INSERT restricted to users with `is_admin = true` or role `admin`/`editor`. No UPDATE or DELETE policies — history is immutable.
+
+### `plant_admin_notes`
+
+Chat-style editorial notes per plant. Replaces the legacy `plants.admin_commentary` free-text field. Any admin can add, edit, or delete any note; every mutation is mirrored as a `plant_history` row (note_add / note_edit / note_delete).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
+author_name     TEXT
+body            TEXT NOT NULL
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** SELECT/INSERT/UPDATE/DELETE all restricted to admins (is_admin = true) or users with role `admin`/`editor`.
 
 ### `friend_requests`
 

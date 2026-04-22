@@ -5,6 +5,8 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
+import { AdminNotesThread } from "@/components/plant/AdminNotesThread"
+import { PlantHistoryPanel } from "@/components/plant/PlantHistoryPanel"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
@@ -15,6 +17,8 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
+import { logPlantHistory, logPlantHistoryBatch } from "@/lib/plantHistory"
+import { buildPlantFieldDiff } from "@/lib/plantHistoryDiff"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
@@ -1305,6 +1309,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const initialLoadCompleteRef = React.useRef(false)
     // Track the previous language to save edits before switching
     const previousLanguageRef = React.useRef<SupportedLanguage>(urlLanguage)
+    // Baseline for history diffing — set on load and after each successful save.
+    const lastSavedPlantRef = React.useRef<Plant | null>(null)
+    // Bump this to force the HistoryPanel / Notes thread to re-fetch.
+    const [historyVersion, setHistoryVersion] = React.useState(0)
+    const bumpHistoryVersion = React.useCallback(() => setHistoryVersion((v) => v + 1), [])
     
     // Handle language changes - save current edits and load new language data
     React.useEffect(() => {
@@ -1362,6 +1371,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setLoadedLanguages(prev => new Set(prev).add(requestedLanguage))
             setExistingLoaded(true)
             initialLoadCompleteRef.current = true
+            // Establish the diff baseline from the freshly-loaded DB state.
+            if (requestedLanguage === 'en') {
+              lastSavedPlantRef.current = JSON.parse(JSON.stringify(loaded)) as Plant
+            }
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -1608,7 +1621,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
+    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean; skipHistoryDiff?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
       const trimmedName = plantToSave.name && typeof plantToSave.name === 'string' ? plantToSave.name.trim() : ''
@@ -2044,7 +2057,43 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             }))
             setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
-        if (isEnglish && !existingLoaded) setExistingLoaded(true)
+        const wasCreate = isEnglish && !existingLoaded
+        if (wasCreate) setExistingLoaded(true)
+
+        // Plant history: log create or per-field diff (English saves only — other
+        // languages just update translations and are noisy to diff against the EN baseline).
+        try {
+          const historyActor = { authorId: profile?.id || null, authorName: profile?.display_name || null }
+          if (wasCreate) {
+            await logPlantHistory({
+              plantId: savedId,
+              authorId: historyActor.authorId,
+              authorName: historyActor.authorName,
+              action: 'create',
+              summary: `Created plant "${trimmedName}"`,
+              newValue: trimmedName,
+            })
+          } else if (options?.skipHistoryDiff) {
+            // Caller will log its own summary entry (e.g. AI Fill).
+          } else if (isEnglish) {
+            const baseline = lastSavedPlantRef.current
+            const diff = buildPlantFieldDiff(savedId, baseline, plantToSave, historyActor)
+            if (diff.length) await logPlantHistoryBatch(diff)
+          } else {
+            await logPlantHistory({
+              plantId: savedId,
+              authorId: historyActor.authorId,
+              authorName: historyActor.authorName,
+              action: 'field_change',
+              field: `translation:${saveLanguage}`,
+              summary: `Updated ${saveLanguage.toUpperCase()} translation`,
+            })
+          }
+          lastSavedPlantRef.current = JSON.parse(JSON.stringify(savedPlant)) as Plant
+          bumpHistoryVersion()
+        } catch (historyErr) {
+          console.warn('[savePlant] history logging failed', historyErr)
+        }
         
         // Notify plant requesters if this plant was created from a request
         if (requestId && isEnglish && !existingLoaded) {
@@ -2452,7 +2501,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const targetPlant = finalPlant || plant
       // Auto-save after AI fill but skip onSaved to prevent popup from closing
       // User can review the AI-filled data and manually save/close when ready
-      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true })
+      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true, skipHistoryDiff: true })
+      if (aiSucceeded && targetPlant?.id) {
+        await logPlantHistory({
+          plantId: targetPlant.id,
+          authorId: profile?.id || null,
+          authorName: profile?.display_name || null,
+          action: 'ai_fill',
+          summary: 'Launched AI Fill (all fields)',
+        })
+        bumpHistoryVersion()
+      }
     }
   }
 
@@ -2590,6 +2649,17 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
       }))
       await savePlant()
+      if (plant.id) {
+        await logPlantHistory({
+          plantId: plant.id,
+          authorId: profile?.id || null,
+          authorName: profile?.display_name || null,
+          action: 'translate',
+          summary: `Launched DeepL translation (${targets.length} ${targets.length === 1 ? 'language' : 'languages'})`,
+          newValue: targets.join(', '),
+        })
+        bumpHistoryVersion()
+      }
       } catch (e: any) {
         setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
     } finally {
@@ -3052,6 +3122,20 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             onUploadImages={() => { setManualUploadError(null); setManualUploadResults([]); setShowUploadDialog(true) }}
             plantReports={plantReports}
             plantVarieties={plantVarieties}
+            adminNotesSlot={
+              <AdminNotesThread
+                plantId={plant.id || id || null}
+                actor={{ id: profile?.id || null, name: profile?.display_name || null }}
+                refreshVersion={historyVersion}
+                onChanged={bumpHistoryVersion}
+              />
+            }
+            historySlot={
+              <PlantHistoryPanel
+                plantId={plant.id || id || null}
+                refreshVersion={historyVersion}
+              />
+            }
           />
         )}
 

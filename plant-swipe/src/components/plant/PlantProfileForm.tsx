@@ -50,6 +50,10 @@ export type PlantProfileFormProps = {
   plantReports?: PlantReport[]
   /** Auto-detected varieties (same species, different variety) */
   plantVarieties?: PlantVariety[]
+  /** Replaces the Admin Notes textarea with a chat-style thread. */
+  adminNotesSlot?: React.ReactNode
+  /** Slot rendered at the bottom of the Meta section (plant change history). */
+  historySlot?: React.ReactNode
 }
 
 const glassCardClass =
@@ -2601,7 +2605,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties, adminNotesSlot, historySlot }: PlantProfileFormProps) {
   const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
@@ -3119,7 +3123,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
 
   const renderMeta = () => (
     <div className="space-y-5">
-      {renderFieldGroup(metaFields)}
+      {renderFieldGroup(metaFields, adminNotesSlot ? { skipKeys: new Set(['adminCommentary']) } : undefined)}
+      {adminNotesSlot}
+      {historySlot}
       {plantReports && plantReports.length > 0 && (
         <>
           <SectionDivider title={`${t('plantAdmin.userReports', 'User Reports')} (${plantReports.length})`} />
