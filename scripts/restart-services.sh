@@ -88,7 +88,14 @@ fi
 if [[ "$cmd" == "nginx" || "$cmd" == "all" ]]; then
   echo "[+] Reloading $SERVICE_NGINX…"
   $SUDO nginx -t
-  $SUDO systemctl reload "$SERVICE_NGINX"
+  # Self-heal: if nginx is stopped (previous reload crashed it), start instead.
+  # `systemctl reload` on an inactive service exits non-zero with "cannot reload".
+  if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+    $SUDO systemctl reload "$SERVICE_NGINX"
+  else
+    echo "[!] $SERVICE_NGINX is inactive — starting it instead"
+    $SUDO systemctl start "$SERVICE_NGINX"
+  fi
 fi
 
 echo "[✓] Done."

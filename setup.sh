@@ -334,9 +334,22 @@ Unattended-Upgrade::Allowed-Origins {
     \"\${distro_id}ESM:\${distro_codename}-infra-security\";
 };
 
-// Packages to never update automatically (add any critical packages here)
+// Packages to never update automatically (add any critical packages here).
+// nginx is blacklisted because its .deb postinst restarts nginx, and a
+// restart re-parses the config from scratch — which resolves upstream
+// hostnames at boot time. If DNS is flaky for even a second during that
+// restart, nginx refuses to come back up (\"host not found in upstream\")
+// and the entire site goes dark until a human manually runs
+// \`systemctl start nginx\`. Prod went down exactly this way on 2026-04-22
+// when apt-daily-upgrade upgraded nginx at 06:22 UTC.
+// We pin security updates for nginx to a manual \`setup.sh\` run instead.
 Unattended-Upgrade::Package-Blacklist {
-    // \"nginx\";  // Uncomment to prevent nginx auto-updates
+    \"nginx\";
+    \"nginx-common\";
+    \"nginx-core\";
+    \"nginx-full\";
+    \"nginx-extras\";
+    \"nginx-light\";
 };
 
 // Automatically reboot at 5:00 AM if required (e.g., kernel updates)
@@ -2196,13 +2209,27 @@ PY
     
     log "Nginx configuration is valid with SSL certificates"
     
-    # Reload nginx to apply SSL configuration
+    # Reload nginx to apply SSL configuration.
+    # `reload` only works on a running service — if nginx was left stopped by a
+    # previous failed reload (e.g. transient DNS failure during apt-daily-upgrade
+    # restarting nginx), `reload` will refuse and the site stays dark. Detect
+    # inactive state and `start` instead so setup.sh always converges to running.
     log "Reloading nginx to apply SSL configuration…"
-    if $SUDO systemctl reload nginx; then
-      log "Nginx reloaded successfully with SSL certificates"
+    if $SUDO systemctl is-active --quiet nginx; then
+      if $SUDO systemctl reload nginx; then
+        log "Nginx reloaded successfully with SSL certificates"
+      else
+        log "[ERROR] Failed to reload nginx. Check status with: systemctl status nginx"
+        return 1
+      fi
     else
-      log "[ERROR] Failed to reload nginx. Check status with: systemctl status nginx"
-      return 1
+      log "Nginx is not active — starting it fresh with SSL configuration"
+      if $SUDO systemctl start nginx; then
+        log "Nginx started successfully with SSL certificates"
+      else
+        log "[ERROR] Failed to start nginx. Check status with: systemctl status nginx"
+        return 1
+      fi
     fi
     
     # Set up auto-renewal
@@ -2214,12 +2241,30 @@ PY
       $SUDO systemctl start certbot.timer
     fi
     
-    # Add renewal hook to reload nginx
+    # Add renewal hook to reload nginx after every successful cert renewal.
+    # certbot.timer fires twice daily — if nginx happens to be stopped at that
+    # moment (or DNS hiccups during the reload), a bare `systemctl reload` fails
+    # silently and the site stays dark. Self-heal: start if inactive, reload if
+    # active, log so we can correlate with outages.
     local renewal_hook="/etc/letsencrypt/renewal-hooks/deploy/reload-nginx.sh"
     $SUDO mkdir -p "$(dirname "$renewal_hook")"
     $SUDO bash -c "cat > '$renewal_hook' <<'EOF'
 #!/bin/bash
-systemctl reload nginx
+# Installed by PlantSwipe setup.sh. Reload-or-start nginx after certbot
+# renews a certificate. See plant-swipe.conf for the media proxy upstream
+# resolver fix that lets this reload survive transient DNS failures.
+set -e
+if ! nginx -t >/dev/null 2>&1; then
+  logger -t certbot-deploy \"nginx config invalid after certbot renewal; refusing to reload\"
+  exit 1
+fi
+if systemctl is-active --quiet nginx; then
+  systemctl reload nginx
+  logger -t certbot-deploy \"nginx reloaded after cert renewal\"
+else
+  systemctl start nginx
+  logger -t certbot-deploy \"nginx was inactive; started after cert renewal\"
+fi
 EOF
 "
     $SUDO chmod +x "$renewal_hook"
@@ -2536,10 +2581,19 @@ if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   fi
 fi
 
-# Final nginx reload to apply site links (only if nginx config is valid)
+# Final nginx reload to apply site links (only if nginx config is valid).
+# Self-healing: if nginx is currently inactive (e.g. left stopped by a prior
+# failed reload), start it instead of trying to reload. Plain `reload` returns
+# "service is not active, cannot reload" and setup.sh would previously just
+# warn and exit, leaving the whole site offline.
 log "Reloading nginx…"
 if $SUDO nginx -t >/dev/null 2>&1; then
-  $SUDO systemctl reload "$SERVICE_NGINX" || log "[WARN] Nginx reload failed, but continuing"
+  if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+    $SUDO systemctl reload "$SERVICE_NGINX" || log "[WARN] Nginx reload failed, but continuing"
+  else
+    log "[INFO] Nginx is inactive — starting it instead of reloading"
+    $SUDO systemctl start "$SERVICE_NGINX" || log "[WARN] Nginx start failed, but continuing"
+  fi
 else
   log "[WARN] Nginx configuration has errors. Skipping reload."
   log "[INFO] Fix nginx configuration or complete SSL setup, then run: sudo systemctl reload nginx"
