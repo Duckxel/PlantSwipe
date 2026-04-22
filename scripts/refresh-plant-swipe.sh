@@ -886,12 +886,20 @@ else
   deploy_supabase_functions
 fi
 
-# Validate and reload nginx
+# Validate and reload nginx. Self-heal if nginx is currently inactive — a bare
+# `reload` refuses to act on a stopped service, which is exactly what left prod
+# offline on 2026-04-22 when apt-daily-upgrade restarted nginx during a transient
+# DNS failure. Previously this script would error out and give up.
 log "Testing nginx configuration…"
 $SUDO nginx -t
 
-log "Reloading nginx…"
-$SUDO systemctl reload "$SERVICE_NGINX"
+if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+  log "Reloading nginx…"
+  $SUDO systemctl reload "$SERVICE_NGINX"
+else
+  log "Nginx is inactive — starting it instead of reloading"
+  $SUDO systemctl start "$SERVICE_NGINX"
+fi
 
 # Keep service environment in sync with repo .env for plug‑and‑play deployment
 render_service_env() {
