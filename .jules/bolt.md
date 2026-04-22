@@ -38,3 +38,6 @@
 ## 2024-05-18 - Replacing multiple reduce calls with single-pass for loops
 **Learning:** In data processing functions that iterate over an array multiple times to calculate aggregate values (e.g., maximum required count and sum of completed tasks), using multiple `.reduce()` calls adds unnecessary function call overhead and time complexity.
 **Action:** Use a single-pass `for` loop to compute multiple aggregates simultaneously to avoid intermediate loop allocations and overhead.
+## 2026-04-03 - Prevent array allocation from Object.values() in recursive functions
+**Learning:** Using `Object.values(obj).some(...)` in recursive functions (like `hasMeaningfulContent`) or heavily accessed components creates significant GC pressure by allocating intermediate arrays of values for every object node traversed.
+**Action:** Replace `Object.values(obj).some(...)` with `for...in` loops in recursive checkers and hot path validations to prevent intermediate array allocation and allow for fast early returns.

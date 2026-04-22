@@ -1556,10 +1556,16 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
       if (!isAdvice) return false
       if (typeof value === "string") return value.trim().length > 0
       if (Array.isArray(value)) return value.some((entry) => (typeof entry === "string" ? entry.trim().length > 0 : entry !== null && entry !== undefined))
-      if (value && typeof value === "object") return Object.values(value as Record<string, unknown>).some((entry) => {
-        if (typeof entry === "string") return entry.trim().length > 0
-        return entry !== null && entry !== undefined
-      })
+      if (value && typeof value === "object") {
+        // ⚡ Bolt: Replace Object.values().some() with a for...in loop to avoid intermediate array allocation
+        const record = value as Record<string, unknown>
+        for (const key in record) {
+          const entry = record[key]
+          if (typeof entry === "string" && entry.trim().length > 0) return true
+          if (typeof entry !== "string" && entry !== null && entry !== undefined) return true
+        }
+        return false
+      }
       return false
     })()
 
