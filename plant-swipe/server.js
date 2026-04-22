@@ -18376,7 +18376,9 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       taskCompletionsDeleted: 0,
       requestedPlantsDeleted: 0,
       bugActionResponsesDeleted: 0,
-      bugPointsHistoryDeleted: 0
+      bugPointsHistoryDeleted: 0,
+      gardenPlantImagesDeleted: 0,
+      mediaUploadsAnonymized: 0
     }
 
     try {
@@ -18727,6 +18729,63 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
     } catch (err) { console.warn('[gdpr] Bug points history deletion partial:', err?.message) }
 
     try {
+      // 14m. Delete garden plant images uploaded by user (photos + DB rows).
+      // The FK uploaded_by → auth.users uses ON DELETE SET NULL which only
+      // anonymises the row — it does NOT remove the underlying storage file,
+      // and for shared gardens the DB row would survive. We explicitly delete
+      // both the storage object and the DB record here.
+      let plantImages = []
+      if (sql) {
+        plantImages = await sql`
+          SELECT id, image_url FROM public.garden_plant_images
+          WHERE uploaded_by = ${userId}
+        `
+      } else {
+        const { data } = await supabaseServiceClient
+          .from('garden_plant_images')
+          .select('id, image_url')
+          .eq('uploaded_by', userId)
+        plantImages = data || []
+      }
+
+      for (const img of plantImages) {
+        if (img?.image_url) {
+          const result = await deleteStorageObjectByUrl(img.image_url)
+          if (result.deleted) stats.storageObjectsDeleted++
+        }
+      }
+
+      if (sql) {
+        const delResult = await sql`DELETE FROM public.garden_plant_images WHERE uploaded_by = ${userId}`
+        stats.gardenPlantImagesDeleted = delResult?.count || plantImages.length
+      } else {
+        await supabaseServiceClient.from('garden_plant_images').delete().eq('uploaded_by', userId)
+        stats.gardenPlantImagesDeleted = plantImages.length
+      }
+    } catch (err) { console.warn('[gdpr] Garden plant images deletion partial:', err?.message) }
+
+    try {
+      // 14n. Anonymise admin_media_uploads entries originated by this user.
+      // This table is an upload audit trail; we keep the operational record
+      // (bucket/path/size) for integrity but strip the PII columns so no
+      // user identifier, email, or display name remains after deletion.
+      if (sql) {
+        const result = await sql`
+          UPDATE public.admin_media_uploads
+          SET admin_id = NULL, admin_email = NULL, admin_name = NULL
+          WHERE admin_id = ${userId}
+        `
+        stats.mediaUploadsAnonymized = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('admin_media_uploads')
+          .update({ admin_id: null, admin_email: null, admin_name: null })
+          .eq('admin_id', userId)
+        stats.mediaUploadsAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] admin_media_uploads anonymisation partial:', err?.message) }
+
+    try {
       // 15. Delete avatar image and profile
       let profile = null
       if (sql) {
@@ -18793,12 +18852,45 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
                 .select('cover_image_url')
                 .eq('id', gardenId)
                 .maybeSingle()
-              
+
               if (gardenRow?.cover_image_url) {
                 const result = await deleteStorageObjectByUrl(gardenRow.cover_image_url)
                 if (result.deleted) stats.storageObjectsDeleted++
               }
-              
+
+              // Clean up plant image storage files before the cascade deletes
+              // the garden_plant_images rows. Any residual storage objects here
+              // belong to a garden that has no remaining members, so it is safe
+              // (and GDPR-required) to remove them.
+              try {
+                let gardenImages = []
+                if (sql) {
+                  gardenImages = await sql`
+                    SELECT gpi.image_url
+                    FROM public.garden_plant_images gpi
+                    JOIN public.garden_plants gp ON gp.id = gpi.garden_plant_id
+                    WHERE gp.garden_id = ${gardenId}
+                  `
+                } else {
+                  const { data: gpRows } = await supabaseServiceClient
+                    .from('garden_plants').select('id').eq('garden_id', gardenId)
+                  const gpIds = (gpRows || []).map(r => r.id)
+                  if (gpIds.length > 0) {
+                    const { data } = await supabaseServiceClient
+                      .from('garden_plant_images').select('image_url').in('garden_plant_id', gpIds)
+                    gardenImages = data || []
+                  }
+                }
+                for (const img of gardenImages) {
+                  if (img?.image_url) {
+                    const result = await deleteStorageObjectByUrl(img.image_url)
+                    if (result.deleted) stats.storageObjectsDeleted++
+                  }
+                }
+              } catch (imgErr) {
+                console.warn('[gdpr] Garden plant images storage cleanup partial:', imgErr?.message)
+              }
+
               if (sql) {
                 await sql.begin(async (tx) => {
                   await tx`SELECT set_config('app.deleting_garden', ${gardenId}, true)`
@@ -18924,6 +19016,8 @@ app.get('/api/account/export', async (req, res) => {
       messageReactions: [],
       discoverySeen: [],
       pushSubscriptions: [],
+      gardenPlantImages: [],
+      mediaUploads: [],
       cookieConsent: null
     }
 
@@ -19350,10 +19444,42 @@ app.get('/api/account/export', async (req, res) => {
           return data || []
         }
       })(),
+      // 27. Garden plant images uploaded by user (GDPR Article 20 — user-generated content)
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, garden_plant_id, image_url, caption, taken_at, uploaded_at
+            FROM public.garden_plant_images WHERE uploaded_by = ${userId}
+            ORDER BY uploaded_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('garden_plant_images').select('id, garden_plant_id, image_url, caption, taken_at, uploaded_at')
+            .eq('uploaded_by', userId).order('uploaded_at', { ascending: false })
+          return data || []
+        }
+      })(),
+      // 28. Media upload audit records (images this user uploaded via admin_media_uploads tracking)
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, bucket, path, public_url, mime_type, size_bytes,
+                   upload_source, metadata, created_at
+            FROM public.admin_media_uploads WHERE admin_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('admin_media_uploads')
+            .select('id, bucket, path, public_url, mime_type, size_bytes, upload_source, metadata, created_at')
+            .eq('admin_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
     ])
 
-    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs']
-    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs']
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs', 'gardenPlantImages', 'mediaUploads']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs', 'Garden plant images', 'Media uploads']
     for (let i = 0; i < gdprParallelResults.length; i++) {
       const r = gdprParallelResults[i]
       if (r.status === 'fulfilled') {

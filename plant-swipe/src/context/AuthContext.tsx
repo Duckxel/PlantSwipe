@@ -473,10 +473,48 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     try {
-      localStorage.removeItem('plantswipe.auth')
-      localStorage.removeItem('plantswipe.profile')
-      // Clear cookie consent on account deletion
-      localStorage.removeItem('cookie_consent')
+      // GDPR: remove every client-side artefact tied to this account.
+      // Anything user-identifying, user-keyed, or consent-related must go.
+      const exactKeys = [
+        'plantswipe.auth',
+        'plantswipe.profile',
+        'plantswipe.anon_id',
+        'plantswipe.accent',
+        'plantswipe.theme',
+        'plantswipe.force_password_change',
+        'plantswipe.broadcast.pos',
+        'plantswipe.actions.skipped',
+        'plantswipe.actions.dismissed_at_count',
+        'plantswipe.actions.migrated_to_db',
+        'aphylia.haptics_enabled',
+        'task_notification_state',
+        'task_notification_sync',
+        'cookie_consent',
+      ]
+      for (const k of exactKeys) {
+        try { localStorage.removeItem(k) } catch {}
+      }
+      // Remove all prefix-keyed entries we know are user- or session-scoped:
+      // plant caches, garden list/task caches, per-user push opt-outs, etc.
+      const prefixes = [
+        'plantswipe.plants.',
+        'plantswipe.push_opt_out.',
+        'garden_list_cache_',
+        'garden_tasks_cache',
+        'plantswipe.categories.',
+      ]
+      try {
+        const toRemove: string[] = []
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i)
+          if (!key) continue
+          if (prefixes.some(p => key.startsWith(p))) toRemove.push(key)
+        }
+        for (const k of toRemove) {
+          try { localStorage.removeItem(k) } catch {}
+        }
+      } catch {}
+      try { sessionStorage.clear() } catch {}
     } catch {}
     setProfile(null)
     setUser(null)
