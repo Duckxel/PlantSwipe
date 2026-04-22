@@ -24910,6 +24910,8 @@ async function ensureJournalTables() {
     await sql`create index if not exists gje_garden_date_idx on public.garden_journal_entries (garden_id, entry_date desc)`
     await sql`create index if not exists gje_user_date_idx on public.garden_journal_entries (user_id, entry_date desc)`
     await sql`alter table public.garden_journal_entries enable row level security`
+    // Rich-text (TipTap HTML) column. `content` is kept as plain-text derivation for search/fallback.
+    await sql`alter table public.garden_journal_entries add column if not exists content_html text`
 
     await sql`
       create table if not exists public.garden_journal_photos (
@@ -24959,8 +24961,8 @@ app.get('/api/garden/:id/journal', async (req, res) => {
 
     // Get entries (own entries + non-private entries from others)
     const entries = await sql`
-      select 
-        e.id, e.garden_id, e.user_id, e.entry_date, e.title, e.content, e.mood,
+      select
+        e.id, e.garden_id, e.user_id, e.entry_date, e.title, e.content, e.content_html, e.mood,
         e.weather_snapshot, e.plants_mentioned, e.tags, e.is_private,
         e.created_at, e.updated_at, p.display_name as author_name
       from public.garden_journal_entries e
@@ -25007,6 +25009,7 @@ app.get('/api/garden/:id/journal', async (req, res) => {
       entryDate: e.entry_date,
       title: e.title,
       content: e.content,
+      contentHtml: e.content_html || null,
       mood: e.mood,
       weatherSnapshot: e.weather_snapshot || {},
       plantsMentioned: e.plants_mentioned || [],
@@ -25040,11 +25043,12 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
+    const { title, content, contentHtml, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!content?.trim()) {
       res.status(400).json({ ok: false, error: 'Content is required' })
       return
     }
+    const normalizedContentHtml = typeof contentHtml === 'string' && contentHtml.trim().length > 0 ? contentHtml : null
 
     // Verify membership
     const membership = await sql`
@@ -25079,9 +25083,9 @@ app.post('/api/garden/:id/journal', async (req, res) => {
     const mentionedIds = Array.isArray(plantsMentioned) ? plantsMentioned.filter(Boolean) : []
     const insertResult = await sql`
       insert into public.garden_journal_entries (
-        garden_id, user_id, entry_date, title, content, mood, is_private, tags, weather_snapshot, plants_mentioned
+        garden_id, user_id, entry_date, title, content, content_html, mood, is_private, tags, weather_snapshot, plants_mentioned
       ) values (
-        ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()},
+        ${gardenId}, ${user.id}, ${today}, ${title || null}, ${content.trim()}, ${normalizedContentHtml},
         ${mood || null}, ${isPrivate || false}, ${sql.array(tags || [])}, ${JSON.stringify(weatherSnapshot)}::jsonb,
         ${sql.array(mentionedIds)}::uuid[]
       )
@@ -25130,11 +25134,12 @@ app.put('/api/garden/:id/journal', async (req, res) => {
     if (!sql) { res.status(500).json({ ok: false, error: 'Database not configured' }); return }
     await ensureJournalTables()
 
-    const { entryId, title, content, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
+    const { entryId, title, content, contentHtml, mood, isPrivate, tags, photos, plantsMentioned, healthStatus } = req.body || {}
     if (!entryId) {
       res.status(400).json({ ok: false, error: 'Entry ID is required' })
       return
     }
+    const normalizedContentHtml = typeof contentHtml === 'string' && contentHtml.trim().length > 0 ? contentHtml : null
 
     // Verify ownership
     const entry = await sql`
@@ -25152,6 +25157,7 @@ app.put('/api/garden/:id/journal', async (req, res) => {
       update public.garden_journal_entries set
         title = ${title || null},
         content = ${content?.trim() || ''},
+        content_html = ${normalizedContentHtml},
         mood = ${mood || null},
         is_private = ${isPrivate || false},
         tags = ${sql.array(tags || [])},

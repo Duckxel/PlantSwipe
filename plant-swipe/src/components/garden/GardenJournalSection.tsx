@@ -38,6 +38,8 @@ import {
 } from "lucide-react";
 import type { Garden } from "@/types/garden";
 import { getPrimaryPhotoUrl } from "@/lib/photos";
+import DOMPurify from "dompurify";
+import { JournalEditor, type JournalEditorHandle } from "@/components/garden/JournalEditor";
 
 // Types
 interface JournalEntry {
@@ -47,6 +49,7 @@ interface JournalEntry {
   entryDate: string;
   title: string | null;
   content: string;
+  contentHtml?: string | null;
   mood: "great" | "good" | "neutral" | "concerned" | "struggling" | null;
   weatherSnapshot: {
     temp?: number;
@@ -166,6 +169,10 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   // Entry form state
   const [entryTitle, setEntryTitle] = React.useState("");
   const [entryContent, setEntryContent] = React.useState("");
+  const [entryContentHtml, setEntryContentHtml] = React.useState<string>("");
+  const journalEditorRef = React.useRef<JournalEditorHandle | null>(null);
+  // Bumped to remount the editor when switching between "new" and "edit" entries
+  const [editorKey, setEditorKey] = React.useState(0);
   const [entryMood, setEntryMood] = React.useState<string | null>(null);
   const [entryIsPrivate, setEntryIsPrivate] = React.useState(false);
   const [entryTags, setEntryTags] = React.useState<string[]>([]);
@@ -630,6 +637,9 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
   const resetForm = () => {
     setEntryTitle("");
     setEntryContent("");
+    setEntryContentHtml("");
+    journalEditorRef.current?.clear();
+    setEditorKey((k) => k + 1);
     setEntryMood(null);
     setEntryIsPrivate(false);
     setEntryTags([]);
@@ -661,10 +671,13 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
       });
       const uploadedPhotoUrls = uploadResults.map((r) => r.url);
 
+      const plainText = entryContent.trim();
+      const htmlTrimmed = entryContentHtml.trim();
       const entryData = {
         entryId: editingEntry?.id || undefined,
         title: entryTitle.trim() || null,
-        content: entryContent.trim(),
+        content: plainText,
+        contentHtml: htmlTrimmed.length > 0 ? htmlTrimmed : null,
         mood: entryMood,
         isPrivate: entryIsPrivate,
         tags: entryTags,
@@ -763,6 +776,8 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
     setEditingEntry(entry);
     setEntryTitle(entry.title || "");
     setEntryContent(entry.content);
+    setEntryContentHtml(entry.contentHtml || "");
+    setEditorKey((k) => k + 1);
     setEntryMood(entry.mood);
     setEntryIsPrivate(entry.isPrivate);
     setEntryTags(entry.tags || []);
@@ -1457,17 +1472,25 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
                   />
                 </div>
 
-                {/* Content */}
+                {/* Content – rich text editor */}
                 <div>
-                  <label htmlFor="entry-content" className="text-sm font-medium mb-2 block">
+                  <label className="text-sm font-medium mb-2 block">
                     {t("gardenDashboard.journalSection.observations", "Your observations")}
                   </label>
-                  <textarea
-                    id="entry-content"
-                    value={entryContent}
-                    onChange={(e) => setEntryContent(e.target.value)}
-                    placeholder={t("gardenDashboard.journalSection.contentPlaceholder", "What did you notice today? How are your plants doing? Any changes, blooms, or concerns?")}
-                    className="w-full min-h-[150px] p-4 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 focus:ring-2 focus:ring-amber-500 focus:border-transparent resize-y"
+                  <JournalEditor
+                    key={`journal-editor-${editingEntry?.id || "new"}-${editorKey}`}
+                    ref={journalEditorRef}
+                    initialHtml={editingEntry?.contentHtml || null}
+                    initialPlainText={editingEntry?.content || null}
+                    placeholder={t(
+                      "gardenDashboard.journalSection.contentPlaceholder",
+                      "What did you notice today? How are your plants doing? Any changes, blooms, or concerns?",
+                    )}
+                    editorContentClassName="min-h-[160px]"
+                    onUpdate={({ html, plainText }) => {
+                      setEntryContentHtml(html);
+                      setEntryContent(plainText);
+                    }}
                   />
                 </div>
 
@@ -1692,9 +1715,22 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
 
                         {/* Content */}
                         <div className="px-4 pb-3">
-                          <p className="text-sm text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed line-clamp-4">
-                            {entry.content}
-                          </p>
+                          {entry.contentHtml ? (
+                            <div
+                              className="journal-entry-content text-sm text-stone-700 dark:text-stone-300 leading-relaxed line-clamp-6"
+                              dangerouslySetInnerHTML={{
+                                __html: DOMPurify.sanitize(entry.contentHtml, {
+                                  USE_PROFILES: { html: true },
+                                  FORBID_TAGS: ["script", "style", "iframe", "object", "embed", "form", "input", "button"],
+                                  FORBID_ATTR: ["onerror", "onload", "onclick"],
+                                }),
+                              }}
+                            />
+                          ) : (
+                            <p className="text-sm text-stone-700 dark:text-stone-300 whitespace-pre-wrap leading-relaxed line-clamp-4">
+                              {entry.content}
+                            </p>
+                          )}
                         </div>
 
                         {/* Photos strip */}
