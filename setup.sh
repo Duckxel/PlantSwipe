@@ -308,7 +308,7 @@ if command -v apt-get >/dev/null 2>&1; then
   PM_UPDATE="$SUDO apt-get update -y"
   PM_INSTALL="$SUDO apt-get install -y"
 else
-  echo "[ERROR] Unsupported distro. Please install nginx, python3-venv, pip, git, curl, and Node.js 20+ manually." >&2
+  echo "[ERROR] Unsupported distro. Please install nginx, python3-venv, pip, git, curl, and Node.js 24+ manually." >&2
   exit 1
 fi
 
@@ -695,23 +695,26 @@ if [[ -d "$SERVICE_HOME/.bun/bin" ]]; then
   export PATH="$SERVICE_HOME/.bun/bin:$PATH"
 fi
 
-# Check for Node.js (still needed for some tools and compatibility)
+# Node.js — align servers with the Node 24 baseline used in CI + local dev.
+# Gate on `< 24` so boxes already running an older LTS (18/20/22) get bumped
+# when setup.sh is re-run, instead of being silently considered "new enough".
+NODE_TARGET_MAJOR=24
 if ! command -v node >/dev/null 2>&1; then
   need_node_install=true
 else
   node_ver_raw="$(node -v 2>/dev/null || echo v0.0.0)"
   node_major="${node_ver_raw#v}"
   node_major="${node_major%%.*}"
-  if [[ -z "$node_major" || "$node_major" -lt 20 ]]; then
+  if [[ -z "$node_major" || "$node_major" -lt "$NODE_TARGET_MAJOR" ]]; then
     need_node_install=true
   fi
 fi
 if $need_node_install; then
-  log "Installing/upgrading Node.js to 22.x (for compatibility)…"
+  log "Installing/upgrading Node.js to ${NODE_TARGET_MAJOR}.x…"
   if [[ -n "$SUDO" ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | $SUDO bash -
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_TARGET_MAJOR}.x" | $SUDO bash -
   else
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+    curl -fsSL "https://deb.nodesource.com/setup_${NODE_TARGET_MAJOR}.x" | bash -
   fi
   $PM_INSTALL nodejs
 else
