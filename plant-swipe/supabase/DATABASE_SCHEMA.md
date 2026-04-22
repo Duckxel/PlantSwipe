@@ -1064,13 +1064,12 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
 ### `plant_history`
 
-Per-plant audit log. One row per discrete admin action on the Create/Edit Plant page. Intentionally compact — short summary + optional old/new snippets. Insert-only for admins; no UPDATE or DELETE policy.
+Per-plant audit log. One row per discrete admin action on the Create/Edit Plant page. Intentionally compact — short summary + optional old/new snippets. Insert-only for admins; no UPDATE or DELETE policy. The author's display name is **not** stored — the UI resolves it from `profiles` at read time via a batched lookup.
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
 plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
-author_name     TEXT
 action          TEXT NOT NULL CHECK (action IN ('field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'))
 field           TEXT                    -- Plant field key for field_change/status_change; 'translation:<lang>' for translation saves
 summary         TEXT                    -- Human-readable summary, e.g. "Changed Watering type"
@@ -1083,13 +1082,12 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
 ### `plant_admin_notes`
 
-Chat-style editorial notes per plant. Replaces the legacy `plants.admin_commentary` free-text field. Any admin can add, edit, or delete any note; every mutation is mirrored as a `plant_history` row (note_add / note_edit / note_delete).
+Chat-style editorial notes per plant. Replaces the legacy `plants.admin_commentary` free-text field. Any admin can add, edit, or delete any note; every mutation is mirrored as a `plant_history` row (note_add / note_edit / note_delete). The author's display name is **not** stored — resolved from `profiles` at read time.
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
 plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
-author_name     TEXT
 body            TEXT NOT NULL
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()

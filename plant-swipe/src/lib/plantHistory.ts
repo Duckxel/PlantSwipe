@@ -15,7 +15,6 @@ const rowToEntry = (row: any): PlantHistoryEntry => ({
   id: row.id,
   plantId: row.plant_id,
   authorId: row.author_id ?? null,
-  authorName: row.author_name ?? null,
   action: row.action as PlantHistoryAction,
   field: row.field ?? null,
   summary: row.summary ?? null,
@@ -27,7 +26,6 @@ const rowToEntry = (row: any): PlantHistoryEntry => ({
 export interface LogPlantHistoryInput {
   plantId: string
   authorId?: string | null
-  authorName?: string | null
   action: PlantHistoryAction
   field?: string | null
   summary?: string | null
@@ -40,7 +38,6 @@ export async function logPlantHistory(input: LogPlantHistoryInput): Promise<void
   const payload = {
     plant_id: input.plantId,
     author_id: input.authorId ?? null,
-    author_name: input.authorName ?? null,
     action: input.action,
     field: input.field ?? null,
     summary: clip(input.summary),
@@ -59,7 +56,6 @@ export async function logPlantHistoryBatch(entries: LogPlantHistoryInput[]): Pro
   const payload = entries.map((e) => ({
     plant_id: e.plantId,
     author_id: e.authorId ?? null,
-    author_name: e.authorName ?? null,
     action: e.action,
     field: e.field ?? null,
     summary: clip(e.summary),

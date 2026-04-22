@@ -13,7 +13,6 @@ import { fetchDisplayNames } from '@/lib/displayNameLookup'
 
 interface Actor {
   id: string | null
-  name: string | null
 }
 
 interface Props {
@@ -66,7 +65,7 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
   React.useEffect(() => { void refresh() }, [refresh, refreshVersion])
 
   const resolveName = (note: PlantAdminNote): string =>
-    (note.authorId && nameById.get(note.authorId)) || note.authorName || 'Unknown'
+    (note.authorId && nameById.get(note.authorId)) || 'Unknown'
 
   const handleSubmit = async () => {
     if (!plantId || posting) return
@@ -74,7 +73,7 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
     if (!body) return
     setPosting(true)
     try {
-      const note = await createPlantAdminNote(plantId, body, { authorId: actor.id, authorName: actor.name })
+      const note = await createPlantAdminNote(plantId, body, { authorId: actor.id })
       if (note) {
         setNotes((prev) => [...prev, note])
         setDraft('')
@@ -98,7 +97,7 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
   const commitEdit = async (note: PlantAdminNote) => {
     const next = editDraft.trim()
     if (!next || next === note.body) { cancelEdit(); return }
-    const updated = await updatePlantAdminNote(note, next, { authorId: actor.id, authorName: actor.name })
+    const updated = await updatePlantAdminNote(note, next, { authorId: actor.id })
     if (updated) {
       setNotes((prev) => prev.map((n) => (n.id === note.id ? updated : n)))
       onChanged?.()
@@ -107,7 +106,7 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
   }
 
   const remove = async (note: PlantAdminNote) => {
-    const ok = await deletePlantAdminNote(note, { authorId: actor.id, authorName: actor.name })
+    const ok = await deletePlantAdminNote(note, { authorId: actor.id })
     if (ok) {
       setNotes((prev) => prev.filter((n) => n.id !== note.id))
       onChanged?.()

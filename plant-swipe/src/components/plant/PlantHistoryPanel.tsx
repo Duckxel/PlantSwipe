@@ -65,7 +65,6 @@ const dateBucket = (iso: string): string => {
 
 interface EntryGroup {
   key: string
-  authorName: string | null
   authorId: string | null
   hour: string
   startIso: string
@@ -74,26 +73,24 @@ interface EntryGroup {
 }
 
 /**
- * Group consecutive entries with the same (author identity, calendar-hour).
- * Author identity = author_id when available (stable across display-name changes);
- * otherwise the snapshot author_name as fallback.
+ * Group consecutive entries with the same (author_id, calendar-hour).
+ * Unknown authors (no author_id — profile deleted) are grouped together as 'anon'.
  */
 function groupEntries(entries: PlantHistoryEntry[]): EntryGroup[] {
   // Iterate oldest-first so groups read chronologically inside a day.
   const ascending = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const groups: EntryGroup[] = []
-  const identity = (e: PlantHistoryEntry) => e.authorId || `name:${e.authorName || 'anon'}`
+  const identity = (e: PlantHistoryEntry) => e.authorId || 'anon'
   for (const e of ascending) {
     const bucket = hourBucket(e.createdAt)
     const last = groups[groups.length - 1]
-    const lastIdentity = last ? (last.authorId || `name:${last.authorName || 'anon'}`) : null
+    const lastIdentity = last ? (last.authorId || 'anon') : null
     if (last && last.hour === bucket && lastIdentity === identity(e)) {
       last.entries.push(e)
       last.endIso = e.createdAt
     } else {
       groups.push({
         key: `${bucket}-${identity(e)}-${e.id}`,
-        authorName: e.authorName || null,
         authorId: e.authorId || null,
         hour: bucket,
         startIso: e.createdAt,
@@ -134,8 +131,8 @@ export const PlantHistoryPanel: React.FC<Props> = ({ plantId, refreshVersion = 0
   React.useEffect(() => { void refresh() }, [refresh, refreshVersion])
 
   const resolveName = React.useCallback(
-    (authorId: string | null, snapshotName: string | null): string =>
-      (authorId && nameById.get(authorId)) || snapshotName || 'Unknown',
+    (authorId: string | null): string =>
+      (authorId && nameById.get(authorId)) || 'Unknown',
     [nameById],
   )
 
@@ -158,7 +155,7 @@ export const PlantHistoryPanel: React.FC<Props> = ({ plantId, refreshVersion = 0
         )
         prevDate = dBucket
       }
-      const displayName = resolveName(g.authorId, g.authorName)
+      const displayName = resolveName(g.authorId)
       out.push(
         <div key={g.key} className="flex gap-3 pt-2 pb-2 border-b border-stone-200/40 dark:border-[#3e3e42]/30 last:border-b-0">
           <div className="h-7 w-7 rounded-full bg-stone-300 dark:bg-stone-700 text-stone-800 dark:text-stone-100 flex items-center justify-center text-[10px] font-semibold flex-shrink-0">

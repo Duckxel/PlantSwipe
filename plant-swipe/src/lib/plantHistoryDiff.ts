@@ -187,7 +187,6 @@ const shortRepr = (v: any): string | null => {
 
 export interface DiffActor {
   authorId?: string | null
-  authorName?: string | null
 }
 
 /**
@@ -217,7 +216,6 @@ export function buildPlantFieldDiff(
     result.push({
       plantId,
       authorId: actor.authorId ?? null,
-      authorName: actor.authorName ?? null,
       action,
       field: key,
       summary: `Changed ${label}`,

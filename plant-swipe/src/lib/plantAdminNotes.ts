@@ -8,7 +8,6 @@ const rowToNote = (row: any): PlantAdminNote => ({
   id: row.id,
   plantId: row.plant_id,
   authorId: row.author_id ?? null,
-  authorName: row.author_name ?? null,
   body: row.body,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
@@ -30,7 +29,6 @@ export async function fetchPlantAdminNotes(plantId: string): Promise<PlantAdminN
 
 interface Actor {
   authorId?: string | null
-  authorName?: string | null
 }
 
 export async function createPlantAdminNote(
@@ -45,7 +43,6 @@ export async function createPlantAdminNote(
     .insert({
       plant_id: plantId,
       author_id: actor.authorId ?? null,
-      author_name: actor.authorName ?? null,
       body: trimmed,
     })
     .select('*')
@@ -57,7 +54,6 @@ export async function createPlantAdminNote(
   await logPlantHistory({
     plantId,
     authorId: actor.authorId,
-    authorName: actor.authorName,
     action: 'note_add',
     summary: 'Added note',
     newValue: trimmed,
@@ -82,14 +78,12 @@ export async function updatePlantAdminNote(
     console.warn('[plantAdminNotes] update failed', error?.message)
     return null
   }
+  const ownEdit = note.authorId && actor.authorId && note.authorId === actor.authorId
   await logPlantHistory({
     plantId: note.plantId,
     authorId: actor.authorId,
-    authorName: actor.authorName,
     action: 'note_edit',
-    summary: note.authorName && note.authorName !== actor.authorName
-      ? `Edited note by ${note.authorName}`
-      : 'Edited note',
+    summary: ownEdit ? 'Edited own note' : 'Edited another admin’s note',
     oldValue: note.body,
     newValue: trimmed,
   })
@@ -108,14 +102,12 @@ export async function deletePlantAdminNote(
     console.warn('[plantAdminNotes] delete failed', error.message)
     return false
   }
+  const ownDelete = note.authorId && actor.authorId && note.authorId === actor.authorId
   await logPlantHistory({
     plantId: note.plantId,
     authorId: actor.authorId,
-    authorName: actor.authorName,
     action: 'note_delete',
-    summary: note.authorName && note.authorName !== actor.authorName
-      ? `Deleted note by ${note.authorName}`
-      : 'Deleted own note',
+    summary: ownDelete ? 'Deleted own note' : 'Deleted another admin’s note',
     oldValue: note.body,
   })
   return true

@@ -2063,12 +2063,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         // Plant history: log create or per-field diff (English saves only — other
         // languages just update translations and are noisy to diff against the EN baseline).
         try {
-          const historyActor = { authorId: profile?.id || null, authorName: profile?.display_name || null }
+          const historyActor = { authorId: profile?.id || null }
           if (wasCreate) {
             await logPlantHistory({
               plantId: savedId,
               authorId: historyActor.authorId,
-              authorName: historyActor.authorName,
               action: 'create',
               summary: `Created plant "${trimmedName}"`,
               newValue: trimmedName,
@@ -2083,7 +2082,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             await logPlantHistory({
               plantId: savedId,
               authorId: historyActor.authorId,
-              authorName: historyActor.authorName,
               action: 'field_change',
               field: `translation:${saveLanguage}`,
               summary: `Updated ${saveLanguage.toUpperCase()} translation`,
@@ -2506,7 +2504,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await logPlantHistory({
           plantId: targetPlant.id,
           authorId: profile?.id || null,
-          authorName: profile?.display_name || null,
           action: 'ai_fill',
           summary: 'Launched AI Fill (all fields)',
         })
@@ -2653,7 +2650,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         await logPlantHistory({
           plantId: plant.id,
           authorId: profile?.id || null,
-          authorName: profile?.display_name || null,
           action: 'translate',
           summary: `Launched DeepL translation (${targets.length} ${targets.length === 1 ? 'language' : 'languages'})`,
           newValue: targets.join(', '),
@@ -3125,7 +3121,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             adminNotesSlot={
               <AdminNotesThread
                 plantId={plant.id || id || null}
-                actor={{ id: profile?.id || null, name: profile?.display_name || null }}
+                actor={{ id: profile?.id || null }}
                 refreshVersion={historyVersion}
                 onChanged={bumpHistoryVersion}
               />

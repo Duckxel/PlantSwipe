@@ -5,33 +5,26 @@
 -- Rules (per product request):
 --   • One note per newline-separated chunk of the existing commentary.
 --   • Blank chunks skipped.
---   • author_id  = Xavier Sabar's profile id (looked up by display_name).
---   • author_name = 'Xavier Sabar' (snapshot).
+--   • author_id = Xavier Sabar's profile id (hardcoded below).
 --   • created_at / updated_at = migration run time (now()).
+--   • The plant_admin_notes / plant_history tables do NOT store a snapshot
+--     display name — the UI resolves names from profiles at read time.
 --
 -- Idempotent: per-plant we skip if a Xavier-authored note already exists for
--- that plant (prevents duplicating on re-run). Plants whose commentary has
--- changed since the last run will still be migrated only if no Xavier note
--- exists for that plant yet.
+-- that plant (prevents duplicating on re-run).
 -- ============================================================================
 
 do $$
 declare
-  v_xavier_id uuid;
+  v_xavier_id constant uuid := '007f393d-7627-4e2d-929a-97584ecf74fc';
   r record;
   raw_line text;
   trimmed_line text;
   inserted integer := 0;
   plants_touched integer := 0;
 begin
-  select p.id
-    into v_xavier_id
-    from public.profiles p
-    where lower(p.display_name) = lower('Xavier Sabar')
-    limit 1;
-
-  if v_xavier_id is null then
-    raise warning '[migrate_admin_commentary] Xavier Sabar profile not found; aborting migration.';
+  if not exists (select 1 from public.profiles where id = v_xavier_id) then
+    raise warning '[migrate_admin_commentary] Xavier profile % not found; aborting.', v_xavier_id;
     return;
   end if;
 
@@ -55,9 +48,9 @@ begin
         continue;
       end if;
       insert into public.plant_admin_notes
-        (plant_id, author_id, author_name, body, created_at, updated_at)
+        (plant_id, author_id, body, created_at, updated_at)
       values
-        (r.plant_id, v_xavier_id, 'Xavier Sabar', trimmed_line, now(), now());
+        (r.plant_id, v_xavier_id, trimmed_line, now(), now());
       inserted := inserted + 1;
     end loop;
   end loop;

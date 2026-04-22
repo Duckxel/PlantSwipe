@@ -2179,11 +2179,11 @@ end $$;
 -- ========== Plant change history ==========
 -- Per-plant audit log written by admins on edits, translations, AI fills, and note actions.
 -- Intentionally compact: one row per discrete action with short summary + optional old/new snippets.
+-- The author's display_name is NOT stored — always resolved from profiles at read time.
 create table if not exists public.plant_history (
   id uuid primary key default gen_random_uuid(),
   plant_id uuid not null references public.plants(id) on delete cascade,
   author_id uuid references public.profiles(id) on delete set null,
-  author_name text,
   action text not null check (action in (
     'field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'
   )),
@@ -2194,6 +2194,8 @@ create table if not exists public.plant_history (
   created_at timestamptz not null default now()
 );
 comment on table public.plant_history is 'Per-plant admin change log: field edits, translations, AI fills, note actions.';
+-- Drop legacy snapshot column if present from an earlier schema revision.
+alter table public.plant_history drop column if exists author_name;
 create index if not exists plant_history_plant_time_idx on public.plant_history (plant_id, created_at desc);
 create index if not exists plant_history_author_idx on public.plant_history (author_id, created_at desc);
 
@@ -2231,16 +2233,18 @@ end $$;
 -- ========== Plant admin notes (chat-style) ==========
 -- Thread of editorial notes per plant. Any admin can add, edit or delete any note.
 -- All note mutations should also write a plant_history row.
+-- The author's display_name is NOT stored — always resolved from profiles at read time.
 create table if not exists public.plant_admin_notes (
   id uuid primary key default gen_random_uuid(),
   plant_id uuid not null references public.plants(id) on delete cascade,
   author_id uuid references public.profiles(id) on delete set null,
-  author_name text,
   body text not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 comment on table public.plant_admin_notes is 'Editorial chat-style notes per plant. Any admin can CRUD any note.';
+-- Drop legacy snapshot column if present from an earlier schema revision.
+alter table public.plant_admin_notes drop column if exists author_name;
 create index if not exists plant_admin_notes_plant_time_idx on public.plant_admin_notes (plant_id, created_at desc);
 create index if not exists plant_admin_notes_author_idx on public.plant_admin_notes (author_id, created_at desc);
 
