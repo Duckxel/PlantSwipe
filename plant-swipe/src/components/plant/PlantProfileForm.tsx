@@ -54,6 +54,8 @@ export type PlantProfileFormProps = {
   adminNotesSlot?: React.ReactNode
   /** Slot rendered at the bottom of the Meta section (plant change history). */
   historySlot?: React.ReactNode
+  /** Replaces the Contributors tags field with a user-search multi-select. */
+  contributorsSlot?: React.ReactNode
 }
 
 const glassCardClass =
@@ -2605,7 +2607,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties, adminNotesSlot, historySlot }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties, adminNotesSlot, historySlot, contributorsSlot }: PlantProfileFormProps) {
   const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
@@ -3121,10 +3123,25 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     </div>
   )
 
-  const renderMeta = () => (
+  const renderMeta = () => {
+    const skipKeys = new Set<string>()
+    if (adminNotesSlot) skipKeys.add('adminCommentary')
+    if (contributorsSlot) skipKeys.add('contributors')
+    return (
     <div className="space-y-5">
-      {renderFieldGroup(metaFields, adminNotesSlot ? { skipKeys: new Set(['adminCommentary']) } : undefined)}
+      {renderFieldGroup(metaFields, skipKeys.size ? { skipKeys } : undefined)}
       {adminNotesSlot}
+      {contributorsSlot ? (
+        <div>
+          <label className="block text-sm font-medium mb-1.5">
+            {t('plantAdmin.fields.contributors.label', { defaultValue: 'Contributors' })}
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t('plantAdmin.fields.contributors.description', { defaultValue: 'People who contributed to this plant entry' })}
+          </p>
+          {contributorsSlot}
+        </div>
+      ) : null}
       {historySlot}
       {plantReports && plantReports.length > 0 && (
         <>
@@ -3151,7 +3168,8 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         </>
       )}
     </div>
-  )
+    )
+  }
 
   const sectionRenderers: Record<string, () => React.ReactNode> = {
     base: renderBase,

@@ -277,7 +277,10 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id),
     supabase.from('plant_sources').select('id,name,url').eq('plant_id', id),
     supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
-    supabase.from('plant_contributors').select('contributor_name').eq('plant_id', id),
+    supabase
+      .from('plant_contributors')
+      .select('contributor_id, contributor_name, profile:contributor_id(id, display_name)')
+      .eq('plant_id', id),
     supabase.from('plant_recipes').select('id,name,name_fr,category,time,link').eq('plant_id', id),
   ])
 
@@ -453,15 +456,32 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     updatedBy: data.updated_by || undefined,
     updatedTime: data.updated_time || undefined,
     contributors: (() => {
-      const seen = new Map<string, string>()
+      // Dedupe by profile id first, then by case-insensitive display name so
+      // legacy rows (id=null, name=...) collapse cleanly against any newer
+      // id-carrying row with the same display name.
+      const seenIds = new Set<string>()
+      const seenNames = new Set<string>()
+      const out: { id: string | null; name: string | null }[] = []
       for (const row of (contributorRows || []) as any[]) {
-        const name = row?.contributor_name
-        if (typeof name === 'string' && name.trim()) {
+        const id = typeof row?.contributor_id === 'string' ? row.contributor_id : null
+        const profile = Array.isArray(row?.profile) ? row.profile[0] : row?.profile
+        const liveName = typeof profile?.display_name === 'string' ? profile.display_name.trim() : ''
+        const snapshotName = typeof row?.contributor_name === 'string' ? row.contributor_name.trim() : ''
+        const name = liveName || snapshotName
+        if (!id && !name) continue
+        if (id) {
+          if (seenIds.has(id)) continue
+          seenIds.add(id)
+          if (name) seenNames.add(name.toLowerCase())
+          out.push({ id, name: name || null })
+        } else if (name) {
           const key = name.toLowerCase()
-          if (!seen.has(key)) seen.set(key, name)
+          if (seenNames.has(key)) continue
+          seenNames.add(key)
+          out.push({ id: null, name })
         }
       }
-      return Array.from(seen.values())
+      return out
     })(),
 
     // Display
@@ -1957,11 +1977,14 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
               <div className="mt-3 space-y-2 text-xs sm:text-sm text-stone-600 dark:text-stone-400">
                 <p>{t('plantInfo:contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
                 <div className="flex flex-wrap gap-2">
-                  {contributorsList.map((name) => (
-                    <Badge key={name} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
-                      {name}
-                    </Badge>
-                  ))}
+                  {contributorsList.map((c, idx) => {
+                    const displayName = c.name || 'Unknown'
+                    return (
+                      <Badge key={c.id || `legacy-${idx}`} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
+                        {displayName}
+                      </Badge>
+                    )
+                  })}
                 </div>
               </div>
             </details>

@@ -7,9 +7,10 @@ import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
 import { AdminNotesThread } from "@/components/plant/AdminNotesThread"
 import { PlantHistoryPanel } from "@/components/plant/PlantHistoryPanel"
+import { PlantContributorsPicker } from "@/components/plant/PlantContributorsPicker"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
+import type { Plant, PlantColor, PlantContributor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -383,22 +384,43 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
 }
 
+type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | string | null | undefined
+
+/**
+ * Merge any mix of legacy strings, {id,name} shapes, or profile ids into a
+ * deduplicated list of PlantContributor rows. IDs dedupe first; nameless
+ * strings dedupe case-insensitively on the trimmed name.
+ */
 const mergeContributors = (
   existing: unknown,
-  extras: Array<string | null | undefined> = [],
-): string[] => {
-  const base = Array.isArray(existing) ? existing : []
+  extras: ContributorInput[] = [],
+): PlantContributor[] => {
+  const base = Array.isArray(existing) ? (existing as ContributorInput[]) : []
   const combined = [...base, ...extras]
-  const seen = new Set<string>()
-  const result: string[] = []
+  const seenIds = new Set<string>()
+  const seenNames = new Set<string>()
+  const result: PlantContributor[] = []
   for (const entry of combined) {
-    if (typeof entry !== "string") continue
-    const trimmed = entry.trim()
-    if (!trimmed) continue
-    const key = trimmed.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(trimmed)
+    if (entry == null) continue
+    let id: string | null = null
+    let name: string | null = null
+    if (typeof entry === "string") {
+      name = entry.trim() || null
+    } else if (typeof entry === "object") {
+      const raw = entry as { id?: unknown; name?: unknown }
+      if (typeof raw.id === "string" && raw.id.trim()) id = raw.id.trim()
+      if (typeof raw.name === "string" && raw.name.trim()) name = raw.name.trim()
+    }
+    if (!id && !name) continue
+    if (id) {
+      if (seenIds.has(id)) continue
+      seenIds.add(id)
+    } else if (name) {
+      const nameKey = name.toLowerCase()
+      if (seenNames.has(nameKey)) continue
+      seenNames.add(nameKey)
+    }
+    result.push({ id, name })
   }
   return result
 }
@@ -626,18 +648,43 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
-async function upsertContributors(plantId: string, contributors: string[]) {
+async function upsertContributors(plantId: string, contributors: PlantContributor[]) {
   await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
   if (!contributors.length) return
+  // Each row must carry an id OR a non-empty name (DB check constraint).
+  // For id rows we still persist the snapshot name so legacy listeners that
+  // only read contributor_name keep working until they're migrated.
   const rows = contributors
-    .filter((name) => typeof name === 'string' && name.trim())
-    .map((name) => ({
-      plant_id: plantId,
-      contributor_name: name.trim(),
-    }))
+    .map((c) => {
+      const id = c.id && c.id.trim() ? c.id.trim() : null
+      const name = c.name && c.name.trim() ? c.name.trim() : null
+      if (!id && !name) return null
+      return { plant_id: plantId, contributor_id: id, contributor_name: name }
+    })
+    .filter((r): r is { plant_id: string; contributor_id: string | null; contributor_name: string | null } => Boolean(r))
   if (!rows.length) return
   const { error } = await supabase.from('plant_contributors').insert(rows)
   if (error) throw new Error(error.message)
+}
+
+/**
+ * Convert rows fetched via `select('contributor_id, contributor_name, profile:contributor_id(...)')`
+ * into the PlantContributor shape used across the app. Prefers the live
+ * display_name from the joined profile; falls back to the stored legacy name.
+ */
+function contributorRowsToList(rows: unknown): PlantContributor[] {
+  if (!Array.isArray(rows)) return []
+  const out: PlantContributor[] = []
+  for (const row of rows as Array<Record<string, any>>) {
+    const id = typeof row?.contributor_id === 'string' ? row.contributor_id : null
+    const profile = Array.isArray(row?.profile) ? row.profile[0] : row?.profile
+    const liveName = profile && typeof profile.display_name === 'string' ? profile.display_name.trim() || null : null
+    const snapshotName = typeof row?.contributor_name === 'string' ? row.contributor_name.trim() || null : null
+    const name = liveName || snapshotName
+    if (!id && !name) continue
+    out.push({ id, name })
+  }
+  return out
 }
 
 function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
@@ -833,7 +880,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: contributorRows } = await supabase
     .from('plant_contributors')
-    .select('contributor_name')
+    .select('contributor_id, contributor_name, profile:contributor_id(id, display_name)')
     .eq('plant_id', id)
   const { data: recipeRows } = await supabase
     .from('plant_recipes')
@@ -994,9 +1041,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     meta: {
       status: formatStatusForUi(data.status),
       adminCommentary: data.admin_commentary || undefined,
-      contributors: (contributorRows || [])
-        .map((row: any) => row?.contributor_name)
-        .filter((name: any) => typeof name === 'string' && name.trim()),
+      contributors: contributorRowsToList(contributorRows),
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -1158,9 +1203,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   // Section 9: Meta
   flat.status = formatStatusForUi(data.status)
   flat.adminCommentary = data.admin_commentary || plant.meta?.adminCommentary || undefined
-  flat.contributors = (contributorRows || [])
-    .map((row: any) => row?.contributor_name)
-    .filter((name: any) => typeof name === 'string' && name.trim())
+  flat.contributors = contributorRowsToList(contributorRows)
 
   return plant
 }
@@ -1283,16 +1326,18 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .select('id, display_name')
             .in('id', userIds)
           if (profilesError) throw new Error(profilesError.message)
-          const names = (profilesData || [])
-            .map((profile: any) => profile?.display_name)
-            .filter((name: any) => typeof name === 'string' && name.trim())
-            .map((name: string) => name.trim())
-          if (!names.length || cancelled) return
+          const contributors: PlantContributor[] = (profilesData || [])
+            .map((profile: any) => ({
+              id: typeof profile?.id === 'string' ? profile.id : null,
+              name: typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null,
+            }))
+            .filter((c) => c.id || c.name)
+          if (!contributors.length || cancelled) return
           setPlant((prev) => ({
             ...prev,
             meta: {
               ...(prev.meta || {}),
-              contributors: mergeContributors(prev.meta?.contributors, names),
+              contributors: mergeContributors(prev.meta?.contributors, contributors),
             },
           }))
         } catch (err) {
@@ -1693,7 +1738,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           ? (plantToSave.meta?.createdAt || null)
           : (plantToSave.meta?.createdAt || new Date().toISOString())
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
-        const contributorList = mergeContributors(plantToSave.meta?.contributors || plantToSave.contributors, [profile?.display_name])
+        // Always seed in the current admin so editors are tracked by profile id.
+        const currentContributor: PlantContributor = {
+          id: profile?.id || null,
+          name: profile?.display_name || null,
+        }
+        const contributorList = mergeContributors(
+          plantToSave.meta?.contributors || plantToSave.contributors,
+          [currentContributor],
+        )
         const normalizedSchedules = normalizeSchedules(plantToSave.wateringSchedules || plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.sources || plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -3128,6 +3181,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               <PlantHistoryPanel
                 plantId={plant.id || id || null}
                 refreshVersion={historyVersion}
+              />
+            }
+            contributorsSlot={
+              <PlantContributorsPicker
+                value={Array.isArray(plant.contributors) ? (plant.contributors as PlantContributor[]) : []}
+                onChange={(next) => setPlant((prev) => ({
+                  ...prev,
+                  contributors: next,
+                  meta: { ...(prev.meta || {}), contributors: next },
+                }))}
               />
             }
           />

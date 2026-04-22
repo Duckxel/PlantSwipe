@@ -320,7 +320,13 @@ export interface Plant {
   createdTime?: string
   updatedBy?: string
   updatedTime?: string
-  contributors?: string[]
+  /**
+   * Contributors to this plant entry. New rows always carry an `id` (profile
+   * FK). Legacy rows from before the id backfill may carry only a `name` —
+   * the UI resolves the live display_name by id when available and falls back
+   * to the stored name otherwise.
+   */
+  contributors?: PlantContributor[]
   sources?: PlantSource[]
 
   // -- Display / UI -----------------------------------------------------------
@@ -590,11 +596,18 @@ export interface PlantMiscellaneous {
   [key: string]: unknown
 }
 
+export interface PlantContributor {
+  /** Profile id. `null` for legacy rows that only carry a name. */
+  id: string | null
+  /** Display-name snapshot (fallback when id is null or profile deleted). */
+  name: string | null
+}
+
 /** @deprecated Use flat Plant interface */
 export interface PlantMeta {
   status?: string
   adminCommentary?: string
-  contributors?: string[]
+  contributors?: PlantContributor[]
   createdBy?: string
   createdTime?: string
   updatedBy?: string

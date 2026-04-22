@@ -1627,14 +1627,57 @@ do $$ begin
 end $$;
 
 -- ========== Plant contributors ==========
+-- Contributors are identified by profile id (contributor_id). A legacy
+-- contributor_name column is kept only as a snapshot fallback for rows that
+-- were inserted before we stored ids; new rows always set contributor_id.
 create table if not exists public.plant_contributors (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  contributor_name text not null,
+  contributor_name text,
   created_at timestamptz not null default now()
 );
+-- Relax contributor_name NOT NULL for rows that only carry an id.
+alter table public.plant_contributors alter column contributor_name drop not null;
+-- Add contributor_id column + FK (set null when the profile is removed so the
+-- historical "someone contributed here" signal is preserved as a blank avatar).
+alter table public.plant_contributors add column if not exists contributor_id uuid;
+do $$ begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'plant_contributors'
+      and constraint_name = 'plant_contributors_contributor_fk'
+  ) then
+    alter table public.plant_contributors
+      add constraint plant_contributors_contributor_fk
+      foreign key (contributor_id) references public.profiles(id) on delete set null;
+  end if;
+end $$;
+-- Ensure at least one identifier is present.
+do $$ begin
+  if not exists (
+    select 1 from information_schema.table_constraints
+    where table_schema = 'public'
+      and table_name = 'plant_contributors'
+      and constraint_name = 'plant_contributors_id_or_name_chk'
+  ) then
+    alter table public.plant_contributors
+      add constraint plant_contributors_id_or_name_chk
+      check (contributor_id is not null or (contributor_name is not null and length(btrim(contributor_name)) > 0));
+  end if;
+end $$;
 create index if not exists plant_contributors_plant_id_idx on public.plant_contributors(plant_id);
-create unique index if not exists plant_contributors_unique_name_idx on public.plant_contributors(plant_id, lower(contributor_name));
+create index if not exists plant_contributors_contributor_id_idx on public.plant_contributors(contributor_id);
+-- Replace the legacy name-based uniqueness with two partial uniques:
+--  • one ID per plant
+--  • one legacy name per plant (for rows without an id)
+drop index if exists plant_contributors_unique_name_idx;
+create unique index if not exists plant_contributors_unique_id_idx
+  on public.plant_contributors(plant_id, contributor_id)
+  where contributor_id is not null;
+create unique index if not exists plant_contributors_unique_legacy_name_idx
+  on public.plant_contributors(plant_id, lower(contributor_name))
+  where contributor_id is null;
 alter table public.plant_contributors enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_select_all') then
