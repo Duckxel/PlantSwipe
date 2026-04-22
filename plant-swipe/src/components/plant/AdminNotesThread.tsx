@@ -9,6 +9,7 @@ import {
   fetchPlantAdminNotes,
   updatePlantAdminNote,
 } from '@/lib/plantAdminNotes'
+import { fetchDisplayNames } from '@/lib/displayNameLookup'
 
 interface Actor {
   id: string | null
@@ -47,18 +48,25 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
   const [posting, setPosting] = React.useState(false)
   const [editingId, setEditingId] = React.useState<string | null>(null)
   const [editDraft, setEditDraft] = React.useState('')
+  const [nameById, setNameById] = React.useState<Map<string, string>>(new Map())
 
   const refresh = React.useCallback(async () => {
     if (!plantId) { setNotes([]); return }
     setLoading(true)
     try {
-      setNotes(await fetchPlantAdminNotes(plantId))
+      const rows = await fetchPlantAdminNotes(plantId)
+      setNotes(rows)
+      const ids = rows.map((r) => r.authorId).filter((x): x is string => Boolean(x))
+      setNameById(await fetchDisplayNames(ids))
     } finally {
       setLoading(false)
     }
   }, [plantId])
 
   React.useEffect(() => { void refresh() }, [refresh, refreshVersion])
+
+  const resolveName = (note: PlantAdminNote): string =>
+    (note.authorId && nameById.get(note.authorId)) || note.authorName || 'Unknown'
 
   const handleSubmit = async () => {
     if (!plantId || posting) return
@@ -139,12 +147,12 @@ export const AdminNotesThread: React.FC<Props> = ({ plantId, actor, refreshVersi
           return (
             <div key={note.id} className="flex gap-3">
               <div className="h-8 w-8 rounded-full bg-sky-600 text-white flex items-center justify-center text-xs font-semibold flex-shrink-0">
-                {initialsFor(note.authorName)}
+                {initialsFor(resolveName(note))}
               </div>
               <div className="flex-1 min-w-0">
                 <div className="flex items-baseline flex-wrap gap-2">
                   <span className="text-sm font-medium text-sky-900 dark:text-sky-100">
-                    {note.authorName || 'Unknown'}
+                    {resolveName(note)}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     {formatStamp(note.createdAt)}

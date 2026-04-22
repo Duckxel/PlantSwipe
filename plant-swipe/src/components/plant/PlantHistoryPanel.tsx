@@ -2,6 +2,7 @@ import React from 'react'
 import { ChevronDown, ChevronUp, History as HistoryIcon, Languages, Pencil, Plus, Sparkles, StickyNote, Trash2 } from 'lucide-react'
 import type { PlantHistoryEntry, PlantHistoryAction } from '@/types/plantHistory'
 import { fetchPlantHistory } from '@/lib/plantHistory'
+import { fetchDisplayNames } from '@/lib/displayNameLookup'
 
 interface Props {
   plantId: string | null | undefined
@@ -73,27 +74,25 @@ interface EntryGroup {
 }
 
 /**
- * Group consecutive entries with the same (author, calendar-hour).
- * Any change in either value starts a new group, preserving chronological order.
+ * Group consecutive entries with the same (author identity, calendar-hour).
+ * Author identity = author_id when available (stable across display-name changes);
+ * otherwise the snapshot author_name as fallback.
  */
 function groupEntries(entries: PlantHistoryEntry[]): EntryGroup[] {
   // Iterate oldest-first so groups read chronologically inside a day.
   const ascending = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const groups: EntryGroup[] = []
+  const identity = (e: PlantHistoryEntry) => e.authorId || `name:${e.authorName || 'anon'}`
   for (const e of ascending) {
     const bucket = hourBucket(e.createdAt)
     const last = groups[groups.length - 1]
-    if (
-      last
-      && last.hour === bucket
-      && last.authorName === (e.authorName || null)
-      && last.authorId === (e.authorId || null)
-    ) {
+    const lastIdentity = last ? (last.authorId || `name:${last.authorName || 'anon'}`) : null
+    if (last && last.hour === bucket && lastIdentity === identity(e)) {
       last.entries.push(e)
       last.endIso = e.createdAt
     } else {
       groups.push({
-        key: `${bucket}-${e.authorId || e.authorName || 'anon'}-${e.id}`,
+        key: `${bucket}-${identity(e)}-${e.id}`,
         authorName: e.authorName || null,
         authorId: e.authorId || null,
         hour: bucket,
@@ -117,18 +116,28 @@ export const PlantHistoryPanel: React.FC<Props> = ({ plantId, refreshVersion = 0
   const [entries, setEntries] = React.useState<PlantHistoryEntry[]>([])
   const [loading, setLoading] = React.useState(false)
   const [open, setOpen] = React.useState(defaultOpen)
+  const [nameById, setNameById] = React.useState<Map<string, string>>(new Map())
 
   const refresh = React.useCallback(async () => {
     if (!plantId) { setEntries([]); return }
     setLoading(true)
     try {
-      setEntries(await fetchPlantHistory(plantId, 300))
+      const rows = await fetchPlantHistory(plantId, 300)
+      setEntries(rows)
+      const ids = rows.map((r) => r.authorId).filter((x): x is string => Boolean(x))
+      setNameById(await fetchDisplayNames(ids))
     } finally {
       setLoading(false)
     }
   }, [plantId])
 
   React.useEffect(() => { void refresh() }, [refresh, refreshVersion])
+
+  const resolveName = React.useCallback(
+    (authorId: string | null, snapshotName: string | null): string =>
+      (authorId && nameById.get(authorId)) || snapshotName || 'Unknown',
+    [nameById],
+  )
 
   const groups = React.useMemo(() => groupEntries(entries), [entries])
 
@@ -149,15 +158,16 @@ export const PlantHistoryPanel: React.FC<Props> = ({ plantId, refreshVersion = 0
         )
         prevDate = dBucket
       }
+      const displayName = resolveName(g.authorId, g.authorName)
       out.push(
         <div key={g.key} className="flex gap-3 pt-2 pb-2 border-b border-stone-200/40 dark:border-[#3e3e42]/30 last:border-b-0">
           <div className="h-7 w-7 rounded-full bg-stone-300 dark:bg-stone-700 text-stone-800 dark:text-stone-100 flex items-center justify-center text-[10px] font-semibold flex-shrink-0">
-            {initialsFor(g.authorName)}
+            {initialsFor(displayName)}
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-2 flex-wrap">
               <span className="text-xs font-semibold text-stone-800 dark:text-stone-100">
-                {g.authorName || 'Unknown'}
+                {displayName}
               </span>
               <span className="text-[11px] text-muted-foreground">
                 {formatTime(g.startIso)}{g.entries.length > 1 ? ` · ${g.entries.length} changes` : ''}
@@ -184,7 +194,7 @@ export const PlantHistoryPanel: React.FC<Props> = ({ plantId, refreshVersion = 0
       )
     }
     return out
-  }, [groups])
+  }, [groups, resolveName])
 
   return (
     <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white/80 dark:bg-[#17171a]/80">
