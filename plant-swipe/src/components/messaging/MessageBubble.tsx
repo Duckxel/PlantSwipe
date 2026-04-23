@@ -101,7 +101,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({
   const handleTouchStart = () => {
     longPressTimer.current = setTimeout(() => {
       setShowReactions(true)
-      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(50))
     }, 500)
   }
   

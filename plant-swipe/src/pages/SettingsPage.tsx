@@ -15,7 +15,7 @@ import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 import { CityCountrySelector } from "@/components/ui/city-country-selector"
-import { isHapticsEnabled, setHapticsEnabled as persistHapticsEnabled, isHapticsAvailable, platformHapticTap } from "@/platform/haptics"
+import { isHapticsEnabled, setHapticsEnabled as persistHapticsEnabled, isHapticsAvailable } from "@/platform/haptics"
 import { validateEmail, validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation"
 import { validatePassword } from "@/lib/passwordValidation"
 import { ValidatedInput } from "@/components/ui/validated-input"
@@ -606,8 +606,6 @@ export default function SettingsPage() {
     const newValue = !hapticsEnabled
     persistHapticsEnabled(newValue)
     setLocalHapticsEnabled(newValue)
-    // Give the user a taste of haptics when they turn it on
-    if (newValue) platformHapticTap(25)
   }
 
   const handleToggleFriendRequests = async () => {

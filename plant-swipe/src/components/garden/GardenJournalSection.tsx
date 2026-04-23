@@ -802,7 +802,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           {t("gardenDashboard.journalSection.title", "Garden Journal")}
         </h2>
         <Button
-          onClick={() => { resetForm(); setShowNewEntry(true); }}
+          onClick={() => { setActiveView("journal"); resetForm(); setShowNewEntry(true); }}
           className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg shadow-emerald-500/20 gap-2"
         >
           <Plus className="w-4 h-4" />

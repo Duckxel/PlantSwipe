@@ -596,7 +596,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
           }
           setAdviceError((retryResult.data?.error as string) || t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
         } catch (retryErr: unknown) {
-          if (retryErr instanceof DOMException && retryErr.name === "AbortError") return;
+          if ((retryErr as { name?: string } | null)?.name === "AbortError") return;
           console.warn("[Analytics] Advice retry failed:", retryErr);
           setAdviceError(t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
         } finally {
@@ -608,7 +608,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       // Other non-OK status
       setAdviceError((result.data?.error as string) || t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") return; // unmounted or superseded
+      if ((err as { name?: string } | null)?.name === "AbortError") return; // unmounted or superseded
       console.warn("[Analytics] Failed to fetch advice:", err);
       const errMsg = err instanceof Error ? err.message : t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." });
       setAdviceError(errMsg);

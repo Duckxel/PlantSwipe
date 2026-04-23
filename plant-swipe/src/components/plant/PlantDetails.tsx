@@ -321,7 +321,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)",
           }}
         />
-        <div className="relative flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+        <div className="relative flex flex-col-reverse gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
           <div className="flex-1 space-y-3 sm:space-y-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
@@ -364,7 +364,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                 )}
             </div>
             {(plant.presentation || plant.description || plant.identity?.overview) && (
-              <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{plant.presentation || plant.description || plant.identity?.overview}</p>
+              <ExpandableOverview text={plant.presentation || plant.description || plant.identity?.overview || ''} />
             )}
             {toxicityWarningConfig && (
               <button
@@ -445,3 +445,36 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 }
 
 export default PlantDetails
+
+const WORD_LIMIT = 100
+
+const ExpandableOverview: React.FC<{ text: string }> = ({ text }) => {
+  const { t } = useTranslation('common')
+  const [expanded, setExpanded] = useState(false)
+  const words = text.trim().split(/\s+/)
+  const needsTruncation = words.length > WORD_LIMIT
+  const preview = needsTruncation ? words.slice(0, WORD_LIMIT).join(' ') + '…' : text
+
+  if (!needsTruncation) {
+    return (
+      <p className="text-muted-foreground leading-relaxed text-sm sm:text-base">{text}</p>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <p className="text-muted-foreground leading-relaxed text-sm sm:text-base whitespace-pre-wrap">
+        {expanded ? text : preview}
+      </p>
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="text-xs sm:text-sm font-medium text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 underline underline-offset-2"
+      >
+        {expanded
+          ? t('plantDetails.overview.readLess', { defaultValue: 'Read less' })
+          : t('plantDetails.overview.readMore', { defaultValue: 'Read more' })}
+      </button>
+    </div>
+  )
+}
