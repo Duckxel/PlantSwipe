@@ -2226,7 +2226,7 @@ end $$;
 -- The author's display_name is NOT stored — always resolved from profiles at read time.
 create table if not exists public.plant_history (
   id uuid primary key default gen_random_uuid(),
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   author_id uuid references public.profiles(id) on delete set null,
   action text not null check (action in (
     'field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'
@@ -2280,7 +2280,7 @@ end $$;
 -- The author's display_name is NOT stored — always resolved from profiles at read time.
 create table if not exists public.plant_admin_notes (
   id uuid primary key default gen_random_uuid(),
-  plant_id uuid not null references public.plants(id) on delete cascade,
+  plant_id text not null references public.plants(id) on delete cascade,
   author_id uuid references public.profiles(id) on delete set null,
   body text not null,
   created_at timestamptz not null default now(),

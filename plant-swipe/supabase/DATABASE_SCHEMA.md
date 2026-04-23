@@ -1074,7 +1074,7 @@ Per-plant audit log. One row per discrete admin action across the Create/Edit Pl
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
 action          TEXT NOT NULL CHECK (action IN ('field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'))
 field           TEXT                    -- Plant field key for field_change/status_change; 'translation:<lang>' for translation saves
@@ -1090,7 +1090,7 @@ Chat-style editorial notes per plant. Replaces the legacy `plants.admin_commenta
 
 ```sql
 id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
-plant_id        UUID NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 author_id       UUID REFERENCES profiles(id) ON DELETE SET NULL
 body            TEXT NOT NULL
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
