@@ -30395,10 +30395,9 @@ async function processDueAutomations() {
             console.warn('[automations] Failed to ensure task occurrences (continuing with existing data):', occErr?.message)
           }
 
-          // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
-          // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
-          // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
-          // only matches hour 23 (acceptable single-hour window for the last hour of day).
+          // Match only the user's preferred local hour. BETWEEN hour AND hour+1 was
+          // inclusive on both ends, giving a 2-hour delivery window that let reminders
+          // land up to ~2 hours after the user's configured time.
           recipientQuery = sql`
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
@@ -30410,8 +30409,7 @@ async function processDueAutomations() {
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
               and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                    and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -30465,8 +30463,7 @@ async function processDueAutomations() {
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                               between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                                   and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                               = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p
