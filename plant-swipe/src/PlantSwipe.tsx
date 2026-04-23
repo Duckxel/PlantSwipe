@@ -1683,7 +1683,6 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(10)
     // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
@@ -1698,7 +1697,6 @@ export default function PlantSwipe() {
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(8)
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
@@ -1707,7 +1705,6 @@ export default function PlantSwipe() {
   }, [swipeList.length])
 
   const handleInfo = React.useCallback(() => {
-    platformHapticTap(12)
     if (current) navigate(`/plants/${current.id}`)
   }, [current, navigate])
 
