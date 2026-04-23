@@ -3050,14 +3050,14 @@ export const GardenDashboardPage: React.FC = () => {
                     to={`/garden/${id}/${k}`}
                     title={String(label)}
                     data-tutorial={tutorialId}
-                    className={`flex items-center justify-center gap-1.5 rounded-full text-[13px] font-medium transition-all no-underline whitespace-nowrap shrink-0 md:w-full md:justify-start md:gap-2 md:rounded-2xl md:px-4 md:py-2.5 md:text-sm ${
+                    className={`flex items-center justify-center gap-1.5 rounded-full text-[13px] font-medium transition-all no-underline whitespace-nowrap shrink-0 min-h-[44px] md:w-full md:justify-start md:gap-2 md:rounded-2xl md:px-4 md:py-2.5 md:text-sm ${
                       isActive
-                        ? "bg-emerald-600 text-white shadow-sm px-4 py-2"
-                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 hover:bg-stone-200/80 dark:hover:bg-stone-700/60 px-2.5 py-2 md:bg-transparent md:dark:bg-transparent md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
+                        ? "bg-emerald-600 text-white shadow-sm px-4 py-2.5"
+                        : "text-stone-600 dark:text-stone-300 bg-stone-100/80 dark:bg-stone-800/60 hover:bg-stone-200/80 dark:hover:bg-stone-700/60 px-3 py-2.5 md:bg-transparent md:dark:bg-transparent md:hover:bg-stone-100 md:dark:hover:bg-stone-800"
                     }`}
                   >
                     <Icon className="w-4 h-4 flex-shrink-0" />
-                    <span className={`${isActive ? "inline" : "hidden"} md:inline`}>{label}</span>
+                    <span>{label}</span>
                   </NavLink>
                 );
               })}
