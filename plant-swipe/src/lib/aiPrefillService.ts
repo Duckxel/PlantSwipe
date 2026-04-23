@@ -9,6 +9,7 @@ import { supabase } from "@/lib/supabaseClient"
 import { fetchAiPlantFill, getEnglishPlantName } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
 import { translateBatch } from "@/lib/deepl"
+import { logPlantHistory } from "@/lib/plantHistory"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
 import { applyAiFieldToPlant } from "@/lib/applyAiField"
 import { plantSchema } from "@/lib/plantSchema"
@@ -44,7 +45,7 @@ import { BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS } from "@/lib/plantFormCategories"
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'variety', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
-  'meta', 'adminCommentary', 'contributors', 'status',
+  'meta', 'contributors', 'status',
   // Featured months — curated by admin
   'featuredMonth',
   // Plant link fields — AI is unaware of plants in our DB
@@ -161,26 +162,27 @@ const normalizeTimePeriodSlug = (value?: string | null): string | null => {
   return slug || null
 }
 
-const mergeContributorNames = (
-  existing: Array<string | null | undefined>,
-  extras: Array<string | null | undefined>,
-): string[] => {
-  const combined = [...existing, ...extras]
+type AiContributor = { id: string }
+
+const mergeContributors = (
+  existing: Array<AiContributor | { id?: unknown } | null | undefined>,
+  extras: Array<AiContributor | { id?: unknown } | null | undefined>,
+): AiContributor[] => {
   const seen = new Set<string>()
-  const result: string[] = []
-  for (const entry of combined) {
-    if (typeof entry !== 'string') continue
-    const trimmed = entry.trim()
-    if (!trimmed) continue
-    const key = trimmed.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(trimmed)
+  const out: AiContributor[] = []
+  for (const entry of [...existing, ...extras]) {
+    if (!entry || typeof entry !== 'object') continue
+    const id = (entry as { id?: unknown }).id
+    if (typeof id !== 'string' || !id.trim()) continue
+    const trimmed = id.trim()
+    if (seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push({ id: trimmed })
   }
-  return result
+  return out
 }
 
-async function fetchRequestContributors(requestId: string): Promise<string[]> {
+async function fetchRequestContributors(requestId: string): Promise<AiContributor[]> {
   if (!requestId) return []
   try {
     const { data: requestUsersData, error: usersError } = await supabase
@@ -203,14 +205,15 @@ async function fetchRequestContributors(requestId: string): Promise<string[]> {
     if (userIds.size === 0) return []
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, display_name')
+      .select('id')
       .in('id', Array.from(userIds))
     if (profilesError) throw new Error(profilesError.message)
-    const names = (profilesData || [])
-      .map((profile: any) => profile?.display_name)
-      .filter((name: any) => typeof name === 'string' && name.trim())
-      .map((name: string) => name.trim())
-    return mergeContributorNames(names, [])
+    const contributors: AiContributor[] = (profilesData || [])
+      .map((profile: any): AiContributor | null =>
+        typeof profile?.id === 'string' && profile.id ? { id: profile.id } : null,
+      )
+      .filter((c): c is AiContributor => Boolean(c))
+    return mergeContributors(contributors, [])
   } catch (err) {
     console.warn('[aiPrefillService] Failed to load request contributors', err)
     return []
@@ -353,15 +356,12 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
-async function upsertContributors(plantId: string, contributors: string[]) {
+async function upsertContributors(plantId: string, contributors: AiContributor[]) {
   await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
   if (!contributors.length) return
   const rows = contributors
-    .filter((name) => typeof name === 'string' && name.trim())
-    .map((name) => ({
-      plant_id: plantId,
-      contributor_name: name.trim(),
-    }))
+    .map((c) => (c.id && c.id.trim() ? { plant_id: plantId, contributor_id: c.id.trim() } : null))
+    .filter((r): r is { plant_id: string; contributor_id: string } => Boolean(r))
   if (!rows.length) return
   const { error } = await supabase.from('plant_contributors').insert(rows)
   if (error) throw new Error(error.message)
@@ -455,7 +455,8 @@ export async function processPlantRequest(
   plantName: string,
   requestId: string,
   createdBy: string | undefined,
-  callbacks?: AiPrefillCallbacks
+  callbacks?: AiPrefillCallbacks,
+  authorId?: string | null,
 ): Promise<{ success: boolean; plantId?: string; error?: string; cancelled?: boolean }> {
   const { onProgress, onFieldComplete, onFieldStart, onImageSourceStart, onImageSourceDone, onImageUploadProgress, onError, signal } = callbacks || {}
   
@@ -689,7 +690,13 @@ export async function processPlantRequest(
     const normalizedStatus = String(plant.status || 'in_progress').toLowerCase()
     const createdTimeValue = new Date().toISOString()
     const requestContributors = await fetchRequestContributors(requestId)
-    const contributors = mergeContributorNames(requestContributors, [createdBy])
+    // Seed in the admin who launched the run (by profile id). `createdBy` is
+    // kept only for the plants.created_by display string; contributors are
+    // id-only.
+    const contributors = mergeContributors(
+      requestContributors,
+      authorId ? [{ id: authorId }] : [],
+    )
     
     // Pre-save cleanup: clear fields that are gated off by boolean toggles or missing utility values
     // This prevents AI-filled data from being saved when its gate is disabled
@@ -796,7 +803,6 @@ export async function processPlantRequest(
       harmful_plants: filterValidUuids(plant.harmfulPlants),
       // Section 9: Meta
       status: normalizedStatus,
-      admin_commentary: plant.adminCommentary || null,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,
@@ -1215,9 +1221,17 @@ export async function processPlantRequest(
       console.error('Failed to delete plant request:', deleteError)
       // Don't fail - the plant was created successfully
     }
-    
+
+    // Plant-history entry: creation via AI Plant Request.
+    await logPlantHistory({
+      plantId,
+      authorId: authorId ?? null,
+      action: 'create',
+      summary: `Created plant via AI Plant Request ("${plantName}")`,
+    })
+
     return { success: true, plantId }
-    
+
   } catch (error) {
     // Don't report cancellation errors as failures - they're intentional
     if (isCancellationError(error)) {
@@ -1239,7 +1253,8 @@ export async function processAllPlantRequests(
   callbacks?: AiPrefillCallbacks & {
     onPlantProgress?: (info: { current: number; total: number; plantName: string }) => void
     onPlantComplete?: (info: { plantName: string; requestId: string; success: boolean; error?: string }) => void
-  }
+  },
+  authorId?: string | null,
 ): Promise<{ processed: number; failed: number; cancelled: boolean }> {
   const { onPlantProgress, onPlantComplete, signal } = callbacks || {}
   
@@ -1259,7 +1274,8 @@ export async function processAllPlantRequests(
       request.plant_name,
       request.id,
       createdBy,
-      callbacks
+      callbacks,
+      authorId,
     )
     
     // If the operation was cancelled, stop processing and don't count as failure

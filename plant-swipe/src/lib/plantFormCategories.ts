@@ -154,7 +154,6 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
 
   // Section 9: Meta
   status: 'meta',
-  adminCommentary: 'meta',
   contributors: 'meta',
 
   // Legacy aliases (map old names to new categories)

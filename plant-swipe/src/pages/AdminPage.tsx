@@ -129,6 +129,8 @@ import {
   type BroadcastRecord,
 } from "@/lib/broadcastStorage";
 import { processAllPlantRequests, aiFieldOrder as aiPrefillFieldOrder } from "@/lib/aiPrefillService";
+import { logPlantHistory, logPlantHistoryBatch } from "@/lib/plantHistory";
+import { labelForField } from "@/lib/plantHistoryDiff";
 import { IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages";
 import { getEnglishPlantName } from "@/lib/aiPlantFill";
 import { Languages, Settings, GraduationCap, ListChecks } from "lucide-react";
@@ -3900,6 +3902,16 @@ export const AdminPage: React.FC = () => {
             p.id === plantId ? { ...p, [localKey]: newValue } : p,
           ),
         );
+        // History: single field_change entry per plant.
+        const fieldKey = String(localKey);
+        const label = labelForField(fieldKey);
+        await logPlantHistory({
+          plantId,
+          authorId: profile?.id ?? null,
+          action: fieldKey === "status" ? "status_change" : "field_change",
+          field: fieldKey,
+          summary: `Quick-edit: changed ${label}`,
+        });
       } catch (err) {
         console.error("Quick plant update error:", err);
         setPlantDashboardError(
@@ -3907,7 +3919,7 @@ export const AdminPage: React.FC = () => {
         );
       }
     },
-    [plantDashboardRows],
+    [plantDashboardRows, profile?.id],
   );
 
   // Bulk quick-action: update a field for all selected plants
@@ -3920,6 +3932,11 @@ export const AdminPage: React.FC = () => {
     ) => {
       if (selectedPlantIds.size === 0) return;
       setBulkActionLoading(true);
+      const fieldKey = String(localKey);
+      const label = labelForField(fieldKey);
+      const action: "status_change" | "field_change" =
+        fieldKey === "status" ? "status_change" : "field_change";
+      const touchedIds: string[] = [];
       try {
         const ids = Array.from(selectedPlantIds);
         if (mode === "set") {
@@ -3932,6 +3949,7 @@ export const AdminPage: React.FC = () => {
               .update({ [dbColumn]: value })
               .in("id", batch);
             if (error) throw new Error(error.message);
+            touchedIds.push(...batch);
           }
           setPlantDashboardRows((prev) =>
             prev.map((p) =>
@@ -3958,12 +3976,25 @@ export const AdminPage: React.FC = () => {
               .update({ [dbColumn]: newValue })
               .eq("id", id);
             if (error) throw new Error(error.message);
+            touchedIds.push(id);
           }
           setPlantDashboardRows((prev) =>
             prev.map((p) => {
               const upd = updates.find((u) => u.id === p.id);
               return upd ? { ...p, [localKey]: upd.newValue } : p;
             }),
+          );
+        }
+        // History: one field_change entry per touched plant.
+        if (touchedIds.length) {
+          await logPlantHistoryBatch(
+            touchedIds.map((plantId) => ({
+              plantId,
+              authorId: profile?.id ?? null,
+              action,
+              field: fieldKey,
+              summary: `Bulk quick-edit: changed ${label}`,
+            })),
           );
         }
       } catch (err) {
@@ -3975,7 +4006,7 @@ export const AdminPage: React.FC = () => {
         setBulkActionLoading(false);
       }
     },
-    [selectedPlantIds, plantDashboardRows],
+    [selectedPlantIds, plantDashboardRows, profile?.id],
   );
 
   const plantStatusCounts = React.useMemo(() => {
@@ -4279,7 +4310,8 @@ export const AdminPage: React.FC = () => {
               setAiPrefillError(error);
             }
           },
-        }
+        },
+        profile?.id ?? null,
       );
       
       // Refresh the requests list after completion
@@ -4301,7 +4333,7 @@ export const AdminPage: React.FC = () => {
       setAiPrefillFieldProgress({ completed: 0, total: 0 });
       setAiPrefillStartTime(null);
     }
-  }, [aiPrefillRunning, filteredPlantRequests, profile?.display_name, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
+  }, [aiPrefillRunning, filteredPlantRequests, profile?.display_name, profile?.id, loadPlantRequests, initAiPrefillCategoryProgress, markAiPrefillFieldComplete]);
 
   const stopAiPrefill = React.useCallback(() => {
     if (aiPrefillAbortController) {
@@ -5577,7 +5609,6 @@ export const AdminPage: React.FC = () => {
       uploadedAt: string | null;
       gardenPlantId: string | null;
       plantName: string | null;
-      adminCommentary: string | null;
     }>;
     scansTotal?: number;
     scansThisMonth?: number;
@@ -6104,7 +6135,6 @@ export const AdminPage: React.FC = () => {
                 uploadedAt: f?.uploadedAt || f?.uploaded_at || null,
                 gardenPlantId: f?.gardenPlantId || f?.garden_plant_id || null,
                 plantName: f?.plantName || f?.plant_name || null,
-                adminCommentary: f?.adminCommentary || f?.admin_commentary || null,
               };
               })
             : [],

@@ -94,6 +94,8 @@ do $$ declare
     'plant_reports',
     'plant_pro_advices',
     'plant_images',
+    'plant_history',
+    'plant_admin_notes',
     'colors',
     'plant_colors',
     'color_translations',

@@ -50,6 +50,12 @@ export type PlantProfileFormProps = {
   plantReports?: PlantReport[]
   /** Auto-detected varieties (same species, different variety) */
   plantVarieties?: PlantVariety[]
+  /** Replaces the Admin Notes textarea with a chat-style thread. */
+  adminNotesSlot?: React.ReactNode
+  /** Slot rendered at the bottom of the Meta section (plant change history). */
+  historySlot?: React.ReactNode
+  /** Replaces the Contributors tags field with a user-search multi-select. */
+  contributorsSlot?: React.ReactNode
 }
 
 const glassCardClass =
@@ -1264,8 +1270,8 @@ const metaFields: FieldConfig[] = [
     { label: "Review", value: "review" },
     { label: "In Progress", value: "in_progress" },
   ] },
-  { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
-  { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
+  // adminCommentary removed — replaced by the plant_admin_notes thread slot.
+  // contributors removed — replaced by the SearchItem-backed contributorsSlot.
 ]
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'plantAdmin'>) {
@@ -2601,7 +2607,7 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
-export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties }: PlantProfileFormProps) {
+export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties, adminNotesSlot, historySlot, contributorsSlot }: PlantProfileFormProps) {
   const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
   const [showColorRecommendations, setShowColorRecommendations] = React.useState(false)
@@ -3117,9 +3123,23 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     </div>
   )
 
-  const renderMeta = () => (
+  const renderMeta = () => {
+    return (
     <div className="space-y-5">
       {renderFieldGroup(metaFields)}
+      {adminNotesSlot}
+      {contributorsSlot ? (
+        <div>
+          <label className="block text-sm font-medium mb-1.5">
+            {t('plantAdmin.fields.contributors.label', { defaultValue: 'Contributors' })}
+          </label>
+          <p className="text-xs text-muted-foreground mb-2">
+            {t('plantAdmin.fields.contributors.description', { defaultValue: 'People who contributed to this plant entry' })}
+          </p>
+          {contributorsSlot}
+        </div>
+      ) : null}
+      {historySlot}
       {plantReports && plantReports.length > 0 && (
         <>
           <SectionDivider title={`${t('plantAdmin.userReports', 'User Reports')} (${plantReports.length})`} />
@@ -3145,7 +3165,8 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
         </>
       )}
     </div>
-  )
+    )
+  }
 
   const sectionRenderers: Record<string, () => React.ReactNode> = {
     base: renderBase,

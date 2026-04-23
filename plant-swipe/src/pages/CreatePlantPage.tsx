@@ -5,9 +5,12 @@ import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
+import { AdminNotesThread } from "@/components/plant/AdminNotesThread"
+import { PlantHistoryPanel } from "@/components/plant/PlantHistoryPanel"
+import { PlantContributorsPicker } from "@/components/plant/PlantContributorsPicker"
 import { fetchAiPlantFill, fetchAiPlantFillField } from "@/lib/aiPlantFill"
 import { fetchExternalPlantImages, uploadPlantImageFromUrl, uploadPlantImageFile, deletePlantImage, isManagedPlantImageUrl, IMAGE_SOURCES, type SourceResult, type ExternalImageSource } from "@/lib/externalImages"
-import type { Plant, PlantColor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
+import type { Plant, PlantColor, PlantContributor, PlantImage, PlantMeta, PlantRecipe, PlantSource, PlantWateringSchedule, MonthSlug } from "@/types/plant"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { SUPPORTED_LANGUAGES, type SupportedLanguage } from "@/lib/i18n"
@@ -15,6 +18,8 @@ import { useLanguageNavigate, useLanguage } from "@/lib/i18nRouting"
 import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
+import { logPlantHistory, logPlantHistoryBatch } from "@/lib/plantHistory"
+import { buildPlantFieldDiff } from "@/lib/plantHistoryDiff"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
@@ -93,7 +98,7 @@ const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','k
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
-  'meta', 'adminCommentary', 'contributors', 'status',
+  'meta', 'contributors', 'status',
   // Featured months — curated by admin
   'featuredMonth',
   // Plant link fields — AI is unaware of plants in our DB
@@ -379,22 +384,29 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
 }
 
+type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | null | undefined
+
+/**
+ * Merge PlantContributor rows deduplicated by id. Entries without a valid id
+ * are dropped — contributors are always linked to a profile now.
+ */
 const mergeContributors = (
   existing: unknown,
-  extras: Array<string | null | undefined> = [],
-): string[] => {
-  const base = Array.isArray(existing) ? existing : []
+  extras: ContributorInput[] = [],
+): PlantContributor[] => {
+  const base = Array.isArray(existing) ? (existing as ContributorInput[]) : []
   const combined = [...base, ...extras]
-  const seen = new Set<string>()
-  const result: string[] = []
+  const seenIds = new Set<string>()
+  const result: PlantContributor[] = []
   for (const entry of combined) {
-    if (typeof entry !== "string") continue
-    const trimmed = entry.trim()
-    if (!trimmed) continue
-    const key = trimmed.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(trimmed)
+    if (entry == null || typeof entry !== 'object') continue
+    const raw = entry as { id?: unknown; name?: unknown }
+    if (typeof raw.id !== 'string' || !raw.id.trim()) continue
+    const id = raw.id.trim()
+    if (seenIds.has(id)) continue
+    seenIds.add(id)
+    const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : null
+    result.push({ id, name })
   }
   return result
 }
@@ -622,18 +634,32 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
   if (error) throw new Error(error.message)
 }
 
-async function upsertContributors(plantId: string, contributors: string[]) {
+async function upsertContributors(plantId: string, contributors: PlantContributor[]) {
   await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
   if (!contributors.length) return
   const rows = contributors
-    .filter((name) => typeof name === 'string' && name.trim())
-    .map((name) => ({
-      plant_id: plantId,
-      contributor_name: name.trim(),
-    }))
+    .map((c) => (c.id && c.id.trim() ? { plant_id: plantId, contributor_id: c.id.trim() } : null))
+    .filter((r): r is { plant_id: string; contributor_id: string } => Boolean(r))
   if (!rows.length) return
   const { error } = await supabase.from('plant_contributors').insert(rows)
   if (error) throw new Error(error.message)
+}
+
+/**
+ * Convert rows fetched via `select('contributor_id, profile:contributor_id(id, display_name)')`
+ * into the PlantContributor shape used across the app.
+ */
+function contributorRowsToList(rows: unknown): PlantContributor[] {
+  if (!Array.isArray(rows)) return []
+  const out: PlantContributor[] = []
+  for (const row of rows as Array<Record<string, any>>) {
+    const id = typeof row?.contributor_id === 'string' ? row.contributor_id : null
+    if (!id) continue
+    const profile = Array.isArray(row?.profile) ? row.profile[0] : row?.profile
+    const name = profile && typeof profile.display_name === 'string' ? profile.display_name.trim() || null : null
+    out.push({ id, name })
+  }
+  return out
 }
 
 function mapInfusionMixRows(rows?: Array<{ mix_name?: string | null; benefit?: string | null }> | null) {
@@ -829,7 +855,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: contributorRows } = await supabase
     .from('plant_contributors')
-    .select('contributor_name')
+    .select('contributor_id, profile:contributor_id(id, display_name)')
     .eq('plant_id', id)
   const { data: recipeRows } = await supabase
     .from('plant_recipes')
@@ -989,10 +1015,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     },
     meta: {
       status: formatStatusForUi(data.status),
-      adminCommentary: data.admin_commentary || undefined,
-      contributors: (contributorRows || [])
-        .map((row: any) => row?.contributor_name)
-        .filter((name: any) => typeof name === 'string' && name.trim()),
+      contributors: contributorRowsToList(contributorRows),
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
       updatedBy: data.updated_by || undefined,
@@ -1153,10 +1176,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 
   // Section 9: Meta
   flat.status = formatStatusForUi(data.status)
-  flat.adminCommentary = data.admin_commentary || plant.meta?.adminCommentary || undefined
-  flat.contributors = (contributorRows || [])
-    .map((row: any) => row?.contributor_name)
-    .filter((name: any) => typeof name === 'string' && name.trim())
+  flat.contributors = contributorRowsToList(contributorRows)
 
   return plant
 }
@@ -1279,16 +1299,19 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .select('id, display_name')
             .in('id', userIds)
           if (profilesError) throw new Error(profilesError.message)
-          const names = (profilesData || [])
-            .map((profile: any) => profile?.display_name)
-            .filter((name: any) => typeof name === 'string' && name.trim())
-            .map((name: string) => name.trim())
-          if (!names.length || cancelled) return
+          const contributors: PlantContributor[] = (profilesData || [])
+            .map((profile: any): PlantContributor | null => {
+              if (typeof profile?.id !== 'string' || !profile.id) return null
+              const name = typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null
+              return { id: profile.id, name }
+            })
+            .filter((c): c is PlantContributor => Boolean(c))
+          if (!contributors.length || cancelled) return
           setPlant((prev) => ({
             ...prev,
             meta: {
               ...(prev.meta || {}),
-              contributors: mergeContributors(prev.meta?.contributors, names),
+              contributors: mergeContributors(prev.meta?.contributors, contributors),
             },
           }))
         } catch (err) {
@@ -1305,6 +1328,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const initialLoadCompleteRef = React.useRef(false)
     // Track the previous language to save edits before switching
     const previousLanguageRef = React.useRef<SupportedLanguage>(urlLanguage)
+    // Baseline for history diffing — set on load and after each successful save.
+    const lastSavedPlantRef = React.useRef<Plant | null>(null)
+    // Bump this to force the HistoryPanel / Notes thread to re-fetch.
+    const [historyVersion, setHistoryVersion] = React.useState(0)
+    const bumpHistoryVersion = React.useCallback(() => setHistoryVersion((v) => v + 1), [])
     
     // Handle language changes - save current edits and load new language data
     React.useEffect(() => {
@@ -1362,6 +1390,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setLoadedLanguages(prev => new Set(prev).add(requestedLanguage))
             setExistingLoaded(true)
             initialLoadCompleteRef.current = true
+            // Establish the diff baseline from the freshly-loaded DB state.
+            if (requestedLanguage === 'en') {
+              lastSavedPlantRef.current = JSON.parse(JSON.stringify(loaded)) as Plant
+            }
           }
         } catch (e: any) {
           if (!ignore && languageRef.current === requestedLanguage) {
@@ -1608,7 +1640,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean }) => {
+    const savePlant = async (plantOverride?: Plant, options?: { skipOnSaved?: boolean; skipHistoryDiff?: boolean }) => {
       const saveLanguage = language
       const plantToSave = plantOverride || plant
       const trimmedName = plantToSave.name && typeof plantToSave.name === 'string' ? plantToSave.name.trim() : ''
@@ -1680,7 +1712,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           ? (plantToSave.meta?.createdAt || null)
           : (plantToSave.meta?.createdAt || new Date().toISOString())
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
-        const contributorList = mergeContributors(plantToSave.meta?.contributors || plantToSave.contributors, [profile?.display_name])
+        // Always seed in the current admin so editors are tracked by profile id.
+        // Skipped silently if the current user has no profile id (shouldn't happen for admins).
+        const currentContributor: ContributorInput = profile?.id
+          ? { id: profile.id, name: profile.display_name || null }
+          : null
+        const contributorList = mergeContributors(
+          plantToSave.meta?.contributors || plantToSave.contributors,
+          [currentContributor],
+        )
         const normalizedSchedules = normalizeSchedules(plantToSave.wateringSchedules || plantToSave.plantCare?.watering?.schedules)
         const sources = plantToSave.sources || plantToSave.miscellaneous?.sources || []
         const primarySource = sources[0]
@@ -1799,7 +1839,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
-            admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
             updated_by: updatedByValue,
@@ -1900,7 +1939,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
-            admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }
@@ -2044,7 +2082,40 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             }))
             setLoadedLanguages(prev => new Set(prev).add(saveLanguage))
           }
-        if (isEnglish && !existingLoaded) setExistingLoaded(true)
+        const wasCreate = isEnglish && !existingLoaded
+        if (wasCreate) setExistingLoaded(true)
+
+        // Plant history: log create or per-field diff (English saves only — other
+        // languages just update translations and are noisy to diff against the EN baseline).
+        try {
+          const historyActor = { authorId: profile?.id || null }
+          if (wasCreate) {
+            await logPlantHistory({
+              plantId: savedId,
+              authorId: historyActor.authorId,
+              action: 'create',
+              summary: `Created plant "${trimmedName}"`,
+            })
+          } else if (options?.skipHistoryDiff) {
+            // Caller will log its own summary entry (e.g. AI Fill).
+          } else if (isEnglish) {
+            const baseline = lastSavedPlantRef.current
+            const diff = buildPlantFieldDiff(savedId, baseline, plantToSave, historyActor)
+            if (diff.length) await logPlantHistoryBatch(diff)
+          } else {
+            await logPlantHistory({
+              plantId: savedId,
+              authorId: historyActor.authorId,
+              action: 'field_change',
+              field: `translation:${saveLanguage}`,
+              summary: `Updated ${saveLanguage.toUpperCase()} translation`,
+            })
+          }
+          lastSavedPlantRef.current = JSON.parse(JSON.stringify(savedPlant)) as Plant
+          bumpHistoryVersion()
+        } catch (historyErr) {
+          console.warn('[savePlant] history logging failed', historyErr)
+        }
         
         // Notify plant requesters if this plant was created from a request
         if (requestId && isEnglish && !existingLoaded) {
@@ -2452,7 +2523,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       const targetPlant = finalPlant || plant
       // Auto-save after AI fill but skip onSaved to prevent popup from closing
       // User can review the AI-filled data and manually save/close when ready
-      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true })
+      if (targetPlant) await savePlant(targetPlant, { skipOnSaved: true, skipHistoryDiff: true })
+      if (aiSucceeded && targetPlant?.id) {
+        await logPlantHistory({
+          plantId: targetPlant.id,
+          authorId: profile?.id || null,
+          action: 'ai_fill',
+          summary: 'Launched AI Fill (all fields)',
+        })
+        bumpHistoryVersion()
+      }
     }
   }
 
@@ -2590,6 +2670,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         meta: { ...(prev.meta || {}), status: IN_PROGRESS_STATUS },
       }))
       await savePlant()
+      if (plant.id) {
+        await logPlantHistory({
+          plantId: plant.id,
+          authorId: profile?.id || null,
+          action: 'translate',
+          summary: `Launched DeepL translation (${targets.length === 1 ? targets[0].toUpperCase() : `${targets.length} languages`})`,
+        })
+        bumpHistoryVersion()
+      }
       } catch (e: any) {
         setError(e?.message || t('plantAdmin.errors.translation', 'Translation failed'))
     } finally {
@@ -3052,6 +3141,30 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             onUploadImages={() => { setManualUploadError(null); setManualUploadResults([]); setShowUploadDialog(true) }}
             plantReports={plantReports}
             plantVarieties={plantVarieties}
+            adminNotesSlot={
+              <AdminNotesThread
+                plantId={plant.id || id || null}
+                actor={{ id: profile?.id || null }}
+                refreshVersion={historyVersion}
+                onChanged={bumpHistoryVersion}
+              />
+            }
+            historySlot={
+              <PlantHistoryPanel
+                plantId={plant.id || id || null}
+                refreshVersion={historyVersion}
+              />
+            }
+            contributorsSlot={
+              <PlantContributorsPicker
+                value={Array.isArray(plant.contributors) ? (plant.contributors as PlantContributor[]) : []}
+                onChange={(next) => setPlant((prev) => ({
+                  ...prev,
+                  contributors: next,
+                  meta: { ...(prev.meta || {}), contributors: next },
+                }))}
+              />
+            }
           />
         )}
 

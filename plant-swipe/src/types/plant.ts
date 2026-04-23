@@ -315,12 +315,18 @@ export interface Plant {
 
   // -- Section 9: Meta --------------------------------------------------------
   status?: PlantStatus
-  adminCommentary?: string
+  // adminCommentary removed — replaced by plant_admin_notes thread.
   createdBy?: string
   createdTime?: string
   updatedBy?: string
   updatedTime?: string
-  contributors?: string[]
+  /**
+   * Contributors to this plant entry. New rows always carry an `id` (profile
+   * FK). Legacy rows from before the id backfill may carry only a `name` —
+   * the UI resolves the live display_name by id when available and falls back
+   * to the stored name otherwise.
+   */
+  contributors?: PlantContributor[]
   sources?: PlantSource[]
 
   // -- Display / UI -----------------------------------------------------------
@@ -590,11 +596,18 @@ export interface PlantMiscellaneous {
   [key: string]: unknown
 }
 
+export interface PlantContributor {
+  /** Profile id — required; no legacy name-only rows remain after cleanup. */
+  id: string
+  /** Display name resolved from profiles at read time (never persisted). */
+  name?: string | null
+}
+
 /** @deprecated Use flat Plant interface */
 export interface PlantMeta {
   status?: string
-  adminCommentary?: string
-  contributors?: string[]
+  // adminCommentary removed — replaced by plant_admin_notes thread.
+  contributors?: PlantContributor[]
   createdBy?: string
   createdTime?: string
   updatedBy?: string

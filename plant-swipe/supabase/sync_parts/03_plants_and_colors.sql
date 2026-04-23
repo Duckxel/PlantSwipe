@@ -284,7 +284,7 @@ create table if not exists public.plants (
 
   -- Section 9: Meta
   status text check (status in ('in_progress','rework','review','approved')),
-  admin_commentary text,
+  -- admin_commentary removed — replaced by public.plant_admin_notes (chat-style thread).
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -574,7 +574,7 @@ declare
     array['sponsored_shop_ids', 'text[] not null default ''{}''::text[]'],
     -- Section 9: Meta
     array['status', 'text'],
-    array['admin_commentary', 'text'],
+    -- admin_commentary removed — replaced by public.plant_admin_notes thread.
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
     array['updated_by', 'text'],
@@ -1413,6 +1413,8 @@ alter table if exists public.plants drop column if exists water_freq_amount;
 alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
+-- admin_commentary replaced by the plant_admin_notes thread (data already migrated).
+alter table if exists public.plants drop column if exists admin_commentary;
 
 -- ========== Phase 4: Column whitelist — drops any column not in the new schema ==========
 do $$ declare
@@ -1501,7 +1503,7 @@ do $$ declare
     'sponsored_shop_ids',
     -- Section 9: Meta
     'status',
-    'admin_commentary',
+    -- admin_commentary removed — replaced by public.plant_admin_notes thread.
     'created_by',
     'created_time',
     'updated_by',
@@ -1627,14 +1629,47 @@ do $$ begin
 end $$;
 
 -- ========== Plant contributors ==========
+-- Contributors are identified solely by profile id. The legacy contributor_name
+-- column and its associated constraints/indexes have been removed now that the
+-- backfill migration has run.
 create table if not exists public.plant_contributors (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  contributor_name text not null,
+  contributor_id uuid not null references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now()
 );
+-- Idempotent cleanup for installs that still have the legacy layout.
+do $$ begin
+  if exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'plant_contributors'
+      and column_name = 'contributor_name'
+  ) then
+    drop index if exists plant_contributors_unique_legacy_name_idx;
+    drop index if exists plant_contributors_unique_name_idx;
+    alter table public.plant_contributors drop constraint if exists plant_contributors_id_or_name_chk;
+    -- Orphan rows that the id-backfill couldn't resolve (name didn't match any
+    -- current profile). Dropping them matches the "no snapshot" data policy.
+    delete from public.plant_contributors where contributor_id is null;
+    alter table public.plant_contributors drop column contributor_name;
+  end if;
+end $$;
+-- contributor_id is now the sole identifier; enforce NOT NULL + CASCADE on
+-- profile delete (previously SET NULL was used alongside the snapshot column).
+alter table public.plant_contributors alter column contributor_id set not null;
+do $$ begin
+  alter table public.plant_contributors drop constraint if exists plant_contributors_contributor_fk;
+  alter table public.plant_contributors
+    add constraint plant_contributors_contributor_fk
+    foreign key (contributor_id) references public.profiles(id) on delete cascade;
+end $$;
+-- Replace the old partial unique (where contributor_id is not null) with a plain one.
+drop index if exists plant_contributors_unique_id_idx;
+create unique index if not exists plant_contributors_unique_contributor_idx
+  on public.plant_contributors(plant_id, contributor_id);
 create index if not exists plant_contributors_plant_id_idx on public.plant_contributors(plant_id);
-create unique index if not exists plant_contributors_unique_name_idx on public.plant_contributors(plant_id, lower(contributor_name));
+create index if not exists plant_contributors_contributor_id_idx on public.plant_contributors(contributor_id);
 alter table public.plant_contributors enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_select_all') then
@@ -2172,6 +2207,144 @@ do $$ begin
         select 1 from public.profiles
         where id = auth.uid()
           and (is_admin = true or coalesce(public.has_any_role(auth.uid(), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+-- ========== Plant change history ==========
+-- Per-plant audit log written by admins on edits, translations, AI fills, and note actions.
+-- Intentionally compact: one row per discrete action with a short summary.
+-- We DO NOT store the old/new field values — only who changed what, when.
+-- The author's display_name is NOT stored — always resolved from profiles at read time.
+create table if not exists public.plant_history (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  author_id uuid references public.profiles(id) on delete set null,
+  action text not null check (action in (
+    'field_change','translate','ai_fill','note_add','note_edit','note_delete','create','status_change'
+  )),
+  field text,
+  summary text,
+  created_at timestamptz not null default now()
+);
+comment on table public.plant_history is 'Per-plant admin change log: field edits, translations, AI fills, note actions.';
+-- Drop columns left over from earlier schema revisions.
+alter table public.plant_history drop column if exists author_name;
+alter table public.plant_history drop column if exists old_value;
+alter table public.plant_history drop column if exists new_value;
+create index if not exists plant_history_plant_time_idx on public.plant_history (plant_id, created_at desc);
+create index if not exists plant_history_author_idx on public.plant_history (author_id, created_at desc);
+
+alter table public.plant_history enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_history' and policyname='plant_history_admin_select') then
+    drop policy plant_history_admin_select on public.plant_history;
+  end if;
+  create policy plant_history_admin_select on public.plant_history for select to authenticated
+    using (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_history' and policyname='plant_history_admin_insert') then
+    drop policy plant_history_admin_insert on public.plant_history;
+  end if;
+  -- History is immutable: inserts only. Admins cannot update or delete rows.
+  create policy plant_history_admin_insert on public.plant_history for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+-- ========== Plant admin notes (chat-style) ==========
+-- Thread of editorial notes per plant. Any admin can add, edit or delete any note.
+-- All note mutations should also write a plant_history row.
+-- The author's display_name is NOT stored — always resolved from profiles at read time.
+create table if not exists public.plant_admin_notes (
+  id uuid primary key default gen_random_uuid(),
+  plant_id text not null references public.plants(id) on delete cascade,
+  author_id uuid references public.profiles(id) on delete set null,
+  body text not null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+comment on table public.plant_admin_notes is 'Editorial chat-style notes per plant. Any admin can CRUD any note.';
+-- Drop legacy snapshot column if present from an earlier schema revision.
+alter table public.plant_admin_notes drop column if exists author_name;
+create index if not exists plant_admin_notes_plant_time_idx on public.plant_admin_notes (plant_id, created_at desc);
+create index if not exists plant_admin_notes_author_idx on public.plant_admin_notes (author_id, created_at desc);
+
+alter table public.plant_admin_notes enable row level security;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_admin_notes' and policyname='plant_admin_notes_admin_select') then
+    drop policy plant_admin_notes_admin_select on public.plant_admin_notes;
+  end if;
+  create policy plant_admin_notes_admin_select on public.plant_admin_notes for select to authenticated
+    using (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_admin_notes' and policyname='plant_admin_notes_admin_insert') then
+    drop policy plant_admin_notes_admin_insert on public.plant_admin_notes;
+  end if;
+  create policy plant_admin_notes_admin_insert on public.plant_admin_notes for insert to authenticated
+    with check (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_admin_notes' and policyname='plant_admin_notes_admin_update') then
+    drop policy plant_admin_notes_admin_update on public.plant_admin_notes;
+  end if;
+  create policy plant_admin_notes_admin_update on public.plant_admin_notes for update to authenticated
+    using (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    )
+    with check (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
+      )
+    );
+end $$;
+
+do $$ begin
+  if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_admin_notes' and policyname='plant_admin_notes_admin_delete') then
+    drop policy plant_admin_notes_admin_delete on public.plant_admin_notes;
+  end if;
+  create policy plant_admin_notes_admin_delete on public.plant_admin_notes for delete to authenticated
+    using (
+      exists (
+        select 1 from public.profiles p
+        where p.id = (select auth.uid())
+          and (p.is_admin = true or coalesce(public.has_any_role((select auth.uid()), array['admin','editor']), false))
       )
     );
 end $$;
