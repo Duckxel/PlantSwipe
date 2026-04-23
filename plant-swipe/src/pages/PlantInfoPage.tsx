@@ -279,7 +279,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     supabase.from('plant_infusion_mixes').select('mix_name,benefit').eq('plant_id', id),
     supabase
       .from('plant_contributors')
-      .select('contributor_id, contributor_name, profile:contributor_id(id, display_name)')
+      .select('contributor_id, profile:contributor_id(id, display_name)')
       .eq('plant_id', id),
     supabase.from('plant_recipes').select('id,name,name_fr,category,time,link').eq('plant_id', id),
   ])
@@ -450,36 +450,20 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
 
     // Section 9: Meta
     status: data.status || undefined,
-    adminCommentary: data.admin_commentary || undefined,
     createdBy: data.created_by || undefined,
     createdTime: data.created_time || undefined,
     updatedBy: data.updated_by || undefined,
     updatedTime: data.updated_time || undefined,
     contributors: (() => {
-      // Dedupe by profile id first, then by case-insensitive display name so
-      // legacy rows (id=null, name=...) collapse cleanly against any newer
-      // id-carrying row with the same display name.
       const seenIds = new Set<string>()
-      const seenNames = new Set<string>()
-      const out: { id: string | null; name: string | null }[] = []
+      const out: { id: string; name: string | null }[] = []
       for (const row of (contributorRows || []) as any[]) {
         const id = typeof row?.contributor_id === 'string' ? row.contributor_id : null
+        if (!id || seenIds.has(id)) continue
+        seenIds.add(id)
         const profile = Array.isArray(row?.profile) ? row.profile[0] : row?.profile
-        const liveName = typeof profile?.display_name === 'string' ? profile.display_name.trim() : ''
-        const snapshotName = typeof row?.contributor_name === 'string' ? row.contributor_name.trim() : ''
-        const name = liveName || snapshotName
-        if (!id && !name) continue
-        if (id) {
-          if (seenIds.has(id)) continue
-          seenIds.add(id)
-          if (name) seenNames.add(name.toLowerCase())
-          out.push({ id, name: name || null })
-        } else if (name) {
-          const key = name.toLowerCase()
-          if (seenNames.has(key)) continue
-          seenNames.add(key)
-          out.push({ id: null, name })
-        }
+        const name = typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null
+        out.push({ id, name })
       }
       return out
     })(),

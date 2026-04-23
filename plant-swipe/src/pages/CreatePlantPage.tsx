@@ -98,7 +98,7 @@ const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','k
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
-  'meta', 'adminCommentary', 'contributors', 'status',
+  'meta', 'contributors', 'status',
   // Featured months — curated by admin
   'featuredMonth',
   // Plant link fields — AI is unaware of plants in our DB
@@ -384,12 +384,11 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
 }
 
-type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | string | null | undefined
+type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | null | undefined
 
 /**
- * Merge any mix of legacy strings, {id,name} shapes, or profile ids into a
- * deduplicated list of PlantContributor rows. IDs dedupe first; nameless
- * strings dedupe case-insensitively on the trimmed name.
+ * Merge PlantContributor rows deduplicated by id. Entries without a valid id
+ * are dropped — contributors are always linked to a profile now.
  */
 const mergeContributors = (
   existing: unknown,
@@ -398,28 +397,15 @@ const mergeContributors = (
   const base = Array.isArray(existing) ? (existing as ContributorInput[]) : []
   const combined = [...base, ...extras]
   const seenIds = new Set<string>()
-  const seenNames = new Set<string>()
   const result: PlantContributor[] = []
   for (const entry of combined) {
-    if (entry == null) continue
-    let id: string | null = null
-    let name: string | null = null
-    if (typeof entry === "string") {
-      name = entry.trim() || null
-    } else if (typeof entry === "object") {
-      const raw = entry as { id?: unknown; name?: unknown }
-      if (typeof raw.id === "string" && raw.id.trim()) id = raw.id.trim()
-      if (typeof raw.name === "string" && raw.name.trim()) name = raw.name.trim()
-    }
-    if (!id && !name) continue
-    if (id) {
-      if (seenIds.has(id)) continue
-      seenIds.add(id)
-    } else if (name) {
-      const nameKey = name.toLowerCase()
-      if (seenNames.has(nameKey)) continue
-      seenNames.add(nameKey)
-    }
+    if (entry == null || typeof entry !== 'object') continue
+    const raw = entry as { id?: unknown; name?: unknown }
+    if (typeof raw.id !== 'string' || !raw.id.trim()) continue
+    const id = raw.id.trim()
+    if (seenIds.has(id)) continue
+    seenIds.add(id)
+    const name = typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim() : null
     result.push({ id, name })
   }
   return result
@@ -651,37 +637,26 @@ async function upsertSources(plantId: string, sources?: PlantSource[]) {
 async function upsertContributors(plantId: string, contributors: PlantContributor[]) {
   await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
   if (!contributors.length) return
-  // Each row must carry an id OR a non-empty name (DB check constraint).
-  // For id rows we still persist the snapshot name so legacy listeners that
-  // only read contributor_name keep working until they're migrated.
   const rows = contributors
-    .map((c) => {
-      const id = c.id && c.id.trim() ? c.id.trim() : null
-      const name = c.name && c.name.trim() ? c.name.trim() : null
-      if (!id && !name) return null
-      return { plant_id: plantId, contributor_id: id, contributor_name: name }
-    })
-    .filter((r): r is { plant_id: string; contributor_id: string | null; contributor_name: string | null } => Boolean(r))
+    .map((c) => (c.id && c.id.trim() ? { plant_id: plantId, contributor_id: c.id.trim() } : null))
+    .filter((r): r is { plant_id: string; contributor_id: string } => Boolean(r))
   if (!rows.length) return
   const { error } = await supabase.from('plant_contributors').insert(rows)
   if (error) throw new Error(error.message)
 }
 
 /**
- * Convert rows fetched via `select('contributor_id, contributor_name, profile:contributor_id(...)')`
- * into the PlantContributor shape used across the app. Prefers the live
- * display_name from the joined profile; falls back to the stored legacy name.
+ * Convert rows fetched via `select('contributor_id, profile:contributor_id(id, display_name)')`
+ * into the PlantContributor shape used across the app.
  */
 function contributorRowsToList(rows: unknown): PlantContributor[] {
   if (!Array.isArray(rows)) return []
   const out: PlantContributor[] = []
   for (const row of rows as Array<Record<string, any>>) {
     const id = typeof row?.contributor_id === 'string' ? row.contributor_id : null
+    if (!id) continue
     const profile = Array.isArray(row?.profile) ? row.profile[0] : row?.profile
-    const liveName = profile && typeof profile.display_name === 'string' ? profile.display_name.trim() || null : null
-    const snapshotName = typeof row?.contributor_name === 'string' ? row.contributor_name.trim() || null : null
-    const name = liveName || snapshotName
-    if (!id && !name) continue
+    const name = profile && typeof profile.display_name === 'string' ? profile.display_name.trim() || null : null
     out.push({ id, name })
   }
   return out
@@ -880,7 +855,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: contributorRows } = await supabase
     .from('plant_contributors')
-    .select('contributor_id, contributor_name, profile:contributor_id(id, display_name)')
+    .select('contributor_id, profile:contributor_id(id, display_name)')
     .eq('plant_id', id)
   const { data: recipeRows } = await supabase
     .from('plant_recipes')
@@ -1040,7 +1015,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
     },
     meta: {
       status: formatStatusForUi(data.status),
-      adminCommentary: data.admin_commentary || undefined,
       contributors: contributorRowsToList(contributorRows),
       createdBy: data.created_by || undefined,
       createdAt: data.created_time || undefined,
@@ -1202,7 +1176,6 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
 
   // Section 9: Meta
   flat.status = formatStatusForUi(data.status)
-  flat.adminCommentary = data.admin_commentary || plant.meta?.adminCommentary || undefined
   flat.contributors = contributorRowsToList(contributorRows)
 
   return plant
@@ -1327,11 +1300,12 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             .in('id', userIds)
           if (profilesError) throw new Error(profilesError.message)
           const contributors: PlantContributor[] = (profilesData || [])
-            .map((profile: any) => ({
-              id: typeof profile?.id === 'string' ? profile.id : null,
-              name: typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null,
-            }))
-            .filter((c) => c.id || c.name)
+            .map((profile: any): PlantContributor | null => {
+              if (typeof profile?.id !== 'string' || !profile.id) return null
+              const name = typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null
+              return { id: profile.id, name }
+            })
+            .filter((c): c is PlantContributor => Boolean(c))
           if (!contributors.length || cancelled) return
           setPlant((prev) => ({
             ...prev,
@@ -1739,10 +1713,10 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           : (plantToSave.meta?.createdAt || new Date().toISOString())
         const updatedByValue = profile?.display_name || plantToSave.meta?.updatedBy || null
         // Always seed in the current admin so editors are tracked by profile id.
-        const currentContributor: PlantContributor = {
-          id: profile?.id || null,
-          name: profile?.display_name || null,
-        }
+        // Skipped silently if the current user has no profile id (shouldn't happen for admins).
+        const currentContributor: ContributorInput = profile?.id
+          ? { id: profile.id, name: profile.display_name || null }
+          : null
         const contributorList = mergeContributors(
           plantToSave.meta?.contributors || plantToSave.contributors,
           [currentContributor],
@@ -1865,7 +1839,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
-            admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
             created_by: createdByValue,
             created_time: createdTimeValue,
             updated_by: updatedByValue,
@@ -1966,7 +1939,6 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             harmful_plants: filterValidUuids(p.harmfulPlants),
             // Section 9: Meta
             status: normalizedStatus,
-            admin_commentary: p.adminCommentary || p.meta?.adminCommentary || null,
             updated_by: updatedByValue,
             updated_time: new Date().toISOString(),
           }

@@ -284,7 +284,7 @@ create table if not exists public.plants (
 
   -- Section 9: Meta
   status text check (status in ('in_progress','rework','review','approved')),
-  admin_commentary text,
+  -- admin_commentary removed — replaced by public.plant_admin_notes (chat-style thread).
   created_by text,
   created_time timestamptz not null default now(),
   updated_by text,
@@ -574,7 +574,7 @@ declare
     array['sponsored_shop_ids', 'text[] not null default ''{}''::text[]'],
     -- Section 9: Meta
     array['status', 'text'],
-    array['admin_commentary', 'text'],
+    -- admin_commentary removed — replaced by public.plant_admin_notes thread.
     array['created_by', 'text'],
     array['created_time', 'timestamptz not null default now()'],
     array['updated_by', 'text'],
@@ -1413,6 +1413,8 @@ alter table if exists public.plants drop column if exists water_freq_amount;
 alter table if exists public.plants drop column if exists water_freq_unit;
 alter table if exists public.plants drop column if exists water_freq_value;
 alter table if exists public.plants drop column if exists updated_at;
+-- admin_commentary replaced by the plant_admin_notes thread (data already migrated).
+alter table if exists public.plants drop column if exists admin_commentary;
 
 -- ========== Phase 4: Column whitelist — drops any column not in the new schema ==========
 do $$ declare
@@ -1501,7 +1503,7 @@ do $$ declare
     'sponsored_shop_ids',
     -- Section 9: Meta
     'status',
-    'admin_commentary',
+    -- admin_commentary removed — replaced by public.plant_admin_notes thread.
     'created_by',
     'created_time',
     'updated_by',
@@ -1627,57 +1629,47 @@ do $$ begin
 end $$;
 
 -- ========== Plant contributors ==========
--- Contributors are identified by profile id (contributor_id). A legacy
--- contributor_name column is kept only as a snapshot fallback for rows that
--- were inserted before we stored ids; new rows always set contributor_id.
+-- Contributors are identified solely by profile id. The legacy contributor_name
+-- column and its associated constraints/indexes have been removed now that the
+-- backfill migration has run.
 create table if not exists public.plant_contributors (
   id uuid primary key default gen_random_uuid(),
   plant_id text not null references public.plants(id) on delete cascade,
-  contributor_name text,
+  contributor_id uuid not null references public.profiles(id) on delete cascade,
   created_at timestamptz not null default now()
 );
--- Relax contributor_name NOT NULL for rows that only carry an id.
-alter table public.plant_contributors alter column contributor_name drop not null;
--- Add contributor_id column + FK (set null when the profile is removed so the
--- historical "someone contributed here" signal is preserved as a blank avatar).
-alter table public.plant_contributors add column if not exists contributor_id uuid;
+-- Idempotent cleanup for installs that still have the legacy layout.
 do $$ begin
-  if not exists (
-    select 1 from information_schema.table_constraints
+  if exists (
+    select 1 from information_schema.columns
     where table_schema = 'public'
       and table_name = 'plant_contributors'
-      and constraint_name = 'plant_contributors_contributor_fk'
+      and column_name = 'contributor_name'
   ) then
-    alter table public.plant_contributors
-      add constraint plant_contributors_contributor_fk
-      foreign key (contributor_id) references public.profiles(id) on delete set null;
+    drop index if exists plant_contributors_unique_legacy_name_idx;
+    drop index if exists plant_contributors_unique_name_idx;
+    alter table public.plant_contributors drop constraint if exists plant_contributors_id_or_name_chk;
+    -- Orphan rows that the id-backfill couldn't resolve (name didn't match any
+    -- current profile). Dropping them matches the "no snapshot" data policy.
+    delete from public.plant_contributors where contributor_id is null;
+    alter table public.plant_contributors drop column contributor_name;
   end if;
 end $$;
--- Ensure at least one identifier is present.
+-- contributor_id is now the sole identifier; enforce NOT NULL + CASCADE on
+-- profile delete (previously SET NULL was used alongside the snapshot column).
+alter table public.plant_contributors alter column contributor_id set not null;
 do $$ begin
-  if not exists (
-    select 1 from information_schema.table_constraints
-    where table_schema = 'public'
-      and table_name = 'plant_contributors'
-      and constraint_name = 'plant_contributors_id_or_name_chk'
-  ) then
-    alter table public.plant_contributors
-      add constraint plant_contributors_id_or_name_chk
-      check (contributor_id is not null or (contributor_name is not null and length(btrim(contributor_name)) > 0));
-  end if;
+  alter table public.plant_contributors drop constraint if exists plant_contributors_contributor_fk;
+  alter table public.plant_contributors
+    add constraint plant_contributors_contributor_fk
+    foreign key (contributor_id) references public.profiles(id) on delete cascade;
 end $$;
+-- Replace the old partial unique (where contributor_id is not null) with a plain one.
+drop index if exists plant_contributors_unique_id_idx;
+create unique index if not exists plant_contributors_unique_contributor_idx
+  on public.plant_contributors(plant_id, contributor_id);
 create index if not exists plant_contributors_plant_id_idx on public.plant_contributors(plant_id);
 create index if not exists plant_contributors_contributor_id_idx on public.plant_contributors(contributor_id);
--- Replace the legacy name-based uniqueness with two partial uniques:
---  • one ID per plant
---  • one legacy name per plant (for rows without an id)
-drop index if exists plant_contributors_unique_name_idx;
-create unique index if not exists plant_contributors_unique_id_idx
-  on public.plant_contributors(plant_id, contributor_id)
-  where contributor_id is not null;
-create unique index if not exists plant_contributors_unique_legacy_name_idx
-  on public.plant_contributors(plant_id, lower(contributor_name))
-  where contributor_id is null;
 alter table public.plant_contributors enable row level security;
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_contributors' and policyname='plant_contributors_select_all') then

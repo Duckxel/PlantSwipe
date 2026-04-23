@@ -1270,8 +1270,8 @@ const metaFields: FieldConfig[] = [
     { label: "Review", value: "review" },
     { label: "In Progress", value: "in_progress" },
   ] },
-  { key: "adminCommentary", label: "Admin Notes", description: "Internal notes for editors", type: "textarea" },
-  { key: "contributors", label: "Contributors", description: "People who contributed to this plant entry", type: "tags", tagConfig: { unique: true, caseInsensitive: true } },
+  // adminCommentary removed — replaced by the plant_admin_notes thread slot.
+  // contributors removed — replaced by the SearchItem-backed contributorsSlot.
 ]
 
 function renderField(plant: Plant, onChange: (path: string, value: any) => void, field: FieldConfig, t: TFunction<'plantAdmin'>) {
@@ -3124,12 +3124,9 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
   )
 
   const renderMeta = () => {
-    const skipKeys = new Set<string>()
-    if (adminNotesSlot) skipKeys.add('adminCommentary')
-    if (contributorsSlot) skipKeys.add('contributors')
     return (
     <div className="space-y-5">
-      {renderFieldGroup(metaFields, skipKeys.size ? { skipKeys } : undefined)}
+      {renderFieldGroup(metaFields)}
       {adminNotesSlot}
       {contributorsSlot ? (
         <div>

@@ -13629,7 +13629,7 @@ app.get('/api/admin/member', async (req, res) => {
       }
 
       try {
-        const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name,admin_commentary))&order=uploaded_at.desc&limit=25`, {
+        const fr = await fetch(`${supabaseUrlEnv}/rest/v1/garden_plant_images?uploaded_by=eq.${encodeURIComponent(targetId)}&select=id,image_url,caption,uploaded_at,garden_plant_id,garden_plants(plant_id,plants(name))&order=uploaded_at.desc&limit=25`, {
           headers: baseHeaders,
         })
         if (fr.ok) {
@@ -13642,7 +13642,6 @@ app.get('/api/admin/member', async (req, res) => {
                 uploadedAt: r.uploaded_at || null,
                 gardenPlantId: r?.garden_plant_id || null,
                 plantName: r?.garden_plants?.plants?.name || null,
-                adminCommentary: r?.garden_plants?.plants?.admin_commentary || null,
               }))
             : []
         }
@@ -14120,8 +14119,7 @@ app.get('/api/admin/member', async (req, res) => {
                gpi.caption,
                gpi.uploaded_at,
                gp.id as garden_plant_id,
-               p.name as plant_name,
-               p.admin_commentary
+               p.name as plant_name
         from public.garden_plant_images gpi
         left join public.garden_plants gp on gp.id = gpi.garden_plant_id
         left join public.plants p on p.id = gp.plant_id
@@ -14137,7 +14135,6 @@ app.get('/api/admin/member', async (req, res) => {
             uploadedAt: r.uploaded_at || null,
             gardenPlantId: r.garden_plant_id || null,
             plantName: r.plant_name || null,
-            adminCommentary: r.admin_commentary || null,
           }))
         : []
     } catch { }
@@ -21929,19 +21926,14 @@ app.post('/api/admin/plant-reports/:id/complete', async (req, res) => {
       return
     }
 
-    // Get user display name for contributor record
-    let contributorName = 'Anonymous'
-    try {
-      const { data: profile } = await client.from('profiles').select('display_name, username').eq('id', report.user_id).maybeSingle()
-      if (profile) contributorName = profile.display_name || profile.username || 'Anonymous'
-    } catch { }
-
-    // Add user as contributor (ignore conflict if already exists)
-    try {
-      await client
-        .from('plant_contributors')
-        .insert({ plant_id: report.plant_id, contributor_name: contributorName })
-    } catch { }
+    // Add the reporter as a contributor (by profile id; ignore conflicts).
+    if (report.user_id) {
+      try {
+        await client
+          .from('plant_contributors')
+          .insert({ plant_id: report.plant_id, contributor_id: report.user_id })
+      } catch { }
+    }
 
     // Delete the report image from storage if it exists
     if (report.image_url) {

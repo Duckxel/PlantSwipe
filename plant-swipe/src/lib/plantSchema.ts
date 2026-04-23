@@ -336,7 +336,7 @@ export const plantSchema = {
   },
 
   // -- Section 9: Meta --------------------------------------------------------
-  adminCommentary: { type: 'longtext', description: 'Internal notes for editors' },
+  // (admin_commentary removed — replaced by the plant_admin_notes thread.)
 } as const
 
 export type PlantSchema = typeof plantSchema

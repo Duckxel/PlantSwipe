@@ -315,7 +315,7 @@ export interface Plant {
 
   // -- Section 9: Meta --------------------------------------------------------
   status?: PlantStatus
-  adminCommentary?: string
+  // adminCommentary removed — replaced by plant_admin_notes thread.
   createdBy?: string
   createdTime?: string
   updatedBy?: string
@@ -597,16 +597,16 @@ export interface PlantMiscellaneous {
 }
 
 export interface PlantContributor {
-  /** Profile id. `null` for legacy rows that only carry a name. */
-  id: string | null
-  /** Display-name snapshot (fallback when id is null or profile deleted). */
-  name: string | null
+  /** Profile id — required; no legacy name-only rows remain after cleanup. */
+  id: string
+  /** Display name resolved from profiles at read time (never persisted). */
+  name?: string | null
 }
 
 /** @deprecated Use flat Plant interface */
 export interface PlantMeta {
   status?: string
-  adminCommentary?: string
+  // adminCommentary removed — replaced by plant_admin_notes thread.
   contributors?: PlantContributor[]
   createdBy?: string
   createdTime?: string

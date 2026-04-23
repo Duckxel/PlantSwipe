@@ -10,20 +10,15 @@ interface Props {
 }
 
 const optionForContributor = (c: PlantContributor): SearchItemOption => ({
-  id: c.id || `legacy:${(c.name || 'unknown').toLowerCase()}`,
+  id: c.id,
   label: c.name || 'Unknown',
-  description: c.id ? c.id : 'legacy contributor (no profile linked)',
+  description: c.id,
   icon: <User className="h-4 w-4 text-stone-400 dark:text-stone-500" />,
 })
 
 /**
- * Multi-select user picker for plant contributors.
- * - Saves profile ids (via onChange / PlantContributor.id).
- * - Legacy rows (id=null, name=...) from before the id backfill are shown with
- *   a neutral avatar and keyed by `legacy:<lowercased name>` so the SearchItem
- *   can treat them as stable entries. Removing a legacy row strips it from the
- *   list; adding a matched profile through search replaces any legacy entry
- *   with the same display name because mergeContributors dedupes by id first.
+ * Multi-select user picker for plant contributors. Saves profile ids only —
+ * display names are resolved from `profiles` at read time.
  */
 export const PlantContributorsPicker: React.FC<Props> = ({ value, onChange }) => {
   const searchUsers = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
@@ -53,13 +48,7 @@ export const PlantContributorsPicker: React.FC<Props> = ({ value, onChange }) =>
   const currentIds = React.useMemo(() => currentOptions.map((o) => o.id), [currentOptions])
 
   const handleMultiSelect = (options: SearchItemOption[]) => {
-    const next: PlantContributor[] = options.map((opt) => {
-      if (opt.id.startsWith('legacy:')) {
-        return { id: null, name: opt.label || null }
-      }
-      return { id: opt.id, name: opt.label || null }
-    })
-    onChange(next)
+    onChange(options.map((opt) => ({ id: opt.id, name: opt.label || null })))
   }
 
   const removeAt = (idx: number) => {
@@ -74,15 +63,12 @@ export const PlantContributorsPicker: React.FC<Props> = ({ value, onChange }) =>
         <div className="flex flex-wrap gap-2">
           {value.map((c, idx) => (
             <span
-              key={(c.id || c.name || 'anon') + ':' + idx}
+              key={c.id + ':' + idx}
               className="inline-flex items-center gap-1.5 rounded-full border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] px-2.5 py-1 text-xs"
-              title={c.id ? `profile ${c.id}` : 'legacy entry (no profile linked)'}
+              title={`profile ${c.id}`}
             >
               <User className="h-3 w-3 text-stone-500" />
               <span>{c.name || 'Unknown'}</span>
-              {!c.id && (
-                <span className="text-[10px] text-amber-600 dark:text-amber-400">legacy</span>
-              )}
               <button
                 type="button"
                 aria-label={`Remove ${c.name || 'contributor'}`}

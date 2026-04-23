@@ -5609,7 +5609,6 @@ export const AdminPage: React.FC = () => {
       uploadedAt: string | null;
       gardenPlantId: string | null;
       plantName: string | null;
-      adminCommentary: string | null;
     }>;
     scansTotal?: number;
     scansThisMonth?: number;
@@ -6136,7 +6135,6 @@ export const AdminPage: React.FC = () => {
                 uploadedAt: f?.uploadedAt || f?.uploaded_at || null,
                 gardenPlantId: f?.gardenPlantId || f?.garden_plant_id || null,
                 plantName: f?.plantName || f?.plant_name || null,
-                adminCommentary: f?.adminCommentary || f?.admin_commentary || null,
               };
               })
             : [],

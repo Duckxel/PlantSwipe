@@ -193,7 +193,7 @@ const TEXT_FIELDS = new Set([
   'nutritionalValue', 'infusionBenefits', 'infusionRecipeIdeas',
   'medicinalBenefits', 'medicinalUsage', 'medicinalWarning', 'medicinalHistory',
   'aromatherapyBenefits', 'essentialOilBlends',
-  'symbiosisNotes', 'adminCommentary',
+  'symbiosisNotes',
 ])
 
 // String array (tag) fields

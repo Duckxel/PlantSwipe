@@ -12,7 +12,6 @@ const IGNORED_FIELDS = new Set<string>([
   'createdAt',
   'createdTime',
   'meta',
-  'adminCommentary', // replaced by plant_admin_notes
   // Nested aggregates already represented by flat fields:
   'identity',
   'plantCare',

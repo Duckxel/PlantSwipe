@@ -45,7 +45,7 @@ import { BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS } from "@/lib/plantFormCategories"
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'variety', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
   // Meta fields — admin-only
-  'meta', 'adminCommentary', 'contributors', 'status',
+  'meta', 'contributors', 'status',
   // Featured months — curated by admin
   'featuredMonth',
   // Plant link fields — AI is unaware of plants in our DB
@@ -162,37 +162,22 @@ const normalizeTimePeriodSlug = (value?: string | null): string | null => {
   return slug || null
 }
 
-type AiContributor = { id: string | null; name: string | null }
+type AiContributor = { id: string }
 
 const mergeContributors = (
-  existing: Array<AiContributor | string | null | undefined>,
-  extras: Array<AiContributor | string | null | undefined>,
+  existing: Array<AiContributor | { id?: unknown } | null | undefined>,
+  extras: Array<AiContributor | { id?: unknown } | null | undefined>,
 ): AiContributor[] => {
-  const combined = [...existing, ...extras]
-  const seenIds = new Set<string>()
-  const seenNames = new Set<string>()
+  const seen = new Set<string>()
   const out: AiContributor[] = []
-  for (const entry of combined) {
-    if (entry == null) continue
-    let id: string | null = null
-    let name: string | null = null
-    if (typeof entry === 'string') {
-      name = entry.trim() || null
-    } else if (typeof entry === 'object') {
-      const raw = entry as { id?: unknown; name?: unknown }
-      if (typeof raw.id === 'string' && raw.id.trim()) id = raw.id.trim()
-      if (typeof raw.name === 'string' && raw.name.trim()) name = raw.name.trim()
-    }
-    if (!id && !name) continue
-    if (id) {
-      if (seenIds.has(id)) continue
-      seenIds.add(id)
-    } else if (name) {
-      const k = name.toLowerCase()
-      if (seenNames.has(k)) continue
-      seenNames.add(k)
-    }
-    out.push({ id, name })
+  for (const entry of [...existing, ...extras]) {
+    if (!entry || typeof entry !== 'object') continue
+    const id = (entry as { id?: unknown }).id
+    if (typeof id !== 'string' || !id.trim()) continue
+    const trimmed = id.trim()
+    if (seen.has(trimmed)) continue
+    seen.add(trimmed)
+    out.push({ id: trimmed })
   }
   return out
 }
@@ -220,15 +205,14 @@ async function fetchRequestContributors(requestId: string): Promise<AiContributo
     if (userIds.size === 0) return []
     const { data: profilesData, error: profilesError } = await supabase
       .from('profiles')
-      .select('id, display_name')
+      .select('id')
       .in('id', Array.from(userIds))
     if (profilesError) throw new Error(profilesError.message)
     const contributors: AiContributor[] = (profilesData || [])
-      .map((profile: any) => ({
-        id: typeof profile?.id === 'string' ? profile.id : null,
-        name: typeof profile?.display_name === 'string' ? profile.display_name.trim() || null : null,
-      }))
-      .filter((c) => c.id || c.name)
+      .map((profile: any): AiContributor | null =>
+        typeof profile?.id === 'string' && profile.id ? { id: profile.id } : null,
+      )
+      .filter((c): c is AiContributor => Boolean(c))
     return mergeContributors(contributors, [])
   } catch (err) {
     console.warn('[aiPrefillService] Failed to load request contributors', err)
@@ -376,13 +360,8 @@ async function upsertContributors(plantId: string, contributors: AiContributor[]
   await supabase.from('plant_contributors').delete().eq('plant_id', plantId)
   if (!contributors.length) return
   const rows = contributors
-    .map((c) => {
-      const id = c.id && c.id.trim() ? c.id.trim() : null
-      const name = c.name && c.name.trim() ? c.name.trim() : null
-      if (!id && !name) return null
-      return { plant_id: plantId, contributor_id: id, contributor_name: name }
-    })
-    .filter((r): r is { plant_id: string; contributor_id: string | null; contributor_name: string | null } => Boolean(r))
+    .map((c) => (c.id && c.id.trim() ? { plant_id: plantId, contributor_id: c.id.trim() } : null))
+    .filter((r): r is { plant_id: string; contributor_id: string } => Boolean(r))
   if (!rows.length) return
   const { error } = await supabase.from('plant_contributors').insert(rows)
   if (error) throw new Error(error.message)
@@ -711,9 +690,13 @@ export async function processPlantRequest(
     const normalizedStatus = String(plant.status || 'in_progress').toLowerCase()
     const createdTimeValue = new Date().toISOString()
     const requestContributors = await fetchRequestContributors(requestId)
-    const contributors = mergeContributors(requestContributors, [
-      { id: null, name: createdBy ?? null },
-    ])
+    // Seed in the admin who launched the run (by profile id). `createdBy` is
+    // kept only for the plants.created_by display string; contributors are
+    // id-only.
+    const contributors = mergeContributors(
+      requestContributors,
+      authorId ? [{ id: authorId }] : [],
+    )
     
     // Pre-save cleanup: clear fields that are gated off by boolean toggles or missing utility values
     // This prevents AI-filled data from being saved when its gate is disabled
@@ -820,7 +803,6 @@ export async function processPlantRequest(
       harmful_plants: filterValidUuids(plant.harmfulPlants),
       // Section 9: Meta
       status: normalizedStatus,
-      admin_commentary: plant.adminCommentary || null,
       created_by: createdBy || null,
       created_time: createdTimeValue,
       updated_by: createdBy || null,

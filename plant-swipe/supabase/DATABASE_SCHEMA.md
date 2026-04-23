@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Apr 23, 2026:** **Dropped legacy admin_commentary + contributor_name.** Now that the data migrations have been applied, `plants.admin_commentary` is dropped and `plant_contributors.contributor_name` is removed (along with its legacy unique index and the id-or-name check constraint). `plant_contributors.contributor_id` is now `NOT NULL` with `ON DELETE CASCADE` and the single unique is `(plant_id, contributor_id)`. Orphan contributor rows that couldn't be resolved to a profile during backfill are deleted by the idempotent cleanup block in `03_plants_and_colors.sql`. Client code purged of every `adminCommentary` / `contributor_name` reference across pages, services, schema, diff helper, and server.js.
 - **Apr 22, 2026:** **Contributors keyed by profile id.** Added `plant_contributors.contributor_id` (uuid FK to `profiles`, `ON DELETE SET NULL`) alongside the existing `contributor_name` (now nullable, kept only as legacy snapshot). Replaced the case-insensitive name unique index with two partial uniques (one per id, one per legacy name) and added a check constraint requiring either an id or a non-empty name. New admin UI uses a shared user-search picker (same `SearchItem` pattern as Admin Event notifications). Migration `20260422100000_backfill_plant_contributor_ids.sql` resolves existing names to profile ids via `display_name`. Schema file: `03_plants_and_colors.sql`.
 - **Apr 22, 2026:** **Plant change history + admin notes thread.** New `plant_history` table logs per-plant admin actions (field edits, translations, AI fills, note add/edit/delete) — insert-only, admin/editor select. New `plant_admin_notes` table replaces the legacy `plants.admin_commentary` textarea with a chat-style thread (any admin can add/edit/delete any note; all mutations mirrored into `plant_history`). Schema file: `03_plants_and_colors.sql`.
 - **Apr 13, 2026:** **Native push tokens, tutorial, GDPR expansion, companion cleanup.** Added `user_fcm_tokens` table for native (Capacitor) FCM/APNs device tokens. Added `tutorial_completed` boolean column to `profiles` for onboarding tutorial persistence. Migration `20260408000000_clean_bad_companion_data.sql` bulk-cleans bad AI-filled companion data from `plants` table. Migration `20260408100000_fix_admin_event_notifications_rls.sql` fixes RLS so non-admin users can receive event notifications. GDPR delete handlers expanded to 10 additional tables (`15_gdpr_and_preferences.sql`). Schema files: `01_extensions_and_setup.sql`, `11_notifications_and_tasks.sql`, `15_gdpr_and_preferences.sql`, `17_admin_event_notifications.sql`.
@@ -831,7 +832,7 @@ sponsored_shop_ids        TEXT[]                 -- Merchant IDs (future sponsor
 
 -- Section 9: Meta
 status                    TEXT                   -- CHECK: in_progress, rework, review, approved
-admin_commentary          TEXT
+-- admin_commentary removed — replaced by the plant_admin_notes thread.
 created_by                TEXT
 created_time              TIMESTAMPTZ NOT NULL DEFAULT now()
 updated_by                TEXT
@@ -982,20 +983,17 @@ created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 
 ### `plant_contributors`
 
-Contributors per plant. Admin/editor write only; public read. New rows carry a profile id (`contributor_id`); `contributor_name` is kept only as a snapshot fallback for legacy rows inserted before the id backfill. Every row must have either an id or a non-empty name (CHECK constraint).
+Contributors per plant, identified solely by profile id. Admin/editor write only; public read. The legacy `contributor_name` column was dropped after the id-backfill migration ran; display names are resolved from `profiles` at read time.
 
 ```sql
-id                UUID PRIMARY KEY DEFAULT gen_random_uuid()
-plant_id          TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
-contributor_id    UUID REFERENCES profiles(id) ON DELETE SET NULL
-contributor_name  TEXT          -- legacy snapshot fallback
-created_at        TIMESTAMPTZ NOT NULL DEFAULT now()
-CHECK (contributor_id IS NOT NULL OR (contributor_name IS NOT NULL AND length(btrim(contributor_name)) > 0))
-UNIQUE(plant_id, contributor_id)           WHERE contributor_id IS NOT NULL
-UNIQUE(plant_id, lower(contributor_name))  WHERE contributor_id IS NULL
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
+contributor_id  UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+UNIQUE(plant_id, contributor_id)
 ```
 
-Backfill migration `20260422100000_backfill_plant_contributor_ids.sql` resolves existing `contributor_name` values to profile ids via `profiles.display_name` (case-insensitive) and removes would-be duplicates before update. The Plant Create/Edit page now uses a shared `SearchItem`-powered user picker (`PlantContributorsPicker`) to add contributors by id; PlantInfoPage resolves the live `display_name` via a joined `profile:contributor_id(id, display_name)` select.
+The Plant Create/Edit page uses a shared `SearchItem`-backed user picker (`PlantContributorsPicker`); PlantInfoPage joins `profile:contributor_id(id, display_name)` to render the current display name. Renaming a profile updates every plant page where they appear.
 
 ### `plant_infusion_mixes`
 
