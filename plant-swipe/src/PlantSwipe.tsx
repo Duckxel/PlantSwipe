@@ -2513,7 +2513,7 @@ export default function PlantSwipe() {
                         }
                       : undefined
                   }
-                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-all duration-300 ${
+                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100 dark:bg-[#1e1e1e] shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-opacity duration-150 ${
                     searchBarVisible ? 'opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
                   }`}
                 >

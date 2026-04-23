@@ -65,16 +65,16 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
       return 'flex justify-center'
     }
     if (count === 2) {
-      return 'flex justify-center gap-5 flex-wrap'
+      return 'grid grid-cols-2 gap-3 sm:gap-5'
     }
-    // 3 or more - use grid
-    return 'grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5'
+    // 3 or more — always 3 per row so the section stays compact on mobile
+    return 'grid grid-cols-3 gap-3 sm:gap-5'
   }
 
-  // For 1 or 2 items, we need to constrain the width
+  // Single garden gets a constrained width so it doesn't span the whole row
   const getItemClasses = (count: number) => {
-    if (count === 1 || count === 2) {
-      return 'w-full max-w-[320px]'
+    if (count === 1) {
+      return 'w-full max-w-[280px]'
     }
     return ''
   }
@@ -89,12 +89,12 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-5">
+        <div className="grid grid-cols-3 gap-3 sm:gap-5">
           {[1, 2, 3].map(i => (
             <div key={i} className="space-y-2">
               <div className="aspect-[4/3] rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 dark:from-stone-800 dark:to-stone-900 animate-pulse">
                 <div className="h-full w-full flex items-center justify-center">
-                  <TreeDeciduous className="h-10 w-10 text-stone-300 dark:text-stone-600 animate-pulse" />
+                  <TreeDeciduous className="h-8 w-8 sm:h-10 sm:w-10 text-stone-300 dark:text-stone-600 animate-pulse" />
                 </div>
               </div>
             </div>
