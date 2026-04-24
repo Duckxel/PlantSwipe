@@ -8,7 +8,7 @@ import { useAuth } from "@/context/AuthContext"
 import { EditProfileDialog, type EditProfileValues } from "@/components/profile/EditProfileDialog"
 import { applyAccentByKey, saveAccentKey, getAccentOption, type AccentKey } from "@/lib/accent"
 import { validateUsername } from "@/lib/username"
-import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Flame, Sprout, Home, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal, Briefcase, ExternalLink, Leaf } from "lucide-react"
+import { MapPin, User as UserIcon, UserPlus, Check, Lock, EyeOff, Trophy, UserCheck, Share2, MoreVertical, AlertTriangle, Ban, MessageCircle, Bug, Medal, Briefcase, ExternalLink, Leaf } from "lucide-react"
 import { ProfileNameBadges } from "@/components/profile/UserRoleBadges"
 import type { UserRole } from "@/constants/userRoles"
 import { hasBugCatcherRole } from "@/constants/userRoles"
@@ -1043,8 +1043,8 @@ export default function PublicProfilePage() {
                       <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{t('profile.gardens')}</span>
                     </div>
                     <div className="flex flex-col items-center">
-                      <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.friendsCount ?? 0}</span>
-                      <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{(stats?.friendsCount ?? 0) === 1 ? t('profile.friend') : t('profile.friends')}</span>
+                      <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</span>
+                      <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{t('profile.currentStreak')}</span>
                     </div>
                   </div>
                 )}
@@ -1434,29 +1434,39 @@ export default function PublicProfilePage() {
               <>
                 <div className="mt-4">
                   <Card className={glassCard}>
-                    <CardContent className="p-6 md:p-8 space-y-4">
-                      <div className="flex items-center justify-between gap-3">
+                    <CardContent className="p-6 md:p-8 space-y-6">
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="text-lg font-semibold">{t("profile.highlights")}</div>
-                        {/* Bug Catcher Badge - simple inline display */}
-                        {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
-                          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-sm">
-                            <Bug className="h-4 w-4 text-orange-500" />
-                            <span className="font-medium tabular-nums">{stats.bugPoints} pts</span>
-                            {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
-                              <>
-                                <span className="text-stone-400">•</span>
-                                <span className="text-stone-600 dark:text-stone-400">#{stats.bugCatcherRank}</span>
-                              </>
-                            )}
-                            {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
-                              <Medal className="h-3.5 w-3.5 text-amber-500" />
-                            )}
-                          </div>
-                        )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Longest streak pill — the only stat not shown in the hero */}
+                          {stats?.bestStreak != null && stats.bestStreak > 0 && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-50 dark:bg-amber-900/20 border border-amber-200/60 dark:border-amber-800/40 text-sm">
+                              <Trophy className="h-4 w-4 text-amber-500" />
+                              <span className="text-xs opacity-70">{t('profile.longestStreak')}</span>
+                              <span className="font-semibold tabular-nums">{stats.bestStreak}</span>
+                            </div>
+                          )}
+                          {/* Bug Catcher Badge - simple inline display */}
+                          {pp.roles && hasBugCatcherRole(pp.roles) && stats?.bugPoints !== undefined && (stats.bugPoints > 0 || (stats.bugCatcherRank && stats.bugCatcherRank <= 10)) && (
+                            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-stone-100 dark:bg-stone-800 text-sm">
+                              <Bug className="h-4 w-4 text-orange-500" />
+                              <span className="font-medium tabular-nums">{stats.bugPoints} pts</span>
+                              {stats.bugCatcherRank && stats.bugCatcherRank > 0 && (
+                                <>
+                                  <span className="text-stone-400">•</span>
+                                  <span className="text-stone-600 dark:text-stone-400">#{stats.bugCatcherRank}</span>
+                                </>
+                              )}
+                              {stats.bugCatcherRank && stats.bugCatcherRank <= 10 && (
+                                <Medal className="h-3.5 w-3.5 text-amber-500" />
+                              )}
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    <div className="flex flex-col md:flex-row items-center justify-center gap-6 md:gap-0">
-                      {/* Task completion grid - left side */}
-                      <div className="flex-1 flex justify-center items-center py-2">
+
+                      {/* Task completion heatmap */}
+                      <div className="flex justify-center items-center py-2">
                         <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
                           {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
                             <div
@@ -1472,46 +1482,12 @@ export default function PublicProfilePage() {
                           ))}
                         </div>
                       </div>
-                      
-                      {/* Horizontal divider on mobile, vertical on desktop */}
-                      <div className="w-full h-px md:hidden bg-stone-200 dark:bg-[#3e3e42]" />
-                      <div className="hidden md:block w-px h-full min-h-[200px] bg-stone-300 dark:bg-[#3e3e42] mx-4" />
-                      
-                      {/* Highlight cards - right side, 2x2 grid */}
-                      <div className="flex-1 flex justify-center items-center py-2">
-                        <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
-                              <Sprout className="h-4 w-4 sm:h-5 sm:w-5 text-emerald-600" />
-                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.plantsOwned')}</div>
-                            </div>
-                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</div>
-                          </div>
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
-                              <Home className="h-4 w-4 sm:h-5 sm:w-5 text-blue-600" />
-                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.gardens')}</div>
-                            </div>
-                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</div>
-                          </div>
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
-                              <Flame className="h-4 w-4 sm:h-5 sm:w-5 text-orange-500" />
-                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.currentStreak')}</div>
-                            </div>
-                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.currentStreak ?? '—'}</div>
-                          </div>
-                          <div className="rounded-xl border border-stone-200 dark:border-[#3e3e42] p-3 sm:p-4 text-center min-w-[100px] sm:min-w-[120px]">
-                            <div className="flex items-center justify-center gap-1 sm:gap-1.5 mb-1.5 sm:mb-2">
-                              <Trophy className="h-4 w-4 sm:h-5 sm:w-5 text-amber-500" />
-                              <div className="text-[10px] sm:text-xs opacity-60">{t('profile.longestStreak')}</div>
-                            </div>
-                            <div className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.bestStreak ?? '—'}</div>
-                          </div>
-                        </div>
+
+                      {/* Badges — merged into Highlights, hidden automatically when empty */}
+                      <div className="pt-2 border-t border-stone-200/60 dark:border-[#3e3e42]/60">
+                        <ProfileBadges userId={pp.id} embedded limit={5} className="pt-4" />
                       </div>
-                    </div>
-                    
+
                 {tooltip && createPortal(
                   <div
                     className="fixed z-[70] pointer-events-none"
@@ -1527,8 +1503,6 @@ export default function PublicProfilePage() {
               </CardContent>
             </Card>
           </div>
-          
-          <ProfileBadges userId={pp.id} className={glassCard} />
 
           <PublicGardensSection userId={pp.id} isOwner={isOwner} />
           
