@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
@@ -7573,8 +7574,7 @@ export const AdminPage: React.FC = () => {
                         </div>
                         <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <select
-                              className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                            <Select
                               value={selectedBranch}
                               onChange={(e) =>
                                 setSelectedBranch(e.target.value)
@@ -7593,7 +7593,7 @@ export const AdminPage: React.FC = () => {
                                   </option>
                                 ))
                               )}
-                            </select>
+                            </Select>
                           </div>
                           <Button
                             variant="outline"
@@ -9028,8 +9028,7 @@ export const AdminPage: React.FC = () => {
                                           />
                                         </div>
                                         <div className="w-full md:w-52">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={selectedFeaturedMonth}
                                             onChange={(e) =>
                                               setSelectedFeaturedMonth(e.target.value as FeaturedMonthSlug | "none" | "all")
@@ -9042,11 +9041,10 @@ export const AdminPage: React.FC = () => {
                                                 {FEATURED_MONTH_LABELS[slug]}
                                               </option>
                                             ))}
-                                          </select>
+                                          </Select>
                                         </div>
                                         <div className="w-full md:w-44">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={plantSortOption}
                                             onChange={(e) =>
                                               setPlantSortOption(e.target.value as PlantSortOption)
@@ -9060,11 +9058,10 @@ export const AdminPage: React.FC = () => {
                                             <option value="likes">Most Likes</option>
                                             <option value="views">Most Views</option>
                                             <option value="images">Image Count</option>
-                                          </select>
+                                          </Select>
                                         </div>
                                         <div className="w-full md:w-32">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={plantPageSize}
                                             onChange={(e) => setPlantPageSize(Number(e.target.value))}
                                           >
@@ -9073,7 +9070,7 @@ export const AdminPage: React.FC = () => {
                                                 {size} per page
                                               </option>
                                             ))}
-                                          </select>
+                                          </Select>
                                         </div>
                                       </div>
                                     </div>
@@ -14189,8 +14186,7 @@ const BroadcastControls: React.FC<{
             onChange={(e) => setMessage(e.target.value)}
             maxLength={200}
           />
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          <Select
             value={severity || "warning"}
             onChange={(e) => {
               const v = e.target.value;
@@ -14203,9 +14199,8 @@ const BroadcastControls: React.FC<{
             <option value="info">Information</option>
             <option value="warning">Warning</option>
             <option value="danger">Danger</option>
-          </select>
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          </Select>
+          <Select
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             aria-label="Display time"
@@ -14218,7 +14213,7 @@ const BroadcastControls: React.FC<{
             <option value="5h">5 hours</option>
             <option value="1d">1 day</option>
             <option value="unlimited">Unlimited</option>
-          </select>
+          </Select>
           <div className="flex gap-2">
             <Button
               className="rounded-2xl"
@@ -14309,8 +14304,7 @@ const BroadcastControls: React.FC<{
             onChange={(e) => setMessage(e.target.value)}
             maxLength={200}
           />
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          <Select
             value={severity}
             onChange={(e) => {
               const v = e.target.value;
@@ -14323,9 +14317,8 @@ const BroadcastControls: React.FC<{
             <option value="info">Information</option>
             <option value="warning">Warning</option>
             <option value="danger">Danger</option>
-          </select>
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          </Select>
+          <Select
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             aria-label="Display time"
@@ -14338,7 +14331,7 @@ const BroadcastControls: React.FC<{
             <option value="5h">5 hours</option>
             <option value="1d">1 day</option>
             <option value="unlimited">Unlimited</option>
-          </select>
+          </Select>
           <Button
             className="rounded-2xl"
             onClick={onSubmit}

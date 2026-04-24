@@ -2,6 +2,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
@@ -1140,16 +1141,15 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-white/70">
                   <span className="text-xs">{t("gardenDashboard.journalSection.speed", "Speed")}:</span>
-                  <select
+                  <Select
                     value={timelapseSpeed}
                     onChange={(e) => setTimelapseSpeed(Number(e.target.value))}
-                    className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-white"
                   >
                     <option value={3000}>0.5x</option>
                     <option value={2000}>1x</option>
                     <option value={1000}>2x</option>
                     <option value={500}>4x</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="relative">

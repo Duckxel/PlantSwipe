@@ -1,6 +1,7 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
@@ -2754,16 +2755,15 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
               <div className="flex items-center gap-2 rounded-full bg-white/80 dark:bg-[#151b15]/80 border border-stone-200/70 dark:border-stone-700/60 px-3 py-1.5 shadow-inner shadow-emerald-100/40 dark:shadow-[inset_0_1px_0_rgba(16,185,129,0.25)]">
                 <label className="text-sm font-medium" htmlFor="create-language">{t('plantAdmin.languageLabel', 'Language')}</label>
-                <select
+                <Select
                   id="create-language"
-                  className="border rounded px-2 py-1 text-sm bg-background"
                   value={language}
                   onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
                 >
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>{lang.toUpperCase()}</option>
                   ))}
-                </select>
+                </Select>
               </div>
               <div className="flex flex-wrap gap-2 items-center">
                 <Button type="button" onClick={translatePlant} disabled={translating} className="rounded-2xl shadow-md" loading={translating}>
