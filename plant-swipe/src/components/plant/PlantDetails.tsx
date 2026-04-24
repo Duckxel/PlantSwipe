@@ -313,7 +313,114 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
-      <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
+      {/* Mobile: clean vertical layout — tags → big image → title → common names → overview */}
+      <div className="lg:hidden space-y-4">
+        {/* Tags above image */}
+        {(utilityBadges.length > 0 || seasons.length > 0 || plant.plantType) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="uppercase tracking-wide text-[10px] px-2.5 py-0.5 rounded-full">
+              {translatePlantType(plant.plantType)}
+            </Badge>
+            {utilityBadges.map((u) => (
+              <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] px-2.5 py-0.5 rounded-full">
+                {translateUtility(u)}
+              </Badge>
+            ))}
+            {seasons.length > 0 && (
+              <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] px-2.5 py-0.5 rounded-full">
+                {seasons.map(s => translateSeason(s)).join(" • ")}
+              </Badge>
+            )}
+          </div>
+        )}
+
+        {/* Big hero image */}
+        <div
+          className="relative w-full overflow-hidden rounded-3xl bg-stone-100 dark:bg-[#1a1a1a] shadow-xl"
+          style={{ aspectRatio: '1 / 1' }}
+          onTouchStart={handleTouchStart}
+          onTouchEnd={handleTouchEnd}
+        >
+          {activeImage ? (
+            <>
+              <img
+                src={activeImage.link}
+                alt={plant.name}
+                className="h-full w-full cursor-zoom-in object-cover"
+                onClick={openViewer}
+                draggable={false}
+                loading="lazy"
+              />
+              {images.length > 1 && (
+                <>
+                  <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label="Previous image">
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label="Next image">
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                  <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
+                    {images.map((_, idx) => (
+                      <button key={`m-dot-${idx}`} type="button" className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
+                    ))}
+                  </div>
+                </>
+              )}
+            </>
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-sm text-muted-foreground">
+              {t('plantDetails.noImage')}
+            </div>
+          )}
+        </div>
+
+        {/* Title & scientific name */}
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-foreground leading-tight tracking-tight">
+            {plant.name}
+            {plant.variety && (
+              <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xl font-extrabold tracking-tight">
+                &lsquo;{plant.variety}&rsquo;
+              </span>
+            )}
+          </h1>
+          {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
+            <p className="text-sm text-muted-foreground italic">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
+          )}
+          {commonNames.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1.5">
+              {commonNames.map((name, idx) => (
+                <span
+                  key={`m-given-${idx}-${name}`}
+                  className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground dark:bg-slate-900/60 dark:border-stone-700/60"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Overview */}
+        {(plant.presentation || plant.description || plant.identity?.overview) && (
+          <ExpandableOverview text={plant.presentation || plant.description || plant.identity?.overview || ''} />
+        )}
+
+        {/* Toxicity warning */}
+        {toxicityWarningConfig && (
+          <button
+            type="button"
+            onClick={scrollToToxicity}
+            className={`inline-flex items-center gap-2 rounded-xl border-2 px-3.5 py-2 text-xs font-semibold cursor-pointer transition-colors shadow-sm ${toxicityWarningConfig.className}`}
+          >
+            <toxicityWarningConfig.Icon className="h-4 w-4" />
+            {toxicityWarningConfig.label}
+          </button>
+        )}
+      </div>
+
+      {/* Desktop: existing side-by-side layout */}
+      <div className="hidden lg:block relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
         <div
           className="absolute inset-0 opacity-25 blur-3xl"
           style={{
@@ -321,47 +428,47 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               "radial-gradient(circle at 20% 20%, #34d39926, transparent 40%), radial-gradient(circle at 80% 10%, #fb718526, transparent 35%), radial-gradient(circle at 60% 80%, #22d3ee26, transparent 45%)",
           }}
         />
-        <div className="relative flex flex-col-reverse gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
-          <div className="flex-1 space-y-3 sm:space-y-4">
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <Badge variant="secondary" className="uppercase tracking-wide text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
+        <div className="relative flex flex-row gap-8 p-8">
+          <div className="flex-1 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant="secondary" className="uppercase tracking-wide text-xs px-3 py-1">
                 {translatePlantType(plant.plantType)}
               </Badge>
               {utilityBadges.map((u) => (
-                <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
+                <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-xs px-3 py-1">
                   {translateUtility(u)}
                 </Badge>
               ))}
               {seasons.length > 0 && (
-                <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] sm:text-xs px-2 sm:px-3 py-0.5 sm:py-1">
+                <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-xs px-3 py-1">
                   {seasons.map(s => translateSeason(s)).join(" • ")}
                 </Badge>
               )}
             </div>
             <div>
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground leading-tight">
+              <h1 className="text-4xl font-bold text-foreground leading-tight">
                 {plant.name}
                 {plant.variety && (
-                  <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-lg sm:text-xl md:text-2xl font-extrabold tracking-tight drop-shadow-sm">
+                  <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-2xl font-extrabold tracking-tight drop-shadow-sm">
                     &lsquo;{plant.variety}&rsquo;
                   </span>
                 )}
               </h1>
               {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
-                <p className="text-sm sm:text-base md:text-lg text-muted-foreground italic mt-1">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
+                <p className="text-lg text-muted-foreground italic mt-1">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
               )}
-                {commonNames.length > 0 && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {commonNames.map((name, idx) => (
-                      <span
-                        key={`given-name-${idx}-${name}`}
-                        className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground dark:bg-slate-900/60 dark:border-stone-700/60"
-                      >
-                        {name}
-                      </span>
-                    ))}
-                  </div>
-                )}
+              {commonNames.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {commonNames.map((name, idx) => (
+                    <span
+                      key={`d-given-${idx}-${name}`}
+                      className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground dark:bg-slate-900/60 dark:border-stone-700/60"
+                    >
+                      {name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
             {(plant.presentation || plant.description || plant.identity?.overview) && (
               <ExpandableOverview text={plant.presentation || plant.description || plant.identity?.overview || ''} />
@@ -370,16 +477,16 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               <button
                 type="button"
                 onClick={scrollToToxicity}
-                className={`inline-flex items-center gap-2 sm:gap-2.5 rounded-xl border-2 px-3.5 py-2 sm:px-4 sm:py-2.5 text-xs sm:text-sm font-semibold cursor-pointer transition-colors shadow-sm ${toxicityWarningConfig.className}`}
+                className={`inline-flex items-center gap-2.5 rounded-xl border-2 px-4 py-2.5 text-sm font-semibold cursor-pointer transition-colors shadow-sm ${toxicityWarningConfig.className}`}
               >
-                <toxicityWarningConfig.Icon className="h-4 w-4 sm:h-5 sm:w-5" />
+                <toxicityWarningConfig.Icon className="h-5 w-5" />
                 {toxicityWarningConfig.label}
               </button>
             )}
           </div>
-          <div className="flex w-full justify-center lg:w-auto">
+          <div className="flex justify-center">
             {activeImage ? (
-              <div className="relative z-0 aspect-[4/3] w-full overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner sm:w-80 lg:w-96" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
+              <div className="relative z-0 aspect-[4/3] w-96 overflow-hidden rounded-2xl border border-muted/60 bg-white/60 shadow-inner" onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}>
                 <img
                   src={activeImage.link}
                   alt={plant.name}
@@ -398,14 +505,14 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                     </button>
                     <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
                       {images.map((_, idx) => (
-                        <button key={`dot-${idx}`} type="button" className={`h-2.5 w-2.5 rounded-full transition ${idx === activeImageIndex ? "bg-white" : "bg-white/40"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
+                        <button key={`d-dot-${idx}`} type="button" className={`h-2.5 w-2.5 rounded-full transition ${idx === activeImageIndex ? "bg-white" : "bg-white/40"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
                       ))}
                     </div>
                   </>
                 )}
               </div>
             ) : (
-              <div className="flex aspect-[4/3] w-full items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground sm:w-80 lg:w-96">
+              <div className="flex aspect-[4/3] w-96 items-center justify-center rounded-2xl border border-dashed border-muted/60 bg-white/40 text-sm text-muted-foreground">
                 {t('plantDetails.noImage')}
               </div>
             )}
