@@ -314,15 +314,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
       {/* Mobile: clean vertical layout — tags → big image → title → common names → overview */}
-      <div className="lg:hidden relative overflow-hidden rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 p-4 sm:p-5 space-y-4 shadow-sm">
+      <div className="lg:hidden relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-5">
         <div
-          className="absolute inset-0 pointer-events-none opacity-60"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]"
           aria-hidden
-          style={{
-            background:
-              "radial-gradient(circle at 15% 10%, rgba(16,185,129,0.12), transparent 45%), radial-gradient(circle at 90% 95%, rgba(34,211,238,0.08), transparent 45%)",
-          }}
         />
+        <div className="relative z-10 space-y-4">
         {/* Tags above image */}
         {(utilityBadges.length > 0 || seasons.length > 0 || plant.plantType) && (
           <div className="flex flex-wrap items-center gap-1.5">
@@ -425,18 +422,16 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
             {toxicityWarningConfig.label}
           </button>
         )}
+        </div>
       </div>
 
       {/* Desktop: existing side-by-side layout */}
-      <div className="hidden lg:block relative overflow-hidden rounded-2xl sm:rounded-3xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 via-white/60 to-emerald-100/40 dark:from-emerald-950/30 dark:via-[#1f1f1f] dark:to-emerald-900/20 shadow-lg">
+      <div className="hidden lg:block relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f]">
         <div
-          className="absolute inset-0 pointer-events-none opacity-60"
-          style={{
-            background:
-              "radial-gradient(circle at 15% 15%, rgba(16,185,129,0.12), transparent 45%), radial-gradient(circle at 85% 10%, rgba(251,191,36,0.08), transparent 40%), radial-gradient(circle at 60% 90%, rgba(34,211,238,0.08), transparent 45%)",
-          }}
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]"
+          aria-hidden
         />
-        <div className="relative flex flex-row gap-8 p-8">
+        <div className="relative z-10 flex flex-row gap-8 p-8">
           <div className="flex-1 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <Badge variant="secondary" className="uppercase tracking-wide text-xs px-3 py-1">
