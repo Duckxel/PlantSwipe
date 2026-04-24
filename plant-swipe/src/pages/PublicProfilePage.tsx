@@ -1465,27 +1465,30 @@ export default function PublicProfilePage() {
                         </div>
                       </div>
 
-                      {/* Task completion heatmap */}
-                      <div className="flex justify-center items-center py-2">
-                        <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
-                          {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
-                            <div
-                              key={idx}
-                              tabIndex={0}
-                              className={`h-7 w-7 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
-                              onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                              onMouseLeave={hideTooltip}
-                              onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
-                              onBlur={hideTooltip}
-                              aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
-                            />
-                          ))}
+                      {/* Heatmap + Badges side-by-side on md+, stacked on mobile */}
+                      <div className="grid gap-6 md:grid-cols-[2fr_1fr] md:gap-8 items-start">
+                        {/* Task completion heatmap — left ~2/3 */}
+                        <div className="flex justify-center items-center py-2">
+                          <div className="grid grid-rows-4 grid-flow-col auto-cols-max gap-1.5 sm:gap-2">
+                            {daysFlat.map((item: { date: string; value: number; success: boolean }, idx: number) => (
+                              <div
+                                key={idx}
+                                tabIndex={0}
+                                className={`h-7 w-7 sm:h-10 sm:w-10 rounded-[4px] ${colorFor(item)}`}
+                                onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                                onMouseLeave={hideTooltip}
+                                onFocus={(e: React.FocusEvent<HTMLDivElement>) => showTooltip(e.currentTarget as HTMLDivElement, item)}
+                                onBlur={hideTooltip}
+                                aria-label={`${new Date(item.date).toLocaleDateString(i18n.language)}: ${item.value} ${t('profile.tasks')}${item.success ? `, ${t('profile.completedDay')}` : ''}`}
+                              />
+                            ))}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* Badges — merged into Highlights, hidden automatically when empty */}
-                      <div className="pt-2 border-t border-stone-200/60 dark:border-[#3e3e42]/60">
-                        <ProfileBadges userId={pp.id} embedded limit={5} className="pt-4" />
+                        {/* Badges — right ~1/3, divider on md (top on mobile) */}
+                        <div className="pt-4 border-t md:pt-0 md:border-t-0 md:border-l md:pl-6 border-stone-200/60 dark:border-[#3e3e42]/60">
+                          <ProfileBadges userId={pp.id} embedded limit={5} />
+                        </div>
                       </div>
 
                 {tooltip && createPortal(
