@@ -369,10 +369,15 @@ export const PlantInfoPageSkeleton: React.FC<{ label?: string }> = ({ label = 'L
         </div>
       </div>
 
-      {/* PlantDetails hero card */}
+      {/* PlantDetails hero card — matches the live hero's emerald ring + glow */}
       <div className="space-y-4 sm:space-y-6">
-        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-muted/50 bg-gradient-to-br from-emerald-50 via-white to-amber-50 dark:from-[#0b1220] dark:via-[#0a0f1a] dark:to-[#05080f] shadow-lg">
-          <div className="relative flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
+        <div className="relative overflow-hidden rounded-2xl sm:rounded-3xl ring-1 ring-inset ring-emerald-500/30 border border-emerald-400/30 bg-white dark:bg-[#141417] shadow-[0_18px_60px_-18px_rgba(16,185,129,0.45)] lg:shadow-[0_28px_80px_-22px_rgba(16,185,129,0.55)]">
+          <div
+            className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_55%)]"
+            aria-hidden
+          />
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" aria-hidden />
+          <div className="relative z-10 flex flex-col gap-3 sm:gap-4 p-3 sm:p-4 md:p-6 lg:flex-row lg:gap-8 lg:p-8">
             {/* Left: text content */}
             <div className="flex-1 space-y-3 sm:space-y-4">
               {/* Badges */}

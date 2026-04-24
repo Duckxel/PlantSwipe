@@ -983,6 +983,26 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+          {/* Admin stats — inline next to the Report button (admins only) */}
+          {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
+            <Badge
+              variant="secondary"
+              className="rounded-full px-3 py-1 text-[11px] font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-3 h-10"
+            >
+              {impressionCount !== null && (
+                <span className="flex items-center gap-1">
+                  <ChartNoAxesColumn className="h-3.5 w-3.5" />
+                  {formatCount(impressionCount)}
+                </span>
+              )}
+              {likesCount !== null && (
+                <span className="flex items-center gap-1">
+                  <Heart className="h-3.5 w-3.5" />
+                  {formatCount(likesCount)}
+                </span>
+              )}
+            </Badge>
+          )}
           {/* Report Button — hidden for plants still in construction */}
           {plant && plant.status !== 'in_progress' && (
             <Button
@@ -1072,29 +1092,6 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
-
-      {/* Admin stats — rendered BELOW the action bar so it never wraps the buttons */}
-      {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
-        <div className="flex justify-end">
-          <Badge
-            variant="secondary"
-            className="rounded-full px-3 py-1 text-[11px] font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-3"
-          >
-            {impressionCount !== null && (
-              <span className="flex items-center gap-1">
-                <ChartNoAxesColumn className="h-3.5 w-3.5" />
-                {formatCount(impressionCount)}
-              </span>
-            )}
-            {likesCount !== null && (
-              <span className="flex items-center gap-1">
-                <Heart className="h-3.5 w-3.5" />
-                {formatCount(likesCount)}
-              </span>
-            )}
-          </Badge>
-        </div>
-      )}
 
       {/* Check if plant is "In Progress" - show construction message for regular users, full page with disclaimer for privileged users */}
       {(() => {
