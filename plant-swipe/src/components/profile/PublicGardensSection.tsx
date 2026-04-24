@@ -64,11 +64,9 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
     if (count === 1) {
       return 'flex justify-center'
     }
-    if (count === 2) {
-      return 'grid grid-cols-2 gap-3 sm:gap-5'
-    }
-    // 3 or more — always 3 per row so the section stays compact on mobile
-    return 'grid grid-cols-3 gap-3 sm:gap-5'
+    // Cards would become unreadable at 3-per-row on narrow phones, so use
+    // 2 columns on mobile and 3 columns from sm: up.
+    return 'grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-5'
   }
 
   // Single garden gets a constrained width so it doesn't span the whole row
@@ -89,7 +87,7 @@ export const PublicGardensSection: React.FC<PublicGardensSectionProps> = ({ user
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-3 gap-3 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-5">
           {[1, 2, 3].map(i => (
             <div key={i} className="space-y-2">
               <div className="aspect-[4/3] rounded-2xl bg-gradient-to-br from-stone-100 to-stone-50 dark:from-stone-800 dark:to-stone-900 animate-pulse">
