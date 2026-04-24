@@ -983,11 +983,11 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-          {/* Admin stats — inline next to the Report button (admins only) */}
+          {/* Admin stats — inline next to the Report button on sm+, rendered as a floating pill over the hero on mobile */}
           {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
             <Badge
               variant="secondary"
-              className="rounded-full px-3 py-1 text-[11px] font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-3 h-10"
+              className="hidden sm:flex rounded-full px-3 py-1 text-[11px] font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] items-center gap-3 h-10"
             >
               {impressionCount !== null && (
                 <span className="flex items-center gap-1">
@@ -1192,13 +1192,35 @@ const PlantInfoPage: React.FC = () => {
                 </Badge>
               </div>
             )}
-            <PlantDetails
-              plant={plant}
-              liked={likedIds.includes(plant.id)}
-              onToggleLike={toggleLiked}
-              onBookmark={handleBookmark}
-              isBookmarked={isBookmarked}
-            />
+            <div className="relative">
+              <PlantDetails
+                plant={plant}
+                liked={likedIds.includes(plant.id)}
+                onToggleLike={toggleLiked}
+                onBookmark={handleBookmark}
+                isBookmarked={isBookmarked}
+              />
+              {/* Mobile-only: admin stats overlay pinned to the hero card top-right */}
+              {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
+                <Badge
+                  variant="secondary"
+                  className="sm:hidden absolute top-3 right-3 z-20 rounded-full px-2.5 py-1 text-[11px] font-medium bg-white/90 dark:bg-[#1a1a1d]/90 backdrop-blur text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-2.5 shadow-sm"
+                >
+                  {impressionCount !== null && (
+                    <span className="flex items-center gap-1">
+                      <ChartNoAxesColumn className="h-3 w-3" />
+                      {formatCount(impressionCount)}
+                    </span>
+                  )}
+                  {likesCount !== null && (
+                    <span className="flex items-center gap-1">
+                      <Heart className="h-3 w-3" />
+                      {formatCount(likesCount)}
+                    </span>
+                  )}
+                </Badge>
+              )}
+            </div>
             {Boolean(profile?.parent) && (
               <ToxicityWarningBanner
                 toxicityHuman={plant.toxicityHuman}
