@@ -73,6 +73,7 @@ SERVICE_NGINX="nginx"
 # askpass helper backed by PSSWORD_KEY loaded from common env files.
 SUDO=""
 ASKPASS_HELPER=""
+ASKPASS_PASS_FILE=""
 # Always initialize to avoid unbound variable under `set -u`
 PSSWORD_KEY_SOURCE=""
 if [[ $EUID -ne 0 ]]; then
@@ -114,13 +115,27 @@ if [[ $EUID -ne 0 ]]; then
   export PSSWORD_KEY
   if [[ -n "${PSSWORD_KEY:-}" && -n "$(command -v sudo 2>/dev/null)" ]]; then
     # Create a secure askpass helper that echoes the password on request.
-    # Embed the resolved password directly to avoid env-sanitization issues.
+    #
+    # The password is stashed in a separate 0600 file and the helper script
+    # just `cat`s it. We deliberately do NOT embed the password into the
+    # helper's shell source — an earlier revision did that via an unquoted
+    # heredoc (`printf "%s" "$PSSWORD_KEY"`), which silently mangled the
+    # generated script whenever the password contained `$`, `"`, `` ` ``, or
+    # `\`. Sudo then got the wrong string back and failed with "3 incorrect
+    # password attempts", even though PSSWORD_KEY was correct in .env.
     ASKPASS_HELPER="$(mktemp -t plantswipe-askpass.XXXXXX)"
-    chmod 0700 "$ASKPASS_HELPER"
+    ASKPASS_PASS_FILE="$(mktemp -t plantswipe-pw.XXXXXX)"
+    chmod 0600 "$ASKPASS_PASS_FILE"
+    # Write the password with a trailing newline (sudo's askpass reads one
+    # line). Use printf so no metacharacters get interpreted on write.
+    printf '%s\n' "$PSSWORD_KEY" > "$ASKPASS_PASS_FILE"
+    # mktemp paths only contain [A-Za-z0-9_./], so embedding via unquoted
+    # heredoc is safe here (no shell metachars possible in the path).
     cat >"$ASKPASS_HELPER" <<EOF
 #!/usr/bin/env bash
-exec printf "%s" "$(printf %s "${PSSWORD_KEY}")" 2>/dev/null
+cat "$ASKPASS_PASS_FILE"
 EOF
+    chmod 0700 "$ASKPASS_HELPER"
     export SUDO_ASKPASS="$ASKPASS_HELPER"
     SUDO="sudo -A"
     src_label="$([[ -n "$PSSWORD_KEY_SOURCE" ]] && echo "$PSSWORD_KEY_SOURCE" || echo env)"
@@ -128,8 +143,11 @@ EOF
   fi
 fi
 
-# Clean up temporary askpass helper on exit
-cleanup_askpass() { [[ -n "$ASKPASS_HELPER" && -f "$ASKPASS_HELPER" ]] && rm -f "$ASKPASS_HELPER" || true; }
+# Clean up temporary askpass helper and password file on exit
+cleanup_askpass() {
+  [[ -n "$ASKPASS_HELPER" && -f "$ASKPASS_HELPER" ]] && rm -f "$ASKPASS_HELPER" || true
+  [[ -n "$ASKPASS_PASS_FILE" && -f "$ASKPASS_PASS_FILE" ]] && rm -f "$ASKPASS_PASS_FILE" || true
+}
 trap cleanup_askpass EXIT
 
 # Attempt to repair common causes of git permission failures without changing users
