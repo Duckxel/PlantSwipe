@@ -210,47 +210,57 @@ export const ProfilePageSkeleton: React.FC = () => {
             <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/40 dark:bg-emerald-500/5 blur-3xl" />
           </div>
           
-          <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
-            <div className="flex items-start gap-4">
+          <CardContent className="relative z-10 p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4">
+            {/* Top row: avatar + inline stats */}
+            <div className="flex items-center gap-4 sm:gap-6">
               {/* Avatar skeleton */}
-              <div className="relative">
-                <Skeleton className="h-16 w-16 rounded-2xl" />
+              <div className="relative h-20 w-20 sm:h-24 sm:w-24 shrink-0">
+                <Skeleton className="h-full w-full rounded-full" />
                 <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-stone-400/50" />
+                  <Loader2 className="h-6 w-6 animate-spin text-stone-400/50" />
                 </div>
               </div>
-              
-              <div className="flex-1 min-w-0 space-y-3">
-                {/* Name and badge skeleton */}
-                <div className="flex items-center gap-2 flex-wrap">
-                  <Skeleton className="h-7 w-48 rounded-xl" />
-                  <Skeleton className="h-5 w-16 rounded-full" />
-                </div>
-                
-                {/* Location skeleton */}
-                <div className="flex items-center gap-1">
-                  <Skeleton className="h-4 w-4 rounded" />
-                  <Skeleton className="h-4 w-24 rounded-md" />
-                </div>
-                
-                {/* Status and joined date skeleton */}
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center gap-1.5">
-                    <Skeleton className="h-2 w-2 rounded-full" />
-                    <Skeleton className="h-3 w-16 rounded-md" />
+
+              {/* Inline stats skeleton (3 columns) */}
+              <div className="flex flex-1 items-center justify-around gap-2 min-w-0">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <div key={i} className="flex flex-col items-center gap-1.5">
+                    <Skeleton className="h-6 w-8 rounded-md" />
+                    <Skeleton className="h-3 w-12 rounded-md" />
                   </div>
-                  <Skeleton className="h-3 w-32 rounded-md" />
-                </div>
-              </div>
-              
-              {/* Action button skeleton */}
-              <div className="ml-auto flex-shrink-0">
-                <Skeleton className="h-10 w-10 rounded-2xl" />
+                ))}
               </div>
             </div>
-            
+
+            {/* Name + badges skeleton */}
+            <div className="space-y-1.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <Skeleton className="h-7 w-48 rounded-xl" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+
+              {/* Location / job / experience row */}
+              <div className="flex items-center gap-3">
+                <Skeleton className="h-4 w-24 rounded-md" />
+                <Skeleton className="h-4 w-20 rounded-md" />
+                <Skeleton className="h-5 w-16 rounded-full" />
+              </div>
+
+              {/* Online + joined date skeleton */}
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-3 w-20 rounded-md" />
+                <Skeleton className="h-3 w-32 rounded-md" />
+              </div>
+            </div>
+
+            {/* Action buttons row */}
+            <div className="flex items-center gap-2 pt-1">
+              <Skeleton className="h-10 flex-1 rounded-2xl" />
+              <Skeleton className="h-10 w-10 rounded-2xl" />
+            </div>
+
             {/* Bio skeleton */}
-            <div className="space-y-2 pt-2">
+            <div className="space-y-2 pt-1">
               <Skeleton className="h-4 w-full rounded-md" />
               <Skeleton className="h-4 w-3/4 rounded-md" />
             </div>
