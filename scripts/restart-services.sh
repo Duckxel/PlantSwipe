@@ -90,7 +90,10 @@ if [[ "$cmd" == "nginx" || "$cmd" == "all" ]]; then
   $SUDO nginx -t
   # Self-heal: if nginx is stopped (previous reload crashed it), start instead.
   # `systemctl reload` on an inactive service exits non-zero with "cannot reload".
-  if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+  # `is-active` is read-only and doesn't need sudo — calling it via sudo would
+  # trip the askpass prompt when running as www-data, since only
+  # `reload|start nginx` are in the NOPASSWD sudoers entry.
+  if systemctl is-active --quiet "$SERVICE_NGINX"; then
     $SUDO systemctl reload "$SERVICE_NGINX"
   else
     echo "[!] $SERVICE_NGINX is inactive — starting it instead"

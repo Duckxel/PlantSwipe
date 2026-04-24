@@ -2537,6 +2537,10 @@ $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
 Defaults:$SERVICE_USER !requiretty
 $SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+# `start nginx` is required by the reload-or-start self-heal pattern in
+# refresh-plant-swipe.sh and restart-services.sh. Without it, the admin-panel
+# refresh cannot recover a stopped nginx and needs SSH to intervene.
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
 # Allow website Pull & Build to sync service env and reload units without password

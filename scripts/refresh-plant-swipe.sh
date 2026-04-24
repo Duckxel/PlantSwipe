@@ -890,10 +890,15 @@ fi
 # `reload` refuses to act on a stopped service, which is exactly what left prod
 # offline on 2026-04-22 when apt-daily-upgrade restarted nginx during a transient
 # DNS failure. Previously this script would error out and give up.
+#
+# `systemctl is-active` is a read-only query that does not require root, so it
+# runs without `$SUDO`. Using sudo here would trigger the askpass helper and
+# fail with "incorrect password attempts" because the NOPASSWD sudoers entry
+# only covers `systemctl reload|start nginx`, not `is-active`.
 log "Testing nginx configuration…"
 $SUDO nginx -t
 
-if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+if systemctl is-active --quiet "$SERVICE_NGINX"; then
   log "Reloading nginx…"
   $SUDO systemctl reload "$SERVICE_NGINX"
 else
