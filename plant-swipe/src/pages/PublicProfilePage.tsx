@@ -1026,82 +1026,99 @@ export default function PublicProfilePage() {
                 <div className="absolute -top-6 -right-8 h-32 w-32 rounded-full bg-emerald-200/60 dark:bg-emerald-500/15 blur-3xl" />
                 <div className="absolute bottom-0 left-0 h-32 w-32 rounded-full bg-emerald-100/60 dark:bg-emerald-500/10 blur-3xl" />
               </div>
-              <CardContent className="relative z-10 p-6 md:p-8 space-y-4">
-              {/* Profile header - stacks on mobile, row on tablet+ */}
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-                {/* Avatar - centered on mobile */}
-                <div className="h-16 w-16 shrink-0 rounded-2xl bg-stone-200 overflow-hidden flex items-center justify-center mx-auto sm:mx-0" aria-hidden>
-                  <UserIcon
-                    className="h-8 w-8 text-black"
-                  />
+              <CardContent className="relative z-10 p-4 sm:p-6 md:p-8 space-y-3 sm:space-y-4">
+              {/* Top row: avatar + inline stats (Instagram/TikTok style) */}
+              <div className="flex items-center gap-4 sm:gap-6">
+                <div className="h-20 w-20 sm:h-24 sm:w-24 shrink-0 rounded-full bg-stone-200 dark:bg-stone-700 overflow-hidden ring-2 ring-white/60 dark:ring-stone-800/60 shadow-md flex items-center justify-center" aria-hidden>
+                  <UserIcon className="h-10 w-10 sm:h-12 sm:w-12 text-stone-500 dark:text-stone-300" />
                 </div>
-                {/* Profile info - takes remaining space */}
-                <div className="flex-1 min-w-0 text-center sm:text-left">
-                  <div className="flex items-center gap-2 flex-wrap justify-center sm:justify-start">
-                    <div className="flex items-center gap-1 min-w-0 max-w-full">
-                      <span 
-                        className="text-xl sm:text-2xl font-semibold truncate max-w-[200px] sm:max-w-[300px]"
-                        style={pp.accent_key ? { color: getAccentOption(pp.accent_key as AccentKey)?.hex } : undefined}
-                      >
-                        {pp.display_name || pp.username || t('profile.member')}
-                      </span>
-                      <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                {canViewProfile && (
+                  <div className="flex flex-1 items-center justify-around gap-2 min-w-0">
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.plantsTotal ?? '—'}</span>
+                      <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{t('profile.plantsOwned')}</span>
                     </div>
-                    {pp.is_banned && (
-                      <div title={t('profile.bannedProfileViewedByAdmin')} className="flex items-center gap-1">
-                        <Ban className="h-5 w-5 text-red-500 dark:text-red-400" />
-                        <span className="text-xs font-medium text-red-500 dark:text-red-400">{t('profile.bannedBadge')}</span>
-                      </div>
-                    )}
-                    {pp.isAdminViewingPrivateNonFriend && !pp.is_banned && (
-                      <div title={t('profile.privateProfileViewedByAdmin')}>
-                        <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
-                      </div>
-                    )}
-                    {!pp.roles?.length && !pp.is_admin && (
-                      <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
-                    )}
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.gardensCount ?? '—'}</span>
+                      <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{t('profile.gardens')}</span>
+                    </div>
+                    <div className="flex flex-col items-center">
+                      <span className="text-lg sm:text-xl font-semibold tabular-nums">{stats?.friendsCount ?? 0}</span>
+                      <span className="text-[10px] sm:text-xs opacity-60 uppercase tracking-wide">{(stats?.friendsCount ?? 0) === 1 ? t('profile.friend') : t('profile.friends')}</span>
+                    </div>
                   </div>
-                  {canViewProfile && (
-                    <>
-                      {/* Country + Job info line */}
-                      <div className="text-sm opacity-70 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 justify-center sm:justify-start">
-                        {pp.show_country !== false && pp.country ? (
-                          <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{pp.country}</span>
-                        ) : null}
-                        {pp.job ? (
-                          <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{pp.job}</span>
-                        ) : null}
-                        {pp.experience_level ? (
-                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
-                            <Leaf className="h-3 w-3" />
-                            {t(`setup.experience.${pp.experience_level}`, { defaultValue: pp.experience_level })}
-                          </span>
-                        ) : null}
-                      </div>
-                      <div className="text-xs opacity-70 mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 justify-center sm:justify-start">
-                        {pp.is_online ? (
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
-                        )}
-                        {pp.joined_at && (
-                          <span>
-                            • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString(i18n.language)}
-                          </span>
-                        )}
-                        {stats?.friendsCount != null && stats.friendsCount > 0 && (
-                          <span>• {stats.friendsCount} {stats.friendsCount !== 1 ? t('profile.friends') : t('profile.friend')}</span>
-                        )}
-                      </div>
-                    </>
+                )}
+              </div>
+
+              {/* Display name + badges + meta — left aligned */}
+              <div className="space-y-1.5">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex items-center gap-1 min-w-0 max-w-full">
+                    <span
+                      className="text-xl sm:text-2xl font-bold truncate max-w-[220px] sm:max-w-[360px]"
+                      style={pp.accent_key ? { color: getAccentOption(pp.accent_key as AccentKey)?.hex } : undefined}
+                    >
+                      {pp.display_name || pp.username || t('profile.member')}
+                    </span>
+                    <ProfileNameBadges roles={pp.roles} isAdmin={pp.is_admin ?? false} size="md" />
+                  </div>
+                  {pp.is_banned && (
+                    <div title={t('profile.bannedProfileViewedByAdmin')} className="flex items-center gap-1">
+                      <Ban className="h-5 w-5 text-red-500 dark:text-red-400" />
+                      <span className="text-xs font-medium text-red-500 dark:text-red-400">{t('profile.bannedBadge')}</span>
+                    </div>
+                  )}
+                  {pp.isAdminViewingPrivateNonFriend && !pp.is_banned && (
+                    <div title={t('profile.privateProfileViewedByAdmin')}>
+                      <EyeOff className="h-5 w-5 text-stone-500 opacity-70" />
+                    </div>
+                  )}
+                  {!pp.roles?.length && !pp.is_admin && (
+                    <span className="text-[11px] px-2 py-0.5 rounded-full border bg-stone-50 dark:bg-stone-800 text-stone-700 dark:text-stone-300 border-stone-200 dark:border-stone-600">{t('profile.member')}</span>
                   )}
                 </div>
-                {/* Action buttons - centered on mobile, right-aligned on tablet+ */}
-                <div className="flex items-center justify-center sm:justify-end gap-2 shrink-0 w-full sm:w-auto" ref={anchorRef}>
+                {canViewProfile && (
+                  <>
+                    <div className="text-sm opacity-70 flex flex-wrap items-center gap-x-3 gap-y-1">
+                      {pp.show_country !== false && pp.country ? (
+                        <span className="inline-flex items-center gap-1"><MapPin className="h-4 w-4" />{pp.country}</span>
+                      ) : null}
+                      {pp.job ? (
+                        <span className="inline-flex items-center gap-1"><Briefcase className="h-3.5 w-3.5" />{pp.job}</span>
+                      ) : null}
+                      {pp.experience_level ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-300">
+                          <Leaf className="h-3 w-3" />
+                          {t(`setup.experience.${pp.experience_level}`, { defaultValue: pp.experience_level })}
+                        </span>
+                      ) : null}
+                    </div>
+                    <div className="text-xs opacity-60 flex flex-wrap items-center gap-x-2 gap-y-1">
+                      {pp.is_online ? (
+                        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-600 dark:bg-emerald-500" />{t('profile.currentlyOnline')}</span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-stone-300" />{formatLastSeen(pp.last_seen_at)}</span>
+                      )}
+                      {pp.joined_at && (
+                        <span>
+                          • {t('profile.joined')} {new Date(pp.joined_at).toLocaleDateString(i18n.language)}
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Action buttons — full width row, primary fills, secondary compact */}
+              <div className="flex items-center gap-2 pt-1" ref={anchorRef}>
                   {isOwner ? (
                     <>
-                      <Button className="rounded-2xl self-start" variant="secondary" onClick={() => setMenuOpen((o) => !o)}>⋯</Button>
+                      <Button className="rounded-2xl flex-1" variant="secondary" onClick={() => setEditOpen(true)}>
+                        {t('profile.edit')}
+                      </Button>
+                      <Button className="rounded-2xl" variant="secondary" size="icon" aria-label={t('common.more', { defaultValue: 'More' })} onClick={() => setMenuOpen((o) => !o)}>
+                        <MoreVertical className="h-4 w-4" />
+                      </Button>
                       {menuOpen && menuPos && createPortal(
                         <div ref={menuRef} className="w-48 rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#252526] shadow z-[60] p-1" style={{ position: 'fixed', top: menuPos.top, right: menuPos.right }}>
                           <button className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] text-black dark:text-white flex items-center gap-2" onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); handleShare() }}>
@@ -1118,9 +1135,9 @@ export default function PublicProfilePage() {
                   ) : user?.id && !pp.disable_friend_requests ? (
                     <>
                       {friendStatus === 'none' && (
-                        <Button 
-                          className="rounded-2xl" 
-                          variant="default" 
+                        <Button
+                          className="rounded-2xl flex-1"
+                          variant="default"
                           onClick={sendFriendRequest}
                           disabled={friendRequestLoading}
                         >
@@ -1128,14 +1145,14 @@ export default function PublicProfilePage() {
                         </Button>
                       )}
                       {friendStatus === 'request_sent' && (
-                        <Button className="rounded-2xl" variant="secondary" disabled>
+                        <Button className="rounded-2xl flex-1" variant="secondary" disabled>
                           {t('profile.requestSent')}
                         </Button>
                       )}
                       {friendStatus === 'request_received' && (
-                        <Button 
-                          className="rounded-2xl" 
-                          variant="default" 
+                        <Button
+                          className="rounded-2xl flex-1"
+                          variant="default"
                           onClick={acceptFriendRequest}
                           disabled={friendRequestLoading}
                         >
@@ -1143,16 +1160,10 @@ export default function PublicProfilePage() {
                         </Button>
                       )}
                       {friendStatus === 'friends' && (
-                        <div className="flex flex-col items-center sm:items-end gap-1">
-                          <Button className="rounded-2xl" variant="secondary" disabled>
-                            {t('profile.friends')}
-                          </Button>
-                          {friendsSince && (
-                            <div className="text-[10px] opacity-60">
-                              {t('profile.since')} {new Date(friendsSince).toLocaleDateString(i18n.language)}
-                            </div>
-                          )}
-                        </div>
+                        <Button className="rounded-2xl flex-1" variant="secondary" disabled title={friendsSince ? `${t('profile.since')} ${new Date(friendsSince).toLocaleDateString(i18n.language)}` : undefined}>
+                          <Check className="h-4 w-4 mr-2" />
+                          {t('profile.friends')}
+                        </Button>
                       )}
                       {/* 3-dots menu for report/block */}
                       <div ref={otherMenuAnchorRef}>
@@ -1362,12 +1373,11 @@ export default function PublicProfilePage() {
                     </>
                   )}
                 </div>
-              </div>
               {canViewProfile && pp.bio && (
-                <div className="text-sm opacity-90 text-center sm:text-left">{pp.bio}</div>
+                <div className="text-sm opacity-90 whitespace-pre-line">{pp.bio}</div>
               )}
               {canViewProfile && pp.profile_link && (
-                <div className="text-center sm:text-left">
+                <div>
                   <a
                     href={pp.profile_link.startsWith('http') ? pp.profile_link : `https://${pp.profile_link}`}
                     target="_blank"
