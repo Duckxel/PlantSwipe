@@ -313,7 +313,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
-      {/* Mobile: clean vertical layout — tags → big image → title → common names → overview */}
+      {/* Mobile: clean vertical layout — title → image → tags → overview */}
       <div className="lg:hidden relative overflow-hidden rounded-2xl sm:rounded-3xl ring-1 ring-inset ring-emerald-500/30 border border-emerald-400/30 bg-white dark:bg-[#141417] p-4 sm:p-5 shadow-[0_18px_60px_-18px_rgba(16,185,129,0.55)]">
         <div
           className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_55%)]"
@@ -321,24 +321,32 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
         />
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" aria-hidden />
         <div className="relative z-10 space-y-4">
-        {/* Tags above image */}
-        {(utilityBadges.length > 0 || seasons.length > 0 || plant.plantType) && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Badge variant="secondary" className="uppercase tracking-wide text-[10px] px-2.5 py-0.5 rounded-full">
-              {translatePlantType(plant.plantType)}
-            </Badge>
-            {utilityBadges.map((u) => (
-              <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] px-2.5 py-0.5 rounded-full">
-                {translateUtility(u)}
-              </Badge>
-            ))}
-            {seasons.length > 0 && (
-              <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] px-2.5 py-0.5 rounded-full">
-                {seasons.map(s => translateSeason(s)).join(" • ")}
-              </Badge>
+        {/* Title & scientific name & common names */}
+        <div className="space-y-1">
+          <h1 className="text-3xl font-bold text-foreground leading-tight tracking-tight">
+            {plant.name}
+            {plant.variety && (
+              <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xl font-extrabold tracking-tight">
+                &lsquo;{plant.variety}&rsquo;
+              </span>
             )}
-          </div>
-        )}
+          </h1>
+          {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
+            <p className="text-sm text-muted-foreground italic">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
+          )}
+          {commonNames.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 pt-1.5">
+              {commonNames.map((name, idx) => (
+                <span
+                  key={`m-given-${idx}-${name}`}
+                  className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground dark:bg-slate-900/60 dark:border-stone-700/60"
+                >
+                  {name}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Big hero image */}
         <div
@@ -380,32 +388,24 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
           )}
         </div>
 
-        {/* Title & scientific name */}
-        <div className="space-y-1">
-          <h1 className="text-3xl font-bold text-foreground leading-tight tracking-tight">
-            {plant.name}
-            {plant.variety && (
-              <span className="ml-2 inline-block bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent text-xl font-extrabold tracking-tight">
-                &lsquo;{plant.variety}&rsquo;
-              </span>
+        {/* Tags below image */}
+        {(utilityBadges.length > 0 || seasons.length > 0 || plant.plantType) && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant="secondary" className="uppercase tracking-wide text-[10px] px-2.5 py-0.5 rounded-full">
+              {translatePlantType(plant.plantType)}
+            </Badge>
+            {utilityBadges.map((u) => (
+              <Badge key={u} variant="outline" className="bg-white/70 dark:bg-slate-900/70 text-[10px] px-2.5 py-0.5 rounded-full">
+                {translateUtility(u)}
+              </Badge>
+            ))}
+            {seasons.length > 0 && (
+              <Badge variant="outline" className="bg-amber-100/60 text-amber-900 dark:bg-amber-900/30 dark:text-amber-50 text-[10px] px-2.5 py-0.5 rounded-full">
+                {seasons.map(s => translateSeason(s)).join(" • ")}
+              </Badge>
             )}
-          </h1>
-          {(plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName) && (
-            <p className="text-sm text-muted-foreground italic">{plant.scientificNameSpecies || plant.scientificName || plant.identity?.scientificName}</p>
-          )}
-          {commonNames.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 pt-1.5">
-              {commonNames.map((name, idx) => (
-                <span
-                  key={`m-given-${idx}-${name}`}
-                  className="rounded-full border border-muted/40 bg-white/80 px-2.5 py-0.5 text-[11px] uppercase tracking-wide text-muted-foreground dark:bg-slate-900/60 dark:border-stone-700/60"
-                >
-                  {name}
-                </span>
-              ))}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Overview */}
         {(plant.presentation || plant.description || plant.identity?.overview) && (
@@ -558,7 +558,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
 export default PlantDetails
 
-const WORD_LIMIT = 25
+const WORD_LIMIT = 20
 
 const ExpandableOverview: React.FC<{ text: string }> = ({ text }) => {
   const { t } = useTranslation('common')
