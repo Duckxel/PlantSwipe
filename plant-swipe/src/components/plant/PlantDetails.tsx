@@ -314,11 +314,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
   return (
     <div className="space-y-4 sm:space-y-6 pb-12 sm:pb-16">
       {/* Mobile: clean vertical layout — tags → big image → title → common names → overview */}
-      <div className="lg:hidden relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-5">
+      <div className="lg:hidden relative overflow-hidden rounded-2xl sm:rounded-3xl ring-1 ring-inset ring-emerald-500/30 border border-emerald-400/30 bg-white dark:bg-[#141417] p-4 sm:p-5 shadow-[0_18px_60px_-18px_rgba(16,185,129,0.55)]">
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_55%)]"
           aria-hidden
         />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" aria-hidden />
         <div className="relative z-10 space-y-4">
         {/* Tags above image */}
         {(utilityBadges.length > 0 || seasons.length > 0 || plant.plantType) && (
@@ -426,11 +427,12 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
       </div>
 
       {/* Desktop: existing side-by-side layout */}
-      <div className="hidden lg:block relative overflow-hidden rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f]">
+      <div className="hidden lg:block relative overflow-hidden rounded-2xl sm:rounded-3xl ring-1 ring-inset ring-emerald-500/30 border border-emerald-400/30 bg-white dark:bg-[#141417] shadow-[0_28px_80px_-22px_rgba(16,185,129,0.55)]">
         <div
-          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]"
+          className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,185,129,0.22),_transparent_60%),radial-gradient(circle_at_bottom_right,_rgba(14,165,233,0.10),_transparent_55%)]"
           aria-hidden
         />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-400/70 to-transparent" aria-hidden />
         <div className="relative z-10 flex flex-row gap-8 p-8">
           <div className="flex-1 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
