@@ -1202,6 +1202,10 @@
       "zoomOut": "Réduire",
       "reset": "Réinitialiser"
     },
+    "overview": {
+      "readMore": "Lire la suite",
+      "readLess": "Réduire"
+    },
     "plantType": {
       "plant": "Plante",
       "herb": "Herbacée",
