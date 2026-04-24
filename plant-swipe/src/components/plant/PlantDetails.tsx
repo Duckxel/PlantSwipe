@@ -553,7 +553,7 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
 
 export default PlantDetails
 
-const WORD_LIMIT = 100
+const WORD_LIMIT = 40
 
 const ExpandableOverview: React.FC<{ text: string }> = ({ text }) => {
   const { t } = useTranslation('common')
