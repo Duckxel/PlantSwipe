@@ -510,7 +510,12 @@ export const AdminEventsPanel: React.FC = () => {
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
             Edit Event
           </h3>
-          <button onClick={handleCancel} className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+          <button
+            onClick={handleCancel}
+            className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none"
+            aria-label="Cancel edit"
+            title="Cancel edit"
+          >
             <X className="h-4 w-4 text-stone-500" />
           </button>
         </div>

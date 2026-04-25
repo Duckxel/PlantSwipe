@@ -785,7 +785,9 @@ export const AdminBugsPanel: React.FC = () => {
             {actionSearch && (
               <button
                 onClick={() => setActionSearch('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600"
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none rounded-sm"
+                aria-label="Clear search"
+                title="Clear search"
               >
                 <X className="h-4 w-4" />
               </button>
