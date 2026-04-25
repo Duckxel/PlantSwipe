@@ -2607,6 +2607,18 @@ function ColorPicker({ colors, onChange }: { colors: PlantColor[]; onChange: (v:
   )
 }
 
+// ⚡ Bolt: Precompute map to avoid O(N) .find() on every render for every field
+const baseFieldsByKey = baseFields.reduce((acc, f) => { acc[f.key] = f; return acc; }, {} as Record<string, FieldConfig>);
+
+// ⚡ Bolt: Precompute map to avoid O(N) .find() on every render for every field
+const identityFieldsByKey = identityFields.reduce((acc, f) => { acc[f.key] = f; return acc; }, {} as Record<string, FieldConfig>);
+
+// ⚡ Bolt: Precompute map to avoid O(N) .find() on every render for every field
+const safetyFieldsByKey = safetyFields.reduce((acc, f) => { acc[f.key] = f; return acc; }, {} as Record<string, FieldConfig>);
+
+// ⚡ Bolt: Precompute map to avoid O(N) .find() on every render for every field
+const careFieldsByKey = careFields.reduce((acc, f) => { acc[f.key] = f; return acc; }, {} as Record<string, FieldConfig>);
+
 export function PlantProfileForm({ value, onChange, colorSuggestions, companionSuggestions, biotopeSuggestions, beneficialSuggestions, harmfulSuggestions, categoryProgress, language = 'en', onImageRemove, onUploadImages, plantReports, plantVarieties, adminNotesSlot, historySlot, contributorsSlot }: PlantProfileFormProps) {
   const { t } = useTranslation('plantAdmin')
   const [selectedCategory, setSelectedCategory] = React.useState<string>('base')
@@ -2743,22 +2755,22 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
             {t('plantAdmin.basics.name.description', 'Canonical English name (unique, mandatory).')}
           </p>
         </div>
-        {renderField(value, setPath, baseFields.find(f => f.key === 'plantType')!, t)}
+        {renderField(value, setPath, baseFieldsByKey['plantType'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.taxonomy', 'Taxonomy')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, baseFields.find(f => f.key === 'scientificNameSpecies')!, t)}
-        {renderField(value, setPath, baseFields.find(f => f.key === 'variety')!, t)}
+        {renderField(value, setPath, baseFieldsByKey['scientificNameSpecies'], t)}
+        {renderField(value, setPath, baseFieldsByKey['variety'], t)}
       </div>
       <div className={fieldRowClass}>
-        {renderField(value, setPath, baseFields.find(f => f.key === 'family')!, t)}
-        {renderField(value, setPath, baseFields.find(f => f.key === 'commonNames')!, t)}
+        {renderField(value, setPath, baseFieldsByKey['family'], t)}
+        {renderField(value, setPath, baseFieldsByKey['commonNames'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.presentation', 'Presentation')} />
-      {renderField(value, setPath, baseFields.find(f => f.key === 'presentation')!, t)}
-      {renderField(value, setPath, baseFields.find(f => f.key === 'featuredMonth')!, t)}
+      {renderField(value, setPath, baseFieldsByKey['presentation'], t)}
+      {renderField(value, setPath, baseFieldsByKey['featuredMonth'], t)}
 
       <SectionDivider title={t('plantAdmin.sections.images', 'Images')} />
       <ImageEditor images={value.images || []} onChange={(imgs) => onChange({ ...value, images: imgs })} onRemove={onImageRemove} onUpload={onUploadImages} />
@@ -2769,38 +2781,38 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     <div className="space-y-5">
       <SectionDivider title={t('plantAdmin.sections.partsHabitat', 'Plant Parts & Habitat')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, identityFields.find(f => f.key === 'plantPart')!, t)}
-        {renderField(value, setPath, identityFields.find(f => f.key === 'habitat')!, t)}
+        {renderField(value, setPath, identityFieldsByKey['plantPart'], t)}
+        {renderField(value, setPath, identityFieldsByKey['habitat'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.originClimate', 'Origin & Climate')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, identityFields.find(f => f.key === 'origin')!, t)}
-        {renderField(value, setPath, identityFields.find(f => f.key === 'climate')!, t)}
+        {renderField(value, setPath, identityFieldsByKey['origin'], t)}
+        {renderField(value, setPath, identityFieldsByKey['climate'], t)}
       </div>
       <div className={fieldRowClass}>
-        {renderField(value, setPath, identityFields.find(f => f.key === 'season')!, t)}
-        {renderField(value, setPath, identityFields.find(f => f.key === 'livingSpace')!, t)}
+        {renderField(value, setPath, identityFieldsByKey['season'], t)}
+        {renderField(value, setPath, identityFieldsByKey['livingSpace'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.utilityUse', 'Utility & Use')} />
-      {renderField(value, setPath, identityFields.find(f => f.key === 'utility')!, t)}
-      {shouldShowField(identityFields.find(f => f.key === 'vegetable')!) && renderField(value, setPath, identityFields.find(f => f.key === 'vegetable')!, t)}
-      {shouldShowField(identityFields.find(f => f.key === 'ediblePart')!) && renderField(value, setPath, identityFields.find(f => f.key === 'ediblePart')!, t)}
+      {renderField(value, setPath, identityFieldsByKey['utility'], t)}
+      {shouldShowField(identityFieldsByKey['vegetable']) && renderField(value, setPath, identityFieldsByKey['vegetable'], t)}
+      {shouldShowField(identityFieldsByKey['ediblePart']) && renderField(value, setPath, identityFieldsByKey['ediblePart'], t)}
 
       <SectionDivider title={t('plantAdmin.sections.lifecycle', 'Life Cycle & Foliage')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, identityFields.find(f => f.key === 'lifeCycle')!, t)}
-        {renderField(value, setPath, identityFields.find(f => f.key === 'averageLifespan')!, t)}
+        {renderField(value, setPath, identityFieldsByKey['lifeCycle'], t)}
+        {renderField(value, setPath, identityFieldsByKey['averageLifespan'], t)}
       </div>
-      {renderField(value, setPath, identityFields.find(f => f.key === 'foliagePersistence')!, t)}
+      {renderField(value, setPath, identityFieldsByKey['foliagePersistence'], t)}
 
       <SectionDivider title={t('plantAdmin.sections.habitForm', 'Habit & Form')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, identityFields.find(f => f.key === 'thorny')!, t)}
+        {renderField(value, setPath, identityFieldsByKey['thorny'], t)}
       </div>
-      {renderField(value, setPath, identityFields.find(f => f.key === 'landscaping')!, t)}
-      {renderField(value, setPath, identityFields.find(f => f.key === 'plantHabit')!, t)}
+      {renderField(value, setPath, identityFieldsByKey['landscaping'], t)}
+      {renderField(value, setPath, identityFieldsByKey['plantHabit'], t)}
 
       <SectionDivider title={t('plantAdmin.sections.colors', 'Colors')} />
       {colorSuggestions?.length ? (
@@ -2855,12 +2867,12 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
 
       <SectionDivider title={t('plantAdmin.sections.safety', 'Safety & Toxicity')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityHuman')!, t)}
-        {renderField(value, setPath, safetyFields.find(f => f.key === 'toxicityPets')!, t)}
+        {renderField(value, setPath, safetyFieldsByKey['toxicityHuman'], t)}
+        {renderField(value, setPath, safetyFieldsByKey['toxicityPets'], t)}
       </div>
-      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningMethod')!, t)}
-      {renderField(value, setPath, safetyFields.find(f => f.key === 'poisoningSymptoms')!, t)}
-      {renderField(value, setPath, safetyFields.find(f => f.key === 'allergens')!, t)}
+      {renderField(value, setPath, safetyFieldsByKey['poisoningMethod'], t)}
+      {renderField(value, setPath, safetyFieldsByKey['poisoningSymptoms'], t)}
+      {renderField(value, setPath, safetyFieldsByKey['allergens'], t)}
     </div>
   )
 
@@ -2868,25 +2880,25 @@ export function PlantProfileForm({ value, onChange, colorSuggestions, companionS
     <div className="space-y-5">
       <SectionDivider title={t('plantAdmin.sections.conditions', 'Conditions')} />
       <div className={fieldRowClass}>
-        {renderField(value, setPath, careFields.find(f => f.key === 'careLevel')!, t)}
-        {renderField(value, setPath, careFields.find(f => f.key === 'sunlight')!, t)}
+        {renderField(value, setPath, careFieldsByKey['careLevel'], t)}
+        {renderField(value, setPath, careFieldsByKey['sunlight'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.temperature', 'Temperature')} />
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMin')!, t)}
-        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureIdeal')!, t)}
-        {renderField(value, setPath, careFields.find(f => f.key === 'temperatureMax')!, t)}
+        {renderField(value, setPath, careFieldsByKey['temperatureMin'], t)}
+        {renderField(value, setPath, careFieldsByKey['temperatureIdeal'], t)}
+        {renderField(value, setPath, careFieldsByKey['temperatureMax'], t)}
       </div>
 
       <SectionDivider title={t('plantAdmin.sections.watering', 'Watering & Humidity')} />
-      {renderField(value, setPath, careFields.find(f => f.key === 'wateringSchedules')!, t)}
-      {renderField(value, setPath, careFields.find(f => f.key === 'wateringType')!, t)}
+      {renderField(value, setPath, careFieldsByKey['wateringSchedules'], t)}
+      {renderField(value, setPath, careFieldsByKey['wateringType'], t)}
       <div className={fieldRowClass}>
-        {renderField(value, setPath, careFields.find(f => f.key === 'hygrometry')!, t)}
-        {renderField(value, setPath, careFields.find(f => f.key === 'mistingFrequency')!, t)}
+        {renderField(value, setPath, careFieldsByKey['hygrometry'], t)}
+        {renderField(value, setPath, careFieldsByKey['mistingFrequency'], t)}
       </div>
-      {renderField(value, setPath, careFields.find(f => f.key === 'specialNeeds')!, t)}
+      {renderField(value, setPath, careFieldsByKey['specialNeeds'], t)}
 
       <SectionDivider title={t('plantAdmin.sections.substrate', 'Substrate & Soil')} />
       <div className={fieldRowClass}>
