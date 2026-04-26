@@ -19,9 +19,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>6.5.1</string>
+	<string>6.6.0</string>
 	<key>CFBundleVersion</key>
-	<string>6005001</string>
+	<string>6006000</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>
