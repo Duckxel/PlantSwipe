@@ -2537,8 +2537,13 @@ $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
 Defaults:$SERVICE_USER !requiretty
 $SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
 # Allow website Pull & Build to sync service env and reload units without password
 $SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
@@ -2546,6 +2551,7 @@ $SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
 $SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
 $SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
 $SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
 $SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
 EOF
