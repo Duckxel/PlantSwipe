@@ -151,8 +151,6 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
   
   // Handle message click
   const handleMessageClick = (message: Message) => {
-    void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(10))
-    
     if (onMessageSelect) {
       onMessageSelect(message.id)
     }

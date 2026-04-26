@@ -1202,6 +1202,10 @@
       "zoomOut": "Zoom out",
       "reset": "Reset"
     },
+    "overview": {
+      "readMore": "Read more",
+      "readLess": "Read less"
+    },
     "plantType": {
       "plant": "Plant",
       "herb": "Herb",

@@ -2,6 +2,7 @@ import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
@@ -1007,16 +1008,16 @@ export const AdminBugsPanel: React.FC = () => {
                 </div>
                 <div>
                   <Label className="text-sm font-medium">Status</Label>
-                  <select
+                  <Select
                     value={editingAction.status || 'draft'}
                     onChange={(e) => setEditingAction({ ...editingAction, status: e.target.value as BugAction['status'] })}
-                    className="mt-2 w-full rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] px-3 py-2 text-sm"
+                    className="mt-2"
                   >
                     <option value="draft">Draft</option>
                     <option value="planned">Planned</option>
                     <option value="active">Active</option>
                     <option value="closed">Closed</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
 
@@ -1074,15 +1075,14 @@ export const AdminBugsPanel: React.FC = () => {
                           </Button>
                         </div>
                         <div className="flex items-center gap-4">
-                          <select
+                          <Select
                             value={question.type}
                             onChange={(e) => updateQuestion(index, { type: e.target.value as 'text' | 'textarea' | 'boolean' })}
-                            className="rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] px-2 py-1 text-xs"
                           >
                             <option value="text">Text</option>
                             <option value="textarea">Textarea</option>
                             <option value="boolean">Yes/No</option>
-                          </select>
+                          </Select>
                           <label className="flex items-center gap-1 text-xs">
                             <input
                               type="checkbox"

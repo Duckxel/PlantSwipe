@@ -2,6 +2,7 @@ import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -4565,23 +4566,23 @@ const ShowcaseTab: React.FC<{
                     placeholder="Member name"
                   />
                   <div className="flex gap-1.5">
-                    <select
+                    <Select
                       value={member.role}
                       onChange={(e) => updateMember(member.id, { role: e.target.value as 'owner' | 'member' })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                      className="flex-1 min-w-0"
                     >
                       <option value="owner">Owner</option>
                       <option value="member">Member</option>
-                    </select>
-                    <select
+                    </Select>
+                    <Select
                       value={member.color}
                       onChange={(e) => updateMember(member.id, { color: e.target.value })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                      className="flex-1 min-w-0"
                     >
                       {colorOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 </div>
 

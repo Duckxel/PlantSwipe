@@ -38,7 +38,7 @@ html.capacitor-native body select {
     /* Remove mobile WebView tap flash (iOS/Android) */
     -webkit-tap-highlight-color: transparent;
     tap-highlight-color: transparent;
-    font-family: system-ui, Avenir, Helvetica, Arial, sans-serif;
+    font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
     line-height: 1.5;
     font-weight: 400;
     color-scheme: light;
@@ -53,6 +53,7 @@ html.capacitor-native body select {
       min-height: 100dvh;
       margin: 0;
       min-width: 320px;
+      font-family: "Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       overscroll-behavior-y: inherit;
     -webkit-tap-highlight-color: transparent;
     tap-highlight-color: transparent;

@@ -1683,7 +1683,6 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(10)
     // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
@@ -1698,7 +1697,6 @@ export default function PlantSwipe() {
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(8)
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
@@ -1707,7 +1705,6 @@ export default function PlantSwipe() {
   }, [swipeList.length])
 
   const handleInfo = React.useCallback(() => {
-    platformHapticTap(12)
     if (current) navigate(`/plants/${current.id}`)
   }, [current, navigate])
 
@@ -2418,7 +2415,7 @@ export default function PlantSwipe() {
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <div
-            className={`min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pt-2 md:px-8 md:pt-4 ${
+            className={`w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1f1f1f] px-4 pt-2 md:px-8 md:pt-4 min-h-[calc(100dvh-5.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-var(--window-controls-overlay-height,0px))] lg:min-h-screen ${
               isDiscoveryView
                 ? "pb-0 lg:pb-8 max-lg:overflow-hidden"
                 : "pb-4 max-lg:pb-6 lg:pb-8 overflow-y-visible"
@@ -2516,7 +2513,7 @@ export default function PlantSwipe() {
                         }
                       : undefined
                   }
-                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-all duration-300 ${
+                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100 dark:bg-[#1e1e1e] shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-opacity duration-150 ${
                     searchBarVisible ? 'opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
                   }`}
                 >

@@ -1,6 +1,7 @@
 import React from "react"
 import { Label } from "@/components/ui/label"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
@@ -734,8 +735,7 @@ const TimePeriodSelect: React.FC<{
   onChange: (v: PlantWateringSchedule['timePeriod'] | undefined) => void
   t: TFunction
 }> = ({ value, onChange, t }) => (
-  <select
-    className="h-9 rounded-md border px-2 text-sm"
+  <Select
     value={value || ""}
     onChange={(e) => onChange(e.target.value ? (e.target.value as PlantWateringSchedule['timePeriod']) : undefined)}
   >
@@ -745,7 +745,7 @@ const TimePeriodSelect: React.FC<{
         {t(`plantAdmin.optionLabels.${opt}`, opt)}
       </option>
     ))}
-  </select>
+  </Select>
 )
 
 const WateringScheduleEditor: React.FC<{
@@ -1317,8 +1317,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
       return (
           <div className="grid gap-2">
             <Label>{label}</Label>
-            <select
-              className="h-9 rounded-md border px-3 text-sm"
+            <Select
               value={value || ""}
               onChange={(e) => onChange(field.key, e.target.value)}
             >
@@ -1328,7 +1327,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
                   ● {translateOption(sanitizeOptionKey(opt), opt)}
                 </option>
               ))}
-            </select>
+            </Select>
             <p className="text-xs text-muted-foreground">{description}</p>
           </div>
         )
@@ -1388,8 +1387,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
           return (
             <div className="grid gap-2">
               <Label>{label}</Label>
-              <select
-                className="h-9 rounded-md border px-2 text-sm"
+              <Select
                 value={valueKey}
                 onChange={(e) => {
                   if (!e.target.value) {
@@ -1404,7 +1402,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
                 {normalizedOptions.map((opt) => (
                   <option key={opt.key} value={opt.key}>{opt.label}</option>
                 ))}
-              </select>
+              </Select>
               <p className="text-xs text-muted-foreground">{description}</p>
             </div>
           )
@@ -2018,24 +2016,24 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                         placeholder={t('plantAdmin.recipeEditor.existingNamePlaceholder', 'Recipe name')}
                       />
                     </div>
-                    <select
-                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                    <Select
+                      className="min-w-[150px]"
                       value={recipe.category}
                       onChange={(e) => updateRecipe(idx, { category: e.target.value as RecipeCategory })}
                     >
                       {RECIPE_CATEGORIES.map(c => (
                         <option key={c.value} value={c.value}>{t(`plantAdmin.recipeEditor.categories.${sanitizeOptionKey(c.value)}`, c.label)}</option>
                       ))}
-                    </select>
-                    <select
-                      className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+                    </Select>
+                    <Select
+                      className="min-w-[150px]"
                       value={recipe.time}
                       onChange={(e) => updateRecipe(idx, { time: e.target.value as RecipeTime })}
                     >
                       {RECIPE_TIMES.map(rt => (
                         <option key={rt.value} value={rt.value}>{t(`plantAdmin.recipeEditor.times.${sanitizeOptionKey(rt.value)}`, rt.label)}</option>
                       ))}
-                    </select>
+                    </Select>
                     <button
                       type="button"
                       onClick={() => removeRecipe(idx)}
@@ -2078,24 +2076,24 @@ function RecipeEditor({ recipes, onChange }: { recipes: PlantRecipe[]; onChange:
                   }}
                 />
               </div>
-              <select
-                className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+              <Select
+                className="min-w-[150px]"
                 value={newCategory}
                 onChange={(e) => setNewCategory(e.target.value as RecipeCategory)}
               >
                 {RECIPE_CATEGORIES.map(c => (
                   <option key={c.value} value={c.value}>{c.label}</option>
                 ))}
-              </select>
-              <select
-                className="h-8 rounded-md border px-2 text-xs min-w-[150px]"
+              </Select>
+              <Select
+                className="min-w-[150px]"
                 value={newTime}
                 onChange={(e) => setNewTime(e.target.value as RecipeTime)}
               >
                 {RECIPE_TIMES.map(t => (
                   <option key={t.value} value={t.value}>{t.label}</option>
                 ))}
-              </select>
+              </Select>
               <Button
                 type="button"
                 size="sm"

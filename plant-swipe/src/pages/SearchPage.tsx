@@ -278,7 +278,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
                     </div>
                   )}
                 </div>
-                <div className="px-3 py-2.5 min-w-0 space-y-0.5 flex-1">
+                <div className="px-3 py-2.5 min-w-0 space-y-0.5 flex-1 min-h-[72px]">
                   <ScrollingTitle className="font-semibold text-sm leading-snug">{p.name}</ScrollingTitle>
                   {p.variety && (
                     <ScrollingTitle className="font-extrabold text-[13px] bg-gradient-to-r from-violet-500 to-fuchsia-500 bg-clip-text text-transparent tracking-tight leading-snug">

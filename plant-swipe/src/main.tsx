@@ -7,6 +7,12 @@ import '@/lib/runtimeEnvLoader'
 import { installNativeNetworkBridge } from '@/lib/nativeNetworkBridge'
 import { patchGoogleTranslateConflict } from '@/lib/googleTranslateFix'
 import './lib/i18n' // Initialize i18n before App
+// Fira Code — bundled variable/standard weights so the app uses it everywhere,
+// including offline native (Capacitor) builds.
+import '@fontsource/fira-code/400.css'
+import '@fontsource/fira-code/500.css'
+import '@fontsource/fira-code/600.css'
+import '@fontsource/fira-code/700.css'
 import './index.scss'
 // App is dynamically imported in bootstrap() below.
 // In Capacitor native builds, environment variables (Supabase credentials, etc.) are

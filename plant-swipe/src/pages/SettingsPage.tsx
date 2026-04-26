@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { Select } from "@/components/ui/select"
 import { supabase } from "@/lib/supabaseClient"
 import { useAuth } from "@/context/AuthContext"
 import { useTheme } from "@/context/ThemeContext"
@@ -15,7 +16,7 @@ import { SUPPORTED_LANGUAGES } from "@/lib/i18n"
 import usePushSubscription from "@/hooks/usePushSubscription"
 import { ACCENT_OPTIONS, applyAccentByKey, saveAccentKey, type AccentKey } from "@/lib/accent"
 import { CityCountrySelector } from "@/components/ui/city-country-selector"
-import { isHapticsEnabled, setHapticsEnabled as persistHapticsEnabled, isHapticsAvailable, platformHapticTap } from "@/platform/haptics"
+import { isHapticsEnabled, setHapticsEnabled as persistHapticsEnabled, isHapticsAvailable } from "@/platform/haptics"
 import { validateEmail, validateEmailFormat, validateEmailDomain } from "@/lib/emailValidation"
 import { validatePassword } from "@/lib/passwordValidation"
 import { ValidatedInput } from "@/components/ui/validated-input"
@@ -606,8 +607,6 @@ export default function SettingsPage() {
     const newValue = !hapticsEnabled
     persistHapticsEnabled(newValue)
     setLocalHapticsEnabled(newValue)
-    // Give the user a taste of haptics when they turn it on
-    if (newValue) platformHapticTap(25)
   }
 
   const handleToggleFriendRequests = async () => {
@@ -2089,18 +2088,17 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label htmlFor="language-select">{t('settings.language.selectLanguage')}</Label>
-                <select
+                <Select
                   id="language-select"
                   value={currentLang}
                   onChange={(e) => changeLanguage(e.target.value as typeof currentLang)}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   {SUPPORTED_LANGUAGES.map((lang) => (
                     <option key={lang} value={lang}>
                       {lang === 'en' ? t('settings.language.english') : t('settings.language.french')}
                     </option>
                   ))}
-                </select>
+                </Select>
               </div>
             </CardContent>
           </Card>
@@ -2123,16 +2121,16 @@ export default function SettingsPage() {
                     {theme === 'light' && <Sun className="h-4 w-4 opacity-60" />}
                     {theme === 'dark' && <Moon className="h-4 w-4 opacity-60" />}
                   </div>
-                  <select
+                  <Select
                     id="theme-select"
                     value={theme}
                     onChange={(e) => setTheme(e.target.value as 'system' | 'light' | 'dark')}
-                    className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] pl-10 pr-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors appearance-none"
+                    className="pl-10"
                   >
                     <option value="system">{t('settings.theme.system')}</option>
                     <option value="light">{t('settings.theme.light')}</option>
                     <option value="dark">{t('settings.theme.dark')}</option>
-                  </select>
+                  </Select>
                 </div>
               </div>
             </CardContent>
@@ -2237,19 +2235,18 @@ export default function SettingsPage() {
             <CardContent className="space-y-4">
               <div className="grid gap-2">
                 <Label htmlFor="timezone-select">{t('settings.timezone.selectTimezone', { defaultValue: 'Select Timezone' })}</Label>
-                <select
+                <Select
                   id="timezone-select"
                   value={timezone || detectedTimezone}
                   onChange={(e) => setTimezone(e.target.value)}
                   disabled={saving}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   {commonTimezones.map((tz) => (
                     <option key={tz.value} value={tz.value}>
                       {tz.label}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <p className="text-xs opacity-70 mt-1">
                   {t('settings.timezone.helper', { defaultValue: 'Scheduled notifications will be sent at the same local time in your timezone.' })}
                 </p>
@@ -2341,61 +2338,58 @@ export default function SettingsPage() {
               <div className="grid gap-2">
                 <Label htmlFor="garden-type-select">{t('setup.settings.gardenType', { defaultValue: 'Garden Location' })}</Label>
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.gardenTypeDescription', { defaultValue: 'Where do you grow your plants?' })}</p>
-                <select
+                <Select
                   id="garden-type-select"
                   value={gardenType}
                   onChange={(e) => handleUpdateSetupField('garden_type', e.target.value || '', gardenType, setGardenType)}
                   disabled={saving}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
                   <option value="inside">{t('setup.gardenType.inside', { defaultValue: 'Inside your home' })}</option>
                   <option value="outside">{t('setup.gardenType.outside', { defaultValue: 'Outside, in a yard' })}</option>
                   <option value="both">{t('setup.gardenType.both', { defaultValue: 'Both inside and outside' })}</option>
-                </select>
+                </Select>
               </div>
 
               {/* Experience Level */}
               <div className="grid gap-2">
                 <Label htmlFor="experience-level-select">{t('setup.settings.experienceLevel', { defaultValue: 'Experience Level' })}</Label>
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.experienceLevelDescription', { defaultValue: 'Your gardening expertise level' })}</p>
-                <select
+                <Select
                   id="experience-level-select"
                   value={experienceLevel}
                   onChange={(e) => handleUpdateSetupField('experience_level', e.target.value || '', experienceLevel, setExperienceLevel)}
                   disabled={saving}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
                   <option value="novice">{t('setup.experience.novice', { defaultValue: 'Novice' })}</option>
                   <option value="intermediate">{t('setup.experience.intermediate', { defaultValue: 'Intermediate' })}</option>
                   <option value="expert">{t('setup.experience.expert', { defaultValue: 'Expert' })}</option>
-                </select>
+                </Select>
               </div>
 
               {/* Garden Purpose */}
               <div className="grid gap-2">
                 <Label htmlFor="looking-for-select">{t('setup.settings.lookingFor', { defaultValue: 'Garden Purpose' })}</Label>
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.lookingForDescription', { defaultValue: "What's your main gardening goal?" })}</p>
-                <select
+                <Select
                   id="looking-for-select"
                   value={lookingFor}
                   onChange={(e) => handleUpdateSetupField('looking_for', e.target.value || '', lookingFor, setLookingFor)}
                   disabled={saving}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   <option value="">{t('common.select', { defaultValue: 'Select...' })}</option>
                   <option value="eat">{t('setup.purpose.eat', { defaultValue: 'Grow food' })}</option>
                   <option value="ornamental">{t('setup.purpose.ornamental', { defaultValue: 'Ornamental garden' })}</option>
                   <option value="various">{t('setup.purpose.various', { defaultValue: 'A bit of everything!' })}</option>
-                </select>
+                </Select>
               </div>
 
               {/* Notification Time */}
               <div className="grid gap-2">
                 <Label htmlFor="notification-time-select">{t('setup.settings.notificationTime', { defaultValue: 'Notification Time' })}</Label>
                 <p className="text-xs opacity-60 -mt-1 mb-1">{t('setup.settings.notificationTimeDescription', { defaultValue: 'When should we send you reminders?' })}</p>
-                <select
+                <Select
                   id="notification-time-select"
                   value={String(notificationHour)}
                   onChange={(e) => {
@@ -2404,14 +2398,13 @@ export default function SettingsPage() {
                     handleUpdateNotificationHour(nextHour)
                   }}
                   disabled={saving}
-                  className="w-full rounded-2xl border border-stone-300 bg-white dark:bg-[#2d2d30] dark:border-[#3e3e42] px-4 py-2.5 text-sm focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
                 >
                   {notificationHourOptions.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
                   ))}
-                </select>
+                </Select>
                 <p className="text-xs opacity-70 mt-1">
                   {t('setup.settings.notificationTimeHelper', {
                     defaultValue: 'Scheduled notifications will be sent at the same local time in your timezone ({{timezone}}).',
