@@ -13,14 +13,16 @@ export const MONTH_SLUGS = [
   'december',
 ] as const
 
-const monthSlugLookup = MONTH_SLUGS.reduce((acc, slug, index) => {
-  const value = index + 1
-  acc[slug] = value
-  acc[slug.slice(0, 3)] = value
-  acc[String(value)] = value
-  acc[value.toString().padStart(2, '0')] = value
-  return acc
-}, {} as Record<string, number>)
+// ⚡ Bolt: Replace reduce with a single-pass for loop to eliminate intermediate array allocations
+const monthSlugLookup: Record<string, number> = {}
+for (let i = 0; i < MONTH_SLUGS.length; i++) {
+  const slug = MONTH_SLUGS[i]
+  const value = i + 1
+  monthSlugLookup[slug] = value
+  monthSlugLookup[slug.slice(0, 3)] = value
+  monthSlugLookup[String(value)] = value
+  monthSlugLookup[value.toString().padStart(2, '0')] = value
+}
 
 export function monthNumberToSlug(value?: number | null): string | null {
   if (typeof value !== 'number') return null

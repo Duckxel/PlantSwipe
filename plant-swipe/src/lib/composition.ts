@@ -29,10 +29,16 @@ const canonicalize = (value: string) =>
 function toArrayInput(value: unknown): string[] {
   if (Array.isArray(value)) return value as string[]
   if (typeof value === 'string') {
-    return value
-      .split(/[,;/]+/)
-      .map((entry) => entry.trim())
-      .filter(Boolean)
+    // ⚡ Bolt: Replace .map().filter() with single-pass for loop to avoid intermediate array allocations
+    const parts = value.split(/[,;/]+/)
+    const result: string[] = []
+    for (let i = 0; i < parts.length; i++) {
+      const trimmed = parts[i].trim()
+      if (trimmed) {
+        result.push(trimmed)
+      }
+    }
+    return result
   }
   return []
 }
@@ -396,7 +402,18 @@ export type CompositionUiValue = string
 
 export function normalizeCompositionForDb(values?: string[] | null): string[] {
   if (!values?.length) return []
-  return values.map(v => v.toLowerCase().replace(/\s+/g, '_')).filter(Boolean)
+  // ⚡ Bolt: Replace .map().filter() with single-pass for loop to avoid intermediate array allocations
+  const result: string[] = []
+  for (let i = 0; i < values.length; i++) {
+    const v = values[i]
+    if (v) {
+      const normalized = v.toLowerCase().replace(/\s+/g, '_')
+      if (normalized) {
+        result.push(normalized)
+      }
+    }
+  }
+  return result
 }
 
 export function expandCompositionFromDb(values?: string[] | null): string[] {
