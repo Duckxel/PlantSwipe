@@ -77,10 +77,15 @@ ASKPASS_HELPER=""
 PSSWORD_KEY_SOURCE=""
 if [[ $EUID -ne 0 ]]; then
   SUDO="sudo"
-  # Resolve PSSWORD_KEY from env or known files; file takes precedence if set
+  # Resolve PSSWORD_KEY from env or known files; file takes precedence if set.
+  # Order: prefer the inherited process env (e.g., when admin-api spawns this
+  # script with PSSWORD_KEY already loaded from /etc/plant-swipe/service.env
+  # via systemd EnvironmentFile), then check repo env files, then the rendered
+  # systemd env files as a final fallback.
   CANDIDATE_ENV_FILES=(
     "$WORK_DIR/.env"
     "$NODE_DIR/.env"
+    "/etc/plant-swipe/service.env"
     "/etc/admin-api/env"
   )
   FILE_PSSWORD_KEY=""
