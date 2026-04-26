@@ -71,3 +71,12 @@ do $$ begin
 end $$;
 
 grant select on public.scan_usage_events to authenticated;
+
+-- Defence in depth: RLS already blocks all writes (no INSERT/UPDATE/DELETE
+-- policies exist), but explicitly revoke the privileges so a future policy
+-- mistake or schema-level grant cannot let a client tamper with their own
+-- usage rows or wipe them to dodge limits.
+revoke insert, update, delete on public.ai_usage_events from authenticated;
+revoke insert, update, delete on public.ai_usage_events from anon;
+revoke insert, update, delete on public.scan_usage_events from authenticated;
+revoke insert, update, delete on public.scan_usage_events from anon;

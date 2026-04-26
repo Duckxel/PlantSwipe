@@ -199,10 +199,21 @@ GRANT SELECT ON public.profiles TO anon;
 
 -- Column-level protection: RLS is row-based only, so a user could otherwise
 -- call .update({ is_admin: true }) directly on their own row and escalate to
--- admin. The trigger below blocks any non-admin caller from changing is_admin
--- or adding 'admin' to their roles array. Service-role/server calls (auth.uid()
--- is null) and existing admins are allowed through so the promote/demote
--- endpoints keep working.
+-- admin. The trigger below blocks any non-admin caller from changing
+-- privileged or server-managed columns. Service-role/server calls
+-- (auth.uid() is null) and existing admins are allowed through so promote/
+-- demote endpoints, the heartbeat, bug-points awards, and moderation tools
+-- keep working.
+--
+-- Locked columns for non-admin callers:
+--   is_admin, roles                            (privilege escalation)
+--   threat_level                               (only monotonic increase
+--                                               allowed, so the legal-decline
+--                                               self-ban still works but a
+--                                               banned user cannot un-ban)
+--   bug_points                                 (server-awarded only)
+--   shadow_ban_backup                          (moderation internal)
+--   last_active_at                             (server heartbeat only)
 create or replace function public.prevent_self_admin_escalation()
 returns trigger
 language plpgsql
@@ -225,20 +236,52 @@ begin
     if coalesce(new.is_admin, false) is distinct from false then
       raise exception 'Only admins can set is_admin' using errcode = '42501';
     end if;
-  elsif tg_op = 'UPDATE' then
-    if new.is_admin is distinct from old.is_admin then
-      raise exception 'Only admins can modify is_admin' using errcode = '42501';
+    if 'admin' = any(coalesce(new.roles, '{}')) then
+      raise exception 'Only admins can grant the admin role' using errcode = '42501';
     end if;
+    if coalesce(new.bug_points, 0) <> 0 then
+      raise exception 'Only the server can set bug_points' using errcode = '42501';
+    end if;
+    if coalesce(new.threat_level, 0) <> 0 then
+      raise exception 'Only the server can set threat_level on insert' using errcode = '42501';
+    end if;
+    if new.shadow_ban_backup is not null then
+      raise exception 'Only admins can set shadow_ban_backup' using errcode = '42501';
+    end if;
+    if new.last_active_at is not null then
+      raise exception 'Only the server can set last_active_at' using errcode = '42501';
+    end if;
+    return new;
   end if;
 
-  old_has_admin_role := case
-    when tg_op = 'UPDATE' then 'admin' = any(coalesce(old.roles, '{}'))
-    else false
-  end;
-  new_has_admin_role := 'admin' = any(coalesce(new.roles, '{}'));
+  -- UPDATE branch
+  if new.is_admin is distinct from old.is_admin then
+    raise exception 'Only admins can modify is_admin' using errcode = '42501';
+  end if;
 
+  old_has_admin_role := 'admin' = any(coalesce(old.roles, '{}'));
+  new_has_admin_role := 'admin' = any(coalesce(new.roles, '{}'));
   if new_has_admin_role and not old_has_admin_role then
     raise exception 'Only admins can grant the admin role' using errcode = '42501';
+  end if;
+  if coalesce(new.roles, '{}') is distinct from coalesce(old.roles, '{}') then
+    raise exception 'Only admins can modify roles' using errcode = '42501';
+  end if;
+
+  if coalesce(new.threat_level, 0) < coalesce(old.threat_level, 0) then
+    raise exception 'Only admins can lower threat_level' using errcode = '42501';
+  end if;
+
+  if coalesce(new.bug_points, 0) is distinct from coalesce(old.bug_points, 0) then
+    raise exception 'Only admins can modify bug_points' using errcode = '42501';
+  end if;
+
+  if new.shadow_ban_backup is distinct from old.shadow_ban_backup then
+    raise exception 'Only admins can modify shadow_ban_backup' using errcode = '42501';
+  end if;
+
+  if new.last_active_at is distinct from old.last_active_at then
+    raise exception 'Only the server can update last_active_at' using errcode = '42501';
   end if;
 
   return new;
