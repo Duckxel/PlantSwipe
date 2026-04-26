@@ -609,6 +609,64 @@ render_service_env() {
 log "Rendering service environment from $NODE_DIR/.env(.server)…"
 render_service_env "$SERVICE_ENV_FILE"
 
+# --- Configure the service user's Unix password from PSSWORD_KEY ---
+# The refresh script (and any other www-data-launched sudo call that isn't
+# covered by the NOPASSWD allow-list in /etc/sudoers.d/plantswipe-admin-api)
+# uses an askpass helper that returns PSSWORD_KEY. For sudo to accept that
+# password it must match the invoking user's actual Unix password. By default
+# www-data is a system account with a locked password (`!`/`*` in /etc/shadow)
+# so askpass can never authenticate. Sync the password here so the askpass
+# fallback works end-to-end.
+#
+# Skip with PLANTSWIPE_SKIP_WWWDATA_PASSWORD=1 if you'd rather keep the account
+# password-locked and rely solely on the NOPASSWD sudoers entries.
+configure_service_user_password() {
+  case "${PLANTSWIPE_SKIP_WWWDATA_PASSWORD:-0}" in
+    1|true|TRUE|yes|YES)
+      log "Skipping $SERVICE_USER password setup (PLANTSWIPE_SKIP_WWWDATA_PASSWORD set)."
+      return 0
+      ;;
+  esac
+  if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
+    log "[WARN] Service user '$SERVICE_USER' does not exist; skipping password setup."
+    return 0
+  fi
+  local pw=""
+  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$WORK_DIR/.env"; do
+    if [[ -z "$pw" ]]; then pw="$(read_env_kv "$f" PSSWORD_KEY)"; fi
+  done
+  if [[ -z "$pw" ]]; then
+    log "PSSWORD_KEY not set in repo .env — leaving '$SERVICE_USER' password unchanged."
+    return 0
+  fi
+  case "$pw" in
+    change-me|CHANGE_ME|placeholder|"")
+      log "PSSWORD_KEY looks like a placeholder ('$pw') — leaving '$SERVICE_USER' password unchanged."
+      return 0
+      ;;
+  esac
+  if ! command -v chpasswd >/dev/null 2>&1; then
+    log "[WARN] chpasswd not available; cannot sync '$SERVICE_USER' password from PSSWORD_KEY."
+    return 0
+  fi
+  # chpasswd reads "user:password" pairs on stdin, so we don't have to escape
+  # special characters for the shell. -c sha512 forces a strong hash regardless
+  # of the system default.
+  local chpasswd_args=()
+  if chpasswd --help 2>&1 | grep -q -- '--crypt-method'; then
+    chpasswd_args+=("--crypt-method" "SHA512")
+  fi
+  if printf '%s:%s\n' "$SERVICE_USER" "$pw" | $SUDO chpasswd "${chpasswd_args[@]}" >/dev/null 2>&1; then
+    log "Synced Unix password for '$SERVICE_USER' from PSSWORD_KEY (askpass sudo can authenticate)."
+    # If the account was locked (`!` prefix in /etc/shadow), unlock it so
+    # sudo's PAM auth actually succeeds. We do not change the login shell.
+    $SUDO passwd -u "$SERVICE_USER" >/dev/null 2>&1 || true
+  else
+    log "[WARN] chpasswd failed for '$SERVICE_USER'; askpass-based sudo will not work."
+  fi
+}
+configure_service_user_password
+
 # Install/upgrade Bun (preferred runtime) and Node.js (for compatibility).
 # Both installers are re-run on every setup.sh pass so minor/patch security
 # fixes land without requiring anyone to touch this script. The previous
