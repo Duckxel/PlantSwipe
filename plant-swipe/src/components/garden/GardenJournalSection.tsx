@@ -984,7 +984,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               className="w-full h-9 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1f1f1f] text-sm placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
             />
             {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+              <button type="button" onClick={() => setSearchQuery("")} aria-label={t("common.clear", { defaultValue: "Clear" })} title={t("common.clear", { defaultValue: "Clear" })} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500">
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
