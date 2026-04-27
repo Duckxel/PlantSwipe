@@ -204,7 +204,7 @@ export const ConversationSearch: React.FC<ConversationSearchProps> = ({
                   onClick={handleClear}
                   aria-label={t('common.clear', { defaultValue: 'Clear' })}
                   title={t('common.clear', { defaultValue: 'Clear' })}
-                  className="p-1.5 -mr-1.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-600 active:bg-stone-300 dark:active:bg-stone-500 transition-colors"
+                  className="p-1.5 -mr-1.5 rounded-full hover:bg-stone-200 dark:hover:bg-stone-600 active:bg-stone-300 dark:active:bg-stone-500 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                 >
                   <X className="h-5 w-5 text-stone-500 dark:text-stone-400" />
                 </button>

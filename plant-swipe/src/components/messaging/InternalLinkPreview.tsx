@@ -227,14 +227,16 @@ const LinkPreviewCard: React.FC<{
             )}>
               <button
                 onClick={handleDownload}
-                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                aria-label={t('messages.download', { defaultValue: 'Download' })}
                 title={t('messages.download', { defaultValue: 'Download' })}
               >
                 <Download className="h-5 w-5" />
               </button>
               <button
                 onClick={handleClick}
-                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110"
+                className="p-2 rounded-full bg-white/90 hover:bg-white text-stone-700 shadow-lg transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+                aria-label={t('messages.openInNewTab', { defaultValue: 'Open in new tab' })}
                 title={t('messages.openInNewTab', { defaultValue: 'Open in new tab' })}
               >
                 <ExternalLink className="h-5 w-5" />
@@ -284,7 +286,7 @@ const LinkPreviewCard: React.FC<{
       onClick={handleClick}
       className={cn(
         'mt-2 flex items-stretch overflow-hidden rounded-xl w-full text-left transition-all active:scale-[0.98]',
-        'border',
+        'border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500',
         isOwn 
           ? 'border-blue-400/30 bg-blue-400/20 hover:bg-blue-400/30'
           : 'border-stone-200/50 dark:border-[#3a3a3d]/50 bg-white/50 dark:bg-[#1f1f1f]/50 hover:bg-white/80 dark:hover:bg-[#1f1f1f]/80'
