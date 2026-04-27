@@ -126,10 +126,10 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
           // Logged-out: show Sign up and Login buttons on all pages
           <>
             <Button className="rounded-2xl" variant="secondary" onClick={openSignup} title={t('common.signup')}>
-              <UserPlus className="h-4 w-4 lg:mr-2" /> <span className="hidden lg:inline">{t('common.signup')}</span>
+              <UserPlus className="h-4 w-4 xl:mr-2" /> <span className="hidden xl:inline">{t('common.signup')}</span>
             </Button>
             <Button className="rounded-2xl" variant="default" onClick={openLogin} title={t('common.login')}>
-              <LogIn className="h-4 w-4 lg:mr-2" /> <span className="hidden lg:inline">{t('common.login')}</span>
+              <LogIn className="h-4 w-4 xl:mr-2" /> <span className="hidden xl:inline">{t('common.login')}</span>
             </Button>
           </>
         ) : (
@@ -173,9 +173,9 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
             />
             <div className="relative" ref={anchorRef}>
               <Button className="rounded-2xl" variant="secondary" onClick={(e: React.MouseEvent<HTMLButtonElement>) => { e.stopPropagation(); setMenuOpen((o) => !o); }} aria-label="Profile menu" aria-haspopup="menu" aria-expanded={menuOpen} title={label}>
-                <User className="h-4 w-4 lg:mr-2 shrink-0" />
-                <span className="hidden lg:inline max-w-[40vw] truncate min-w-0">{label}</span>
-                <ChevronDown className="h-4 w-4 lg:ml-2 opacity-70" />
+                <User className="h-4 w-4 xl:mr-2 shrink-0" />
+                <span className="hidden xl:inline max-w-[40vw] truncate min-w-0">{label}</span>
+                <ChevronDown className="h-4 w-4 xl:ml-2 opacity-70" />
               </Button>
               {menuOpen && menuPosition && createPortal(
                 <div
@@ -248,7 +248,7 @@ function NavPill({ to, isActive, icon, label, showDot, dataTutorial }: { to: str
         <Link to={to} className="no-underline" title={label}>
           <span className="inline-flex items-center gap-2">
             {icon}
-            <span className="hidden lg:inline">{label}</span>
+            <span className="hidden xl:inline">{label}</span>
           </span>
         </Link>
       </Button>
@@ -302,7 +302,7 @@ function NavPillAnchor({ to, icon, label }: { to: string; icon: React.ReactNode;
         <a href={to} onClick={handleClick} className="no-underline" title={label}>
           <span className="inline-flex items-center gap-2">
             {icon}
-            <span className="hidden lg:inline">{label}</span>
+            <span className="hidden xl:inline">{label}</span>
           </span>
         </a>
       </Button>
