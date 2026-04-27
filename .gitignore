@@ -69,6 +69,11 @@ plant-swipe/supabase/config.toml
 # Domain configuration (server-specific)
 domain.json
 
+# Embedded Aphydle daily-game repo (cloned by setup.sh into ./aphydle/).
+# It has its own .git/, .env, dist/, node_modules — never commit any of it
+# back into PlantSwipe.
+/aphydle/
+
 # Bun runtime
 .bun/
 *.bun
