@@ -1800,6 +1800,58 @@ function supabaseStorageToMediaProxy(url) {
   }
 }
 
+// =============================================================================
+// External image proxy helpers
+// =============================================================================
+// Plant image URLs in `plant_images.link` and `plants.photos[].url` may point at
+// arbitrary third-party hosts (e.g. img.passeportsante.net) that don't serve
+// `Access-Control-Allow-Origin`. Cross-origin consumers like Aphydle
+// (aphydle.<domain>, separate origin from aphylia.app) hit CORS errors when
+// they load those URLs into a <canvas> or with `crossorigin="anonymous"`.
+// `/api/image-proxy?url=…` re-serves the bytes with permissive CORS headers,
+// and `wrapExternalImageUrl` rewrites third-party URLs through it before they
+// leave our API. URLs already on aphylia.app / supabase.co / media.aphylia.app
+// pass through untouched — they already serve correct CORS headers.
+const imageProxyPublicBase = (() => {
+  const fromEnv = (process.env.IMAGE_PROXY_PUBLIC_BASE || process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').trim()
+  return fromEnv.replace(/\/+$/, '')
+})()
+const imageProxyEndpointPath = '/api/image-proxy'
+
+function isTrustedImageOrigin(urlString) {
+  try {
+    const u = new URL(urlString)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return true
+    const host = u.hostname.toLowerCase()
+    if (host === 'aphylia.app' || host.endsWith('.aphylia.app')) return true
+    if (host.endsWith('.supabase.co')) return true
+    if (host === 'localhost' || host === '127.0.0.1') return true
+    return false
+  } catch {
+    return true
+  }
+}
+
+function wrapExternalImageUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') return urlString
+  const trimmed = urlString.trim()
+  if (!trimmed) return urlString
+  if (!/^https?:\/\//i.test(trimmed)) return urlString
+  if (isTrustedImageOrigin(trimmed)) return urlString
+  return `${imageProxyPublicBase}${imageProxyEndpointPath}?url=${encodeURIComponent(trimmed)}`
+}
+
+function wrapPhotosArrayExternalUrls(photos) {
+  if (!Array.isArray(photos)) return photos
+  return photos.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry
+    if (typeof entry.url !== 'string') return entry
+    const wrapped = wrapExternalImageUrl(entry.url)
+    if (wrapped === entry.url) return entry
+    return { ...entry, url: wrapped }
+  })
+}
+
 const gardenCoverUploadBucket = (() => {
   const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
   if (fromEnv) return fromEnv
@@ -4410,6 +4462,143 @@ function getDbHealth() {
 app.get('/api/health', async (_req, res) => {
   const db = await getDbHealth()
   res.status(200).json({ ok: true, db })
+})
+
+// =============================================================================
+// Image Proxy - CORS-enabled passthrough for third-party plant images
+// =============================================================================
+// Many `plant_images.link` rows (and historical `plants.photos[].url`) point at
+// external hosts that don't send `Access-Control-Allow-Origin`. Cross-origin
+// consumers (Aphydle on aphydle.<domain>, native Capacitor shells, anything
+// else outside aphylia.app) can't load those into <canvas> / `crossorigin`.
+// This endpoint streams the upstream bytes back with permissive CORS headers,
+// using the same SSRF guard (`validateImageUrl`) that protects our admin
+// upload-from-URL flow.
+const IMAGE_PROXY_MAX_BYTES = 25 * 1024 * 1024 // 25MB hard cap per response
+const IMAGE_PROXY_TIMEOUT_MS = 15000 // 15s upstream timeout
+const IMAGE_PROXY_MAX_REDIRECTS = 5
+
+// Fetch with manual redirect handling so we can re-run the SSRF guard against
+// each redirect target. `validateImageUrl` only inspects the URL passed in;
+// `redirect: 'follow'` would let a malicious upstream 302 us into 169.254.x.x
+// (cloud metadata) or 10.0.0.0/8.
+async function imageProxyFetch(initialUrl, signal) {
+  let currentUrl = initialUrl
+  for (let hop = 0; hop <= IMAGE_PROXY_MAX_REDIRECTS; hop++) {
+    await validateImageUrl(currentUrl)
+    const resp = await fetch(currentUrl, {
+      signal,
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Aphylia-ImageProxy/1.0 (+https://aphylia.app)',
+        'Accept': 'image/*,*/*;q=0.8',
+      },
+    })
+    if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get('location')
+      if (!location) return resp
+      try {
+        currentUrl = new URL(location, currentUrl).toString()
+      } catch {
+        throw new Error('Invalid redirect target')
+      }
+      try { await resp.body?.cancel?.() } catch {}
+      continue
+    }
+    return resp
+  }
+  throw new Error(`Too many redirects (>${IMAGE_PROXY_MAX_REDIRECTS})`)
+}
+
+app.get(imageProxyEndpointPath, async (req, res) => {
+  const target = typeof req.query.url === 'string' ? req.query.url.trim() : ''
+  if (!target) {
+    res.status(400).json({ error: 'Missing url query parameter' })
+    return
+  }
+
+  const controller = new AbortController()
+  const abortTimer = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS)
+  let upstream
+  try {
+    upstream = await imageProxyFetch(target, controller.signal)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    const msg = err?.message || 'unknown'
+    const status = msg.startsWith('Invalid or restricted URL') || msg.startsWith('Invalid redirect') ? 400 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  if (!upstream.ok) {
+    clearTimeout(abortTimer)
+    res.status(upstream.status === 404 ? 404 : 502).json({ error: `Upstream HTTP ${upstream.status}` })
+    return
+  }
+
+  const rawContentType = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
+  if (rawContentType && !rawContentType.startsWith('image/') && rawContentType !== 'application/octet-stream') {
+    clearTimeout(abortTimer)
+    res.status(415).json({ error: `Unsupported content-type: ${rawContentType}` })
+    return
+  }
+  const contentType = rawContentType.startsWith('image/') ? rawContentType : 'application/octet-stream'
+
+  const declaredLength = parseInt(upstream.headers.get('content-length') || '0', 10)
+  if (Number.isFinite(declaredLength) && declaredLength > IMAGE_PROXY_MAX_BYTES) {
+    clearTimeout(abortTimer)
+    res.status(413).json({ error: 'Upstream image exceeds size limit' })
+    return
+  }
+
+  res.setHeader('Content-Type', contentType)
+  // Cache aggressively at the edge: third-party plant photos rarely change at
+  // their stable URL, and a cache miss can be slow (we hit a foreign host).
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  res.setHeader('Timing-Allow-Origin', '*')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Vary', 'Accept-Encoding')
+  if (declaredLength > 0) res.setHeader('Content-Length', String(declaredLength))
+
+  try {
+    const { Readable } = await import('stream')
+    const nodeStream = Readable.fromWeb(upstream.body)
+    let received = 0
+    nodeStream.on('data', (chunk) => {
+      received += chunk.length
+      if (received > IMAGE_PROXY_MAX_BYTES) {
+        nodeStream.destroy(new Error('Upstream image exceeded size limit during streaming'))
+      }
+    })
+    nodeStream.on('error', (err) => {
+      console.warn('[image-proxy] stream error:', err?.message || err)
+      if (!res.headersSent) {
+        try { res.status(502).end() } catch {}
+      } else {
+        try { res.destroy(err) } catch {}
+      }
+    })
+    res.on('close', () => {
+      try { nodeStream.destroy() } catch {}
+      clearTimeout(abortTimer)
+    })
+    nodeStream.pipe(res)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Stream failed: ' + (err?.message || 'unknown') })
+    }
+  }
+})
+
+app.options(imageProxyEndpointPath, (_req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  res.status(204).end()
 })
 
 // =============================================================================
@@ -17219,8 +17408,8 @@ async function loadPlantsViaSupabase() {
         rarity: r.rarity,
         meaning: r.meaning ?? '',
         description: r.description ?? '',
-        photos,
-        image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+        photos: wrapPhotosArrayExternalUrls(photos),
+        image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
         care: {
           sunlight: r.level_sun || null,
           water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
@@ -17565,8 +17754,8 @@ app.get('/api/plants', async (_req, res) => {
             rarity: r.rarity,
             meaning: r.meaning ?? '',
             description: r.description ?? '',
-            photos,
-            image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+            photos: wrapPhotosArrayExternalUrls(photos),
+            image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
             care: {
               sunlight: r.level_sun || null,
               water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
