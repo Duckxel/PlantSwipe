@@ -858,6 +858,7 @@ export const AdminPage: React.FC = () => {
 
   const [restarting, setRestarting] = React.useState(false);
   const [pulling, setPulling] = React.useState(false);
+  const [refreshingAphydle, setRefreshingAphydle] = React.useState(false);
   const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false);
   const [consoleLines, setConsoleLines] = React.useState<string[]>([]);
   const [reloadReady, setReloadReady] = React.useState<boolean>(false);
@@ -5109,6 +5110,120 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const refreshAphydle = async () => {
+    if (refreshingAphydle) return;
+    setRefreshingAphydle(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[aphydle] Refresh Aphydle: starting…");
+
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      let adminToken: string | null = null;
+      try {
+        adminToken =
+          ((globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN as
+            | string
+            | undefined
+            | null) || null;
+      } catch {
+        adminToken = null;
+      }
+      const sseHeaders: Record<string, string> = {};
+      if (token) sseHeaders["Authorization"] = `Bearer ${token}`;
+      if (adminToken) sseHeaders["X-Admin-Token"] = String(adminToken);
+      const adminSseHeaders: Record<string, string> = {};
+      if (adminToken) adminSseHeaders["X-Admin-Token"] = String(adminToken);
+      const adminJsonPostHeaders = {
+        ...adminSseHeaders,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+
+      let resp: Response | null = null;
+      try {
+        resp = await fetch("/api/admin/refresh-aphydle/stream", {
+          method: "GET",
+          headers: sseHeaders,
+          credentials: "same-origin",
+        });
+      } catch {}
+      if (!resp || !resp.ok || !resp.body) {
+        try {
+          resp = await fetch("/admin/refresh-aphydle/stream", {
+            method: "GET",
+            headers: adminSseHeaders,
+            credentials: "same-origin",
+          });
+        } catch {}
+      }
+      if (!resp || !resp.ok || !resp.body) {
+        const bg = await fetch("/admin/refresh-aphydle", {
+          method: "POST",
+          headers: adminJsonPostHeaders,
+          credentials: "same-origin",
+          body: "{}",
+        });
+        const bgBody = await safeJson(bg);
+        if (!bg.ok || bgBody?.ok !== true) {
+          throw new Error(bgBody?.error || `Aphydle refresh failed (${bg.status})`);
+        }
+        appendConsole("[aphydle] Started background refresh via Admin API.");
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let currentEvent: string | null = null;
+      let sawDoneEvent = false;
+      let buildOk = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const raw = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          const line = raw.replace(/\r$/, "");
+          if (!line) continue;
+          if (line.startsWith("event:")) {
+            currentEvent = line.slice(6).trim();
+          } else if (line.startsWith("data:")) {
+            const payload = line.slice(5).trimStart();
+            if (currentEvent === "done") {
+              try {
+                const obj = JSON.parse(payload);
+                if (obj && typeof obj.ok === "boolean") {
+                  sawDoneEvent = true;
+                  buildOk = !!obj.ok;
+                }
+              } catch {}
+            }
+            appendConsole(payload);
+          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+            appendConsole(line);
+          }
+        }
+      }
+
+      if (sawDoneEvent && buildOk) {
+        appendConsole("[aphydle] ✓ Aphydle refresh complete.");
+      } else if (sawDoneEvent && !buildOk) {
+        appendConsole("[aphydle] ✗ Aphydle refresh failed. See logs above.");
+      } else {
+        appendConsole("[aphydle] Stream ended without terminal status.");
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[aphydle] Failed to refresh Aphydle: ${message}`);
+    } finally {
+      setRefreshingAphydle(false);
+    }
+  };
+
   // Backup UI disabled for now
 
     // Loader for total registered accounts & plants (DB first via admin API; fallback to client count)
@@ -7627,7 +7742,7 @@ export const AdminPage: React.FC = () => {
                             <span className="text-sm font-semibold">Quick Actions</span>
                           </div>
                           {/* Action buttons */}
-                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
                           <Button
                             className="rounded-xl w-full text-xs px-2 py-2 h-auto"
                             size="sm"
@@ -7649,6 +7764,19 @@ export const AdminPage: React.FC = () => {
                             <Github className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="truncate">
                               {pulling ? "Pulling..." : "Pull & Build"}
+                            </span>
+                          </Button>
+                          <Button
+                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
+                            size="sm"
+                            variant="secondary"
+                            onClick={refreshAphydle}
+                            disabled={refreshingAphydle}
+                            title="Pull latest Aphydle main and rebuild"
+                          >
+                            <Sprout className="h-3.5 w-3.5 flex-shrink-0" />
+                            <span className="truncate">
+                              {refreshingAphydle ? "Refreshing..." : "Refresh Aphydle"}
                             </span>
                           </Button>
                           <Button
