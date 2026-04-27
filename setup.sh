@@ -618,63 +618,174 @@ render_service_env() {
 log "Rendering service environment from $NODE_DIR/.env(.server)…"
 render_service_env "$SERVICE_ENV_FILE"
 
-# --- Configure the service user's Unix password from PSSWORD_KEY ---
-# The refresh script (and any other www-data-launched sudo call that isn't
-# covered by the NOPASSWD allow-list in /etc/sudoers.d/plantswipe-admin-api)
-# uses an askpass helper that returns PSSWORD_KEY. For sudo to accept that
-# password it must match the invoking user's actual Unix password. By default
-# www-data is a system account with a locked password (`!`/`*` in /etc/shadow)
-# so askpass can never authenticate. Sync the password here so the askpass
-# fallback works end-to-end.
+# --- Configure Unix passwords from PSSWORD_KEY (one-way: system follows .env) ---
+# PSSWORD_KEY in plant-swipe/.env is the single source of truth. We sync:
+#   1. The service user (www-data) — locked by default, must match the askpass
+#      helper used by refresh-*.sh and admin-api spawned sudo calls.
+#   2. The invoking user (`$SUDO_USER`) — so future `sudo ./setup.sh` and any
+#      askpass-driven sudo elsewhere uses the same key the operator stores in .env.
+# Root is NOT synced by default — silently changing root's password can lock
+# operators out of recovery shells. Opt in with PLANTSWIPE_SYNC_ROOT_PASSWORD=1.
 #
-# Skip with PLANTSWIPE_SKIP_WWWDATA_PASSWORD=1 if you'd rather keep the account
-# password-locked and rely solely on the NOPASSWD sudoers entries.
-configure_service_user_password() {
-  case "${PLANTSWIPE_SKIP_WWWDATA_PASSWORD:-0}" in
-    1|true|TRUE|yes|YES)
-      log "Skipping $SERVICE_USER password setup (PLANTSWIPE_SKIP_WWWDATA_PASSWORD set)."
-      return 0
-      ;;
-  esac
-  if ! id -u "$SERVICE_USER" >/dev/null 2>&1; then
-    log "[WARN] Service user '$SERVICE_USER' does not exist; skipping password setup."
-    return 0
-  fi
+# Per-user opt-outs:
+#   PLANTSWIPE_SKIP_WWWDATA_PASSWORD=1   leave www-data's password alone
+#   PLANTSWIPE_SKIP_INVOKER_PASSWORD=1   leave $SUDO_USER's password alone
+read_pssword_key_value() {
   local pw=""
-  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$WORK_DIR/.env"; do
+  local f
+  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$REPO_DIR/.env"; do
     if [[ -z "$pw" ]]; then pw="$(read_env_kv "$f" PSSWORD_KEY)"; fi
   done
-  if [[ -z "$pw" ]]; then
-    log "PSSWORD_KEY not set in repo .env — leaving '$SERVICE_USER' password unchanged."
-    return 0
-  fi
-  case "$pw" in
-    change-me|CHANGE_ME|placeholder|"")
-      log "PSSWORD_KEY looks like a placeholder ('$pw') — leaving '$SERVICE_USER' password unchanged."
-      return 0
-      ;;
+  printf '%s' "$pw"
+}
+
+is_pssword_key_placeholder() {
+  case "$1" in
+    change-me|CHANGE_ME|placeholder|"") return 0 ;;
+    *) return 1 ;;
   esac
-  if ! command -v chpasswd >/dev/null 2>&1; then
-    log "[WARN] chpasswd not available; cannot sync '$SERVICE_USER' password from PSSWORD_KEY."
+}
+
+# Install an askpass helper backed by PSSWORD_KEY so any descendant `sudo -A`
+# call (refresh-plant-swipe.sh, refresh-aphydle.sh, ad-hoc sudo from this
+# script, …) can authenticate without a TTY. The helper is a temp file with
+# 0700 perms; it gets cleaned up on exit.
+PLANTSWIPE_ASKPASS_HELPER=""
+install_askpass_helper() {
+  local pw="$1"
+  [[ -z "$pw" ]] && return 0
+  if is_pssword_key_placeholder "$pw"; then return 0; fi
+  PLANTSWIPE_ASKPASS_HELPER="$(mktemp -t plantswipe-setup-askpass.XXXXXX)"
+  chmod 0700 "$PLANTSWIPE_ASKPASS_HELPER"
+  # Write the password as a single-quoted bash literal, escaping any single
+  # quotes inside via the standard `'\''` trick. Safe for arbitrary values.
+  local escaped="${pw//\'/\'\\\'\'}"
+  cat > "$PLANTSWIPE_ASKPASS_HELPER" <<EOF
+#!/usr/bin/env bash
+exec printf '%s' '${escaped}'
+EOF
+  chmod 0700 "$PLANTSWIPE_ASKPASS_HELPER"
+  export SUDO_ASKPASS="$PLANTSWIPE_ASKPASS_HELPER"
+  trap '[[ -n "${PLANTSWIPE_ASKPASS_HELPER:-}" ]] && rm -f "$PLANTSWIPE_ASKPASS_HELPER"' EXIT
+  log "Installed PSSWORD_KEY-backed askpass helper for descendant sudo calls."
+}
+
+# Sync a single user's Unix password to PSSWORD_KEY. Skips placeholder values,
+# missing users, or absent chpasswd. Reports outcome via stdout log lines.
+sync_user_password_from_pssword_key() {
+  local user="$1"
+  local pw="$2"
+  local label="$3"   # "$SERVICE_USER" or "invoker $SUDO_USER", purely for logs
+  if [[ -z "$user" ]]; then return 0; fi
+  if ! id -u "$user" >/dev/null 2>&1; then
+    log "[WARN] User '$user' does not exist; skipping $label password sync."
     return 0
   fi
-  # chpasswd reads "user:password" pairs on stdin, so we don't have to escape
-  # special characters for the shell. -c sha512 forces a strong hash regardless
-  # of the system default.
+  if [[ -z "$pw" ]]; then
+    log "PSSWORD_KEY not set — leaving '$user' password unchanged."
+    return 0
+  fi
+  if is_pssword_key_placeholder "$pw"; then
+    log "PSSWORD_KEY looks like a placeholder ('$pw') — leaving '$user' password unchanged."
+    return 0
+  fi
+  if ! command -v chpasswd >/dev/null 2>&1; then
+    log "[WARN] chpasswd not available; cannot sync '$user' password from PSSWORD_KEY."
+    return 0
+  fi
   local chpasswd_args=()
   if chpasswd --help 2>&1 | grep -q -- '--crypt-method'; then
     chpasswd_args+=("--crypt-method" "SHA512")
   fi
-  if printf '%s:%s\n' "$SERVICE_USER" "$pw" | $SUDO chpasswd "${chpasswd_args[@]}" >/dev/null 2>&1; then
-    log "Synced Unix password for '$SERVICE_USER' from PSSWORD_KEY (askpass sudo can authenticate)."
-    # If the account was locked (`!` prefix in /etc/shadow), unlock it so
-    # sudo's PAM auth actually succeeds. We do not change the login shell.
-    $SUDO passwd -u "$SERVICE_USER" >/dev/null 2>&1 || true
+  if printf '%s:%s\n' "$user" "$pw" | $SUDO chpasswd "${chpasswd_args[@]}" >/dev/null 2>&1; then
+    log "Synced Unix password for '$user' from PSSWORD_KEY ($label)."
+    # Unlock the account if it was locked (`!`/`*` in /etc/shadow) so PAM accepts
+    # the new password. Login shell is left untouched.
+    $SUDO passwd -u "$user" >/dev/null 2>&1 || true
   else
-    log "[WARN] chpasswd failed for '$SERVICE_USER'; askpass-based sudo will not work."
+    log "[WARN] chpasswd failed for '$user'; askpass-based sudo will not work for them."
   fi
 }
-configure_service_user_password
+
+# Render /etc/sudoers.d/plantswipe-admin-api with the canonical NOPASSWD allow
+# list. This function is defined here so we can call it BEFORE delegating to
+# refresh-plant-swipe.sh / refresh-aphydle.sh — those scripts run as www-data
+# and call `sudo ln`, `sudo systemctl restart`, etc. If the sudoers file on
+# disk is from an older setup.sh that didn't include `ln`/`rm`/etc., the
+# refresh blows up. Writing it early closes that timing hole.
+SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
+install_plantswipe_sudoers() {
+  log "Configuring sudoers at $SUDOERS_FILE…"
+  $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
+Defaults:$SERVICE_USER !requiretty
+$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
+# Allow website Pull & Build to sync service env and reload units without password
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/ln
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/rm
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
+EOF
+"
+  $SUDO chmod 0440 "$SUDOERS_FILE"
+  if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
+    echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
+    $SUDO rm -f "$SUDOERS_FILE" || true
+  fi
+}
+
+PSSWORD_KEY_VALUE="$(read_pssword_key_value)"
+install_askpass_helper "$PSSWORD_KEY_VALUE"
+
+# 1) Service user (www-data) — required for askpass-driven sudo from refresh scripts.
+case "${PLANTSWIPE_SKIP_WWWDATA_PASSWORD:-0}" in
+  1|true|TRUE|yes|YES) log "Skipping $SERVICE_USER password setup (PLANTSWIPE_SKIP_WWWDATA_PASSWORD set)." ;;
+  *) sync_user_password_from_pssword_key "$SERVICE_USER" "$PSSWORD_KEY_VALUE" "service user" ;;
+esac
+
+# 2) Invoking user — sync only when invoked via `sudo` from a non-root account
+# (i.e., $SUDO_USER is set and != root). Lets the operator type PSSWORD_KEY
+# the next time sudo prompts, instead of guessing their old shell password.
+INVOKER_USER="${SUDO_USER:-}"
+case "${PLANTSWIPE_SKIP_INVOKER_PASSWORD:-0}" in
+  1|true|TRUE|yes|YES)
+    log "Skipping invoker password setup (PLANTSWIPE_SKIP_INVOKER_PASSWORD set)."
+    ;;
+  *)
+    if [[ -n "$INVOKER_USER" && "$INVOKER_USER" != "root" ]]; then
+      sync_user_password_from_pssword_key "$INVOKER_USER" "$PSSWORD_KEY_VALUE" "invoker"
+    elif [[ "$INVOKER_USER" == "root" || -z "$INVOKER_USER" ]]; then
+      case "${PLANTSWIPE_SYNC_ROOT_PASSWORD:-0}" in
+        1|true|TRUE|yes|YES)
+          sync_user_password_from_pssword_key "root" "$PSSWORD_KEY_VALUE" "root (opted in)"
+          ;;
+        *)
+          log "Skipping root password sync (set PLANTSWIPE_SYNC_ROOT_PASSWORD=1 to enable)."
+          ;;
+      esac
+    fi
+    ;;
+esac
+
+# Install sudoers NOW (before refresh delegation below). The refresh scripts
+# run as www-data and rely on this NOPASSWD allow list; rendering it later
+# would let one stale-sudoers run break (the prior /usr/bin/ln denial).
+install_plantswipe_sudoers
 
 # Install/upgrade Bun (preferred runtime) and Node.js (for compatibility).
 # Both installers are re-run on every setup.sh pass so minor/patch security
@@ -1304,6 +1415,11 @@ else
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
+  # Discard local edits to lock files / package.json that bun update may have caused
+  if (cd "$REPO_DIR" && git rev-parse --git-dir >/dev/null 2>&1); then
+    log "Discarding local lock file changes (if any)…"
+    (cd "$REPO_DIR" && git checkout -- "$NODE_DIR/bun.lock" "$NODE_DIR/package.json" 2>/dev/null) || true
+  fi
 fi
 fi
 
@@ -1362,6 +1478,90 @@ fi
 # Supabase _shared directory (sync target)
 $SUDO mkdir -p "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
+
+get_primary_domain_from_domain_json() {
+  local domain_json="$1"
+  [[ -f "$domain_json" ]] || { echo ""; return 0; }
+  python3 - "$domain_json" <<'PY' 2>/dev/null
+import json
+import os
+import sys
+path = sys.argv[1]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if domains:
+        print(domains[0])
+except Exception:
+    pass
+PY
+}
+
+domain_exists_in_domain_json() {
+  local domain_json="$1"
+  local check_domain="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$check_domain" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$check_domain" <<'PY' 2>/dev/null
+import json
+import sys
+path = sys.argv[1]
+check_domain = sys.argv[2]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if check_domain in domains:
+        print("true")
+    else:
+        print("false")
+except Exception:
+    print("false")
+PY
+}
+
+# Returns "true" if domain.json contains any entry ending in `.<suffix>` (e.g. "fr").
+# Used to decide whether to wire the French aphylia server_name/CSP block — both
+# the bare aphylia.fr and any subdomain like dev01.aphylia.fr should opt-in.
+any_domain_with_suffix_in_json() {
+  local domain_json="$1"
+  local suffix="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$suffix" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$suffix" <<'PY' 2>/dev/null
+import json
+import sys
+path, suffix = sys.argv[1], sys.argv[2].lstrip(".").lower()
+needle = "." + suffix
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    for d in domains:
+        if not isinstance(d, str):
+            continue
+        d = d.strip().lower()
+        if d == suffix or d.endswith(needle):
+            print("true")
+            sys.exit(0)
+    print("false")
+except Exception:
+    print("false")
+PY
+}
 
 # Aphydle helper: append a domain to domain.json if absent (idempotent)
 aphydle_register_domain_in_json() {
@@ -1550,58 +1750,6 @@ fi
 # Install nginx site and admin snippet
 log "Installing nginx config…"
 
-# Helper utilities for SSL/Let's Encrypt reconciliation
-get_primary_domain_from_domain_json() {
-  local domain_json="$1"
-  [[ -f "$domain_json" ]] || { echo ""; return 0; }
-  python3 - "$domain_json" <<'PY' 2>/dev/null
-import json
-import os
-import sys
-path = sys.argv[1]
-try:
-    with open(path, "r") as f:
-        data = json.load(f)
-    domains = []
-    if isinstance(data, dict) and isinstance(data.get("domains"), list):
-        domains = data["domains"]
-    elif isinstance(data, list):
-        domains = data
-    if domains:
-        print(domains[0])
-except Exception:
-    pass
-PY
-}
-
-# Check if a domain exists in domain.json
-domain_exists_in_domain_json() {
-  local domain_json="$1"
-  local check_domain="$2"
-  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
-  [[ -z "$check_domain" ]] && { echo "false"; return 0; }
-  python3 - "$domain_json" "$check_domain" <<'PY' 2>/dev/null
-import json
-import sys
-path = sys.argv[1]
-check_domain = sys.argv[2]
-try:
-    with open(path, "r") as f:
-        data = json.load(f)
-    domains = []
-    if isinstance(data, dict) and isinstance(data.get("domains"), list):
-        domains = data["domains"]
-    elif isinstance(data, list):
-        domains = data
-    if check_domain in domains:
-        print("true")
-    else:
-        print("false")
-except Exception:
-    print("false")
-PY
-}
-
 ensure_nginx_ssl_directives() {
   local cert_domain="$1"
   [[ -n "$cert_domain" ]] || return 1
@@ -1676,12 +1824,14 @@ prepare_nginx_config() {
       log "media.aphylia.app not found in domain.json - excluding media server block"
     fi
 
-    # Check if aphylia.fr is in domain.json (French domain support)
-    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "aphylia.fr")" == "true" ]]; then
+    # Check if any *.fr domain is in domain.json (French domain support).
+    # Match both bare aphylia.fr and subdomains (dev01.aphylia.fr, etc.) so the
+    # main app block accepts them via server_name `aphylia.fr *.aphylia.fr`.
+    if [[ "$(any_domain_with_suffix_in_json "$REPO_DIR/domain.json" "fr")" == "true" ]]; then
       has_french_domain="true"
-      log "aphylia.fr found in domain.json - including French domain in nginx config"
+      log "Found .fr domain(s) in domain.json - including French domain in nginx config"
     else
-      log "aphylia.fr not found in domain.json - excluding French domain from nginx config"
+      log "No .fr domains in domain.json - excluding French domain from nginx config"
     fi
 
     # Check if aphydle.<primary> is in domain.json (Aphydle daily-game support)
@@ -1751,10 +1901,11 @@ prepare_nginx_config() {
     sed -i "s|__APHYDLE_DOMAIN__|$aphydle_domain|g" "$tmp_config"
   fi
   
-  # Remove SSL listeners if user doesn't want SSL
+  # Remove SSL listeners if user doesn't want SSL.
+  # Match `listen 443 ssl;` and `listen 443 ssl default_server;` (and IPv6).
   if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
     log "Removing SSL listeners (user declined SSL setup)"
-    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
+    sed -i -e '/listen 443 ssl/d' -e '/listen \[::\]:443 ssl/d' "$tmp_config"
   fi
   
   # Install the processed config
@@ -1823,8 +1974,8 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
         $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
         # Strip ALL SSL directives
         $SUDO sed -i \
-          -e '/listen 443 ssl;/d' \
-          -e '/listen \[::\]:443 ssl;/d' \
+          -e '/listen 443 ssl/d' \
+          -e '/listen \[::\]:443 ssl/d' \
           -e '/ssl_certificate /d' \
           -e '/ssl_certificate_key /d' \
           -e '/ssl_protocols /d' \
@@ -2864,39 +3015,11 @@ EOF
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
-# Sudoers for Admin API to manage limited systemctl commands without password
-SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
-log "Configuring sudoers at $SUDOERS_FILE…"
-$SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
-Defaults:$SERVICE_USER !requiretty
-$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
-# Allow website Pull & Build to sync service env and reload units without password
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
-EOF
-"
-$SUDO chmod 0440 "$SUDOERS_FILE"
-# Validate sudoers syntax
-if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
-  echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
-  $SUDO rm -f "$SUDOERS_FILE" || true
-fi
+# Re-render sudoers at end-of-setup as well — defensive in case anything below
+# changed values that flow into the file. The same function ran earlier (right
+# after the password sync) so refresh-plant-swipe.sh / refresh-aphydle.sh saw
+# the up-to-date NOPASSWD entries during the build phase.
+install_plantswipe_sudoers
 
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"

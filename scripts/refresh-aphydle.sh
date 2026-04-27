@@ -25,10 +25,53 @@ APHYDLE_REPO_URL="${APHYDLE_REPO_URL:-https://github.com/Duckxel/Aphydle.git}"
 APHYDLE_WEB_ROOT_LINK="${APHYDLE_WEB_ROOT_LINK:-/var/www/Aphydle}"
 SERVICE_APHYDLE="${SERVICE_APHYDLE:-plant-swipe-aphydle}"
 
-# Sudo usage: only set when not already root
+# Sudo usage. When not root, prefer a non-interactive askpass helper backed by
+# PSSWORD_KEY so internal `sudo ln -sfn` / `sudo systemctl restart` invocations
+# don't fall back to a TTY prompt. Mirrors refresh-plant-swipe.sh setup, and
+# also reuses an inherited SUDO_ASKPASS from the parent (setup.sh sets one up
+# at the start of its run, refresh-plant-swipe.sh sets one too).
 SUDO=""
+APHYDLE_ASKPASS_HELPER=""
 if [[ $EUID -ne 0 ]]; then
   SUDO="sudo"
+  if [[ -z "${SUDO_ASKPASS:-}" ]]; then
+    PSSWORD_KEY_VAL=""
+    for env_file in \
+      "$WORK_DIR/plant-swipe/.env" \
+      "$WORK_DIR/.env" \
+      "/etc/plant-swipe/service.env" \
+      "/etc/admin-api/env"; do
+      [[ -f "$env_file" ]] || continue
+      kv_line="$(grep -E '^[[:space:]]*PSSWORD_KEY=' "$env_file" | tail -n1 || true)"
+      [[ -n "$kv_line" ]] || continue
+      tmp_key="${kv_line#*=}"
+      tmp_key="$(printf %s "$tmp_key" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+      if [[ "${#tmp_key}" -ge 2 && "${tmp_key:0:1}" == '"' && "${tmp_key: -1}" == '"' ]]; then
+        tmp_key="${tmp_key:1:${#tmp_key}-2}"
+      elif [[ "${#tmp_key}" -ge 2 && "${tmp_key:0:1}" == "'" && "${tmp_key: -1}" == "'" ]]; then
+        tmp_key="${tmp_key:1:${#tmp_key}-2}"
+      fi
+      if [[ -n "$tmp_key" ]]; then
+        PSSWORD_KEY_VAL="$tmp_key"
+        break
+      fi
+    done
+    if [[ -n "$PSSWORD_KEY_VAL" ]]; then
+      APHYDLE_ASKPASS_HELPER="$(mktemp -t aphydle-askpass.XXXXXX)"
+      chmod 0700 "$APHYDLE_ASKPASS_HELPER"
+      escaped_pw="${PSSWORD_KEY_VAL//\'/\'\\\'\'}"
+      cat > "$APHYDLE_ASKPASS_HELPER" <<EOF
+#!/usr/bin/env bash
+exec printf '%s' '${escaped_pw}'
+EOF
+      chmod 0700 "$APHYDLE_ASKPASS_HELPER"
+      export SUDO_ASKPASS="$APHYDLE_ASKPASS_HELPER"
+      trap '[[ -n "${APHYDLE_ASKPASS_HELPER:-}" ]] && rm -f "$APHYDLE_ASKPASS_HELPER"' EXIT
+    fi
+  fi
+  if [[ -n "${SUDO_ASKPASS:-}" ]]; then
+    SUDO="sudo -A"
+  fi
 fi
 
 # Determine repo owner (mirrors refresh-plant-swipe.sh logic)

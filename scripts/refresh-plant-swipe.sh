@@ -898,7 +898,9 @@ fi
 log "Testing nginx configuration…"
 $SUDO nginx -t
 
-if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+if [[ "$SKIP_RESTARTS" == "true" ]]; then
+  log "Skipping nginx reload (requested)"
+elif $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
   log "Reloading nginx…"
   $SUDO systemctl reload "$SERVICE_NGINX"
 else
