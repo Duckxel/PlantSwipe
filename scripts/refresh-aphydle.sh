@@ -164,6 +164,22 @@ PY
   fi
 fi
 
+# ── 3b. patch Aphydle source for image proxy ────────────────────────────────
+# Aphydle queries Supabase directly for plant_images.link and renders the URL
+# into a <canvas> via crossOrigin="anonymous" — third-party hosts that don't
+# send Access-Control-Allow-Origin (e.g. img.passeportsante.net) make every
+# load fail CORS. The patcher rewrites pickImage() to route those URLs through
+# PlantSwipe's /api/image-proxy. Idempotent, fails loudly if upstream changes.
+APHYDLE_PATCHER="$WORK_DIR/scripts/aphydle-patch-image-proxy.mjs"
+if [[ -f "$APHYDLE_PATCHER" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
+  log "Patching Aphydle source for image-proxy CORS wrapping…"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
+  else
+    node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
+  fi
+fi
+
 # ── 4. locate Bun ────────────────────────────────────────────────────────────
 OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
 OWNER_BUN_DIR="$OWNER_HOME/.bun/bin"
@@ -224,6 +240,31 @@ fi
 if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
   echo "[ERROR] Aphydle build did not produce $APHYDLE_DIR/dist" >&2
   exit 1
+fi
+
+# ── 5b. ensure favicon.ico is present in dist ───────────────────────────────
+# Aphydle's upstream repo ships no favicon, so the browser-issued GET for
+# /favicon.ico 404s (visible in the Aphydle browser console). Reuse the
+# PlantSwipe app icon so the app reports a green console without dragging
+# Aphydle into PlantSwipe-specific deploy assets.
+APHYDLE_FAVICON_DEST="$APHYDLE_DIR/dist/favicon.ico"
+APHYDLE_FAVICON_SRC=""
+for candidate in \
+  "$WORK_DIR/plant-swipe/public/icons/icon-192x192.png" \
+  "$WORK_DIR/plant-swipe/public/favicon.ico"; do
+  if [[ -f "$candidate" ]]; then APHYDLE_FAVICON_SRC="$candidate"; break; fi
+done
+if [[ -n "$APHYDLE_FAVICON_SRC" ]]; then
+  log "Installing favicon.ico into Aphydle dist (from $APHYDLE_FAVICON_SRC)"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
+      log "[WARN] Failed to install Aphydle favicon"
+  else
+    install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
+      log "[WARN] Failed to install Aphydle favicon"
+  fi
+else
+  log "[WARN] No PlantSwipe favicon source found; Aphydle /favicon.ico will 404."
 fi
 
 # ── 6. ensure /var/www/Aphydle symlink ──────────────────────────────────────
