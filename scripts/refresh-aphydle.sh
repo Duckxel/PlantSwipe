@@ -115,13 +115,29 @@ if [[ ! -d "$APHYDLE_DIR/.git" ]]; then
   fi
 fi
 
-# ── 2. git pull ──────────────────────────────────────────────────────────────
+# ── 2. git fetch + hard reset ────────────────────────────────────────────────
+# Fetch+reset (not pull --ff-only): the patchers below modify tracked files
+# (src/lib/data.js, index.html). Those edits are idempotent and re-applied
+# every run, so discarding them before pulling is safe — and avoids the
+# "local changes would be overwritten by merge" abort that would otherwise
+# leave the checkout stuck on an old commit missing newly-committed assets
+# (e.g. src/assets/FINAL.png).
 if [[ "$SKIP_PULL" != "true" ]]; then
   log "Pulling latest Aphydle…"
   if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H git -C "$APHYDLE_DIR" pull --ff-only || log "[WARN] git pull failed; continuing with current checkout."
+    APHYDLE_BRANCH="$(sudo -u "$REPO_OWNER" -H git -C "$APHYDLE_DIR" symbolic-ref --short HEAD 2>/dev/null || true)"
   else
-    git -C "$APHYDLE_DIR" pull --ff-only || log "[WARN] git pull failed; continuing with current checkout."
+    APHYDLE_BRANCH="$(git -C "$APHYDLE_DIR" symbolic-ref --short HEAD 2>/dev/null || true)"
+  fi
+  [[ -n "$APHYDLE_BRANCH" && "$APHYDLE_BRANCH" != "HEAD" ]] || APHYDLE_BRANCH="main"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H git -C "$APHYDLE_DIR" fetch origin "$APHYDLE_BRANCH" \
+      && sudo -u "$REPO_OWNER" -H git -C "$APHYDLE_DIR" reset --hard "origin/$APHYDLE_BRANCH" \
+      || log "[WARN] git fetch/reset failed; continuing with current checkout."
+  else
+    git -C "$APHYDLE_DIR" fetch origin "$APHYDLE_BRANCH" \
+      && git -C "$APHYDLE_DIR" reset --hard "origin/$APHYDLE_BRANCH" \
+      || log "[WARN] git fetch/reset failed; continuing with current checkout."
   fi
 else
   log "Skipping git pull (--skip-pull)"
