@@ -1304,6 +1304,11 @@ else
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
+  # Discard local edits to lock files / package.json that bun update may have caused
+  if (cd "$REPO_DIR" && git rev-parse --git-dir >/dev/null 2>&1); then
+    log "Discarding local lock file changes (if any)…"
+    (cd "$REPO_DIR" && git checkout -- "$NODE_DIR/bun.lock" "$NODE_DIR/package.json" 2>/dev/null) || true
+  fi
 fi
 fi
 
@@ -1362,6 +1367,56 @@ fi
 # Supabase _shared directory (sync target)
 $SUDO mkdir -p "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
+
+get_primary_domain_from_domain_json() {
+  local domain_json="$1"
+  [[ -f "$domain_json" ]] || { echo ""; return 0; }
+  python3 - "$domain_json" <<'PY' 2>/dev/null
+import json
+import os
+import sys
+path = sys.argv[1]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if domains:
+        print(domains[0])
+except Exception:
+    pass
+PY
+}
+
+domain_exists_in_domain_json() {
+  local domain_json="$1"
+  local check_domain="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$check_domain" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$check_domain" <<'PY' 2>/dev/null
+import json
+import sys
+path = sys.argv[1]
+check_domain = sys.argv[2]
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    if check_domain in domains:
+        print("true")
+    else:
+        print("false")
+except Exception:
+    print("false")
+PY
+}
 
 # Aphydle helper: append a domain to domain.json if absent (idempotent)
 aphydle_register_domain_in_json() {
@@ -1549,58 +1604,6 @@ fi
 
 # Install nginx site and admin snippet
 log "Installing nginx config…"
-
-# Helper utilities for SSL/Let's Encrypt reconciliation
-get_primary_domain_from_domain_json() {
-  local domain_json="$1"
-  [[ -f "$domain_json" ]] || { echo ""; return 0; }
-  python3 - "$domain_json" <<'PY' 2>/dev/null
-import json
-import os
-import sys
-path = sys.argv[1]
-try:
-    with open(path, "r") as f:
-        data = json.load(f)
-    domains = []
-    if isinstance(data, dict) and isinstance(data.get("domains"), list):
-        domains = data["domains"]
-    elif isinstance(data, list):
-        domains = data
-    if domains:
-        print(domains[0])
-except Exception:
-    pass
-PY
-}
-
-# Check if a domain exists in domain.json
-domain_exists_in_domain_json() {
-  local domain_json="$1"
-  local check_domain="$2"
-  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
-  [[ -z "$check_domain" ]] && { echo "false"; return 0; }
-  python3 - "$domain_json" "$check_domain" <<'PY' 2>/dev/null
-import json
-import sys
-path = sys.argv[1]
-check_domain = sys.argv[2]
-try:
-    with open(path, "r") as f:
-        data = json.load(f)
-    domains = []
-    if isinstance(data, dict) and isinstance(data.get("domains"), list):
-        domains = data["domains"]
-    elif isinstance(data, list):
-        domains = data
-    if check_domain in domains:
-        print("true")
-    else:
-        print("false")
-except Exception:
-    print("false")
-PY
-}
 
 ensure_nginx_ssl_directives() {
   local cert_domain="$1"
