@@ -30983,6 +30983,25 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
+// Derive the Aphydle (sister daily plant guessing game) origin from the primary
+// site URL. Aphydle is served on `aphydle.<primary>` per plant-swipe.conf /
+// setup.sh. PLANTSWIPE_APHYDLE_URL or APHYDLE_URL can override the default.
+function deriveAphydleOrigin(siteUrl) {
+  const override = (process.env.PLANTSWIPE_APHYDLE_URL || process.env.APHYDLE_URL || '').trim()
+  if (override) {
+    try { return new URL(override).origin } catch { /* fall through */ }
+  }
+  try {
+    const parsed = new URL(siteUrl)
+    let host = parsed.hostname
+    if (host.startsWith('www.')) host = host.slice(4)
+    if (!host.startsWith('aphydle.')) host = `aphydle.${host}`
+    return `${parsed.protocol}//${host}`
+  } catch {
+    return null
+  }
+}
+
 // Dynamic sitemap.xml generator
 // Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
 // Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
@@ -31024,6 +31043,20 @@ app.get('/sitemap.xml', async (req, res) => {
 
   // Build sitemap XML - generate URLs for each language
   let urls = ''
+
+  // Sister app: Aphydle (daily plant guessing game) hosted on aphydle.<primary>.
+  // Top priority cross-link so crawlers discover the second property.
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
+  if (aphydleOrigin) {
+    const aphydleHref = `${aphydleOrigin}/`
+    urls += `  <url>
+    <loc>${aphydleHref}</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="x-default" href="${aphydleHref}" />
+  </url>\n`
+  }
+
   for (const lang of languages) {
     urls += staticPages.map(page => `  <url>
     <loc>${langUrl(page.loc, lang)}</loc>
@@ -31282,6 +31315,7 @@ ${urls}
 // Analogous to sitemap.xml but optimized for LLM consumption.
 app.get('/llms-full.txt', async (req, res) => {
   const siteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').replace(/\/+$/, '')
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
   const now = new Date().toISOString()
   const db = supabaseServiceClient || supabaseServer
 
@@ -31291,6 +31325,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`# Website: ${siteUrl}`)
   lines.push(`# Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`# LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`# Sister app — Aphydle (daily plant guessing game): ${aphydleOrigin}/`)
+  }
   lines.push('')
   lines.push('> This file is dynamically generated from the Aphylia database.')
   lines.push('> It lists every plant with key care data, all blog posts, public gardens, public profiles, and public bookmark collections.')
@@ -31588,6 +31625,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`Website: ${siteUrl}`)
   lines.push(`Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`Sister app — Aphydle: ${aphydleOrigin}/`)
+  }
   lines.push(`Contact: ${siteUrl}/contact`)
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')

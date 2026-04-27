@@ -75,6 +75,8 @@ try {
 }
 const siteUrlWithSlash = siteUrlBase.endsWith('/') ? siteUrlBase : `${siteUrlBase}/`
 
+const aphydleUrlBase = deriveAphydleUrl(siteUrlBase)
+
 const basePath = normalizeBasePath(process.env.VITE_APP_BASE_PATH)
 const defaultLanguage = (process.env.SITEMAP_DEFAULT_LANGUAGE || 'en').trim() || 'en'
 
@@ -173,6 +175,20 @@ async function main() {
     // Then sort by URL
     return a.loc.localeCompare(b.loc)
   })
+
+  // Sister app: Aphydle (daily plant guessing game) on aphydle.<primary>.
+  // Top-priority cross-link so crawlers discover the second property.
+  if (aphydleUrlBase) {
+    const aphydleHref = `${aphydleUrlBase}/`
+    urlEntries.unshift({
+      loc: aphydleHref,
+      changefreq: 'daily',
+      priority: 1.0,
+      lastmod: nowIso,
+      alternates: [{ hreflang: 'x-default', href: aphydleHref }],
+      lang: defaultLanguage,
+    })
+  }
 
   const xml = [
     '<?xml version="1.0" encoding="UTF-8"?>',
@@ -440,6 +456,31 @@ function escapeXml(value) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/'/g, '&apos;')
+}
+
+// Derive the Aphydle (sister daily plant guessing game) URL from the primary
+// site URL. Aphydle is served on the `aphydle.<primary>` subdomain (see
+// plant-swipe.conf and setup.sh). An explicit override can be supplied via
+// PLANTSWIPE_APHYDLE_URL or APHYDLE_URL env vars.
+function deriveAphydleUrl(siteUrl) {
+  const override = (process.env.PLANTSWIPE_APHYDLE_URL || process.env.APHYDLE_URL || '').trim()
+  if (override) {
+    try {
+      const parsed = new URL(override)
+      return `${parsed.origin}`
+    } catch {
+      console.warn(`[sitemap] Invalid APHYDLE_URL "${override}" — falling back to derived URL.`)
+    }
+  }
+  try {
+    const parsed = new URL(siteUrl)
+    let host = parsed.hostname
+    if (host.startsWith('www.')) host = host.slice(4)
+    if (!host.startsWith('aphydle.')) host = `aphydle.${host}`
+    return `${parsed.protocol}//${host}`
+  } catch {
+    return null
+  }
 }
 
 async function loadBlogRoutes() {
@@ -913,6 +954,14 @@ async function generateLlmsTxt(counts) {
   lines.push(`- [Terms](${siteUrlBase}/terms): Terms of Service`)
   lines.push(`- [Privacy](${siteUrlBase}/privacy): GDPR-compliant Privacy Policy`)
   lines.push(``)
+
+  // ── Sister Apps ──────────────────────────────────────────────
+  if (aphydleUrlBase) {
+    lines.push(`### Sister Apps`)
+    lines.push(``)
+    lines.push(`- [Aphydle](${aphydleUrlBase}/): Daily plant guessing game from the Aphylia team. A new mystery plant every day — players guess the species using progressive botanical clues (foliage, habitat, family, etc.). Hosted on a dedicated subdomain and shares the Aphylia plant database.`)
+    lines.push(``)
+  }
 
   // ── Optional / Technical ─────────────────────────────────────
   lines.push(`## Optional`)
