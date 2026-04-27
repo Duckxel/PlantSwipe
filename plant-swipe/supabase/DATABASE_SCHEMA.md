@@ -1,6 +1,6 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** March 31, 2026
+> **Last Updated:** April 27, 2026
 > **Database:** PostgreSQL (Supabase)  
 > **Total Tables:** 75+  
 > **RLS Policies:** 250+
@@ -28,18 +28,15 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **Apr 26, 2026:** **Profile field hardening + usage table REVOKE.** Extended the `prevent_self_admin_escalation` trigger to protect `roles`, `threat_level` (non-admins may only increase), `bug_points`, `shadow_ban_backup`, and `last_active_at` from client tampering. INSERT defaults also enforced. Explicitly `REVOKE INSERT/UPDATE/DELETE` on `ai_usage_events` and `scan_usage_events` from `authenticated`/`anon` for defence in depth. Migration: `20260422000002_harden_profile_and_usage.sql`. Schema files: `02_profiles_and_purge.sql`, `21_ai_and_scan_usage.sql`.
+- **Apr 22, 2026:** **AI & scan usage monitoring.** New `ai_usage_events` table logs every OpenAI request (user, feature, model, prompt/completion/total tokens, request_id, metadata). New `scan_usage_events` table logs every Kindwise plant scan (1 scan = 1 token, classification_level, success). RLS: users read own rows, admins see all. No write policies — server (service role) inserts only. No limits enforced yet; tables exist for abuse detection and future plan pricing. Schema file: `21_ai_and_scan_usage.sql`. Migration: `20260422000001_add_ai_and_scan_usage.sql`.
+- **Apr 22, 2026:** **Admin escalation prevention.** Added `BEFORE INSERT/UPDATE` trigger `prevent_self_admin_escalation` on `profiles` that blocks non-admin callers from setting `is_admin = true` or adding `'admin'` to `roles`. Service-role calls (`auth.uid() IS NULL`) pass through so server endpoints keep working. Migration: `20260422000000_prevent_self_admin_escalation.sql`. Schema file: `02_profiles_and_purge.sql`.
 - **Apr 23, 2026:** **Dropped legacy admin_commentary + contributor_name.** Now that the data migrations have been applied, `plants.admin_commentary` is dropped and `plant_contributors.contributor_name` is removed (along with its legacy unique index and the id-or-name check constraint). `plant_contributors.contributor_id` is now `NOT NULL` with `ON DELETE CASCADE` and the single unique is `(plant_id, contributor_id)`. Orphan contributor rows that couldn't be resolved to a profile during backfill are deleted by the idempotent cleanup block in `03_plants_and_colors.sql`. Client code purged of every `adminCommentary` / `contributor_name` reference across pages, services, schema, diff helper, and server.js.
 - **Apr 22, 2026:** **Contributors keyed by profile id.** Added `plant_contributors.contributor_id` (uuid FK to `profiles`, `ON DELETE SET NULL`) alongside the existing `contributor_name` (now nullable, kept only as legacy snapshot). Replaced the case-insensitive name unique index with two partial uniques (one per id, one per legacy name) and added a check constraint requiring either an id or a non-empty name. New admin UI uses a shared user-search picker (same `SearchItem` pattern as Admin Event notifications). Migration `20260422100000_backfill_plant_contributor_ids.sql` resolves existing names to profile ids via `display_name`. Schema file: `03_plants_and_colors.sql`.
 - **Apr 22, 2026:** **Plant change history + admin notes thread.** New `plant_history` table logs per-plant admin actions (field edits, translations, AI fills, note add/edit/delete) — insert-only, admin/editor select. New `plant_admin_notes` table replaces the legacy `plants.admin_commentary` textarea with a chat-style thread (any admin can add/edit/delete any note; all mutations mirrored into `plant_history`). Schema file: `03_plants_and_colors.sql`.
 - **Apr 13, 2026:** **Native push tokens, tutorial, GDPR expansion, companion cleanup.** Added `user_fcm_tokens` table for native (Capacitor) FCM/APNs device tokens. Added `tutorial_completed` boolean column to `profiles` for onboarding tutorial persistence. Migration `20260408000000_clean_bad_companion_data.sql` bulk-cleans bad AI-filled companion data from `plants` table. Migration `20260408100000_fix_admin_event_notifications_rls.sql` fixes RLS so non-admin users can receive event notifications. GDPR delete handlers expanded to 10 additional tables (`15_gdpr_and_preferences.sql`). Schema files: `01_extensions_and_setup.sql`, `11_notifications_and_tasks.sql`, `15_gdpr_and_preferences.sql`, `17_admin_event_notifications.sql`.
 - **Apr 6, 2026:** **Events & Badges schema files.** Added `19_badges.sql` (badge catalog, translations, user badges) and `20_events.sql` (events, items, translations, registrations, user progress) to `sync_parts/`. Added `conservation_status` values `protected` and `protected_in_some_regions`. Unified `plant_part` and `edible_part` to share 12 items (added `tubers`). Fixed Phase 3 sync constraints for `conservation_status` and `plant_part`. Schema files: `03_plants_and_colors.sql`, `19_badges.sql`, `20_events.sql`.
 - **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
-- **Mar 25, 2026:** **Seedling Tray Garden Type.** Added `seedling` to `garden_type` CHECK constraint and `living_space` values. Added `tray_rows` and `tray_cols` INTEGER columns to `gardens` table (used when `garden_type = 'seedling'`). New `seedling_tray_cells` table with per-cell tracking (position, plant, stage, sow date, watering, notes). Stages: `empty`, `sown`, `germinating`, `sprouted`, `ready`. RLS policies for garden member access. Schema file: `12_audit_and_analytics.sql`. Migration: `20260325000000_add_seedling_tray.sql`.
-- **Mar 16, 2026:** **Garden Living Space & Roadmap Persistence.** Added `living_space` text[] column to `gardens` table (values: indoor, outdoor, terrarium, greenhouse) — used for plant suggestions and beginner onboarding. New `garden_roadmap_completions` table tracks beginner roadmap step completions per garden (persistent, never reverted). RPC: `complete_roadmap_step(uuid, text)`. Schema file: `12_audit_and_analytics.sql`.
-- **Mar 14, 2026:** **Admin Event Notifications.** Added `admin_event_notifications` table for configurable push notifications sent to selected admins when special events occur (user reports, bug reports, plant reports, plant requests). Each event type has its own enable/disable toggle, custom message template with `{{variable}}` interpolation, and selectable list of admin recipients. Schema file: `17_admin_event_notifications.sql`. New admin panel: "Event Alerts" tab.
-- **Mar 11, 2026:** **Email timezone bug fix.** Added `original_scheduled_for` column to `admin_email_campaigns` — stores the admin's intended send time immutably. The campaign runner edge function now uses this column for per-user timezone calculations instead of `scheduled_for`, which gets overwritten with cron wake-up times after partial sends, preventing timezone offset compounding. Added detailed column documentation for `admin_email_campaigns` and `admin_campaign_sends` tables.
-- **Mar 10, 2026:** **Performance optimizations.** Added new RPC `get_enriched_occurrences_for_gardens(uuid[], timestamptz, timestamptz)` that returns task occurrences pre-joined with task metadata (type, emoji) in a single query — replaces 3-step fetch-tasks → fetch-occurrences → client-merge pattern. Added performance indexes: `idx_task_occurrences_due_completed (due_at, completed_at)`, `idx_task_occurrences_task_id (task_id)`, `idx_garden_plant_tasks_garden_id (garden_id)`. Server-side: postgres connection pooling (max 10), health-check caching (5s TTL with request coalescing), parallelised GDPR export queries.
-- **Mar 6, 2026:** Merged Likes into Bookmarks system. Added `is_like` boolean column to `bookmarks` table with unique partial index (one per user). New user trigger now creates a private Likes bookmark instead of a Default public bookmark. `profiles.liked_plant_ids` deprecated — likes now stored via `bookmark_items` in the user's Likes bookmark.
 
 ### Required Extensions
 ```sql
@@ -52,7 +49,7 @@ pg_net        -- HTTP requests from database (edge functions)
 
 ## Schema Files Structure
 
-The schema is split into 20 files in `supabase/sync_parts/` for easier management:
+The schema is split into 21 files in `supabase/sync_parts/` for easier management:
 
 | File | Description |
 |------|-------------|
@@ -76,6 +73,7 @@ The schema is split into 20 files in `supabase/sync_parts/` for easier managemen
 | `18_discovery_history.sql` | Discovery seen-plants history for personalized scoring |
 | `19_badges.sql` | Badge catalog, translations, and user badge awards |
 | `20_events.sql` | Event system: events, items, translations, registrations, user progress |
+| `21_ai_and_scan_usage.sql` | AI (OpenAI) token usage and plant-scan usage monitoring |
 
 ---
 
@@ -211,6 +209,8 @@ The schema is split into 20 files in `supabase/sync_parts/` for easier managemen
 | `garden_task_audit_log` | Task change audit |
 | `gdpr_audit_log` | GDPR compliance audit |
 | `impressions` | Page view impressions for plants and blog posts (admin read-only) |
+| `ai_usage_events` | Per-request OpenAI token usage (feature, model, tokens). Server-insert only. |
+| `scan_usage_events` | Per-scan Kindwise plant identification usage (1 scan = 1 token). Server-insert only. |
 
 ### Events & Badges
 
@@ -1348,6 +1348,52 @@ updated_at        TIMESTAMPTZ DEFAULT now()  -- Auto-updated via trigger
 
 **Seeded defaults:** One row per event type is inserted on migration with `enabled = false`.
 
+### `ai_usage_events`
+
+Per-request OpenAI token usage. One row per `openaiClient.responses.create` call across all server features (plant fill, plant verify, blog metadata, blog summary, garden advice, journal feedback, garden-chat). Server-insert only; no client write policies.
+
+```sql
+id                  UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id             UUID REFERENCES auth.users(id) ON DELETE SET NULL
+feature             TEXT NOT NULL            -- e.g. 'plant_fill', 'blog_summary', 'garden_advice'
+provider            TEXT NOT NULL DEFAULT 'openai'
+model               TEXT                     -- e.g. 'gpt-4o'
+prompt_tokens       INTEGER NOT NULL DEFAULT 0
+completion_tokens   INTEGER NOT NULL DEFAULT 0
+total_tokens        INTEGER NOT NULL DEFAULT 0
+request_id          TEXT                     -- OpenAI request ID for tracing
+metadata            JSONB NOT NULL DEFAULT '{}'
+created_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** SELECT only — users read own rows; admins see all. No INSERT/UPDATE/DELETE policies. `REVOKE INSERT, UPDATE, DELETE` on `authenticated`/`anon` for defence in depth.
+
+**Indexes:** `(user_id, created_at DESC)`, `(feature, created_at DESC)`, `(created_at DESC)`.
+
+**Schema file:** `21_ai_and_scan_usage.sql`. Migration: `20260422000001_add_ai_and_scan_usage.sql`.
+
+### `scan_usage_events`
+
+Per-scan Kindwise plant identification usage. One row per successful scan, 1 scan = 1 token. Server-insert only; no client write policies.
+
+```sql
+id                      UUID PRIMARY KEY DEFAULT gen_random_uuid()
+user_id                 UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE
+scan_id                 UUID REFERENCES plant_scans(id) ON DELETE SET NULL
+provider                TEXT NOT NULL DEFAULT 'kindwise'
+tokens                  INTEGER NOT NULL DEFAULT 1
+classification_level    TEXT
+success                 BOOLEAN NOT NULL DEFAULT true
+metadata                JSONB NOT NULL DEFAULT '{}'
+created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** SELECT only — users read own rows; admins see all. No INSERT/UPDATE/DELETE policies. `REVOKE INSERT, UPDATE, DELETE` on `authenticated`/`anon` for defence in depth.
+
+**Indexes:** `(user_id, created_at DESC)`, `(created_at DESC)`.
+
+**Schema file:** `21_ai_and_scan_usage.sql`. Migration: `20260422000001_add_ai_and_scan_usage.sql`.
+
 ---
 
 ## Row Level Security (RLS)
@@ -1413,6 +1459,9 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `impressions` | Admin SELECT only; server writes via service role |
 | `plant_stocks` | Authenticated users can SELECT; only admins can INSERT/UPDATE/DELETE |
 | `events` | Anyone can SELECT; only admins can UPDATE (`events_update_admin` via `is_admin_user`) |
+| `ai_usage_events` | SELECT: own rows or admin; no INSERT/UPDATE/DELETE policies; `REVOKE` enforced |
+| `scan_usage_events` | SELECT: own rows or admin; no INSERT/UPDATE/DELETE policies; `REVOKE` enforced |
+| `profiles` | `prevent_self_admin_escalation` trigger blocks non-admin changes to `is_admin`, `roles`, `threat_level` (decrease), `bug_points`, `shadow_ban_backup`, `last_active_at` |
 
 ---
 
