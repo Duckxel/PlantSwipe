@@ -256,41 +256,16 @@ if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
   exit 1
 fi
 
-# ── 5b. install Aphylia branding into dist ──────────────────────────────────
-# Aphydle's upstream repo ships no icons, so:
-#   - the browser-issued GET for /favicon.ico 404s (visible in the console)
-#   - the patched index.html (<link rel="icon" href="/icons/...">) and the
-#     patched MosaicLeaf (<img src="/icons/plant-swipe-icon.svg">) need the
-#     same files reachable on Aphydle's origin (CSS/<img> can't reach across
-#     to aphylia.app without CORS we don't want to manage for icons).
-# Copy PlantSwipe's icons/ directory into dist/icons/ and drop a same-origin
-# /favicon.ico for the browser's automatic request. Idempotent; cp -fL handles
-# repeated refreshes without fuss.
-APHYDLE_ICON_SRC_DIR="$WORK_DIR/plant-swipe/public/icons"
-APHYDLE_ICON_DEST_DIR="$APHYDLE_DIR/dist/icons"
-if [[ -d "$APHYDLE_ICON_SRC_DIR" ]]; then
-  log "Copying Aphylia icons into Aphydle dist ($APHYDLE_ICON_SRC_DIR → $APHYDLE_ICON_DEST_DIR)"
-  if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H mkdir -p "$APHYDLE_ICON_DEST_DIR"
-    sudo -u "$REPO_OWNER" -H cp -fL "$APHYDLE_ICON_SRC_DIR"/* "$APHYDLE_ICON_DEST_DIR/" || \
-      log "[WARN] Failed to copy Aphylia icons into Aphydle dist"
-  else
-    mkdir -p "$APHYDLE_ICON_DEST_DIR"
-    cp -fL "$APHYDLE_ICON_SRC_DIR"/* "$APHYDLE_ICON_DEST_DIR/" || \
-      log "[WARN] Failed to copy Aphylia icons into Aphydle dist"
-  fi
-else
-  log "[WARN] $APHYDLE_ICON_SRC_DIR not found; Aphydle branding icons missing."
-fi
-
+# ── 5b. drop a same-origin favicon.ico for the browser's auto-fetch ─────────
+# Even with `<link rel="icon">` in index.html (injected by aphydle-patch-
+# branding.mjs and hashed by Vite into dist/assets/<hash>.png), some clients
+# still poke /favicon.ico — copy the upstream brand asset there so the
+# console stays clean. The hashed dist asset and the in-app <MosaicLeaf>
+# image don't need any post-build copy: Vite already emits and references
+# them via src/assets/FINAL.png.
 APHYDLE_FAVICON_DEST="$APHYDLE_DIR/dist/favicon.ico"
-APHYDLE_FAVICON_SRC=""
-for candidate in \
-  "$WORK_DIR/plant-swipe/public/icons/icon-192x192.png" \
-  "$WORK_DIR/plant-swipe/public/favicon.ico"; do
-  if [[ -f "$candidate" ]]; then APHYDLE_FAVICON_SRC="$candidate"; break; fi
-done
-if [[ -n "$APHYDLE_FAVICON_SRC" ]]; then
+APHYDLE_FAVICON_SRC="$APHYDLE_DIR/src/assets/FINAL.png"
+if [[ -f "$APHYDLE_FAVICON_SRC" ]]; then
   log "Installing favicon.ico into Aphydle dist (from $APHYDLE_FAVICON_SRC)"
   if [[ "$EUID" -eq 0 ]]; then
     sudo -u "$REPO_OWNER" -H install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
@@ -300,7 +275,7 @@ if [[ -n "$APHYDLE_FAVICON_SRC" ]]; then
       log "[WARN] Failed to install Aphydle favicon"
   fi
 else
-  log "[WARN] No PlantSwipe favicon source found; Aphydle /favicon.ico will 404."
+  log "[WARN] $APHYDLE_FAVICON_SRC not found; Aphydle /favicon.ico will 404."
 fi
 
 # ── 6. ensure /var/www/Aphydle symlink ──────────────────────────────────────

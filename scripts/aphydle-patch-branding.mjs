@@ -1,25 +1,28 @@
 #!/usr/bin/env node
-// Patch the upstream Aphydle clone to use Aphylia/PlantSwipe branding.
+// Patch the upstream Aphydle clone to wire the Aphylia/PlantSwipe brand mark
+// into the favicon and the in-app logo.
 //
 // Why this exists:
-//   - Aphydle ships no favicon, so the browser's automatic /favicon.ico fetch
-//     404s in the console.
-//   - Its in-app brand mark is a CSS-grid mosaic leaf (`MosaicLeaf`) and we
-//     want every Aphylia surface to wear the same plant icon for consistency
-//     while Aphydle doesn't yet have its own art direction.
+//   - Aphydle's upstream `index.html` ships no favicon, so the browser's
+//     automatic /favicon.ico fetch 404s in the console.
+//   - Its in-app brand mark is a procedural CSS-grid mosaic leaf
+//     (`MosaicLeaf`) and we want every Aphylia surface to wear the same
+//     plant icon while Aphydle doesn't yet have its own art direction.
 //
 // What this does:
-//   - Inserts `<link rel="icon">` tags into Aphydle's `index.html` pointing
-//     at the PlantSwipe icons that scripts/refresh-aphydle.sh copies into
-//     dist/icons/ post-build.
+//   - Inserts a `<link rel="icon">` into Aphydle's `index.html` pointing at
+//     `src/assets/FINAL.png`. The path is relative so Vite picks it up
+//     during build, hashes it, and emits a content-addressed asset URL.
 //   - Rewrites `src/components/ui/MosaicLeaf.jsx` so every callsite renders
-//     the PlantSwipe icon SVG instead of the procedural mosaic.
-//   - Idempotent (skip if marker present), and fails loudly if the upstream
-//     source no longer matches, so a future refactor can't silently regress.
+//     the same PNG via an ES-module import, again letting Vite hash and
+//     cache-bust the asset.
+//   - Idempotent (skip if marker present), and fails loudly if upstream
+//     Aphydle removes the assets or the MosaicLeaf export so a future
+//     refactor can't silently regress the branding.
 //
 // Invoked from scripts/refresh-aphydle.sh between `git pull` and `bun install`.
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import process from "node:process";
 
@@ -31,7 +34,20 @@ if (!APHYDLE_DIR) {
 
 const MARKER = "__APHYLIA_BRANDING_PATCH__";
 
-// ── 1. Inject favicon links into index.html ──────────────────────────────────
+// Aphydle ships the brand PNG at src/assets/FINAL.png. Bail loudly if it's
+// missing — the patch would otherwise build a bundle that 404s every icon.
+const ASSET_REL = "src/assets/FINAL.png";
+const ASSET_ABS = resolve(APHYDLE_DIR, ASSET_REL);
+if (!existsSync(ASSET_ABS)) {
+  console.error(
+    `[aphydle-branding] FAILED: ${ASSET_ABS} is missing. Update Aphydle ` +
+      `upstream so the brand asset exists, or change the path in ` +
+      `scripts/aphydle-patch-branding.mjs.`,
+  );
+  process.exit(1);
+}
+
+// ── 1. Inject favicon link into index.html ──────────────────────────────────
 const INDEX_PATH = resolve(APHYDLE_DIR, "index.html");
 let indexHtml;
 try {
@@ -48,11 +64,12 @@ if (indexHtml.includes(MARKER)) {
     console.error(`[aphydle-branding] ${INDEX_PATH} has no </head> tag — refusing to patch`);
     process.exit(1);
   }
-  const FAVICON_BLOCK = `    <!-- ${MARKER}: branding sourced from Aphylia/PlantSwipe; files copied into dist/icons/ post-build by scripts/refresh-aphydle.sh -->
-    <link rel="icon" type="image/svg+xml" href="/icons/plant-swipe-icon.svg" />
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
-    <link rel="apple-touch-icon" href="/icons/icon-192x192.png" />
+  // Relative path → Vite hashes the asset and rewrites href= to the emitted
+  // /assets/<hash>.png. Absolute /src/assets/... would bypass Vite asset
+  // handling and 404 in production.
+  const FAVICON_BLOCK = `    <!-- ${MARKER}: brand icon shared with Aphylia/PlantSwipe; Vite hashes and emits this on build -->
+    <link rel="icon" type="image/png" href="./${ASSET_REL}" />
+    <link rel="apple-touch-icon" href="./${ASSET_REL}" />
   </head>`;
   indexHtml = indexHtml.replace("</head>", FAVICON_BLOCK);
   writeFileSync(INDEX_PATH, indexHtml);
@@ -83,14 +100,18 @@ if (leafSrc.includes(MARKER)) {
     );
     process.exit(1);
   }
-  const REPLACEMENT = `// ${MARKER}: rendered as the Aphylia/PlantSwipe icon so Aphydle and its host
-// share the same brand mark. The original procedural mosaic-leaf renderer
-// lives in git history if a standalone Aphydle ever needs it back.
+  // Import path is relative to src/components/ui/MosaicLeaf.jsx
+  // (i.e. ../../assets/FINAL.png).
+  const REPLACEMENT = `// ${MARKER}: rendered as the shared Aphylia/PlantSwipe brand mark so Aphydle
+// and its host wear the same icon. The original procedural mosaic-leaf
+// renderer lives in git history if a standalone Aphydle ever needs it back.
+import aphyliaIcon from "../../assets/FINAL.png";
+
 export function MosaicLeaf({ size = 22 }) {
   const px = typeof size === "number" ? \`\${size}px\` : size;
   return (
     <img
-      src="/icons/plant-swipe-icon.svg"
+      src={aphyliaIcon}
       alt="Aphylia"
       width={size}
       height={size}
