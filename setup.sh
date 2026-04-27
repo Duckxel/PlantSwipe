@@ -76,6 +76,15 @@ SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 SERVICE_SITEMAP="plant-swipe-sitemap"
+SERVICE_APHYDLE="plant-swipe-aphydle"
+
+# Aphydle (daily plant guessing game) - embedded sub-app served at aphydle.<primary>
+APHYDLE_REPO_URL="${APHYDLE_REPO_URL:-https://github.com/Duckxel/Aphydle.git}"
+APHYDLE_DIR="${APHYDLE_DIR:-$REPO_DIR/aphydle}"
+APHYDLE_WEB_ROOT_LINK="${APHYDLE_WEB_ROOT_LINK:-/var/www/Aphydle}"
+APHYDLE_HOST="${APHYDLE_HOST:-127.0.0.1}"
+APHYDLE_PORT="${APHYDLE_PORT:-4173}"
+APHYDLE_SETUP_RAW="${SETUP_APHYDLE:-1}"
 # Service account that runs Node/Admin services (and git operations)
 SERVICE_USER="${SERVICE_USER:-www-data}"
 SERVICE_USER_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
@@ -1354,6 +1363,149 @@ fi
 $SUDO mkdir -p "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 
+# Aphydle helper: append a domain to domain.json if absent (idempotent)
+aphydle_register_domain_in_json() {
+  local domain_json="$1"
+  local new_domain="$2"
+  [[ -f "$domain_json" ]] || return 1
+  [[ -n "$new_domain" ]] || return 1
+  python3 - "$domain_json" "$new_domain" <<'PY'
+import json, os, sys
+path, new = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+if not isinstance(data, dict) or not isinstance(data.get("domains"), list):
+    print("ERROR: domain.json missing 'domains' array", file=sys.stderr)
+    sys.exit(2)
+if new in data["domains"]:
+    print("PRESENT")
+    sys.exit(0)
+data["domains"].append(new)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+os.chmod(path, 0o644)
+print("ADDED")
+PY
+}
+
+# Aphydle: clone repo, share env with PlantSwipe, build, web-root symlink, register domain
+setup_aphydle() {
+  case "$APHYDLE_SETUP_RAW" in
+    0|n|no|false|off|"") log "SETUP_APHYDLE disabled — skipping Aphydle setup"; return 0 ;;
+  esac
+
+  log "Setting up Aphydle (daily plant guessing game)…"
+
+  # Clone or update Aphydle repo
+  if [[ -d "$APHYDLE_DIR/.git" ]]; then
+    log "Aphydle repo present at $APHYDLE_DIR — pulling latest…"
+    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" pull --ff-only 2>&1; then
+      log "[WARN] git pull failed for Aphydle; continuing with existing checkout."
+    fi
+  else
+    log "Cloning Aphydle from $APHYDLE_REPO_URL → $APHYDLE_DIR"
+    $SUDO mkdir -p "$(dirname "$APHYDLE_DIR")"
+    $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$(dirname "$APHYDLE_DIR")" 2>/dev/null || true
+    if ! sudo -u "$SERVICE_USER" -H git clone --depth 1 "$APHYDLE_REPO_URL" "$APHYDLE_DIR" 2>&1; then
+      log "[ERROR] Failed to clone Aphydle repo; skipping Aphydle setup."
+      return 1
+    fi
+  fi
+
+  # Ownership + perms
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$APHYDLE_DIR" || true
+  $SUDO find "$APHYDLE_DIR" -type d -exec chmod 755 {} + 2>/dev/null || true
+
+  # Share .env with PlantSwipe so Aphydle uses the same Supabase credentials.
+  # Aphydle reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; extras are harmless.
+  local plant_env="$NODE_DIR/.env"
+  local aphydle_env="$APHYDLE_DIR/.env"
+  if [[ -f "$plant_env" ]]; then
+    log "Copying $plant_env → $aphydle_env (shared Supabase credentials)"
+    $SUDO install -m 0640 -o "$SERVICE_USER" -g "$SERVICE_USER" "$plant_env" "$aphydle_env"
+  elif [[ -f "$APHYDLE_DIR/.env.example" && ! -f "$aphydle_env" ]]; then
+    log "[WARN] $plant_env not found — bootstrapping $aphydle_env from .env.example (placeholders only)"
+    $SUDO install -m 0640 -o "$SERVICE_USER" -g "$SERVICE_USER" "$APHYDLE_DIR/.env.example" "$aphydle_env"
+  fi
+
+  # Locate Bun for the service user (matches plant-swipe convention)
+  local owner_home owner_bun_dir owner_bun_bin
+  owner_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+  owner_bun_dir="$owner_home/.bun/bin"
+  owner_bun_bin="$owner_bun_dir/bun"
+  if [[ ! -x "$owner_bun_bin" ]]; then
+    if command -v bun >/dev/null 2>&1; then
+      log "Copying system Bun to $SERVICE_USER home for Aphydle build…"
+      $SUDO -u "$SERVICE_USER" -H mkdir -p "$owner_bun_dir"
+      $SUDO cp "$(command -v bun)" "$owner_bun_bin"
+      $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$owner_home/.bun"
+      $SUDO chmod +x "$owner_bun_bin"
+    fi
+  fi
+
+  if [[ ! -x "$owner_bun_bin" ]]; then
+    log "[ERROR] Bun not available for $SERVICE_USER; cannot build Aphydle."
+    return 1
+  fi
+
+  log "Installing Aphydle dependencies with Bun…"
+  if ! sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$owner_bun_dir:\$PATH' && cd '$APHYDLE_DIR' && bun install" 2>&1; then
+    log "[ERROR] bun install failed for Aphydle."
+    return 1
+  fi
+
+  log "Building Aphydle production bundle…"
+  if ! sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$owner_bun_dir:\$PATH' && cd '$APHYDLE_DIR' && VITE_APP_BASE_PATH=/ bun run build" 2>&1; then
+    log "[ERROR] Aphydle vite build failed."
+    return 1
+  fi
+
+  if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
+    log "[ERROR] Aphydle build did not produce $APHYDLE_DIR/dist"
+    return 1
+  fi
+
+  # Web root symlink: /var/www/Aphydle -> $APHYDLE_DIR
+  $SUDO mkdir -p "$(dirname "$APHYDLE_WEB_ROOT_LINK")"
+  if [[ -e "$APHYDLE_WEB_ROOT_LINK" && ! -L "$APHYDLE_WEB_ROOT_LINK" ]]; then
+    log "Removing existing non-symlink at $APHYDLE_WEB_ROOT_LINK"
+    $SUDO rm -rf "$APHYDLE_WEB_ROOT_LINK"
+  fi
+  $SUDO ln -sfn "$APHYDLE_DIR" "$APHYDLE_WEB_ROOT_LINK"
+  log "Linked $APHYDLE_WEB_ROOT_LINK -> $APHYDLE_DIR"
+
+  # Register aphydle.<primary> in domain.json so certbot covers it and nginx
+  # block gets included. Only acts if domain.json already has a primary set.
+  if [[ -f "$REPO_DIR/domain.json" ]]; then
+    local primary
+    primary="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -n "$primary" && "$primary" != "__PRIMARY_DOMAIN__" ]]; then
+      local aphydle_dom="aphydle.$primary"
+      local result
+      result="$(aphydle_register_domain_in_json "$REPO_DIR/domain.json" "$aphydle_dom" 2>&1 || true)"
+      case "$result" in
+        ADDED)   log "Added $aphydle_dom to domain.json (cert will be expanded)" ;;
+        PRESENT) log "$aphydle_dom already present in domain.json" ;;
+        *)       log "[WARN] Could not update domain.json with $aphydle_dom: $result" ;;
+      esac
+    else
+      log "domain.json has no usable primary yet — Aphydle entry will be added during SSL setup."
+    fi
+  else
+    log "domain.json missing — Aphydle entry will be added during SSL setup."
+  fi
+
+  APHYDLE_SETUP_DONE=1
+  log "Aphydle app prepared (systemd unit + nginx wiring installed later in setup)."
+}
+
+APHYDLE_SETUP_DONE=0
+setup_aphydle || log "[WARN] Aphydle setup encountered errors; continuing with main setup."
+
 # Ask about SSL setup BEFORE installing nginx config
 WANT_SSL=""
 if [[ ! -f "$REPO_DIR/domain.json" ]]; then
@@ -1472,7 +1624,8 @@ prepare_nginx_config() {
   local primary_domain=""
   local has_media_domain="false"
   local has_french_domain="false"
-  
+  local aphydle_domain=""
+
   # Get primary domain from domain.json if it exists
   if [[ -f "$REPO_DIR/domain.json" ]]; then
     primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
@@ -1484,7 +1637,7 @@ prepare_nginx_config() {
         break
       done
     fi
-    
+
     # Check if media.aphylia.app is in domain.json
     if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "media.aphylia.app")" == "true" ]]; then
       has_media_domain="true"
@@ -1499,6 +1652,17 @@ prepare_nginx_config() {
       log "aphylia.fr found in domain.json - including French domain in nginx config"
     else
       log "aphylia.fr not found in domain.json - excluding French domain from nginx config"
+    fi
+
+    # Check if aphydle.<primary> is in domain.json (Aphydle daily-game support)
+    if [[ -n "$primary_domain" ]]; then
+      local candidate="aphydle.$primary_domain"
+      if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "$candidate")" == "true" ]]; then
+        aphydle_domain="$candidate"
+        log "$candidate found in domain.json - including Aphydle server block"
+      else
+        log "$candidate not found in domain.json - excluding Aphydle server block"
+      fi
     fi
   else
     # No domain.json - try to find existing certificate
@@ -1544,6 +1708,17 @@ prepare_nginx_config() {
     # Remove the markers but keep the server block
     sed -i '/# __MEDIA_SERVER_BLOCK_START__/d' "$tmp_config"
     sed -i '/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
+  fi
+
+  # Conditionally include/exclude Aphydle server block
+  if [[ -z "$aphydle_domain" ]]; then
+    log "Removing Aphydle server block (aphydle.<primary> not in domain.json)"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_START__/,/# __APHYDLE_SERVER_BLOCK_END__/d' "$tmp_config"
+  else
+    log "Aphydle server block enabled for $aphydle_domain"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_START__/d' "$tmp_config"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_END__/d' "$tmp_config"
+    sed -i "s|__APHYDLE_DOMAIN__|$aphydle_domain|g" "$tmp_config"
   fi
   
   # Remove SSL listeners if user doesn't want SSL
@@ -1858,7 +2033,24 @@ PY
     log "[ERROR] domain.json exists but is not readable: $domain_json"
     return 1
   fi
-  
+
+  # Auto-add aphydle.<primary> to domain.json if Aphydle was prepared by setup_aphydle.
+  # This guarantees the SAN gets included in the certificate request below.
+  if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" ]]; then
+    local _aphydle_primary
+    _aphydle_primary="$(get_primary_domain_from_domain_json "$domain_json")"
+    if [[ -n "$_aphydle_primary" && "$_aphydle_primary" != "__PRIMARY_DOMAIN__" ]]; then
+      local _aphydle_dom="aphydle.$_aphydle_primary"
+      local _aphydle_res
+      _aphydle_res="$(aphydle_register_domain_in_json "$domain_json" "$_aphydle_dom" 2>&1 || true)"
+      case "$_aphydle_res" in
+        ADDED)   log "Auto-added $_aphydle_dom to domain.json (cert SAN)" ;;
+        PRESENT) : ;;
+        *)       log "[WARN] Could not auto-add $_aphydle_dom to domain.json: $_aphydle_res" ;;
+      esac
+    fi
+  fi
+
   # Parse domain.json - only supports new format with "domains" array
     local domain_info
     local domain_info_err
@@ -2370,6 +2562,20 @@ else
   log "Skipping SSL certificate setup (user declined SSL)."
 fi
 
+# Re-render nginx config so any conditional blocks (Aphydle, media, French) added
+# to domain.json during SSL setup get included now. Idempotent.
+if [[ -f "$REPO_DIR/domain.json" ]]; then
+  log "Re-rendering nginx config to pick up domain.json changes…"
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+  if $SUDO nginx -t 2>&1 | tee /tmp/nginx-test-postssl.log; then
+    if $SUDO systemctl is-active --quiet nginx; then
+      $SUDO systemctl reload nginx || log "[WARN] nginx reload after re-render failed."
+    fi
+  else
+    log "[WARN] nginx -t failed after re-render; leaving previous config in place."
+  fi
+fi
+
 # Admin API: install to /opt/admin with venv
 log "Setting up Admin API venv…"
 $SUDO mkdir -p "$ADMIN_DIR"
@@ -2500,6 +2706,46 @@ WantedBy=multi-user.target
 EOF
 "
 
+# Aphydle static-server unit (only installed when Aphydle was set up)
+APHYDLE_SERVICE_FILE="/etc/systemd/system/$SERVICE_APHYDLE.service"
+APHYDLE_SERVE_SCRIPT="$REPO_DIR/scripts/aphydle-server.mjs"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_SERVE_SCRIPT" ]]; then
+  log "Installing Aphydle systemd unit ($SERVICE_APHYDLE)…"
+  $SUDO bash -c "cat > '$APHYDLE_SERVICE_FILE' <<EOF
+[Unit]
+Description=Aphydle daily plant guessing game (static bundle server)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+Environment=APHYDLE_HOST=$APHYDLE_HOST
+Environment=APHYDLE_PORT=$APHYDLE_PORT
+Environment=APHYDLE_DIST=$APHYDLE_WEB_ROOT_LINK/dist
+WorkingDirectory=$APHYDLE_DIR
+ExecStart=/usr/bin/node $APHYDLE_SERVE_SCRIPT
+Restart=always
+RestartSec=3s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=15s
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+else
+  log "Aphydle systemd unit not installed (Aphydle setup skipped or server script missing)."
+  # Clean up stale unit if Aphydle was disabled after a previous install
+  if [[ -f "$APHYDLE_SERVICE_FILE" && "${APHYDLE_SETUP_DONE:-0}" != "1" ]]; then
+    log "Removing stale Aphydle unit at $APHYDLE_SERVICE_FILE"
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE" 2>/dev/null || true
+    $SUDO rm -f "$APHYDLE_SERVICE_FILE"
+  fi
+fi
+
 # Sitemap generator helper + unit files
 if [[ -f "$REPO_DIR/scripts/generate-sitemap-daily.sh" ]]; then
   log "Installing sitemap generator helper to $SITEMAP_GENERATOR_BIN…"
@@ -2599,6 +2845,7 @@ $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
 $SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
@@ -2625,12 +2872,18 @@ fi
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer" "$SERVICE_CA_UPDATE.timer"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  $SUDO systemctl enable "$SERVICE_APHYDLE" || log "[WARN] Failed to enable $SERVICE_APHYDLE"
+fi
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
 # Run CA update immediately to fix any current SSL issues
 log "Running initial CA certificates update…"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  $SUDO systemctl restart "$SERVICE_APHYDLE" || log "[WARN] Failed to restart $SERVICE_APHYDLE"
+fi
 if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then
     log "[WARN] Initial sitemap generation failed. Inspect: $SYSTEMCTL_BIN status $SERVICE_SITEMAP.service"
@@ -2697,11 +2950,15 @@ deploy_supabase_contact_function
 
 # Verify
 log "Verifying services are active…"
-if $SUDO systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX" >/dev/null; then
-  log "All services active."
+verify_services=("$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX")
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  verify_services+=("$SERVICE_APHYDLE")
+fi
+if $SUDO systemctl is-active "${verify_services[@]}" >/dev/null; then
+  log "All services active: ${verify_services[*]}"
 else
   echo "[WARN] One or more services not active" >&2
-  $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX" --no-pager || true
+  $SUDO systemctl status "${verify_services[@]}" --no-pager || true
 fi
 
 # --- Environment & credential file checks ---
