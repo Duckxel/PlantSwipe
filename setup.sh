@@ -1421,7 +1421,8 @@ setup_aphydle() {
   $SUDO find "$APHYDLE_DIR" -type d -exec chmod 755 {} + 2>/dev/null || true
 
   # Share .env with PlantSwipe so Aphydle uses the same Supabase credentials.
-  # Aphydle reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; extras are harmless.
+  # Aphydle reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; extras are harmless
+  # because Vite only embeds VITE_-prefixed values in the client bundle.
   local plant_env="$NODE_DIR/.env"
   local aphydle_env="$APHYDLE_DIR/.env"
   if [[ -f "$plant_env" ]]; then
@@ -1430,6 +1431,21 @@ setup_aphydle() {
   elif [[ -f "$APHYDLE_DIR/.env.example" && ! -f "$aphydle_env" ]]; then
     log "[WARN] $plant_env not found — bootstrapping $aphydle_env from .env.example (placeholders only)"
     $SUDO install -m 0640 -o "$SERVICE_USER" -g "$SERVICE_USER" "$APHYDLE_DIR/.env.example" "$aphydle_env"
+  fi
+
+  # Inject Aphylia host metadata so Aphydle's "← BACK TO APHYLIA" / "Powered by"
+  # chips render. Both gate on VITE_APHYLIA_HOST_URL being set; absent it the app
+  # behaves as a standalone deploy. Derived from domain.json's primary entry.
+  if [[ -f "$aphydle_env" && -f "$REPO_DIR/domain.json" ]]; then
+    local _primary_for_env
+    _primary_for_env="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -n "$_primary_for_env" && "$_primary_for_env" != "__PRIMARY_DOMAIN__" ]]; then
+      local _host_url="https://$_primary_for_env"
+      log "Injecting VITE_APHYLIA_HOST_URL=$_host_url into Aphydle .env"
+      $SUDO sed -i '/^VITE_APHYLIA_HOST_URL=/d; /^VITE_APHYLIA_API_URL=/d' "$aphydle_env"
+      $SUDO bash -c "printf 'VITE_APHYLIA_HOST_URL=%s\nVITE_APHYLIA_API_URL=%s\n' '$_host_url' '$_host_url' >> '$aphydle_env'"
+      $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$aphydle_env"
+    fi
   fi
 
   # Locate Bun for the service user (matches plant-swipe convention)
@@ -1497,6 +1513,20 @@ setup_aphydle() {
     fi
   else
     log "domain.json missing — Aphydle entry will be added during SSL setup."
+  fi
+
+  # Surface the supabase migration step. Aphydle ships its own SQL under the
+  # `aphydle` schema (no collisions with PlantSwipe tables). It needs a one-time
+  # `supabase db push` against the shared Supabase project. We don't run it
+  # automatically because it writes to shared DB infra.
+  if [[ -d "$APHYDLE_DIR/supabase/migrations" ]] && \
+     compgen -G "$APHYDLE_DIR/supabase/migrations/*.sql" >/dev/null 2>&1; then
+    log "------------------------------------------------------------------"
+    log "Aphydle ships Supabase migrations under the 'aphydle' schema."
+    log "Apply them once against your project with:"
+    log "  cd $APHYDLE_DIR && supabase link --project-ref <ref> && supabase db push"
+    log "See $APHYDLE_DIR/supabase/README.md for details."
+    log "------------------------------------------------------------------"
   fi
 
   APHYDLE_SETUP_DONE=1

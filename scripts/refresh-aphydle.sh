@@ -96,6 +96,31 @@ else
   log "[WARN] PlantSwipe .env not found; leaving Aphydle .env unchanged."
 fi
 
+# Inject VITE_APHYLIA_HOST_URL / VITE_APHYLIA_API_URL so the back-link chips
+# render. Derived from domain.json's primary entry. Idempotent: removes any
+# previous values before appending.
+if [[ -f "$APHYDLE_DIR/.env" && -f "$WORK_DIR/domain.json" ]]; then
+  PRIMARY_DOMAIN="$(python3 - "$WORK_DIR/domain.json" <<'PY' 2>/dev/null || true
+import json, sys
+try:
+    with open(sys.argv[1]) as f:
+        d = json.load(f)
+    domains = d.get("domains") if isinstance(d, dict) else None
+    if isinstance(domains, list) and domains:
+        print(domains[0])
+except Exception:
+    pass
+PY
+)"
+  if [[ -n "$PRIMARY_DOMAIN" && "$PRIMARY_DOMAIN" != "__PRIMARY_DOMAIN__" ]]; then
+    HOST_URL="https://$PRIMARY_DOMAIN"
+    log "Injecting VITE_APHYLIA_HOST_URL=$HOST_URL into Aphydle .env"
+    $SUDO sed -i '/^VITE_APHYLIA_HOST_URL=/d; /^VITE_APHYLIA_API_URL=/d' "$APHYDLE_DIR/.env"
+    $SUDO bash -c "printf 'VITE_APHYLIA_HOST_URL=%s\nVITE_APHYLIA_API_URL=%s\n' '$HOST_URL' '$HOST_URL' >> '$APHYDLE_DIR/.env'"
+    $SUDO chown "$REPO_OWNER:$REPO_OWNER" "$APHYDLE_DIR/.env"
+  fi
+fi
+
 # ── 4. locate Bun ────────────────────────────────────────────────────────────
 OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
 OWNER_BUN_DIR="$OWNER_HOME/.bun/bin"
