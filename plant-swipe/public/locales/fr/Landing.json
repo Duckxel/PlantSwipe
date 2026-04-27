@@ -263,6 +263,13 @@
     "ctaDocs": "Voir la documentation",
     "socialText": "Connectons-nous ! Nous adorons avoir de vos nouvelles"
   },
+  "aphydle": {
+    "eyebrow": "Par l'équipe Aphylia",
+    "title": "Aphydle",
+    "tagline": "Le jeu de devinette de plantes quotidien",
+    "description": "Une nouvelle plante mystère chaque jour. Utilisez des indices botaniques progressifs — feuillage, habitat, famille — pour deviner l'espèce avant la fin de vos essais.",
+    "cta": "Jouer à Aphydle"
+  },
   "footer": {
     "about": "À propos",
     "blog": "Blog",

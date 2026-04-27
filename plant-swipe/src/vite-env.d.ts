@@ -9,6 +9,8 @@ interface ImportMetaEnv {
   readonly VITE_API_ORIGIN?: string
   /** Canonical public site URL. */
   readonly VITE_SITE_URL?: string
+  /** Override for the Aphydle (sister daily plant guessing game) origin. */
+  readonly VITE_APHYDLE_URL?: string
 }
 
 interface ImportMeta {
