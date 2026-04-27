@@ -431,10 +431,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
           style={{
             // TopBar is hidden on mobile (`hidden lg:flex`), so the only top
             // chrome is the outer container's pt-2 (8px) + the grid wrapper's
-            // mt-2 (8px) = 16px. Body handles the status-bar safe area via
-            // padding-top, so we subtract env(safe-area-inset-top) here as
-            // well. The fixed MobileNavBar takes 5.5rem + safe-area-inset-bottom.
-            height: 'calc(100dvh - 16px - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
+            // mt-2 (8px) = 16px. We also reserve 16px below the card so the
+            // rounded bottom corners aren't clipped by the fixed nav bar.
+            // Body handles the status-bar safe area via padding-top.
+            height: 'calc(100dvh - 32px - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
             minHeight: '380px',
           }}
         >

@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent } from '@/components/ui/card'
+import { Select } from '@/components/ui/select'
 import { supabase } from '@/lib/supabaseClient'
 import {
   Calendar,
@@ -510,7 +511,12 @@ export const AdminEventsPanel: React.FC = () => {
           <h3 className="text-sm font-semibold text-stone-900 dark:text-white">
             Edit Event
           </h3>
-          <button onClick={handleCancel} className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors">
+          <button
+            onClick={handleCancel}
+            className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none"
+            aria-label="Cancel edit"
+            title="Cancel edit"
+          >
             <X className="h-4 w-4 text-stone-500" />
           </button>
         </div>
@@ -568,16 +574,15 @@ export const AdminEventsPanel: React.FC = () => {
         {/* Badge */}
         <div className="space-y-2">
           <Label>Badge (awarded on completion)</Label>
-          <select
+          <Select
             value={formData.badge_id}
             onChange={(e) => setFormData((p) => ({ ...p, badge_id: e.target.value }))}
-            className="w-full rounded-xl border border-stone-200 dark:border-[#3e3e42] bg-transparent px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
           >
             <option value="">No badge</option>
             {badges.map((b) => (
               <option key={b.id} value={b.id}>{b.name} ({b.slug})</option>
             ))}
-          </select>
+          </Select>
         </div>
 
         {/* Dates */}

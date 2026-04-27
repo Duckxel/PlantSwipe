@@ -98,6 +98,16 @@ import type { SeedlingTrayCell } from "@/types/garden";
 import { getSeedlingTrayCells, updateSeedlingTrayCell, updateSeedlingTrayCells, clearSeedlingTrayCell, clearSeedlingTrayCells, createSeedlingWateringTask, getSeedlingWateringTaskId } from "@/lib/gardens";
 
 /**
+ * An abort from a cancelled fetch (component unmount, tab switch, navigation)
+ * is not a real error — never surface it to the user.
+ */
+function isAbortError(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  const name = (e as { name?: unknown }).name;
+  return name === "AbortError";
+}
+
+/**
  * Convert any thrown value into a human-readable string so we never render
  * "[object Object]" in the UI. Supabase/PostgREST errors are plain objects
  * with `message`/`error`/`error_description` fields, which `String(e)`
@@ -998,6 +1008,7 @@ export const GardenDashboardPage: React.FC = () => {
           } catch {}
         serverTodayRef.current = today;
       } catch (e: unknown) {
+        if (isAbortError(e)) return;
         if (suppressError) {
           console.warn("[GardenDashboard] Silent load failed:", e);
         } else {
@@ -1291,6 +1302,7 @@ export const GardenDashboardPage: React.FC = () => {
           setDueToday(dueTodaySet);
         }
       } catch (e: unknown) {
+        if (isAbortError(e)) return;
         if (opts?.suppressError) {
           console.warn("[GardenDashboard] Silent heavy load failed:", e);
         } else {

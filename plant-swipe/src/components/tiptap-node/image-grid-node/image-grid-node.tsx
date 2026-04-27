@@ -3,6 +3,7 @@ import { useState, useCallback, useRef, useMemo } from "react"
 import { Plus, Trash2, Image as ImageIcon, AlignLeft, AlignCenter, AlignRight, Maximize2, GripVertical, Crop, X, Check, RotateCcw, Link, ZoomIn } from "lucide-react"
 import type { GridColumns, GridGap, GridAspectRatio, ImageGridImage, ImageGridAlign } from "./image-grid-node-extension"
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
+import { Select } from "@/components/ui/select"
 
 // Default upload folder if not configured
 const DEFAULT_UPLOAD_FOLDER = "image-grids"
@@ -786,17 +787,16 @@ export function ImageGridNode({ node, updateAttributes, selected, editor }: Node
                 )}
 
                 {/* Gap */}
-                <select
+                <Select
                   value={gap}
                   onChange={(e) => updateAttributes({ gap: e.target.value as GridGap })}
-                  className="rounded-md border border-stone-200 bg-white px-1.5 py-1 text-[10px] dark:border-[#3e3e42] dark:bg-[#0f0f11] dark:text-white"
                 >
                   {GAP_OPTIONS.map((g) => (
                     <option key={g.value} value={g.value}>
                       {g.label}
                     </option>
                   ))}
-                </select>
+                </Select>
 
                 {/* Rounded */}
                 <label className="flex cursor-pointer items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">

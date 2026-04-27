@@ -224,7 +224,15 @@ export function ProfileActions({ userId }: Props) {
 
   React.useEffect(() => {
     if (!data) return
-    const nowDone = new Set(PROFILE_ACTIONS.filter((a) => isActionDone(a, data, dbStatuses)).map((a) => a.id))
+    // ⚡ Bolt: Initialize Set using single-pass for loop to avoid intermediate array allocations
+    // from .filter() and .map() that create garbage collection pressure
+    const nowDone = new Set<string>()
+    for (let i = 0; i < PROFILE_ACTIONS.length; i++) {
+      const a = PROFILE_ACTIONS[i]
+      if (a && isActionDone(a, data, dbStatuses)) {
+        nowDone.add(a.id)
+      }
+    }
     for (const id of nowDone) {
       if (!prevCompletedRef.current.has(id)) {
         setJustCompleted(id)

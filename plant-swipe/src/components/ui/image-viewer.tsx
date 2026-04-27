@@ -259,7 +259,6 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > SWIPE_THRESHOLD && dt < SWIPE_MAX_TIME) {
         if (dx > 0) goToPrev()
         else goToNext()
-        void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(10))
       }
     },
     [zoom, goToNext, goToPrev],

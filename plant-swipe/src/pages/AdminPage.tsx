@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { LazyCharts, ChartSuspense } from "@/components/admin/LazyChart";
 import { AdminUploadMediaPanel } from "@/components/admin/AdminUploadMediaPanel";
@@ -857,6 +858,7 @@ export const AdminPage: React.FC = () => {
 
   const [restarting, setRestarting] = React.useState(false);
   const [pulling, setPulling] = React.useState(false);
+  const [refreshingAphydle, setRefreshingAphydle] = React.useState(false);
   const [consoleOpen, setConsoleOpen] = React.useState<boolean>(false);
   const [consoleLines, setConsoleLines] = React.useState<string[]>([]);
   const [reloadReady, setReloadReady] = React.useState<boolean>(false);
@@ -5108,6 +5110,120 @@ export const AdminPage: React.FC = () => {
     }
   };
 
+  const refreshAphydle = async () => {
+    if (refreshingAphydle) return;
+    setRefreshingAphydle(true);
+    try {
+      setConsoleLines([]);
+      setConsoleOpen(true);
+      appendConsole("[aphydle] Refresh Aphydle: starting…");
+
+      const session = (await supabase.auth.getSession()).data.session;
+      const token = session?.access_token;
+      let adminToken: string | null = null;
+      try {
+        adminToken =
+          ((globalThis as EnvWithAdminToken)?.__ENV__?.VITE_ADMIN_STATIC_TOKEN as
+            | string
+            | undefined
+            | null) || null;
+      } catch {
+        adminToken = null;
+      }
+      const sseHeaders: Record<string, string> = {};
+      if (token) sseHeaders["Authorization"] = `Bearer ${token}`;
+      if (adminToken) sseHeaders["X-Admin-Token"] = String(adminToken);
+      const adminSseHeaders: Record<string, string> = {};
+      if (adminToken) adminSseHeaders["X-Admin-Token"] = String(adminToken);
+      const adminJsonPostHeaders = {
+        ...adminSseHeaders,
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      };
+
+      let resp: Response | null = null;
+      try {
+        resp = await fetch("/api/admin/refresh-aphydle/stream", {
+          method: "GET",
+          headers: sseHeaders,
+          credentials: "same-origin",
+        });
+      } catch {}
+      if (!resp || !resp.ok || !resp.body) {
+        try {
+          resp = await fetch("/admin/refresh-aphydle/stream", {
+            method: "GET",
+            headers: adminSseHeaders,
+            credentials: "same-origin",
+          });
+        } catch {}
+      }
+      if (!resp || !resp.ok || !resp.body) {
+        const bg = await fetch("/admin/refresh-aphydle", {
+          method: "POST",
+          headers: adminJsonPostHeaders,
+          credentials: "same-origin",
+          body: "{}",
+        });
+        const bgBody = await safeJson(bg);
+        if (!bg.ok || bgBody?.ok !== true) {
+          throw new Error(bgBody?.error || `Aphydle refresh failed (${bg.status})`);
+        }
+        appendConsole("[aphydle] Started background refresh via Admin API.");
+        return;
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      let currentEvent: string | null = null;
+      let sawDoneEvent = false;
+      let buildOk = false;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buf.indexOf("\n")) >= 0) {
+          const raw = buf.slice(0, idx);
+          buf = buf.slice(idx + 1);
+          const line = raw.replace(/\r$/, "");
+          if (!line) continue;
+          if (line.startsWith("event:")) {
+            currentEvent = line.slice(6).trim();
+          } else if (line.startsWith("data:")) {
+            const payload = line.slice(5).trimStart();
+            if (currentEvent === "done") {
+              try {
+                const obj = JSON.parse(payload);
+                if (obj && typeof obj.ok === "boolean") {
+                  sawDoneEvent = true;
+                  buildOk = !!obj.ok;
+                }
+              } catch {}
+            }
+            appendConsole(payload);
+          } else if (!/^(:|event:|id:|retry:)/.test(line)) {
+            appendConsole(line);
+          }
+        }
+      }
+
+      if (sawDoneEvent && buildOk) {
+        appendConsole("[aphydle] ✓ Aphydle refresh complete.");
+      } else if (sawDoneEvent && !buildOk) {
+        appendConsole("[aphydle] ✗ Aphydle refresh failed. See logs above.");
+      } else {
+        appendConsole("[aphydle] Stream ended without terminal status.");
+      }
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : String(e);
+      appendConsole(`[aphydle] Failed to refresh Aphydle: ${message}`);
+    } finally {
+      setRefreshingAphydle(false);
+    }
+  };
+
   // Backup UI disabled for now
 
     // Loader for total registered accounts & plants (DB first via admin API; fallback to client count)
@@ -7434,6 +7550,18 @@ export const AdminPage: React.FC = () => {
                                 {gitPulling ? "Pulling..." : "Git Pull Only"}
                               </Button>
 
+                              {/* Refresh Aphydle Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={refreshAphydle}
+                                disabled={refreshingAphydle}
+                                title="Pull latest Aphydle main and rebuild"
+                              >
+                                <Sprout className={`h-4 w-4 ${refreshingAphydle ? "animate-pulse" : ""}`} />
+                                {refreshingAphydle ? "Refreshing..." : "Refresh Aphydle"}
+                              </Button>
+
                               {/* Clear Memory Button */}
                               <Button
                                 variant="outline"
@@ -7573,8 +7701,7 @@ export const AdminPage: React.FC = () => {
                         </div>
                         <div className="mt-3 flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                           <div className="flex-1 min-w-0">
-                            <select
-                              className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+                            <Select
                               value={selectedBranch}
                               onChange={(e) =>
                                 setSelectedBranch(e.target.value)
@@ -7593,7 +7720,7 @@ export const AdminPage: React.FC = () => {
                                   </option>
                                 ))
                               )}
-                            </select>
+                            </Select>
                           </div>
                           <Button
                             variant="outline"
@@ -9028,8 +9155,7 @@ export const AdminPage: React.FC = () => {
                                           />
                                         </div>
                                         <div className="w-full md:w-52">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={selectedFeaturedMonth}
                                             onChange={(e) =>
                                               setSelectedFeaturedMonth(e.target.value as FeaturedMonthSlug | "none" | "all")
@@ -9042,11 +9168,10 @@ export const AdminPage: React.FC = () => {
                                                 {FEATURED_MONTH_LABELS[slug]}
                                               </option>
                                             ))}
-                                          </select>
+                                          </Select>
                                         </div>
                                         <div className="w-full md:w-44">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={plantSortOption}
                                             onChange={(e) =>
                                               setPlantSortOption(e.target.value as PlantSortOption)
@@ -9060,11 +9185,10 @@ export const AdminPage: React.FC = () => {
                                             <option value="likes">Most Likes</option>
                                             <option value="views">Most Views</option>
                                             <option value="images">Image Count</option>
-                                          </select>
+                                          </Select>
                                         </div>
                                         <div className="w-full md:w-32">
-                                          <select
-                                            className="w-full rounded-xl border border-stone-300 dark:border-[#3e3e42] bg-white dark:bg-[#111116] px-3 py-2 text-sm text-stone-800 dark:text-stone-100 focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+                                          <Select
                                             value={plantPageSize}
                                             onChange={(e) => setPlantPageSize(Number(e.target.value))}
                                           >
@@ -9073,7 +9197,7 @@ export const AdminPage: React.FC = () => {
                                                 {size} per page
                                               </option>
                                             ))}
-                                          </select>
+                                          </Select>
                                         </div>
                                       </div>
                                     </div>
@@ -14189,8 +14313,7 @@ const BroadcastControls: React.FC<{
             onChange={(e) => setMessage(e.target.value)}
             maxLength={200}
           />
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          <Select
             value={severity || "warning"}
             onChange={(e) => {
               const v = e.target.value;
@@ -14203,9 +14326,8 @@ const BroadcastControls: React.FC<{
             <option value="info">Information</option>
             <option value="warning">Warning</option>
             <option value="danger">Danger</option>
-          </select>
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          </Select>
+          <Select
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             aria-label="Display time"
@@ -14218,7 +14340,7 @@ const BroadcastControls: React.FC<{
             <option value="5h">5 hours</option>
             <option value="1d">1 day</option>
             <option value="unlimited">Unlimited</option>
-          </select>
+          </Select>
           <div className="flex gap-2">
             <Button
               className="rounded-2xl"
@@ -14309,8 +14431,7 @@ const BroadcastControls: React.FC<{
             onChange={(e) => setMessage(e.target.value)}
             maxLength={200}
           />
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          <Select
             value={severity}
             onChange={(e) => {
               const v = e.target.value;
@@ -14323,9 +14444,8 @@ const BroadcastControls: React.FC<{
             <option value="info">Information</option>
             <option value="warning">Warning</option>
             <option value="danger">Danger</option>
-          </select>
-          <select
-            className="rounded-xl border border-stone-300 dark:border-[#3e3e42] px-3 py-2 text-sm bg-white dark:bg-[#2d2d30] text-black dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 transition-colors"
+          </Select>
+          <Select
             value={duration}
             onChange={(e) => setDuration(e.target.value)}
             aria-label="Display time"
@@ -14338,7 +14458,7 @@ const BroadcastControls: React.FC<{
             <option value="5h">5 hours</option>
             <option value="1d">1 day</option>
             <option value="unlimited">Unlimited</option>
-          </select>
+          </Select>
           <Button
             className="rounded-2xl"
             onClick={onSubmit}

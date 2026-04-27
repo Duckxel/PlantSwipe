@@ -1,5 +1,6 @@
 import React from "react";
 import { Button } from "@/components/ui/button";
+import { Select } from "@/components/ui/select";
 import { useTranslation } from "react-i18next";
 import { supabase } from "@/lib/supabaseClient";
 import { Loader2, Check } from "lucide-react";
@@ -98,18 +99,17 @@ export const GardenAdviceLanguageEditor: React.FC<GardenAdviceLanguageEditorProp
         <label className="text-sm font-medium">
           {t("gardenDashboard.settingsSection.selectLanguage", "Select Language")}
         </label>
-        <select
+        <Select
           value={preferredLanguage}
           onChange={(e) => setPreferredLanguage(e.target.value)}
           disabled={!canEdit}
-          className="w-full p-3 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1f1f1f] text-base focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-colors"
         >
           {ADVICE_LANGUAGES.map((lang) => (
             <option key={lang.code} value={lang.code}>
               {lang.flag} {lang.name}
             </option>
           ))}
-        </select>
+        </Select>
       </div>
       
       {/* Current Selection Info */}

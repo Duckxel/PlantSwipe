@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { ChevronDown, ChevronUp, X } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { AppSelect, type AppSelectOption } from '@/components/ui/app-select'
 import { useTranslation } from 'react-i18next'
 import { useLanguage } from '@/lib/i18nRouting'
 import { FilterSectionHeader } from './FilterSectionHeader'
@@ -239,19 +240,26 @@ const FilterControlsComponent: React.FC<FilterControlsProps> = ({
       {/* Sort */}
       <div>
         <div className="text-xs font-medium mb-2 uppercase tracking-wide opacity-60">{t("plant.sortLabel")}</div>
-        <select
+        <AppSelect<SearchSortMode>
           value={searchSort}
-          onChange={(e) => setSearchSort(e.target.value as SearchSortMode)}
-          className="w-full rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#2d2d30] px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 dark:text-white"
-        >
-          <option value="default">{t("plant.sortDefault")}</option>
-          <option value="newest">{t("plant.sortNewest")}</option>
-          <option value="popular">{t("plant.sortPopular")}</option>
-          <option value="favorites">{t("plant.sortFavorites")}</option>
-          {isAdmin && (
-            <option value="impressions">{t("plant.sortImpressions", { defaultValue: "Most viewed" })}</option>
-          )}
-        </select>
+          onChange={setSearchSort}
+          ariaLabel={t("plant.sortLabel")}
+          options={(() => {
+            const opts: AppSelectOption<SearchSortMode>[] = [
+              { value: "default", label: t("plant.sortDefault") },
+              { value: "newest", label: t("plant.sortNewest") },
+              { value: "popular", label: t("plant.sortPopular") },
+              { value: "favorites", label: t("plant.sortFavorites") },
+            ]
+            if (isAdmin) {
+              opts.push({
+                value: "impressions",
+                label: t("plant.sortImpressions", { defaultValue: "Most viewed" }),
+              })
+            }
+            return opts
+          })()}
+        />
       </div>
 
       {/* Type */}

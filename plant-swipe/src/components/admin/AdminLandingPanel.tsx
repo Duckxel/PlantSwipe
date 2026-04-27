@@ -2,6 +2,7 @@ import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
@@ -2522,12 +2523,12 @@ const TestimonialsTab: React.FC<{
               <CardContent className="p-3 sm:p-4 space-y-3 sm:space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-2 sm:gap-3">
-                    <button
+                    <button type="button" aria-label="Edit testimonial avatar" title="Edit testimonial avatar"
                       onClick={() => {
                         setEditingId(testimonial.id)
                         setImagePickerOpen(true)
                       }}
-                      className="relative h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group flex-shrink-0"
+                      className="relative h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center text-white font-semibold overflow-hidden group flex-shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-stone-900"
                     >
                       {testimonial.author_avatar_url ? (
                         <img
@@ -2585,10 +2586,10 @@ const TestimonialsTab: React.FC<{
                 {/* Rating */}
                 <div className="flex items-center gap-1">
                   {[1, 2, 3, 4, 5].map((star) => (
-                    <button
+                    <button type="button" aria-label={`Rate ${star} stars`} title={`Rate ${star} stars`}
                       key={star}
                       onClick={() => updateLocalTestimonial(testimonial.id, { rating: star })}
-                      className="focus:outline-none transition-transform hover:scale-110"
+                      className="focus:outline-none transition-transform hover:scale-110 focus-visible:ring-2 focus-visible:ring-emerald-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-stone-900 rounded-sm"
                     >
                       <Star
                         className={cn(
@@ -4565,23 +4566,23 @@ const ShowcaseTab: React.FC<{
                     placeholder="Member name"
                   />
                   <div className="flex gap-1.5">
-                    <select
+                    <Select
                       value={member.role}
                       onChange={(e) => updateMember(member.id, { role: e.target.value as 'owner' | 'member' })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                      className="flex-1 min-w-0"
                     >
                       <option value="owner">Owner</option>
                       <option value="member">Member</option>
-                    </select>
-                    <select
+                    </Select>
+                    <Select
                       value={member.color}
                       onChange={(e) => updateMember(member.id, { color: e.target.value })}
-                      className="flex-1 text-xs rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-800 p-1.5 min-w-0"
+                      className="flex-1 min-w-0"
                     >
                       {colorOptions.map(opt => (
                         <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
-                    </select>
+                    </Select>
                   </div>
                 </div>
 

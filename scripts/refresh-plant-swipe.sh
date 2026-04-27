@@ -77,10 +77,15 @@ ASKPASS_HELPER=""
 PSSWORD_KEY_SOURCE=""
 if [[ $EUID -ne 0 ]]; then
   SUDO="sudo"
-  # Resolve PSSWORD_KEY from env or known files; file takes precedence if set
+  # Resolve PSSWORD_KEY from env or known files; file takes precedence if set.
+  # Order: prefer the inherited process env (e.g., when admin-api spawns this
+  # script with PSSWORD_KEY already loaded from /etc/plant-swipe/service.env
+  # via systemd EnvironmentFile), then check repo env files, then the rendered
+  # systemd env files as a final fallback.
   CANDIDATE_ENV_FILES=(
     "$WORK_DIR/.env"
     "$NODE_DIR/.env"
+    "/etc/plant-swipe/service.env"
     "/etc/admin-api/env"
   )
   FILE_PSSWORD_KEY=""
@@ -893,7 +898,9 @@ fi
 log "Testing nginx configuration…"
 $SUDO nginx -t
 
-if $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
+if [[ "$SKIP_RESTARTS" == "true" ]]; then
+  log "Skipping nginx reload (requested)"
+elif $SUDO systemctl is-active --quiet "$SERVICE_NGINX"; then
   log "Reloading nginx…"
   $SUDO systemctl reload "$SERVICE_NGINX"
 else
@@ -1059,6 +1066,25 @@ fi
 # These files should match what's in the repo, not local regenerations
 log "Discarding local lock file changes (if any)…"
 "${GIT_LOCAL_CMD[@]}" checkout -- "$NODE_DIR/bun.lock" "$NODE_DIR/package.json" 2>/dev/null || true
+
+# Refresh embedded Aphydle daily-game app, if present
+APHYDLE_REFRESH_SCRIPT="$WORK_DIR/scripts/refresh-aphydle.sh"
+if [[ -f "$APHYDLE_REFRESH_SCRIPT" && -d "$WORK_DIR/aphydle" ]]; then
+  log "Refreshing Aphydle (delegating to $APHYDLE_REFRESH_SCRIPT)…"
+  APHYDLE_FLAGS=()
+  if [[ "$SKIP_PULL" == "true" ]]; then
+    APHYDLE_FLAGS+=(--skip-pull)
+  fi
+  if [[ "${SKIP_SERVICE_RESTARTS:-false}" == "true" ]]; then
+    APHYDLE_FLAGS+=(--no-restart)
+  fi
+  chmod +x "$APHYDLE_REFRESH_SCRIPT" 2>/dev/null || true
+  if ! PLANTSWIPE_REPO_DIR="$WORK_DIR" bash "$APHYDLE_REFRESH_SCRIPT" "${APHYDLE_FLAGS[@]}"; then
+    log "[WARN] Aphydle refresh failed — continuing (PlantSwipe is still up)."
+  fi
+elif [[ -f "$APHYDLE_REFRESH_SCRIPT" ]]; then
+  log "[INFO] Aphydle not installed at $WORK_DIR/aphydle — run setup.sh to bootstrap it."
+fi
 
 # Write the current time to TIME file on successful completion
 log "Recording successful update time…"

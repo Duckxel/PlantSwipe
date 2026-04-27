@@ -1800,6 +1800,58 @@ function supabaseStorageToMediaProxy(url) {
   }
 }
 
+// =============================================================================
+// External image proxy helpers
+// =============================================================================
+// Plant image URLs in `plant_images.link` and `plants.photos[].url` may point at
+// arbitrary third-party hosts (e.g. img.passeportsante.net) that don't serve
+// `Access-Control-Allow-Origin`. Cross-origin consumers like Aphydle
+// (aphydle.<domain>, separate origin from aphylia.app) hit CORS errors when
+// they load those URLs into a <canvas> or with `crossorigin="anonymous"`.
+// `/api/image-proxy?url=…` re-serves the bytes with permissive CORS headers,
+// and `wrapExternalImageUrl` rewrites third-party URLs through it before they
+// leave our API. URLs already on aphylia.app / supabase.co / media.aphylia.app
+// pass through untouched — they already serve correct CORS headers.
+const imageProxyPublicBase = (() => {
+  const fromEnv = (process.env.IMAGE_PROXY_PUBLIC_BASE || process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').trim()
+  return fromEnv.replace(/\/+$/, '')
+})()
+const imageProxyEndpointPath = '/api/image-proxy'
+
+function isTrustedImageOrigin(urlString) {
+  try {
+    const u = new URL(urlString)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return true
+    const host = u.hostname.toLowerCase()
+    if (host === 'aphylia.app' || host.endsWith('.aphylia.app')) return true
+    if (host.endsWith('.supabase.co')) return true
+    if (host === 'localhost' || host === '127.0.0.1') return true
+    return false
+  } catch {
+    return true
+  }
+}
+
+function wrapExternalImageUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') return urlString
+  const trimmed = urlString.trim()
+  if (!trimmed) return urlString
+  if (!/^https?:\/\//i.test(trimmed)) return urlString
+  if (isTrustedImageOrigin(trimmed)) return urlString
+  return `${imageProxyPublicBase}${imageProxyEndpointPath}?url=${encodeURIComponent(trimmed)}`
+}
+
+function wrapPhotosArrayExternalUrls(photos) {
+  if (!Array.isArray(photos)) return photos
+  return photos.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry
+    if (typeof entry.url !== 'string') return entry
+    const wrapped = wrapExternalImageUrl(entry.url)
+    if (wrapped === entry.url) return entry
+    return { ...entry, url: wrapped }
+  })
+}
+
 const gardenCoverUploadBucket = (() => {
   const fromEnv = (process.env.GARDEN_UPLOAD_BUCKET || '').trim()
   if (fromEnv) return fromEnv
@@ -3545,6 +3597,7 @@ async function generateFieldData(options) {
     },
     { timeout }
   )
+  logAiUsage({ feature: 'admin_plant_fill_field', model: openaiModel, response, metadata: { fieldKey } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3607,6 +3660,7 @@ async function verifyPlantNameCandidate(plantName) {
     },
     { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
+  logAiUsage({ feature: 'admin_plant_verify', model: openaiModelNano, response, metadata: { plantName } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3764,6 +3818,50 @@ postgresOptions.idle_timeout = parseInt(process.env.PG_IDLE_TIMEOUT || '20', 10)
 postgresOptions.connect_timeout = parseInt(process.env.PG_CONNECT_TIMEOUT || '10', 10) // seconds to wait for new conn
 
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
+
+// Usage monitoring helpers. These are best-effort: any failure is logged and
+// swallowed so that instrumentation never breaks a user request. No limits
+// are enforced yet — these writes feed admin/analytics queries.
+function isUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+async function logAiUsage({ userId = null, feature, model = null, provider = 'openai', response = null, metadata = null } = {}) {
+  if (!sql || !feature) return
+  try {
+    const usage = response?.usage || {}
+    // OpenAI Responses API returns input_tokens/output_tokens; Chat Completions
+    // returns prompt_tokens/completion_tokens. Accept either shape.
+    const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0
+    const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0
+    const totalTokens = Number(usage.total_tokens ?? (promptTokens + completionTokens)) || 0
+    const requestId = typeof response?.id === 'string' ? response.id : null
+    const safeUserId = isUuid(userId) ? userId : null
+    await sql`
+      insert into public.ai_usage_events
+        (user_id, feature, provider, model, prompt_tokens, completion_tokens, total_tokens, request_id, metadata)
+      values
+        (${safeUserId}, ${feature}, ${provider}, ${model}, ${promptTokens}, ${completionTokens}, ${totalTokens}, ${requestId}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[ai-usage] failed to record event', feature, err?.message || err)
+  }
+}
+
+async function logScanUsage({ userId, scanId = null, provider = 'kindwise', tokens = 1, classificationLevel = null, success = true, metadata = null } = {}) {
+  if (!sql) return
+  if (!isUuid(userId)) return
+  try {
+    await sql`
+      insert into public.scan_usage_events
+        (user_id, scan_id, provider, tokens, classification_level, success, metadata)
+      values
+        (${userId}, ${isUuid(scanId) ? scanId : null}, ${provider}, ${tokens}, ${classificationLevel}, ${success}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[scan-usage] failed to record event', err?.message || err)
+  }
+}
 
 let adminMediaUploadsEnsured = false
 async function ensureAdminMediaUploadsTable() {
@@ -4367,6 +4465,143 @@ app.get('/api/health', async (_req, res) => {
 })
 
 // =============================================================================
+// Image Proxy - CORS-enabled passthrough for third-party plant images
+// =============================================================================
+// Many `plant_images.link` rows (and historical `plants.photos[].url`) point at
+// external hosts that don't send `Access-Control-Allow-Origin`. Cross-origin
+// consumers (Aphydle on aphydle.<domain>, native Capacitor shells, anything
+// else outside aphylia.app) can't load those into <canvas> / `crossorigin`.
+// This endpoint streams the upstream bytes back with permissive CORS headers,
+// using the same SSRF guard (`validateImageUrl`) that protects our admin
+// upload-from-URL flow.
+const IMAGE_PROXY_MAX_BYTES = 25 * 1024 * 1024 // 25MB hard cap per response
+const IMAGE_PROXY_TIMEOUT_MS = 15000 // 15s upstream timeout
+const IMAGE_PROXY_MAX_REDIRECTS = 5
+
+// Fetch with manual redirect handling so we can re-run the SSRF guard against
+// each redirect target. `validateImageUrl` only inspects the URL passed in;
+// `redirect: 'follow'` would let a malicious upstream 302 us into 169.254.x.x
+// (cloud metadata) or 10.0.0.0/8.
+async function imageProxyFetch(initialUrl, signal) {
+  let currentUrl = initialUrl
+  for (let hop = 0; hop <= IMAGE_PROXY_MAX_REDIRECTS; hop++) {
+    await validateImageUrl(currentUrl)
+    const resp = await fetch(currentUrl, {
+      signal,
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Aphylia-ImageProxy/1.0 (+https://aphylia.app)',
+        'Accept': 'image/*,*/*;q=0.8',
+      },
+    })
+    if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get('location')
+      if (!location) return resp
+      try {
+        currentUrl = new URL(location, currentUrl).toString()
+      } catch {
+        throw new Error('Invalid redirect target')
+      }
+      try { await resp.body?.cancel?.() } catch {}
+      continue
+    }
+    return resp
+  }
+  throw new Error(`Too many redirects (>${IMAGE_PROXY_MAX_REDIRECTS})`)
+}
+
+app.get(imageProxyEndpointPath, async (req, res) => {
+  const target = typeof req.query.url === 'string' ? req.query.url.trim() : ''
+  if (!target) {
+    res.status(400).json({ error: 'Missing url query parameter' })
+    return
+  }
+
+  const controller = new AbortController()
+  const abortTimer = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS)
+  let upstream
+  try {
+    upstream = await imageProxyFetch(target, controller.signal)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    const msg = err?.message || 'unknown'
+    const status = msg.startsWith('Invalid or restricted URL') || msg.startsWith('Invalid redirect') ? 400 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  if (!upstream.ok) {
+    clearTimeout(abortTimer)
+    res.status(upstream.status === 404 ? 404 : 502).json({ error: `Upstream HTTP ${upstream.status}` })
+    return
+  }
+
+  const rawContentType = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
+  if (rawContentType && !rawContentType.startsWith('image/') && rawContentType !== 'application/octet-stream') {
+    clearTimeout(abortTimer)
+    res.status(415).json({ error: `Unsupported content-type: ${rawContentType}` })
+    return
+  }
+  const contentType = rawContentType.startsWith('image/') ? rawContentType : 'application/octet-stream'
+
+  const declaredLength = parseInt(upstream.headers.get('content-length') || '0', 10)
+  if (Number.isFinite(declaredLength) && declaredLength > IMAGE_PROXY_MAX_BYTES) {
+    clearTimeout(abortTimer)
+    res.status(413).json({ error: 'Upstream image exceeds size limit' })
+    return
+  }
+
+  res.setHeader('Content-Type', contentType)
+  // Cache aggressively at the edge: third-party plant photos rarely change at
+  // their stable URL, and a cache miss can be slow (we hit a foreign host).
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  res.setHeader('Timing-Allow-Origin', '*')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Vary', 'Accept-Encoding')
+  if (declaredLength > 0) res.setHeader('Content-Length', String(declaredLength))
+
+  try {
+    const { Readable } = await import('stream')
+    const nodeStream = Readable.fromWeb(upstream.body)
+    let received = 0
+    nodeStream.on('data', (chunk) => {
+      received += chunk.length
+      if (received > IMAGE_PROXY_MAX_BYTES) {
+        nodeStream.destroy(new Error('Upstream image exceeded size limit during streaming'))
+      }
+    })
+    nodeStream.on('error', (err) => {
+      console.warn('[image-proxy] stream error:', err?.message || err)
+      if (!res.headersSent) {
+        try { res.status(502).end() } catch {}
+      } else {
+        try { res.destroy(err) } catch {}
+      }
+    })
+    res.on('close', () => {
+      try { nodeStream.destroy() } catch {}
+      clearTimeout(abortTimer)
+    })
+    nodeStream.pipe(res)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Stream failed: ' + (err?.message || 'unknown') })
+    }
+  }
+})
+
+app.options(imageProxyEndpointPath, (_req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  res.status(204).end()
+})
+
+// =============================================================================
 // PWA Manifest Screenshots - Public endpoint for dynamic manifest screenshots
 // =============================================================================
 // Returns screenshots tagged for PWA manifest use (tag: screenshot)
@@ -4925,6 +5160,7 @@ Examples:
       instructions,
       input: prompt,
     })
+    logAiUsage({ userId: caller, feature: 'admin_plant_fill_name', model: openaiModelNano, response, metadata: { plantName } })
 
     const outputText = (response.output_text || '').trim()
 
@@ -8601,6 +8837,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         },
         { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
       )
+      logAiUsage({ userId: adminPrincipal, feature: 'blog_metadata', model: openaiModel, response, metadata: { title } })
       const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
       // Parse the JSON response, handling potential markdown code blocks
       let parsed = {}
@@ -8647,6 +8884,7 @@ app.post('/api/blog/summarize', async (req, res) => {
       },
       { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
+    logAiUsage({ userId: adminPrincipal, feature: 'blog_summary', model: openaiModel, response, metadata: { title } })
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
   } catch (err) {
@@ -12584,7 +12822,7 @@ function generateVerificationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars: I, O, 0, 1
   let code = ''
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
+    code += chars.charAt(crypto.randomInt(0, chars.length))
   }
   return code
 }
@@ -17170,8 +17408,8 @@ async function loadPlantsViaSupabase() {
         rarity: r.rarity,
         meaning: r.meaning ?? '',
         description: r.description ?? '',
-        photos,
-        image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+        photos: wrapPhotosArrayExternalUrls(photos),
+        image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
         care: {
           sunlight: r.level_sun || null,
           water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
@@ -17516,8 +17754,8 @@ app.get('/api/plants', async (_req, res) => {
             rarity: r.rarity,
             meaning: r.meaning ?? '',
             description: r.description ?? '',
-            photos,
-            image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+            photos: wrapPhotosArrayExternalUrls(photos),
+            image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
             care: {
               sunlight: r.level_sun || null,
               water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
@@ -17947,6 +18185,99 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
   } catch (e) {
     try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
   }
+})
+
+// Admin: stream Aphydle refresh logs via Server-Sent Events (SSE)
+app.get('/api/admin/refresh-aphydle/stream', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch { }
+    }
+
+    send('open', { ok: true, message: 'Starting Aphydle refresh…' })
+
+    const repoRoot = await getRepoRoot()
+
+    try {
+      const caller = await getUserFromRequest(req)
+      const callerId = caller?.id || null
+      let adminName = null
+      if (sql && callerId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${callerId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      let logged = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${callerId}, ${adminName}, 'refresh_aphydle', ${null}, ${sql.json({ source: 'stream' })})`; logged = true } catch { }
+      }
+      if (!logged) {
+        try { await insertAdminActivityViaRest(req, { admin_id: callerId, admin_name: adminName, action: 'refresh_aphydle', target: null, detail: { source: 'stream' } }) } catch { }
+      }
+    } catch { }
+
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-aphydle.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `Aphydle refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
+
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+
+    const child = spawnChild(scriptPath, [], {
+      cwd: repoRoot,
+      env: childEnv,
+      shell: false,
+    })
+
+    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    let streamClosedGracefully = false
+
+    child.stdout?.on('data', (buf) => { send('log', buf.toString()) })
+    child.stderr?.on('data', (buf) => { send('log', buf.toString()) })
+    child.on('error', (err) => { send('error', { error: err?.message || 'spawn failed' }) })
+    child.on('close', (code) => {
+      const ok = code === 0
+      if (!streamClosedGracefully) {
+        send('done', { ok, code })
+      }
+      streamClosedGracefully = true
+      try { clearInterval(heartbeatId) } catch { }
+      try { res.end() } catch { }
+    })
+
+    req.on('close', () => {
+      if (streamClosedGracefully) return
+      try { clearInterval(heartbeatId) } catch { }
+      console.warn('[refresh-aphydle] SSE client disconnected; refresh continues in background.')
+    })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+  }
+})
+
+app.options('/api/admin/refresh-aphydle/stream', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
 })
 
 // Admin: list remote branches and current branch
@@ -21360,6 +21691,16 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
 
         identificationResult = await apiResponse.json()
         console.log('[scan] Kindwise API success, status:', identificationResult.status)
+        logScanUsage({
+          userId: user.id,
+          classificationLevel: sanitizedClassificationLevel,
+          success: true,
+          metadata: {
+            status: identificationResult?.status || null,
+            hasLocation: latitude !== undefined && longitude !== undefined,
+            accessToken: identificationResult?.access_token || null,
+          },
+        })
       } catch (apiErr) {
         console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
         res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
@@ -23940,6 +24281,7 @@ Include specific observations from the photos in your advice.`
           },
           { timeout: 300000 }
         )
+        logAiUsage({ userId: user?.id, feature: 'garden_advice', model: openaiModel, response, metadata: { gardenId } })
 
         aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
         tokensUsed = response.usage?.total_tokens || 0
@@ -25382,15 +25724,17 @@ Be specific and reference what you actually see in the images. If you notice any
     }
 
     // Use Responses API for both text and vision
+    const journalModel = photos.length > 0 ? openaiModel : openaiModelNano
     const response = await openaiClient.responses.create(
       {
-        model: photos.length > 0 ? openaiModel : openaiModelNano, // Use larger model for vision
+        model: journalModel, // Use larger model for vision
         reasoning: { effort: photos.length > 0 ? 'medium' : 'low' },
         instructions: journalInstructions,
         input: [{ role: 'user', content: inputContent }],
       },
       { timeout: photos.length > 0 ? 120000 : 60000 }
     )
+    logAiUsage({ userId: user?.id, feature: 'garden_journal_feedback', model: journalModel, response, metadata: { gardenId, entryId, hasPhotos: photos.length > 0 } })
 
     feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     tokensUsed = response.usage?.total_tokens || 0
@@ -28997,7 +29341,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             },
             { timeout: 60000 }
           )
-          
+          logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'stream' } })
+
           // Check if response contains tool calls
           if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
             const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
@@ -29037,7 +29382,9 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         let fullContent = ''
         let totalTokens = 0
-        
+        let streamUsage = null
+        let streamResponseId = null
+
         for await (const event of streamResponse) {
           // Handle different event types from the Responses API stream
           if (event.type === 'response.output_text.delta') {
@@ -29049,9 +29396,18 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           } else if (event.type === 'response.completed' || event.type === 'response.done') {
             if (event.response?.usage) {
               totalTokens = event.response.usage.total_tokens || 0
+              streamUsage = event.response.usage
+              streamResponseId = event.response.id || null
             }
           }
         }
+        logAiUsage({
+          userId: user?.id,
+          feature: 'garden_chat_stream',
+          model: openaiModelNano,
+          response: { usage: streamUsage, id: streamResponseId },
+          metadata: { gardenId: gardenIdForTools || null, mode: 'stream' },
+        })
         
         // Send done event with complete message
         const messageId = crypto.randomUUID()
@@ -29092,14 +29448,15 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           },
           { timeout: 60000 }
         )
-        
+        logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'sync' } })
+
         // Check if response contains tool calls
         if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
           const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
           if (toolUseOutputs.length > 0) {
             const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
             toolCallsExecuted = executed
-            
+
             // Pass tool calls and results as structured Responses API input items.
             // See streaming path comment for full rationale on why we avoid plain
             // text concatenation of tool results (prompt injection prevention).
@@ -29111,7 +29468,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           }
         }
       }
-      
+
       // Final response using Responses API
       const response = await openaiClient.responses.create(
         {
@@ -29122,7 +29479,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         },
         { timeout: 120000 }
       )
-      
+      logAiUsage({ userId: user?.id, feature: 'garden_chat', model: openaiModelNano, response, metadata: { gardenId: gardenIdForTools || null, mode: 'sync' } })
+
       const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
       const messageId = crypto.randomUUID()
       
@@ -30387,10 +30745,9 @@ async function processDueAutomations() {
             console.warn('[automations] Failed to ensure task occurrences (continuing with existing data):', occErr?.message)
           }
 
-          // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
-          // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
-          // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
-          // only matches hour 23 (acceptable single-hour window for the last hour of day).
+          // Match only the user's preferred local hour. BETWEEN hour AND hour+1 was
+          // inclusive on both ends, giving a 2-hour delivery window that let reminders
+          // land up to ~2 hours after the user's configured time.
           recipientQuery = sql`
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
@@ -30402,8 +30759,7 @@ async function processDueAutomations() {
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
               and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                    and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -30457,8 +30813,7 @@ async function processDueAutomations() {
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                               between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                                   and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                               = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p

@@ -221,6 +221,11 @@ Key dependencies are up-to-date:
 #### ✅ Command Injection Remediation (April 2026)
 - Admin **`/api/admin/system-health`** endpoint previously used `child_process.exec()` for disk stats, which was vulnerable to shell injection via crafted input. Replaced with `child_process.execFile()` which bypasses shell interpolation entirely.
 
+#### ✅ Admin Escalation Prevention (April 2026)
+- **`prevent_self_admin_escalation` trigger** on `profiles` blocks non-admin callers from setting `is_admin = true` or adding `'admin'` to `roles`. Service-role connections pass through.
+- Trigger extended to also protect `threat_level` (non-admins may only increase, preventing shadow-ban escape), `bug_points`, `shadow_ban_backup`, `last_active_at`, and all non-admin `roles` changes.
+- **Usage tables hardened:** `ai_usage_events` and `scan_usage_events` have no write RLS policies, and `INSERT/UPDATE/DELETE` is explicitly `REVOKE`d from `authenticated`/`anon` for defence in depth.
+
 #### ⚠️ Potential Concerns
 - No automated dependency vulnerability scanning in CI/CD (recommend adding)
 - `'unsafe-eval'` in CSP (required for some libraries but increases risk)

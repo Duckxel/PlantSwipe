@@ -1,3 +1,5 @@
+import { isNativeCapacitor } from '@/platform/runtime'
+
 const DEFAULT_NATIVE_API_ORIGIN = 'https://aphylia.app'
 const HTML_PLACEHOLDER_RE = /^%[A-Z0-9_]+%$/i
 
@@ -41,6 +43,9 @@ function readConfiguredOrigins(): Array<string | null> {
 }
 
 export function isNativeStoreBuild(): boolean {
+  // Any Capacitor shell needs the native bridge: relative /api URLs
+  // resolve to the capacitor:// scheme otherwise, so fetches silently fail.
+  if (isNativeCapacitor()) return true
   if (import.meta.env.VITE_APP_NATIVE_BUILD === '1') return true
   const runtimeWindow = getRuntimeWindow()
   const raw = runtimeWindow?.__APHYLIA_HTML_ENV__?.nativeBuild
