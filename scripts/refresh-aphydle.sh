@@ -164,7 +164,7 @@ PY
   fi
 fi
 
-# ── 3b. patch Aphydle source for image proxy ────────────────────────────────
+# ── 3b. patch Aphydle source for image proxy + Aphylia branding ────────────
 # Aphydle queries Supabase directly for plant_images.link and renders the URL
 # into a <canvas> via crossOrigin="anonymous" — third-party hosts that don't
 # send Access-Control-Allow-Origin (e.g. img.passeportsante.net) make every
@@ -177,6 +177,20 @@ if [[ -f "$APHYDLE_PATCHER" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
     sudo -u "$REPO_OWNER" -H node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
   else
     node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
+  fi
+fi
+
+# Branding: drop in the Aphylia favicon links and replace the procedural
+# MosaicLeaf with the PlantSwipe icon SVG. Aphylia/PlantSwipe icon files are
+# copied into dist/icons/ after build (step 5b below) so the patched paths
+# resolve at runtime.
+APHYDLE_BRANDING_PATCHER="$WORK_DIR/scripts/aphydle-patch-branding.mjs"
+if [[ -f "$APHYDLE_BRANDING_PATCHER" && -f "$APHYDLE_DIR/index.html" ]]; then
+  log "Patching Aphydle source for Aphylia branding (favicon + logo)…"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
+  else
+    node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
   fi
 fi
 
@@ -242,11 +256,33 @@ if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
   exit 1
 fi
 
-# ── 5b. ensure favicon.ico is present in dist ───────────────────────────────
-# Aphydle's upstream repo ships no favicon, so the browser-issued GET for
-# /favicon.ico 404s (visible in the Aphydle browser console). Reuse the
-# PlantSwipe app icon so the app reports a green console without dragging
-# Aphydle into PlantSwipe-specific deploy assets.
+# ── 5b. install Aphylia branding into dist ──────────────────────────────────
+# Aphydle's upstream repo ships no icons, so:
+#   - the browser-issued GET for /favicon.ico 404s (visible in the console)
+#   - the patched index.html (<link rel="icon" href="/icons/...">) and the
+#     patched MosaicLeaf (<img src="/icons/plant-swipe-icon.svg">) need the
+#     same files reachable on Aphydle's origin (CSS/<img> can't reach across
+#     to aphylia.app without CORS we don't want to manage for icons).
+# Copy PlantSwipe's icons/ directory into dist/icons/ and drop a same-origin
+# /favicon.ico for the browser's automatic request. Idempotent; cp -fL handles
+# repeated refreshes without fuss.
+APHYDLE_ICON_SRC_DIR="$WORK_DIR/plant-swipe/public/icons"
+APHYDLE_ICON_DEST_DIR="$APHYDLE_DIR/dist/icons"
+if [[ -d "$APHYDLE_ICON_SRC_DIR" ]]; then
+  log "Copying Aphylia icons into Aphydle dist ($APHYDLE_ICON_SRC_DIR → $APHYDLE_ICON_DEST_DIR)"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H mkdir -p "$APHYDLE_ICON_DEST_DIR"
+    sudo -u "$REPO_OWNER" -H cp -fL "$APHYDLE_ICON_SRC_DIR"/* "$APHYDLE_ICON_DEST_DIR/" || \
+      log "[WARN] Failed to copy Aphylia icons into Aphydle dist"
+  else
+    mkdir -p "$APHYDLE_ICON_DEST_DIR"
+    cp -fL "$APHYDLE_ICON_SRC_DIR"/* "$APHYDLE_ICON_DEST_DIR/" || \
+      log "[WARN] Failed to copy Aphylia icons into Aphydle dist"
+  fi
+else
+  log "[WARN] $APHYDLE_ICON_SRC_DIR not found; Aphydle branding icons missing."
+fi
+
 APHYDLE_FAVICON_DEST="$APHYDLE_DIR/dist/favicon.ico"
 APHYDLE_FAVICON_SRC=""
 for candidate in \
