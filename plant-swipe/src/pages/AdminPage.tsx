@@ -7550,6 +7550,18 @@ export const AdminPage: React.FC = () => {
                                 {gitPulling ? "Pulling..." : "Git Pull Only"}
                               </Button>
 
+                              {/* Refresh Aphydle Button */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={refreshAphydle}
+                                disabled={refreshingAphydle}
+                                title="Pull latest Aphydle main and rebuild"
+                              >
+                                <Sprout className={`h-4 w-4 ${refreshingAphydle ? "animate-pulse" : ""}`} />
+                                {refreshingAphydle ? "Refreshing..." : "Refresh Aphydle"}
+                              </Button>
+
                               {/* Clear Memory Button */}
                               <Button
                                 variant="outline"
@@ -7742,7 +7754,7 @@ export const AdminPage: React.FC = () => {
                             <span className="text-sm font-semibold">Quick Actions</span>
                           </div>
                           {/* Action buttons */}
-                          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                           <Button
                             className="rounded-xl w-full text-xs px-2 py-2 h-auto"
                             size="sm"
@@ -7764,19 +7776,6 @@ export const AdminPage: React.FC = () => {
                             <Github className="h-3.5 w-3.5 flex-shrink-0" />
                             <span className="truncate">
                               {pulling ? "Pulling..." : "Pull & Build"}
-                            </span>
-                          </Button>
-                          <Button
-                            className="rounded-xl w-full text-xs px-2 py-2 h-auto"
-                            size="sm"
-                            variant="secondary"
-                            onClick={refreshAphydle}
-                            disabled={refreshingAphydle}
-                            title="Pull latest Aphydle main and rebuild"
-                          >
-                            <Sprout className="h-3.5 w-3.5 flex-shrink-0" />
-                            <span className="truncate">
-                              {refreshingAphydle ? "Refreshing..." : "Refresh Aphydle"}
                             </span>
                           </Button>
                           <Button
