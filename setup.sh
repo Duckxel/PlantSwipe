@@ -641,7 +641,7 @@ configure_service_user_password() {
     return 0
   fi
   local pw=""
-  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$WORK_DIR/.env"; do
+  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$REPO_DIR/.env"; do
     if [[ -z "$pw" ]]; then pw="$(read_env_kv "$f" PSSWORD_KEY)"; fi
   done
   if [[ -z "$pw" ]]; then
