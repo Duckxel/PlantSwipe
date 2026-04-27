@@ -1418,6 +1418,40 @@ except Exception:
 PY
 }
 
+# Returns "true" if domain.json contains any entry ending in `.<suffix>` (e.g. "fr").
+# Used to decide whether to wire the French aphylia server_name/CSP block — both
+# the bare aphylia.fr and any subdomain like dev01.aphylia.fr should opt-in.
+any_domain_with_suffix_in_json() {
+  local domain_json="$1"
+  local suffix="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$suffix" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$suffix" <<'PY' 2>/dev/null
+import json
+import sys
+path, suffix = sys.argv[1], sys.argv[2].lstrip(".").lower()
+needle = "." + suffix
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    for d in domains:
+        if not isinstance(d, str):
+            continue
+        d = d.strip().lower()
+        if d == suffix or d.endswith(needle):
+            print("true")
+            sys.exit(0)
+    print("false")
+except Exception:
+    print("false")
+PY
+}
+
 # Aphydle helper: append a domain to domain.json if absent (idempotent)
 aphydle_register_domain_in_json() {
   local domain_json="$1"
@@ -1679,12 +1713,14 @@ prepare_nginx_config() {
       log "media.aphylia.app not found in domain.json - excluding media server block"
     fi
 
-    # Check if aphylia.fr is in domain.json (French domain support)
-    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "aphylia.fr")" == "true" ]]; then
+    # Check if any *.fr domain is in domain.json (French domain support).
+    # Match both bare aphylia.fr and subdomains (dev01.aphylia.fr, etc.) so the
+    # main app block accepts them via server_name `aphylia.fr *.aphylia.fr`.
+    if [[ "$(any_domain_with_suffix_in_json "$REPO_DIR/domain.json" "fr")" == "true" ]]; then
       has_french_domain="true"
-      log "aphylia.fr found in domain.json - including French domain in nginx config"
+      log "Found .fr domain(s) in domain.json - including French domain in nginx config"
     else
-      log "aphylia.fr not found in domain.json - excluding French domain from nginx config"
+      log "No .fr domains in domain.json - excluding French domain from nginx config"
     fi
 
     # Check if aphydle.<primary> is in domain.json (Aphydle daily-game support)
@@ -1754,10 +1790,11 @@ prepare_nginx_config() {
     sed -i "s|__APHYDLE_DOMAIN__|$aphydle_domain|g" "$tmp_config"
   fi
   
-  # Remove SSL listeners if user doesn't want SSL
+  # Remove SSL listeners if user doesn't want SSL.
+  # Match `listen 443 ssl;` and `listen 443 ssl default_server;` (and IPv6).
   if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
     log "Removing SSL listeners (user declined SSL setup)"
-    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
+    sed -i -e '/listen 443 ssl/d' -e '/listen \[::\]:443 ssl/d' "$tmp_config"
   fi
   
   # Install the processed config
@@ -1826,8 +1863,8 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
         $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
         # Strip ALL SSL directives
         $SUDO sed -i \
-          -e '/listen 443 ssl;/d' \
-          -e '/listen \[::\]:443 ssl;/d' \
+          -e '/listen 443 ssl/d' \
+          -e '/listen \[::\]:443 ssl/d' \
           -e '/ssl_certificate /d' \
           -e '/ssl_certificate_key /d' \
           -e '/ssl_protocols /d' \
