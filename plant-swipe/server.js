@@ -17998,6 +17998,99 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
   }
 })
 
+// Admin: stream Aphydle refresh logs via Server-Sent Events (SSE)
+app.get('/api/admin/refresh-aphydle/stream', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch { }
+    }
+
+    send('open', { ok: true, message: 'Starting Aphydle refresh…' })
+
+    const repoRoot = await getRepoRoot()
+
+    try {
+      const caller = await getUserFromRequest(req)
+      const callerId = caller?.id || null
+      let adminName = null
+      if (sql && callerId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${callerId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      let logged = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${callerId}, ${adminName}, 'refresh_aphydle', ${null}, ${sql.json({ source: 'stream' })})`; logged = true } catch { }
+      }
+      if (!logged) {
+        try { await insertAdminActivityViaRest(req, { admin_id: callerId, admin_name: adminName, action: 'refresh_aphydle', target: null, detail: { source: 'stream' } }) } catch { }
+      }
+    } catch { }
+
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-aphydle.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `Aphydle refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
+
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+
+    const child = spawnChild(scriptPath, [], {
+      cwd: repoRoot,
+      env: childEnv,
+      shell: false,
+    })
+
+    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    let streamClosedGracefully = false
+
+    child.stdout?.on('data', (buf) => { send('log', buf.toString()) })
+    child.stderr?.on('data', (buf) => { send('log', buf.toString()) })
+    child.on('error', (err) => { send('error', { error: err?.message || 'spawn failed' }) })
+    child.on('close', (code) => {
+      const ok = code === 0
+      if (!streamClosedGracefully) {
+        send('done', { ok, code })
+      }
+      streamClosedGracefully = true
+      try { clearInterval(heartbeatId) } catch { }
+      try { res.end() } catch { }
+    })
+
+    req.on('close', () => {
+      if (streamClosedGracefully) return
+      try { clearInterval(heartbeatId) } catch { }
+      console.warn('[refresh-aphydle] SSE client disconnected; refresh continues in background.')
+    })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+  }
+})
+
+app.options('/api/admin/refresh-aphydle/stream', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
