@@ -90,6 +90,31 @@
   background: rgba(30, 30, 30, 0.7);
 }
 
+/* Aphydle tease-strip pixel sprites: gentle staggered bobbing on group hover.
+   Idle they sit still so the card stays calm; on hover they wiggle to invite
+   a click. The mystery sprite is rendered as a dark silhouette so users can't
+   tell which plant it is — same shape as the others, but unreadable. */
+@keyframes aphydle-sprite-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+.aphydle-tease-sprite {
+  transition: transform 0.25s ease-out;
+}
+.group:hover .aphydle-tease-sprite {
+  animation: aphydle-sprite-bob 1.4s ease-in-out infinite;
+}
+.group:hover .aphydle-tease-sprite:nth-child(2) { animation-delay: 0.1s; }
+.group:hover .aphydle-tease-sprite:nth-child(3) { animation-delay: 0.2s; }
+.group:hover .aphydle-tease-sprite:nth-child(4) { animation-delay: 0.3s; }
+.group:hover .aphydle-tease-sprite:nth-child(5) { animation-delay: 0.4s; }
+.aphydle-tease-mystery {
+  filter: brightness(0) saturate(100%) opacity(0.55);
+}
+.dark .aphydle-tease-mystery {
+  filter: brightness(0) saturate(100%) invert(15%) opacity(0.7);
+}
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,

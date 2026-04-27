@@ -12,6 +12,7 @@ import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
 import i18n from "@/lib/i18n"
 import { DitheringShader } from "@/components/ui/dithering-shader"
+import { PixelSprite } from "@/components/ui/pixel-sprite"
 import "./LandingPage.css"
 
 // Intersection Observer hook: defers rendering of below-fold sections until they approach the viewport.
@@ -2102,6 +2103,23 @@ const AphydleSection: React.FC = React.memo(() => {
       "A new mystery plant every day. Use progressive botanical clues — foliage, habitat, family — to guess the species before you run out of tries.",
   })
   const cta = t("aphydle.cta", { defaultValue: "Play Aphydle" })
+  const tease = t("aphydle.tease", { defaultValue: "Can you guess what's growing today?" })
+
+  // Show the URL as it appears in the browser address bar (host only, no scheme)
+  // so the favicon-flanked tab preview reads naturally.
+  const aphydleHostLabel = React.useMemo(() => {
+    try { return new URL(aphydleUrl).host } catch { return "aphydle" }
+  }, [aphydleUrl])
+
+  // Decorative pixel-plant strip — five plants in a procession of growth stages
+  // mixed across the three available sprite sheets. The last slot is left as
+  // "???" to tease that today's plant could be anything.
+  const teaseSprites: Array<{ name: "Growing_Plant_00" | "Growing_Plant_01" | "Growing_Plant_03"; state: number }> = [
+    { name: "Growing_Plant_00", state: 0 },
+    { name: "Growing_Plant_01", state: 1 },
+    { name: "Growing_Plant_00", state: 2 },
+    { name: "Growing_Plant_03", state: 3 },
+  ]
 
   return (
     <section className="py-12 lg:py-16 px-4 sm:px-6 lg:px-8">
@@ -2119,47 +2137,94 @@ const AphydleSection: React.FC = React.memo(() => {
             <div className="pointer-events-none absolute -top-16 -right-10 w-64 h-64 bg-violet-500/10 rounded-full blur-3xl" />
             <div className="pointer-events-none absolute -bottom-16 -left-10 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl" />
 
-            <div className="relative flex flex-col sm:flex-row items-center gap-6 p-6 sm:p-8">
-              {/* Logo block */}
-              <div className="relative shrink-0">
-                <div className="absolute inset-0 bg-gradient-to-br from-violet-500/30 to-emerald-500/30 rounded-2xl blur-lg group-hover:from-violet-500/40 group-hover:to-emerald-500/40 transition-colors" />
-                <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm">
-                  <img
-                    src="/icons/plant-swipe-icon.svg"
-                    alt=""
-                    className="h-12 w-12 plant-icon-theme"
-                    draggable="false"
-                    aria-hidden="true"
-                  />
-                  <span className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-stone-950">
-                    <Gamepad2 className="h-3.5 w-3.5 text-white" />
-                  </span>
+            <div className="relative p-6 sm:p-8">
+              {/* Top row: logo + text + CTA */}
+              <div className="flex flex-col sm:flex-row items-center gap-6">
+                {/* Logo block — Aphydle's favicon (shared with Aphylia) */}
+                <div className="relative shrink-0">
+                  <div className="absolute inset-0 bg-gradient-to-br from-violet-500/30 to-emerald-500/30 rounded-2xl blur-lg group-hover:from-violet-500/40 group-hover:to-emerald-500/40 transition-colors" />
+                  <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm">
+                    <img
+                      src="/icons/plant-swipe-icon.svg"
+                      alt=""
+                      className="h-12 w-12 plant-icon-theme"
+                      draggable="false"
+                      aria-hidden="true"
+                    />
+                    <span className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-stone-950">
+                      <Gamepad2 className="h-3.5 w-3.5 text-white" />
+                    </span>
+                  </div>
+                </div>
+
+                {/* Text + browser-tab style URL preview (favicon flanks the host) */}
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <div className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-violet-600 dark:text-violet-400">
+                    <Sparkles className="h-3.5 w-3.5" />
+                    {eyebrow}
+                  </div>
+                  <div className="mt-1.5 flex items-baseline gap-2 justify-center sm:justify-start flex-wrap">
+                    <span className="font-brand text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-white">
+                      {title}
+                    </span>
+                    <span className="text-sm text-stone-500 dark:text-stone-400">
+                      · {tagline}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm sm:text-base text-stone-600 dark:text-stone-300 leading-relaxed">
+                    {description}
+                  </p>
+                  {/* Browser-tab style URL chip — favicon next to the host */}
+                  <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-stone-100 dark:bg-stone-800/70 border border-stone-200/70 dark:border-stone-700/70 text-xs text-stone-600 dark:text-stone-300 font-mono">
+                    <img
+                      src="/icons/plant-swipe-icon.svg"
+                      alt=""
+                      className="h-3.5 w-3.5 plant-icon-theme"
+                      draggable="false"
+                      aria-hidden="true"
+                    />
+                    <span className="truncate">{aphydleHostLabel}</span>
+                  </div>
+                </div>
+
+                {/* CTA */}
+                <div className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-stone-900 text-white dark:bg-white dark:text-stone-900 text-sm font-semibold shadow-sm group-hover:bg-stone-800 dark:group-hover:bg-stone-100 transition-colors">
+                  {cta}
+                  <ExternalLink className="h-4 w-4 opacity-80 group-hover:translate-x-0.5 transition-transform" />
                 </div>
               </div>
 
-              {/* Text + CTA */}
-              <div className="flex-1 min-w-0 text-center sm:text-left">
-                <div className="inline-flex items-center gap-1.5 text-xs font-medium uppercase tracking-wider text-violet-600 dark:text-violet-400">
-                  <Sparkles className="h-3.5 w-3.5" />
-                  {eyebrow}
+              {/* Pixel-plant tease strip — growth-stage procession + a hidden "today's plant" */}
+              <div className="mt-6 pt-5 border-t border-stone-200/70 dark:border-stone-800/70 flex items-center gap-4 sm:gap-6 justify-center sm:justify-start">
+                <div
+                  className="flex items-end gap-3 sm:gap-4"
+                  aria-hidden="true"
+                >
+                  {teaseSprites.map((s, i) => (
+                    <PixelSprite
+                      key={`${s.name}-${i}`}
+                      name={s.name}
+                      state={s.state}
+                      scale={3}
+                      className="aphydle-tease-sprite"
+                    />
+                  ))}
+                  {/* Mystery plant: a real sprite turned into a silhouette with a "?" overlay */}
+                  <div className="relative inline-flex items-end justify-center">
+                    <PixelSprite
+                      name="Growing_Plant_03"
+                      state={3}
+                      scale={3}
+                      className="aphydle-tease-sprite aphydle-tease-mystery"
+                    />
+                    <span className="absolute inset-0 flex items-center justify-center text-xl font-bold text-white drop-shadow">
+                      ?
+                    </span>
+                  </div>
                 </div>
-                <div className="mt-1.5 flex items-baseline gap-2 justify-center sm:justify-start flex-wrap">
-                  <span className="font-brand text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-white">
-                    {title}
-                  </span>
-                  <span className="text-sm text-stone-500 dark:text-stone-400">
-                    · {tagline}
-                  </span>
-                </div>
-                <p className="mt-2 text-sm sm:text-base text-stone-600 dark:text-stone-300 leading-relaxed">
-                  {description}
-                </p>
-              </div>
-
-              {/* CTA arrow / button */}
-              <div className="shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-stone-900 text-white dark:bg-white dark:text-stone-900 text-sm font-semibold shadow-sm group-hover:bg-stone-800 dark:group-hover:bg-stone-100 transition-colors">
-                {cta}
-                <ExternalLink className="h-4 w-4 opacity-80 group-hover:translate-x-0.5 transition-transform" />
+                <span className="text-sm text-stone-500 dark:text-stone-400 italic">
+                  {tease}
+                </span>
               </div>
             </div>
           </div>
