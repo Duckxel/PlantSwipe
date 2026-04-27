@@ -164,6 +164,36 @@ PY
   fi
 fi
 
+# ── 3b. patch Aphydle source for image proxy + Aphylia branding ────────────
+# Aphydle queries Supabase directly for plant_images.link and renders the URL
+# into a <canvas> via crossOrigin="anonymous" — third-party hosts that don't
+# send Access-Control-Allow-Origin (e.g. img.passeportsante.net) make every
+# load fail CORS. The patcher rewrites pickImage() to route those URLs through
+# PlantSwipe's /api/image-proxy. Idempotent, fails loudly if upstream changes.
+APHYDLE_PATCHER="$WORK_DIR/scripts/aphydle-patch-image-proxy.mjs"
+if [[ -f "$APHYDLE_PATCHER" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
+  log "Patching Aphydle source for image-proxy CORS wrapping…"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
+  else
+    node "$APHYDLE_PATCHER" "$APHYDLE_DIR"
+  fi
+fi
+
+# Branding: drop in the Aphylia favicon links and replace the procedural
+# MosaicLeaf with the PlantSwipe icon SVG. Aphylia/PlantSwipe icon files are
+# copied into dist/icons/ after build (step 5b below) so the patched paths
+# resolve at runtime.
+APHYDLE_BRANDING_PATCHER="$WORK_DIR/scripts/aphydle-patch-branding.mjs"
+if [[ -f "$APHYDLE_BRANDING_PATCHER" && -f "$APHYDLE_DIR/index.html" ]]; then
+  log "Patching Aphydle source for Aphylia branding (favicon + logo)…"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
+  else
+    node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
+  fi
+fi
+
 # ── 4. locate Bun ────────────────────────────────────────────────────────────
 OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
 OWNER_BUN_DIR="$OWNER_HOME/.bun/bin"
@@ -224,6 +254,28 @@ fi
 if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
   echo "[ERROR] Aphydle build did not produce $APHYDLE_DIR/dist" >&2
   exit 1
+fi
+
+# ── 5b. drop a same-origin favicon.ico for the browser's auto-fetch ─────────
+# Even with `<link rel="icon">` in index.html (injected by aphydle-patch-
+# branding.mjs and hashed by Vite into dist/assets/<hash>.png), some clients
+# still poke /favicon.ico — copy the upstream brand asset there so the
+# console stays clean. The hashed dist asset and the in-app <MosaicLeaf>
+# image don't need any post-build copy: Vite already emits and references
+# them via src/assets/FINAL.png.
+APHYDLE_FAVICON_DEST="$APHYDLE_DIR/dist/favicon.ico"
+APHYDLE_FAVICON_SRC="$APHYDLE_DIR/src/assets/FINAL.png"
+if [[ -f "$APHYDLE_FAVICON_SRC" ]]; then
+  log "Installing favicon.ico into Aphydle dist (from $APHYDLE_FAVICON_SRC)"
+  if [[ "$EUID" -eq 0 ]]; then
+    sudo -u "$REPO_OWNER" -H install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
+      log "[WARN] Failed to install Aphydle favicon"
+  else
+    install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
+      log "[WARN] Failed to install Aphydle favicon"
+  fi
+else
+  log "[WARN] $APHYDLE_FAVICON_SRC not found; Aphydle /favicon.ico will 404."
 fi
 
 # ── 6. ensure /var/www/Aphydle symlink ──────────────────────────────────────
