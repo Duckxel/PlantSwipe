@@ -1,7 +1,7 @@
 {
   "name": "aphylia",
   "private": true,
-  "version": "6.8.9",
+  "version": "6.8.10",
   "type": "module",
   "scripts": {
     "dev": "vite",
