@@ -88,6 +88,52 @@ const tabs = [
 
 ---
 
+### `AppSelect`
+
+**File:** `src/components/ui/app-select.tsx`
+
+A custom select dropdown built on Radix Popover. Replaces native HTML `<select>` app-wide for consistent styling, keyboard navigation, and support for icons/descriptions per option. Generic over the value type.
+
+**Props:**
+
+| Prop | Type | Default | Description |
+|------|------|---------|-------------|
+| `value` | `T \| null \| undefined` | — | Currently selected value |
+| `onChange` | `(value: T) => void` | — | Called when an option is selected |
+| `options` | `AppSelectOption<T>[]` | — | Array of `{ value, label, description?, icon?, disabled? }` |
+| `placeholder` | `ReactNode` | — | Shown when no value is selected |
+| `disabled` | `boolean` | `false` | Disables the trigger |
+| `className` | `string` | — | Wrapper class |
+| `triggerClassName` | `string` | — | Extra classes on the trigger button |
+| `contentClassName` | `string` | — | Extra classes on the dropdown panel |
+| `align` | `'start' \| 'center' \| 'end'` | `'start'` | Popover alignment |
+| `ariaLabel` | `string` | — | Accessible label |
+| `size` | `'sm' \| 'md'` | `'md'` | Trigger size variant |
+
+**Example:**
+
+```tsx
+import { AppSelect } from "@/components/ui/app-select"
+
+const options = [
+  { value: "name", label: "Name" },
+  { value: "date", label: "Date", icon: <CalendarIcon /> },
+]
+
+<AppSelect value={sort} onChange={setSort} options={options} placeholder="Sort by…" />
+```
+
+**Features:**
+- Keyboard navigation (arrow keys, Enter, Escape)
+- Check icon on selected option
+- Dark mode support
+- Optional per-option description and icon
+- Two size variants (`sm` / `md`)
+
+**Used in:** Encyclopedia sort, Discovery filters, admin panels — replaces all native `<select>` elements.
+
+---
+
 ### `ValidatedInput`
 
 **File:** `src/components/ui/validated-input.tsx`
