@@ -707,6 +707,48 @@ sync_user_password_from_pssword_key() {
   fi
 }
 
+# Render /etc/sudoers.d/plantswipe-admin-api with the canonical NOPASSWD allow
+# list. This function is defined here so we can call it BEFORE delegating to
+# refresh-plant-swipe.sh / refresh-aphydle.sh — those scripts run as www-data
+# and call `sudo ln`, `sudo systemctl restart`, etc. If the sudoers file on
+# disk is from an older setup.sh that didn't include `ln`/`rm`/etc., the
+# refresh blows up. Writing it early closes that timing hole.
+SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
+install_plantswipe_sudoers() {
+  log "Configuring sudoers at $SUDOERS_FILE…"
+  $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
+Defaults:$SERVICE_USER !requiretty
+$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
+# Allow website Pull & Build to sync service env and reload units without password
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/ln
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/rm
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
+EOF
+"
+  $SUDO chmod 0440 "$SUDOERS_FILE"
+  if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
+    echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
+    $SUDO rm -f "$SUDOERS_FILE" || true
+  fi
+}
+
 PSSWORD_KEY_VALUE="$(read_pssword_key_value)"
 install_askpass_helper "$PSSWORD_KEY_VALUE"
 
@@ -739,6 +781,11 @@ case "${PLANTSWIPE_SKIP_INVOKER_PASSWORD:-0}" in
     fi
     ;;
 esac
+
+# Install sudoers NOW (before refresh delegation below). The refresh scripts
+# run as www-data and rely on this NOPASSWD allow list; rendering it later
+# would let one stale-sudoers run break (the prior /usr/bin/ln denial).
+install_plantswipe_sudoers
 
 # Install/upgrade Bun (preferred runtime) and Node.js (for compatibility).
 # Both installers are re-run on every setup.sh pass so minor/patch security
@@ -2968,41 +3015,11 @@ EOF
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
-# Sudoers for Admin API to manage limited systemctl commands without password
-SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
-log "Configuring sudoers at $SUDOERS_FILE…"
-$SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
-Defaults:$SERVICE_USER !requiretty
-$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
-# Allow website Pull & Build to sync service env and reload units without password
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/ln
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/rm
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
-EOF
-"
-$SUDO chmod 0440 "$SUDOERS_FILE"
-# Validate sudoers syntax
-if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
-  echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
-  $SUDO rm -f "$SUDOERS_FILE" || true
-fi
+# Re-render sudoers at end-of-setup as well — defensive in case anything below
+# changed values that flow into the file. The same function ran earlier (right
+# after the password sync) so refresh-plant-swipe.sh / refresh-aphydle.sh saw
+# the up-to-date NOPASSWD entries during the build phase.
+install_plantswipe_sudoers
 
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
