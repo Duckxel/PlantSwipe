@@ -109,6 +109,20 @@ SITEMAP_TIMER_RANDOM_DELAY="${PLANTSWIPE_SITEMAP_JITTER:-900}"
 if ! [[ "$SITEMAP_TIMER_RANDOM_DELAY" =~ ^[0-9]+$ ]]; then
   SITEMAP_TIMER_RANDOM_DELAY="900"
 fi
+
+# Aphydle nightly rebuild — re-runs `vite build` so yesterday's puzzle gets
+# picked up by Aphydle's seoArtifactsPlugin (emits dist/sitemap.xml + per-puzzle
+# pages from aphydle.daily_log rows where puzzle_date < today UTC). Staggered
+# 25 min after the PlantSwipe sitemap to avoid concurrent Supabase egress.
+SERVICE_APHYDLE_REBUILD="plant-swipe-aphydle-rebuild"
+APHYDLE_REBUILD_BIN="/usr/local/bin/plantswipe-aphydle-rebuild"
+APHYDLE_REBUILD_SERVICE_FILE="/etc/systemd/system/$SERVICE_APHYDLE_REBUILD.service"
+APHYDLE_REBUILD_TIMER_FILE="/etc/systemd/system/$SERVICE_APHYDLE_REBUILD.timer"
+APHYDLE_REBUILD_SCHEDULE="${PLANTSWIPE_APHYDLE_REBUILD_SCHEDULE:-*-*-* 03:30:00}"
+APHYDLE_REBUILD_RANDOM_DELAY="${PLANTSWIPE_APHYDLE_REBUILD_JITTER:-1800}"
+if ! [[ "$APHYDLE_REBUILD_RANDOM_DELAY" =~ ^[0-9]+$ ]]; then
+  APHYDLE_REBUILD_RANDOM_DELAY="1800"
+fi
 SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
 NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
 
@@ -2972,6 +2986,60 @@ WantedBy=timers.target
 EOF
 "
 
+# Aphydle nightly rebuild helper + unit files. The wrapper delegates to
+# scripts/refresh-aphydle.sh, which already runs as $SERVICE_USER under the
+# same NOPASSWD sudoers entries used by manual refreshes. Skipped (and any
+# stale unit removed) when Aphydle setup was disabled.
+APHYDLE_REBUILD_HELPER_SRC="$REPO_DIR/scripts/aphydle-nightly-rebuild.sh"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_HELPER_SRC" ]]; then
+  log "Installing Aphydle nightly rebuild helper to $APHYDLE_REBUILD_BIN…"
+  $SUDO install -D -m 0755 "$APHYDLE_REBUILD_HELPER_SRC" "$APHYDLE_REBUILD_BIN"
+
+  log "Installing Aphydle nightly rebuild systemd unit…"
+  $SUDO bash -c "cat > '$APHYDLE_REBUILD_SERVICE_FILE' <<EOF
+[Unit]
+Description=Aphydle nightly rebuild (refresh puzzle archive sitemap)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+EnvironmentFile=$SERVICE_ENV_FILE
+WorkingDirectory=$REPO_DIR
+ExecStart=$APHYDLE_REBUILD_BIN
+SuccessExitStatus=0
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=1800
+EOF
+"
+
+  log "Installing Aphydle nightly rebuild timer unit…"
+  $SUDO bash -c "cat > '$APHYDLE_REBUILD_TIMER_FILE' <<EOF
+[Unit]
+Description=Daily Aphydle bundle rebuild for puzzle-archive indexing
+
+[Timer]
+OnCalendar=$APHYDLE_REBUILD_SCHEDULE
+Persistent=true
+RandomizedDelaySec=$APHYDLE_REBUILD_RANDOM_DELAY
+Unit=$SERVICE_APHYDLE_REBUILD.service
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+else
+  if [[ -f "$APHYDLE_REBUILD_TIMER_FILE" || -f "$APHYDLE_REBUILD_SERVICE_FILE" ]]; then
+    log "Removing stale Aphydle rebuild units (Aphydle setup is disabled)"
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE_REBUILD.timer" 2>/dev/null || true
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE_REBUILD.service" 2>/dev/null || true
+    $SUDO rm -f "$APHYDLE_REBUILD_TIMER_FILE" "$APHYDLE_REBUILD_SERVICE_FILE"
+  fi
+fi
+
 # CA certificates auto-update timer (weekly)
 # This ensures the system CA certificates stay up-to-date for SSL connections
 # (e.g., connecting to Supabase database which requires valid CA certs)
@@ -3028,8 +3096,14 @@ $SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVI
 if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
   $SUDO systemctl enable "$SERVICE_APHYDLE" || log "[WARN] Failed to enable $SERVICE_APHYDLE"
 fi
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_TIMER_FILE" ]]; then
+  $SUDO systemctl enable "$SERVICE_APHYDLE_REBUILD.timer" || log "[WARN] Failed to enable $SERVICE_APHYDLE_REBUILD.timer"
+fi
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_TIMER_FILE" ]]; then
+  $SUDO systemctl start "$SERVICE_APHYDLE_REBUILD.timer" || log "[WARN] Failed to start $SERVICE_APHYDLE_REBUILD.timer"
+fi
 # Run CA update immediately to fix any current SSL issues
 log "Running initial CA certificates update…"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
