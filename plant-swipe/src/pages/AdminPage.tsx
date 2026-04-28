@@ -1926,6 +1926,7 @@ export const AdminPage: React.FC = () => {
     );
     // Aphydle (sister daily plant guessing game) — players for today's puzzle
     const [aphydlePlayersToday, setAphydlePlayersToday] = React.useState<number | null>(null);
+    const [aphydleVisitsToday, setAphydleVisitsToday] = React.useState<number | null>(null);
     const [aphydleStatsLoading, setAphydleStatsLoading] = React.useState<boolean>(true);
     const [aphydleStatsRefreshing, setAphydleStatsRefreshing] = React.useState<boolean>(false);
     const [aphydleStatsUpdatedAt, setAphydleStatsUpdatedAt] = React.useState<number | null>(null);
@@ -5348,6 +5349,7 @@ export const AdminPage: React.FC = () => {
         if (resp && resp.ok) {
           const data = await safeJson(resp);
           if (typeof data?.playersToday === "number") setAphydlePlayersToday(data.playersToday);
+          if (typeof data?.visitsToday === "number") setAphydleVisitsToday(data.visitsToday);
           setAphydleStatsUpdatedAt(Date.now());
         }
       } catch (e) {
@@ -7507,8 +7509,13 @@ export const AdminPage: React.FC = () => {
                                 <span className="inline-block w-10 h-8 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
                               ) : aphydleStatsUpdatedAt !== null ? (aphydlePlayersToday ?? "-") : "-"}
                             </div>
-                            <span className="text-xs font-medium text-fuchsia-500 dark:text-fuchsia-400">today</span>
+                            <span className="text-xs font-medium text-fuchsia-500 dark:text-fuchsia-400">players</span>
                           </div>
+                          {aphydleVisitsToday != null && (
+                            <div className="mt-1 text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60 tabular-nums">
+                              {aphydleVisitsToday.toLocaleString()} visit{aphydleVisitsToday === 1 ? "" : "s"} today
+                            </div>
+                          )}
                         </div>
                       </div>
 
