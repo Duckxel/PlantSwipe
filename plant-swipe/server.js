@@ -34799,99 +34799,166 @@ async function generateCrawlerHtml(req, pagePath) {
     keywords = 'aphylia, plant collection, bookmarks, saved plants, plant list'
   }
 
-  // Build JSON-LD structured data for search engines
-  let jsonLdSchema = null
+  // Build JSON-LD structured data for search engines.
+  // We emit an array of schemas: a route-specific primary schema plus a
+  // BreadcrumbList where the route has a meaningful navigation hierarchy.
+  // BreadcrumbList enables breadcrumb rich-results in SERPs (CTR uplift).
+  const jsonLdSchemas = []
+  const siteUrlNoTrailing = siteUrl.replace(/\/+$/, '')
+  const buildBreadcrumb = (items) => ({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((it, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      name: it.name,
+      item: it.item,
+    })),
+  })
+  // Localised section labels used in breadcrumbs
+  const crumbLabel = (key) => {
+    const labels = {
+      home: { en: 'Home', fr: 'Accueil' },
+      plants: { en: 'Plants', fr: 'Plantes' },
+      blog: { en: 'Blog', fr: 'Blog' },
+      gardens: { en: 'Gardens', fr: 'Jardins' },
+      community: { en: 'Community', fr: 'Communauté' },
+      collections: { en: 'Collections', fr: 'Collections' },
+    }
+    return labels[key]?.[detectedLang] || labels[key]?.en || key
+  }
+
   if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
     const plantData = req._ssrDebug.queryResults.plant
-    jsonLdSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'Product',
+    // Plant pages are care guides, not commerce listings. Use Article (TechArticle)
+    // with the plant as the `about` Thing/Taxon. Avoids the misleading Product+Offer
+    // markup that Google flags as structured-data spam when no real offer exists.
+    const plantThing = {
+      '@type': 'Thing',
+      additionalType: 'https://schema.org/Taxon',
       name: plantData.name || 'Plant',
+      ...(plantData.scientificName ? { alternateName: plantData.scientificName } : {}),
+      ...(image ? { image } : {}),
+      url: canonicalUrl,
+    }
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'TechArticle',
+      headline: title,
       description: description,
-      image: image || undefined,
-      brand: {
-        '@type': 'Brand',
-        name: 'Aphylia'
+      ...(image ? { image } : {}),
+      inLanguage: detectedLang,
+      about: plantThing,
+      author: { '@type': 'Organization', name: 'Aphylia', url: siteUrl },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: { '@type': 'ImageObject', url: `${siteUrl}/icons/icon-512x512.png` },
       },
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
-        availability: 'https://schema.org/InStock'
-      }
-    }
-    if (plantData.scientificName) {
-      jsonLdSchema.alternateName = plantData.scientificName
-    }
+      mainEntityOfPage: { '@type': 'WebPage', '@id': canonicalUrl },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: `${siteUrlNoTrailing}/search` },
+      { name: plantData.name || 'Plant', item: canonicalUrl },
+    ]))
   } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
-    jsonLdSchema = {
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'BlogPosting',
       headline: title,
       description: description,
       image: image || undefined,
+      inLanguage: detectedLang,
       author: {
         '@type': 'Organization',
-        name: 'Aphylia'
+        name: 'Aphylia',
       },
       publisher: {
         '@type': 'Organization',
         name: 'Aphylia',
         logo: {
           '@type': 'ImageObject',
-          url: `${siteUrl}/icons/icon-512x512.png`
-        }
+          url: `${siteUrl}/icons/icon-512x512.png`,
+        },
       },
       mainEntityOfPage: {
         '@type': 'WebPage',
-        '@id': canonicalUrl
-      }
-    }
+        '@id': canonicalUrl,
+      },
+    })
+    const blogTitle = title.split('|')[0].replace(/[📖]/g, '').trim() || 'Post'
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('blog'), item: `${siteUrlNoTrailing}/blog` },
+      { name: blogTitle, item: canonicalUrl },
+    ]))
   } else if (req._ssrDebug?.matchedRoute === 'profile') {
-    jsonLdSchema = {
+    const personName = title.replace(/🌱\s*/, '').split('|')[0].trim()
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'ProfilePage',
+      inLanguage: detectedLang,
       mainEntity: {
         '@type': 'Person',
-        name: title.replace(/🌱\s*/, '').split('|')[0].trim(),
+        name: personName,
         description: description,
         image: image || undefined,
-        url: canonicalUrl
-      }
-    }
+        url: canonicalUrl,
+      },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('community'), item: `${siteUrlNoTrailing}/` },
+      { name: personName, item: canonicalUrl },
+    ]))
   } else if (req._ssrDebug?.matchedRoute === 'garden') {
-    jsonLdSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'Place',
-      name: title.replace(/[🌳🌿🌱🏡]\s*/, '').split('-')[0].trim(),
-      description: description,
-      image: image || undefined,
-      url: canonicalUrl
-    }
-  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
-    jsonLdSchema = {
+    const gardenName = title.replace(/[🌳🌿🌱🏡]\s*/g, '').split('-')[0].trim()
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      name: title.replace(/🔖\s*/, '').split('-')[0].trim(),
+      name: gardenName,
       description: description,
       image: image || undefined,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('gardens'), item: `${siteUrlNoTrailing}/gardens` },
+      { name: gardenName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    const bookmarkName = title.replace(/🔖\s*/, '').split('-')[0].trim()
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: bookmarkName,
+      description: description,
+      image: image || undefined,
+      inLanguage: detectedLang,
       url: canonicalUrl,
       ...(req._ssrDebug?.bookmarkOwnerName ? {
         author: {
           '@type': 'Person',
-          name: req._ssrDebug.bookmarkOwnerName
-        }
+          name: req._ssrDebug.bookmarkOwnerName,
+        },
       } : {}),
       ...(req._ssrDebug?.bookmarkCreatedAt ? {
-        dateCreated: new Date(req._ssrDebug.bookmarkCreatedAt).toISOString()
+        dateCreated: new Date(req._ssrDebug.bookmarkCreatedAt).toISOString(),
       } : {}),
       ...(req._ssrDebug?.bookmarkPlantCount != null ? {
-        numberOfItems: req._ssrDebug.bookmarkPlantCount
-      } : {})
-    }
+        numberOfItems: req._ssrDebug.bookmarkPlantCount,
+      } : {}),
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('collections'), item: `${siteUrlNoTrailing}/` },
+      { name: bookmarkName, item: canonicalUrl },
+    ]))
   } else {
-    // Generic website schema
-    jsonLdSchema = {
+    // Generic website schema (homepage / unmatched routes) - sitelinks searchbox
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'Aphylia',
@@ -34900,9 +34967,9 @@ async function generateCrawlerHtml(req, pagePath) {
       potentialAction: {
         '@type': 'SearchAction',
         target: `${siteUrl}/search?q={search_term_string}`,
-        'query-input': 'required name=search_term_string'
-      }
-    }
+        'query-input': 'required name=search_term_string',
+      },
+    })
   }
 
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
@@ -34960,9 +35027,9 @@ async function generateCrawlerHtml(req, pagePath) {
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
   
   <!-- JSON-LD Structured Data -->
-  ${jsonLdSchema ? `<script type="application/ld+json">
-${safeJsonStringify(jsonLdSchema)}
-  </script>` : ''}
+  ${jsonLdSchemas.map(schema => `<script type="application/ld+json">
+${safeJsonStringify(schema)}
+  </script>`).join('\n  ')}
   
   <style>
     * { box-sizing: border-box; }
