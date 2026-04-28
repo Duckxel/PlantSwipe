@@ -13468,6 +13468,81 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 })
 
+// Admin: Aphydle stats — count of players who attempted today's puzzle and
+// page visits today. Reads aphydle.attempts / aphydle.daily_log directly via
+// the postgres-js client; aphydle.attempts has no SELECT RLS policy so the
+// REST fallback can't be used here.
+app.get('/api/admin/aphydle-stats', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  try {
+    let playersToday = null
+    let visitsToday = null
+    let puzzleNo = null
+    let puzzleDate = null
+
+    if (sql) {
+      // Today's puzzle_no: prefer daily_log (matches what the runtime served),
+      // fall back to date-math against the rotation epoch (2026-04-27, mirrors
+      // PUZZLE_EPOCH_UTC in Aphydle's src/engine/game.js) if no row has been
+      // stamped yet.
+      try {
+        const pnRows = await sql`
+          select coalesce(
+            (select puzzle_no from aphydle.daily_log where puzzle_date = (now() at time zone 'utc')::date),
+            ((now() at time zone 'utc')::date - date '2026-04-27') + 1
+          )::int as puzzle_no,
+          to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as puzzle_date
+        `
+        if (Array.isArray(pnRows) && pnRows[0]) {
+          puzzleNo = Number(pnRows[0].puzzle_no)
+          puzzleDate = pnRows[0].puzzle_date || null
+        }
+      } catch (e) {
+        console.warn('[aphydle-stats] puzzle_no lookup failed:', e?.message)
+      }
+
+      if (puzzleNo != null) {
+        // (anon_id, puzzle_no) is unique on aphydle.attempts, so count(*) on
+        // today's puzzle_no is the number of distinct players today.
+        try {
+          const rows = await sql`
+            select count(*)::int as count
+            from aphydle.attempts
+            where puzzle_no = ${puzzleNo}
+          `
+          if (Array.isArray(rows) && rows[0]) playersToday = Number(rows[0].count)
+        } catch (e) {
+          console.warn('[aphydle-stats] players query failed:', e?.message)
+        }
+      }
+
+      try {
+        const rows = await sql`
+          select count(*)::int as count
+          from aphydle.page_visits
+          where visited_at >= (now() at time zone 'utc')::date
+        `
+        if (Array.isArray(rows) && rows[0]) visitsToday = Number(rows[0].count)
+      } catch (e) {
+        console.warn('[aphydle-stats] visits query failed:', e?.message)
+      }
+    }
+
+    res.json({ ok: true, playersToday, visitsToday, puzzleNo, puzzleDate })
+  } catch (e) {
+    res.status(200).json({
+      ok: true,
+      playersToday: null,
+      visitsToday: null,
+      puzzleNo: null,
+      puzzleDate: null,
+      error: e?.message || 'Failed to load aphydle stats',
+      errorCode: 'ADMIN_APHYDLE_STATS_ERROR',
+    })
+  }
+})
+
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {

@@ -104,6 +104,7 @@ import {
   Eye,
   MousePointer,
   ArrowDownRight,
+  Gamepad2,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -1923,6 +1924,13 @@ export const AdminPage: React.FC = () => {
     const [plantsUpdatedAt, setPlantsUpdatedAt] = React.useState<number | null>(
       null,
     );
+    // Aphydle (sister daily plant guessing game) — players for today's puzzle
+    const [aphydlePlayersToday, setAphydlePlayersToday] = React.useState<number | null>(null);
+    const [aphydleVisitsToday, setAphydleVisitsToday] = React.useState<number | null>(null);
+    const [aphydlePuzzleNo, setAphydlePuzzleNo] = React.useState<number | null>(null);
+    const [aphydleStatsLoading, setAphydleStatsLoading] = React.useState<boolean>(true);
+    const [aphydleStatsRefreshing, setAphydleStatsRefreshing] = React.useState<boolean>(false);
+    const [aphydleStatsUpdatedAt, setAphydleStatsUpdatedAt] = React.useState<number | null>(null);
   // Distinct, high-contrast palette for readability
   const countryColors = [
     "#10b981",
@@ -5319,6 +5327,57 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id);
   }, [loadRegisteredCount]);
 
+  // Loader for Aphydle (sister daily plant guessing game) stats
+  const loadAphydleStats = React.useCallback(
+    async (opts?: { initial?: boolean }) => {
+      const isInitial = !!opts?.initial;
+      if (isInitial) setAphydleStatsLoading(true);
+      else setAphydleStatsRefreshing(true);
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        try {
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
+            ?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
+        const resp = await fetchWithRetry("/api/admin/aphydle-stats", {
+          headers,
+          credentials: "same-origin",
+        }).catch(() => null);
+        if (resp && resp.ok) {
+          const data = await safeJson(resp);
+          if (typeof data?.playersToday === "number") setAphydlePlayersToday(data.playersToday);
+          if (typeof data?.visitsToday === "number") setAphydleVisitsToday(data.visitsToday);
+          if (typeof data?.puzzleNo === "number") setAphydlePuzzleNo(data.puzzleNo);
+          setAphydleStatsUpdatedAt(Date.now());
+        }
+      } catch (e) {
+        console.error("[AdminPage] Failed to load aphydle stats:", e);
+      } finally {
+        if (isInitial) setAphydleStatsLoading(false);
+        else setAphydleStatsRefreshing(false);
+      }
+    },
+    [safeJson, fetchWithRetry],
+  );
+
+  React.useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadAphydleStats({ initial: true });
+    }, 400);
+    return () => clearTimeout(timeoutId);
+  }, [loadAphydleStats]);
+
+  React.useEffect(() => {
+    const id = setInterval(() => {
+      loadAphydleStats({ initial: false });
+    }, 60_000);
+    return () => clearInterval(id);
+  }, [loadAphydleStats]);
+
 
   // Loader for list of connected IPs (unique IPs past N minutes; default 60)
   const loadEnrichedIps = React.useCallback(
@@ -7291,7 +7350,7 @@ export const AdminPage: React.FC = () => {
                       </div>
 
                       {/* Quick Stats Cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                         {/* Currently Online Card — powered by GA Realtime */}
                         <div className="group relative rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-emerald-500/8 transition-all duration-200 overflow-hidden">
                           <div className="flex items-center justify-between mb-3">
@@ -7410,6 +7469,48 @@ export const AdminPage: React.FC = () => {
                             </div>
                             <span className="text-xs font-medium text-amber-500 dark:text-amber-400">plants</span>
                           </div>
+                        </div>
+
+                        {/* Aphydle Players Today Card — sister daily plant guessing game */}
+                        <div className="group relative rounded-2xl border border-fuchsia-200/70 dark:border-fuchsia-800/40 bg-gradient-to-br from-fuchsia-50/80 to-violet-50/50 dark:from-fuchsia-950/30 dark:to-violet-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-fuchsia-500/8 transition-all duration-200 overflow-hidden">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
+                                <Gamepad2 className="h-4.5 w-4.5 text-white" />
+                              </div>
+                              <div>
+                                <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle Players</div>
+                                <div className="text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60">
+                                  {aphydlePuzzleNo != null
+                                    ? `Puzzle #${aphydlePuzzleNo} · ${aphydleStatsUpdatedAt ? formatTimeAgo(aphydleStatsUpdatedAt) : "Updating..."}`
+                                    : aphydleStatsUpdatedAt ? formatTimeAgo(aphydleStatsUpdatedAt) : "Updating..."}
+                                </div>
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Refresh aphydle players"
+                              onClick={() => loadAphydleStats({ initial: false })}
+                              disabled={aphydleStatsLoading || aphydleStatsRefreshing}
+                              className="h-7 w-7 rounded-lg text-fuchsia-600 dark:text-fuchsia-400"
+                            >
+                              <RefreshCw className={`h-3.5 w-3.5 ${aphydleStatsLoading || aphydleStatsRefreshing ? "animate-spin" : ""}`} />
+                            </Button>
+                          </div>
+                          <div className="flex items-baseline gap-1.5">
+                            <div className="text-3xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300">
+                              {aphydleStatsLoading ? (
+                                <span className="inline-block w-10 h-8 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
+                              ) : aphydleStatsUpdatedAt !== null ? (aphydlePlayersToday ?? "-") : "-"}
+                            </div>
+                            <span className="text-xs font-medium text-fuchsia-500 dark:text-fuchsia-400">today</span>
+                          </div>
+                          {aphydleVisitsToday != null && aphydleVisitsToday > 0 && (
+                            <div className="mt-1.5 text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60">
+                              {aphydleVisitsToday.toLocaleString()} visit{aphydleVisitsToday === 1 ? "" : "s"} today
+                            </div>
+                          )}
                         </div>
                       </div>
 
