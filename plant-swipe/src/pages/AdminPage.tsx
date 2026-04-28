@@ -7480,7 +7480,12 @@ export const AdminPage: React.FC = () => {
                               <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
                                 <Gamepad2 className="h-4 w-4 text-white" />
                               </div>
-                              <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle</div>
+                              <div>
+                                <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle</div>
+                                <div className="text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60">
+                                  {aphydleStatsUpdatedAt ? formatTimeAgo(aphydleStatsUpdatedAt) : "Updating..."}
+                                </div>
+                              </div>
                             </div>
                             <Button
                               variant="ghost"
