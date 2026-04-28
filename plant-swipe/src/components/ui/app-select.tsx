@@ -1,4 +1,5 @@
 import * as React from "react"
+import { createPortal } from "react-dom"
 import * as Popover from "@radix-ui/react-popover"
 import { Check, ChevronDown } from "lucide-react"
 
@@ -178,40 +179,19 @@ export function AppSelect<T extends string = string>({
                 const isSelected = value === opt.value
                 const isActive = activeIndex === i
                 return (
-                  <button
+                  <AppSelectOptionRow
                     key={opt.value}
-                    type="button"
-                    role="option"
-                    aria-selected={isSelected}
-                    data-idx={i}
-                    disabled={opt.disabled}
-                    onMouseEnter={() => !opt.disabled && setActiveIndex(i)}
-                    onClick={() => {
+                    opt={opt}
+                    index={i}
+                    isSelected={isSelected}
+                    isActive={isActive}
+                    onActivate={() => !opt.disabled && setActiveIndex(i)}
+                    onSelect={() => {
                       if (opt.disabled) return
                       onChange(opt.value)
                       setOpen(false)
                     }}
-                    className={cn(
-                      "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
-                      isActive && !opt.disabled && "bg-emerald-50 dark:bg-emerald-900/20",
-                      isSelected && "font-medium text-emerald-700 dark:text-emerald-300",
-                      !isSelected && !opt.disabled && "text-foreground",
-                      opt.disabled && "cursor-not-allowed opacity-50",
-                    )}
-                  >
-                    {opt.icon && <span className="shrink-0">{opt.icon}</span>}
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate">{opt.label}</span>
-                      {opt.description && (
-                        <span className="truncate text-[11px] text-muted-foreground">
-                          {opt.description}
-                        </span>
-                      )}
-                    </span>
-                    {isSelected && (
-                      <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
-                    )}
-                  </button>
+                  />
                 )
               })}
             </div>
@@ -223,3 +203,138 @@ export function AppSelect<T extends string = string>({
 }
 
 AppSelect.displayName = "AppSelect"
+
+interface AppSelectOptionRowProps<T extends string> {
+  opt: AppSelectOption<T>
+  index: number
+  isSelected: boolean
+  isActive: boolean
+  onActivate: () => void
+  onSelect: () => void
+}
+
+function AppSelectOptionRow<T extends string>({
+  opt,
+  index,
+  isSelected,
+  isActive,
+  onActivate,
+  onSelect,
+}: AppSelectOptionRowProps<T>) {
+  const buttonRef = React.useRef<HTMLButtonElement>(null)
+  const labelRef = React.useRef<HTMLSpanElement>(null)
+  const longPressTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null)
+  const longPressFired = React.useRef(false)
+  const [tooltipRect, setTooltipRect] = React.useState<DOMRect | null>(null)
+
+  const showTooltipIfTruncated = React.useCallback(() => {
+    const label = labelRef.current
+    const btn = buttonRef.current
+    if (!label || !btn) return
+    if (label.scrollWidth <= label.clientWidth) return
+    setTooltipRect(btn.getBoundingClientRect())
+  }, [])
+
+  const hideTooltip = React.useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+    setTooltipRect(null)
+  }, [])
+
+  React.useEffect(() => {
+    if (!tooltipRect) return
+    const onScroll = () => hideTooltip()
+    window.addEventListener("scroll", onScroll, true)
+    return () => window.removeEventListener("scroll", onScroll, true)
+  }, [tooltipRect, hideTooltip])
+
+  React.useEffect(() => () => hideTooltip(), [hideTooltip])
+
+  return (
+    <>
+      <button
+        ref={buttonRef}
+        type="button"
+        role="option"
+        aria-selected={isSelected}
+        data-idx={index}
+        disabled={opt.disabled}
+        onMouseEnter={() => {
+          onActivate()
+          showTooltipIfTruncated()
+        }}
+        onMouseLeave={hideTooltip}
+        onTouchStart={() => {
+          longPressFired.current = false
+          longPressTimer.current = setTimeout(() => {
+            longPressFired.current = true
+            showTooltipIfTruncated()
+          }, 500)
+        }}
+        onTouchMove={hideTooltip}
+        onTouchEnd={(e) => {
+          if (longPressFired.current) e.preventDefault()
+          hideTooltip()
+        }}
+        onTouchCancel={hideTooltip}
+        onClick={() => {
+          if (longPressFired.current) {
+            longPressFired.current = false
+            return
+          }
+          onSelect()
+        }}
+        className={cn(
+          "flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors",
+          isActive && !opt.disabled && "bg-emerald-50 dark:bg-emerald-900/20",
+          isSelected && "font-medium text-emerald-700 dark:text-emerald-300",
+          !isSelected && !opt.disabled && "text-foreground",
+          opt.disabled && "cursor-not-allowed opacity-50",
+        )}
+      >
+        {opt.icon && <span className="shrink-0">{opt.icon}</span>}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span ref={labelRef} className="truncate">{opt.label}</span>
+          {opt.description && (
+            <span className="truncate text-[11px] text-muted-foreground">
+              {opt.description}
+            </span>
+          )}
+        </span>
+        {isSelected && (
+          <Check className="h-4 w-4 shrink-0 text-emerald-600 dark:text-emerald-400" />
+        )}
+      </button>
+      {tooltipRect && typeof document !== "undefined" &&
+        createPortal(
+          <div
+            role="tooltip"
+            style={{
+              position: "fixed",
+              top: tooltipRect.top - 6,
+              left: tooltipRect.left + tooltipRect.width / 2,
+              transform: "translate(-50%, -100%)",
+              maxWidth: "min(90vw, 24rem)",
+            }}
+            className={cn(
+              "pointer-events-none z-[100] rounded-lg px-2.5 py-1.5 text-[11px] font-medium shadow-lg",
+              "bg-stone-900 text-white dark:bg-stone-100 dark:text-stone-900",
+              "animate-in fade-in-0 zoom-in-95 break-words",
+            )}
+          >
+            {opt.label}
+            <div
+              className={cn(
+                "absolute left-1/2 top-full -translate-x-1/2 h-0 w-0",
+                "border-x-[5px] border-x-transparent",
+                "border-t-[5px] border-t-stone-900 dark:border-t-stone-100",
+              )}
+            />
+          </div>,
+          document.body,
+        )}
+    </>
+  )
+}
