@@ -7472,13 +7472,16 @@ export const AdminPage: React.FC = () => {
                         </div>
 
                         {/* Aphydle Card — sister daily plant guessing game.
-                            Compact: fixed width on lg so it doesn't stretch
-                            the three main cards next to it. */}
-                        <div className="group relative rounded-2xl border border-fuchsia-200/70 dark:border-fuchsia-800/40 bg-gradient-to-br from-fuchsia-50/80 to-violet-50/50 dark:from-fuchsia-950/30 dark:to-violet-950/20 p-3 shadow-sm hover:shadow-md hover:shadow-fuchsia-500/8 transition-all duration-200 overflow-hidden lg:w-44">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
-                                <Gamepad2 className="h-4 w-4 text-white" />
+                            Matches the Registered / Plants cards' internal
+                            dimensions (p-4, w-9 logo, text-3xl number) so all
+                            four cards align; the grid template above gives it
+                            its own auto-sized column so it doesn't squash the
+                            three main cards. */}
+                        <div className="group relative rounded-2xl border border-fuchsia-200/70 dark:border-fuchsia-800/40 bg-gradient-to-br from-fuchsia-50/80 to-violet-50/50 dark:from-fuchsia-950/30 dark:to-violet-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-fuchsia-500/8 transition-all duration-200 overflow-hidden lg:w-52">
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2.5">
+                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
+                                <Gamepad2 className="h-4.5 w-4.5 text-white" />
                               </div>
                               <div>
                                 <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle</div>
@@ -7493,18 +7496,18 @@ export const AdminPage: React.FC = () => {
                               aria-label="Refresh aphydle players"
                               onClick={() => loadAphydleStats({ initial: false })}
                               disabled={aphydleStatsLoading || aphydleStatsRefreshing}
-                              className="h-6 w-6 rounded-lg text-fuchsia-600 dark:text-fuchsia-400"
+                              className="h-7 w-7 rounded-lg text-fuchsia-600 dark:text-fuchsia-400"
                             >
-                              <RefreshCw className={`h-3 w-3 ${aphydleStatsLoading || aphydleStatsRefreshing ? "animate-spin" : ""}`} />
+                              <RefreshCw className={`h-3.5 w-3.5 ${aphydleStatsLoading || aphydleStatsRefreshing ? "animate-spin" : ""}`} />
                             </Button>
                           </div>
                           <div className="flex items-baseline gap-1.5">
-                            <div className="text-2xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300 leading-none">
+                            <div className="text-3xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300">
                               {aphydleStatsLoading ? (
-                                <span className="inline-block w-8 h-6 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
+                                <span className="inline-block w-10 h-8 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
                               ) : aphydleStatsUpdatedAt !== null ? (aphydlePlayersToday ?? "-") : "-"}
                             </div>
-                            <span className="text-[11px] font-medium text-fuchsia-500 dark:text-fuchsia-400">players today</span>
+                            <span className="text-xs font-medium text-fuchsia-500 dark:text-fuchsia-400">today</span>
                           </div>
                         </div>
                       </div>
