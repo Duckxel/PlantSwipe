@@ -121,6 +121,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SearchInput } from "@/components/ui/search-input";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
+import { PillTabs } from "@/components/ui/pill-tabs";
 import { supabase } from "@/lib/supabaseClient";
 import { cn } from "@/lib/utils";
 import { setUserThreatLevel, getReportCounts } from "@/lib/moderation";
@@ -1930,6 +1931,32 @@ export const AdminPage: React.FC = () => {
     const [aphydleStatsLoading, setAphydleStatsLoading] = React.useState<boolean>(true);
     const [aphydleStatsRefreshing, setAphydleStatsRefreshing] = React.useState<boolean>(false);
     const [aphydleStatsUpdatedAt, setAphydleStatsUpdatedAt] = React.useState<number | null>(null);
+
+    // Aphydle full analytics (time series + last puzzles + totals) for the
+    // analytics tab in the GA section. Only fetched when the user switches to
+    // the "Aphydle" pill so we don't waste round-trips on the default view.
+    type AphydleSeriesPoint = { date: string; visits: number; players: number; attempts: number; wins: number };
+    type AphydlePuzzleRow = {
+      puzzleNo: number;
+      puzzleDate: string;
+      plantId: string | null;
+      plantName: string | null;
+      players: number;
+      wins: number;
+      losses: number;
+      totalPlayed: number;
+      buckets: number[];
+    };
+    type AphydleAnalytics = {
+      totals: { visits: number; plays: number; guesses: number; wins: number };
+      timeSeries: AphydleSeriesPoint[];
+      lastPuzzles: AphydlePuzzleRow[];
+    };
+    const [analyticsTab, setAnalyticsTab] = React.useState<"aphylia" | "aphydle">("aphylia");
+    const [aphydleAnalytics, setAphydleAnalytics] = React.useState<AphydleAnalytics | null>(null);
+    const [aphydleAnalyticsLoading, setAphydleAnalyticsLoading] = React.useState<boolean>(false);
+    const [aphydleAnalyticsError, setAphydleAnalyticsError] = React.useState<string | null>(null);
+    const [aphydleAnalyticsUpdatedAt, setAphydleAnalyticsUpdatedAt] = React.useState<number | null>(null);
   // Distinct, high-contrast palette for readability
   const countryColors = [
     "#10b981",
@@ -5376,6 +5403,57 @@ export const AdminPage: React.FC = () => {
     return () => clearInterval(id);
   }, [loadAphydleStats]);
 
+  // Aphydle full analytics loader — pulls /api/admin/aphydle-analytics for
+  // the chosen window. Lazy: only invoked once the user lands on the Aphydle
+  // analytics pill, then re-runs whenever gaDays changes.
+  const loadAphydleAnalytics = React.useCallback(
+    async (days: number) => {
+      setAphydleAnalyticsLoading(true);
+      setAphydleAnalyticsError(null);
+      try {
+        const session = (await supabase.auth.getSession()).data.session;
+        const token = session?.access_token;
+        const headers: Record<string, string> = { Accept: "application/json" };
+        if (token) headers["Authorization"] = `Bearer ${token}`;
+        try {
+          const adminToken = (globalThis as EnvWithAdminToken)?.__ENV__
+            ?.VITE_ADMIN_STATIC_TOKEN;
+          if (adminToken) headers["X-Admin-Token"] = String(adminToken);
+        } catch {}
+        const resp = await fetchWithRetry(
+          `/api/admin/aphydle-analytics?days=${encodeURIComponent(String(days))}`,
+          { headers, credentials: "same-origin" },
+        ).catch(() => null);
+        if (!resp || !resp.ok) {
+          setAphydleAnalyticsError("Failed to load Aphydle analytics");
+          return;
+        }
+        const data = await safeJson(resp);
+        if (data?.ok === false) {
+          setAphydleAnalyticsError(data?.error || "Failed to load Aphydle analytics");
+          return;
+        }
+        setAphydleAnalytics({
+          totals: data?.totals ?? { visits: 0, plays: 0, guesses: 0, wins: 0 },
+          timeSeries: Array.isArray(data?.timeSeries) ? data.timeSeries : [],
+          lastPuzzles: Array.isArray(data?.lastPuzzles) ? data.lastPuzzles : [],
+        });
+        setAphydleAnalyticsUpdatedAt(Date.now());
+      } catch (e) {
+        console.error("[AdminPage] Failed to load aphydle analytics:", e);
+        setAphydleAnalyticsError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setAphydleAnalyticsLoading(false);
+      }
+    },
+    [safeJson, fetchWithRetry],
+  );
+
+  React.useEffect(() => {
+    if (analyticsTab !== "aphydle") return;
+    loadAphydleAnalytics(gaDays);
+  }, [analyticsTab, gaDays, loadAphydleAnalytics]);
+
 
   // Loader for list of connected IPs (unique IPs past N minutes; default 60)
   const loadEnrichedIps = React.useCallback(
@@ -8054,9 +8132,11 @@ export const AdminPage: React.FC = () => {
                                 <Activity className="h-5 w-5 text-orange-600 dark:text-orange-400" />
                               </div>
                               <div className="text-left">
-                                <div className="text-sm font-semibold">Google Analytics</div>
+                                <div className="text-sm font-semibold">Analytics</div>
                                 <div className="text-xs text-stone-500 dark:text-stone-400">
-                                  {gaConfigured === null ? "Checking..." : gaConfigured ? "GA4 Data API connected" : "Not configured"}
+                                  {analyticsTab === "aphydle"
+                                    ? "Aphydle · sister daily plant guessing game"
+                                    : (gaConfigured === null ? "Checking..." : gaConfigured ? "Aphylia · GA4 Data API connected" : "Not configured")}
                                 </div>
                               </div>
                             </div>
@@ -8079,6 +8159,18 @@ export const AdminPage: React.FC = () => {
 
                           {gaOpen && gaConfigured === true && (
                             <div className="mt-4 space-y-4">
+                              {/* Pill toggle: Aphylia (GA) ↔ Aphydle (sister daily plant guessing game) */}
+                              <PillTabs
+                                activeKey={analyticsTab}
+                                onTabChange={(k) => setAnalyticsTab(k)}
+                                tabs={[
+                                  { key: "aphylia", label: "Aphylia" },
+                                  { key: "aphydle", label: "Aphydle" },
+                                ]}
+                                className="!justify-start"
+                              />
+
+                              {analyticsTab === "aphylia" && (<>
                               {/* Period selector + refresh */}
                               <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-1">
@@ -8651,6 +8743,294 @@ export const AdminPage: React.FC = () => {
                                 <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                   <span>Loading Google Analytics data...</span>
+                                </div>
+                              )}
+                              </>)}
+
+                              {/* ─── Aphydle analytics tab ─── */}
+                              {analyticsTab === "aphydle" && (
+                                <div className="space-y-4">
+                                  {/* Period selector + refresh — reuses gaDays so the toggle sticks across tabs */}
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1">
+                                      {([7, 14, 30] as const).map((d) => (
+                                        <button
+                                          key={d}
+                                          type="button"
+                                          className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${gaDays === d ? "bg-black dark:bg-white text-white dark:text-black border-black dark:border-white" : "bg-white dark:bg-[#2d2d30] border-stone-200 dark:border-[#3e3e42] hover:bg-stone-50 dark:hover:bg-[#3e3e42]"}`}
+                                          onClick={() => setGaDays(d)}
+                                          aria-pressed={gaDays === d}
+                                        >
+                                          {d}d
+                                        </button>
+                                      ))}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      {aphydleAnalyticsUpdatedAt && (
+                                        <span className="text-[10px] opacity-50">{formatTimeAgo(aphydleAnalyticsUpdatedAt)}</span>
+                                      )}
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        aria-label="Refresh Aphydle analytics"
+                                        onClick={() => loadAphydleAnalytics(gaDays)}
+                                        disabled={aphydleAnalyticsLoading}
+                                        className="h-7 w-7 rounded-lg"
+                                      >
+                                        <RefreshCw className={`h-3.5 w-3.5 ${aphydleAnalyticsLoading ? "animate-spin" : ""}`} />
+                                      </Button>
+                                    </div>
+                                  </div>
+
+                                  {aphydleAnalyticsError && (
+                                    <div className="text-xs text-amber-600 dark:text-amber-400 p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/40">
+                                      {aphydleAnalyticsError}
+                                    </div>
+                                  )}
+
+                                  {/* Summary stats: Visits / Plays / Guesses / Win rate.
+                                      Tailwind JIT can't see classes built via template strings,
+                                      so each colour ships its full set of explicit class names. */}
+                                  {aphydleAnalytics && (() => {
+                                    const t = aphydleAnalytics.totals;
+                                    const winRate = t.plays > 0 ? Math.round((t.wins / t.plays) * 1000) / 10 : 0;
+                                    const avgGuessesAcross = t.plays > 0 ? Math.round((t.guesses / t.plays) * 10) / 10 : 0;
+                                    const cards = [
+                                      {
+                                        label: "Visits", value: t.visits.toLocaleString(), icon: Eye,
+                                        wrap: "bg-blue-50/40 dark:bg-blue-950/20 border-blue-200/50 dark:border-blue-800/40",
+                                        iconCls: "text-blue-600 dark:text-blue-400",
+                                        valueCls: "text-blue-700 dark:text-blue-300",
+                                      },
+                                      {
+                                        label: "Plays", value: t.plays.toLocaleString(), icon: Gamepad2,
+                                        wrap: "bg-fuchsia-50/40 dark:bg-fuchsia-950/20 border-fuchsia-200/50 dark:border-fuchsia-800/40",
+                                        iconCls: "text-fuchsia-600 dark:text-fuchsia-400",
+                                        valueCls: "text-fuchsia-700 dark:text-fuchsia-300",
+                                      },
+                                      {
+                                        label: "Total Guesses", value: t.guesses.toLocaleString(), icon: MousePointer,
+                                        wrap: "bg-violet-50/40 dark:bg-violet-950/20 border-violet-200/50 dark:border-violet-800/40",
+                                        iconCls: "text-violet-600 dark:text-violet-400",
+                                        valueCls: "text-violet-700 dark:text-violet-300",
+                                      },
+                                      {
+                                        label: "Win Rate", value: `${winRate}%`, icon: Trophy,
+                                        wrap: "bg-emerald-50/40 dark:bg-emerald-950/20 border-emerald-200/50 dark:border-emerald-800/40",
+                                        iconCls: "text-emerald-600 dark:text-emerald-400",
+                                        valueCls: "text-emerald-700 dark:text-emerald-300",
+                                      },
+                                    ] as const;
+                                    return (
+                                      <>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                                          {cards.map(({ label, value, icon: Icon, wrap, iconCls, valueCls }) => (
+                                            <div key={label} className={`rounded-xl border p-3 ${wrap}`}>
+                                              <div className="flex items-center gap-2 mb-1.5">
+                                                <Icon className={`h-3.5 w-3.5 ${iconCls}`} />
+                                                <span className="text-[10px] font-semibold uppercase tracking-wider opacity-60">{label}</span>
+                                              </div>
+                                              <div className={`text-2xl font-bold tabular-nums ${valueCls}`}>{value}</div>
+                                            </div>
+                                          ))}
+                                        </div>
+                                        {t.plays > 0 && (
+                                          <div className="text-[11px] text-stone-500 dark:text-stone-400">
+                                            Average <span className="font-bold tabular-nums">{avgGuessesAcross}</span> guesses per play across the last {aphydleAnalytics.timeSeries.length} day{aphydleAnalytics.timeSeries.length === 1 ? "" : "s"}.
+                                          </div>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+
+                                  {/* Visits over time */}
+                                  {aphydleAnalytics && aphydleAnalytics.timeSeries.length > 0 && (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-sm font-medium">Daily visits — last {gaDays} days</div>
+                                        <span className="text-[10px] opacity-50">page_visits</span>
+                                      </div>
+                                      <div className="h-44 w-full">
+                                        <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <ComposedChart data={aphydleAnalytics.timeSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                              <defs>
+                                                <linearGradient id="aphydleVisitsGrad" x1="0" y1="0" x2="0" y2="1">
+                                                  <stop offset="0%" stopColor="#3b82f6" stopOpacity={0.3} />
+                                                  <stop offset="100%" stopColor="#3b82f6" stopOpacity={0.05} />
+                                                </linearGradient>
+                                              </defs>
+                                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                              <XAxis
+                                                dataKey="date"
+                                                tickFormatter={(d: string) => {
+                                                  try {
+                                                    const dt = new Date(d + "T00:00:00Z");
+                                                    return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
+                                                  } catch { return d; }
+                                                }}
+                                                tick={{ fontSize: 10 }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
+                                              />
+                                              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                                              <Tooltip
+                                                content={({ active: tActive, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
+                                                  if (!tActive || !payload?.length) return null;
+                                                  return (
+                                                    <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
+                                                      <div className="font-medium opacity-70 mb-1">{label}</div>
+                                                      {payload.map((p) => (
+                                                        <div key={p.dataKey} className="flex items-center gap-2">
+                                                          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                          <span className="capitalize">{p.dataKey}</span>
+                                                          <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  );
+                                                }}
+                                              />
+                                              <Area type="monotone" dataKey="visits" fill="url(#aphydleVisitsGrad)" stroke="none" />
+                                              <Line type="monotone" dataKey="visits" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                                            </ComposedChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Plays + guesses + wins over time */}
+                                  {aphydleAnalytics && aphydleAnalytics.timeSeries.length > 0 && (
+                                    <div className="rounded-xl border p-3">
+                                      <div className="flex items-center justify-between mb-2">
+                                        <div className="text-sm font-medium">Plays, guesses &amp; wins — last {gaDays} days</div>
+                                        <div className="flex items-center gap-3 text-[10px]">
+                                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-fuchsia-500" /> Plays</span>
+                                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-violet-500" /> Guesses</span>
+                                          <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> Wins</span>
+                                        </div>
+                                      </div>
+                                      <div className="h-56 w-full">
+                                        <ChartSuspense fallback={<div className="h-full flex items-center justify-center text-sm text-gray-400">Loading chart...</div>}>
+                                          <ResponsiveContainer width="100%" height="100%">
+                                            <ComposedChart data={aphydleAnalytics.timeSeries} margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
+                                              <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.06)" />
+                                              <XAxis
+                                                dataKey="date"
+                                                tickFormatter={(d: string) => {
+                                                  try {
+                                                    const dt = new Date(d + "T00:00:00Z");
+                                                    return gaDays <= 14 ? ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][dt.getUTCDay()] : `${dt.getUTCMonth()+1}/${dt.getUTCDate()}`;
+                                                  } catch { return d; }
+                                                }}
+                                                tick={{ fontSize: 10 }}
+                                                axisLine={false}
+                                                tickLine={false}
+                                                interval={gaDays > 14 ? Math.floor(gaDays / 7) - 1 : 0}
+                                              />
+                                              <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={32} allowDecimals={false} />
+                                              <Tooltip
+                                                content={({ active: tActive, payload, label }: { active?: boolean; payload?: Array<{ dataKey?: string; value?: number; color?: string }>; label?: string }) => {
+                                                  if (!tActive || !payload?.length) return null;
+                                                  return (
+                                                    <div className="rounded-xl border bg-white/95 dark:bg-[#252526] backdrop-blur p-2.5 shadow-lg text-xs">
+                                                      <div className="font-medium opacity-70 mb-1">{label}</div>
+                                                      {payload.map((p) => (
+                                                        <div key={p.dataKey} className="flex items-center gap-2">
+                                                          <span className="w-2 h-2 rounded-full" style={{ background: p.color }} />
+                                                          <span className="capitalize">{p.dataKey === "players" ? "plays" : p.dataKey === "attempts" ? "guesses" : p.dataKey}</span>
+                                                          <span className="font-bold tabular-nums ml-auto">{p.value?.toLocaleString()}</span>
+                                                        </div>
+                                                      ))}
+                                                    </div>
+                                                  );
+                                                }}
+                                              />
+                                              <Line type="monotone" dataKey="players" stroke="#d946ef" strokeWidth={2} dot={false} />
+                                              <Line type="monotone" dataKey="attempts" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                                              <Line type="monotone" dataKey="wins" stroke="#10b981" strokeWidth={2} dot={false} />
+                                            </ComposedChart>
+                                          </ResponsiveContainer>
+                                        </ChartSuspense>
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Last 5 puzzles — one card each with a mini histogram */}
+                                  {aphydleAnalytics && aphydleAnalytics.lastPuzzles.length > 0 && (
+                                    <div>
+                                      <div className="text-sm font-medium mb-2">Last {aphydleAnalytics.lastPuzzles.length} puzzles</div>
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                                        {aphydleAnalytics.lastPuzzles.map((p) => {
+                                          const peak = Math.max(1, ...p.buckets, p.losses);
+                                          const winRatePuzzle = p.players > 0 ? Math.round((p.wins / p.players) * 100) : 0;
+                                          // Avg guesses on a winning play: weighted average of bucket index (1..10) by bucket count
+                                          const winningGuessSum = p.buckets.reduce((s, c, i) => s + c * (i + 1), 0);
+                                          const avgWinGuesses = p.wins > 0 ? Math.round((winningGuessSum / p.wins) * 10) / 10 : null;
+                                          return (
+                                            <div key={p.puzzleNo} className="rounded-xl border p-3 bg-fuchsia-50/30 dark:bg-fuchsia-950/15 border-fuchsia-200/40 dark:border-fuchsia-800/30">
+                                              <div className="flex items-baseline justify-between mb-1">
+                                                <div className="text-xs font-semibold">#{p.puzzleNo}</div>
+                                                <div className="text-[10px] opacity-50">{p.puzzleDate}</div>
+                                              </div>
+                                              {p.plantName && (
+                                                <div className="text-[11px] text-fuchsia-700 dark:text-fuchsia-300 truncate" title={p.plantName}>{p.plantName}</div>
+                                              )}
+                                              <div className="mt-2 flex items-baseline gap-1">
+                                                <span className="text-2xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300">{p.players}</span>
+                                                <span className="text-[10px] text-stone-500 dark:text-stone-400">plays</span>
+                                              </div>
+                                              <div className="text-[10px] text-stone-500 dark:text-stone-400">
+                                                {p.wins} win{p.wins === 1 ? "" : "s"} · {p.losses} loss{p.losses === 1 ? "" : "es"}
+                                                {p.players > 0 && ` · ${winRatePuzzle}%`}
+                                              </div>
+                                              {avgWinGuesses != null && (
+                                                <div className="text-[10px] text-stone-500 dark:text-stone-400">avg {avgWinGuesses} guesses to win</div>
+                                              )}
+                                              {/* Mini histogram: 1..10 wins + losses bar */}
+                                              <div className="mt-2 flex items-end gap-0.5 h-12" aria-hidden="true">
+                                                {p.buckets.map((c, i) => (
+                                                  <div
+                                                    key={i}
+                                                    className="flex-1 rounded-sm bg-emerald-400/80 dark:bg-emerald-500/70"
+                                                    style={{ height: `${(c / peak) * 100}%`, minHeight: c > 0 ? 2 : 0 }}
+                                                    title={`${i + 1} guess${i === 0 ? "" : "es"}: ${c}`}
+                                                  />
+                                                ))}
+                                                <div
+                                                  className="flex-1 rounded-sm bg-rose-400/80 dark:bg-rose-500/70"
+                                                  style={{ height: `${(p.losses / peak) * 100}%`, minHeight: p.losses > 0 ? 2 : 0 }}
+                                                  title={`Lost: ${p.losses}`}
+                                                />
+                                              </div>
+                                              <div className="mt-0.5 flex justify-between text-[9px] opacity-50">
+                                                <span>1</span>
+                                                <span>10</span>
+                                                <span>X</span>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    </div>
+                                  )}
+
+                                  {/* Loading state */}
+                                  {aphydleAnalyticsLoading && !aphydleAnalytics && (
+                                    <div className="flex items-center gap-2 text-sm opacity-60 py-4 justify-center">
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                      <span>Loading Aphydle analytics...</span>
+                                    </div>
+                                  )}
+
+                                  {/* Empty state */}
+                                  {!aphydleAnalyticsLoading && !aphydleAnalyticsError && aphydleAnalytics && aphydleAnalytics.timeSeries.every((p) => p.visits === 0 && p.players === 0) && (
+                                    <div className="text-xs text-stone-500 dark:text-stone-400 py-4 text-center">
+                                      No Aphydle activity recorded in the last {gaDays} days.
+                                    </div>
+                                  )}
                                 </div>
                               )}
                             </div>

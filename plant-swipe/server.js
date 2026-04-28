@@ -13543,6 +13543,174 @@ app.get('/api/admin/aphydle-stats', async (req, res) => {
   }
 })
 
+// Admin: Aphydle analytics — time series (visits / players / attempts / wins
+// per day) and details for the most recent puzzles, used by the admin
+// dashboard's "Aphydle" tab. Reads aphydle.* directly via the postgres-js
+// client because the schema's RLS policies don't grant SELECT on attempts /
+// page_visits to anon/authenticated.
+app.get('/api/admin/aphydle-analytics', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  const days = Math.max(1, Math.min(90, Number.parseInt(req.query.days, 10) || 30))
+  if (!sql) {
+    return res.json({
+      ok: false,
+      error: 'Database connection not available',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
+  }
+  try {
+    // Visits per UTC day (count of page_visits rows). Bucketed in UTC to match
+    // the puzzle_date convention in aphydle.daily_log.
+    const visitsRows = await sql`
+      select to_char(date_trunc('day', visited_at at time zone 'utc'), 'YYYY-MM-DD') as date,
+             count(*)::int as visits
+      from aphydle.page_visits
+      where visited_at >= (now() at time zone 'utc')::date - (${days}::int - 1)
+      group by 1
+      order by 1
+    `
+
+    // Players + total guesses + wins per day. Each row in aphydle.attempts is
+    // one player-puzzle pairing (unique constraint), so count(*) gives the
+    // number of players on that day's puzzle and sum(attempt_no) is the total
+    // guess count across all those players.
+    const playsRows = await sql`
+      select to_char(dl.puzzle_date, 'YYYY-MM-DD') as date,
+             count(*)::int as players,
+             coalesce(sum(a.attempt_no), 0)::int as attempts,
+             sum(case when a.is_correct then 1 else 0 end)::int as wins
+      from aphydle.attempts a
+      join aphydle.daily_log dl on dl.puzzle_no = a.puzzle_no
+      where dl.puzzle_date >= (now() at time zone 'utc')::date - (${days}::int - 1)
+      group by 1
+      order by 1
+    `
+
+    // Last 5 puzzles with their distribution buckets. Joins the existing
+    // aphydle.daily_distribution view (bucket_1..10 + bucket_lost +
+    // total_played) to avoid duplicating the histogram aggregation here.
+    const lastPuzzleRows = await sql`
+      select dl.puzzle_no,
+             to_char(dl.puzzle_date, 'YYYY-MM-DD') as puzzle_date,
+             dl.plant_id,
+             coalesce(dd.bucket_1, 0)::int as bucket_1,
+             coalesce(dd.bucket_2, 0)::int as bucket_2,
+             coalesce(dd.bucket_3, 0)::int as bucket_3,
+             coalesce(dd.bucket_4, 0)::int as bucket_4,
+             coalesce(dd.bucket_5, 0)::int as bucket_5,
+             coalesce(dd.bucket_6, 0)::int as bucket_6,
+             coalesce(dd.bucket_7, 0)::int as bucket_7,
+             coalesce(dd.bucket_8, 0)::int as bucket_8,
+             coalesce(dd.bucket_9, 0)::int as bucket_9,
+             coalesce(dd.bucket_10, 0)::int as bucket_10,
+             coalesce(dd.bucket_lost, 0)::int as bucket_lost,
+             coalesce(dd.total_played, 0)::int as total_played,
+             (select count(*)::int from aphydle.attempts a where a.puzzle_no = dl.puzzle_no) as players
+      from aphydle.daily_log dl
+      left join aphydle.daily_distribution dd on dd.puzzle_no = dl.puzzle_no
+      order by dl.puzzle_no desc
+      limit 5
+    `
+
+    // Resolve plant common names (best-effort; ignored on failure).
+    const plantIds = Array.from(new Set(lastPuzzleRows.map(r => r.plant_id).filter(Boolean).map(String)))
+    const plantNamesById = {}
+    if (plantIds.length) {
+      try {
+        const plantRows = await sql`select id::text as id, name from public.plants where id::text = any(${plantIds})`
+        for (const p of plantRows) plantNamesById[p.id] = p.name
+      } catch { /* swallow — names are nice-to-have */ }
+    }
+
+    // Totals over the window
+    const totalsRows = await sql`
+      select
+        coalesce((select count(*)::int from aphydle.page_visits
+                  where visited_at >= (now() at time zone 'utc')::date - (${days}::int - 1)), 0) as visits_total,
+        coalesce((select count(*)::int from aphydle.attempts a
+                  join aphydle.daily_log dl on dl.puzzle_no = a.puzzle_no
+                  where dl.puzzle_date >= (now() at time zone 'utc')::date - (${days}::int - 1)), 0) as plays_total,
+        coalesce((select sum(a.attempt_no)::int from aphydle.attempts a
+                  join aphydle.daily_log dl on dl.puzzle_no = a.puzzle_no
+                  where dl.puzzle_date >= (now() at time zone 'utc')::date - (${days}::int - 1)), 0) as guesses_total,
+        coalesce((select sum(case when a.is_correct then 1 else 0 end)::int from aphydle.attempts a
+                  join aphydle.daily_log dl on dl.puzzle_no = a.puzzle_no
+                  where dl.puzzle_date >= (now() at time zone 'utc')::date - (${days}::int - 1)), 0) as wins_total
+    `
+    const tot = totalsRows[0] || {}
+
+    // Densify the time series — make sure every UTC day in the window has a
+    // row so the chart doesn't have gaps. Visits-only days, play-only days,
+    // and quiet days (zeros) all share the same row.
+    const todayUtc = new Date()
+    const startUtc = new Date(Date.UTC(todayUtc.getUTCFullYear(), todayUtc.getUTCMonth(), todayUtc.getUTCDate()))
+    startUtc.setUTCDate(startUtc.getUTCDate() - (days - 1))
+    const seriesByDate = {}
+    for (let i = 0; i < days; i++) {
+      const d = new Date(startUtc)
+      d.setUTCDate(startUtc.getUTCDate() + i)
+      const key = d.toISOString().slice(0, 10)
+      seriesByDate[key] = { date: key, visits: 0, players: 0, attempts: 0, wins: 0 }
+    }
+    for (const r of visitsRows) {
+      if (seriesByDate[r.date]) seriesByDate[r.date].visits = Number(r.visits) || 0
+    }
+    for (const r of playsRows) {
+      if (seriesByDate[r.date]) {
+        seriesByDate[r.date].players = Number(r.players) || 0
+        seriesByDate[r.date].attempts = Number(r.attempts) || 0
+        seriesByDate[r.date].wins = Number(r.wins) || 0
+      }
+    }
+    const timeSeries = Object.values(seriesByDate).sort((a, b) => a.date.localeCompare(b.date))
+
+    res.json({
+      ok: true,
+      days,
+      totals: {
+        visits: Number(tot.visits_total) || 0,
+        plays: Number(tot.plays_total) || 0,
+        guesses: Number(tot.guesses_total) || 0,
+        wins: Number(tot.wins_total) || 0,
+      },
+      timeSeries,
+      lastPuzzles: lastPuzzleRows.map(r => ({
+        puzzleNo: Number(r.puzzle_no),
+        puzzleDate: r.puzzle_date,
+        plantId: r.plant_id || null,
+        plantName: r.plant_id ? (plantNamesById[String(r.plant_id)] || null) : null,
+        players: Number(r.players) || 0,
+        wins: Number(r.bucket_1) + Number(r.bucket_2) + Number(r.bucket_3) + Number(r.bucket_4) +
+              Number(r.bucket_5) + Number(r.bucket_6) + Number(r.bucket_7) + Number(r.bucket_8) +
+              Number(r.bucket_9) + Number(r.bucket_10),
+        losses: Number(r.bucket_lost) || 0,
+        totalPlayed: Number(r.total_played) || 0,
+        buckets: [
+          Number(r.bucket_1) || 0, Number(r.bucket_2) || 0, Number(r.bucket_3) || 0,
+          Number(r.bucket_4) || 0, Number(r.bucket_5) || 0, Number(r.bucket_6) || 0,
+          Number(r.bucket_7) || 0, Number(r.bucket_8) || 0, Number(r.bucket_9) || 0,
+          Number(r.bucket_10) || 0,
+        ],
+      })),
+    })
+  } catch (e) {
+    console.error('[aphydle-analytics] failed:', e?.message)
+    res.status(200).json({
+      ok: false,
+      error: e?.message || 'Failed to load aphydle analytics',
+      errorCode: 'ADMIN_APHYDLE_ANALYTICS_ERROR',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
+  }
+})
+
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
