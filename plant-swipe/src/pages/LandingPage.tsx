@@ -2145,16 +2145,16 @@ const AphydleSection: React.FC = React.memo(() => {
                 {/* Logo block — official Aphydle brand mark */}
                 <div className="relative shrink-0">
                   <div className="absolute inset-0 bg-gradient-to-br from-violet-500/30 to-emerald-500/30 rounded-2xl blur-lg group-hover:from-violet-500/40 group-hover:to-emerald-500/40 transition-colors" />
-                  <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm overflow-hidden">
+                  <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm">
                     <img
                       src={APHYDLE_LOGO_URL}
                       alt="Aphydle"
-                      className="h-16 w-16 object-contain"
+                      className="h-16 w-16 object-contain rounded-xl"
                       loading="lazy"
                       decoding="async"
                       draggable="false"
                     />
-                    <span className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-stone-950">
+                    <span className="absolute -top-2 -right-2 h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-stone-950">
                       <Gamepad2 className="h-3.5 w-3.5 text-white" />
                     </span>
                   </div>
