@@ -33700,6 +33700,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Static pages with enhanced previews
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
+      req._ssrDebug.matchedRoute = 'about'
       title = `🌱 ${tr.aboutTitle}`
       description = tr.aboutDesc
       pageContent = `
@@ -33730,6 +33731,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     else if (effectivePath[0] === 'search' && effectivePath[1] === 'categories') {
       // Categories page — distinct from the search page
+      req._ssrDebug.matchedRoute = 'categories'
       title = `📚 ${tr.categoriesTitle} | Aphylia`
       description = tr.categoriesDesc
 
@@ -33750,6 +33752,9 @@ async function generateCrawlerHtml(req, pagePath) {
         { name: tr.catFern, desc: tr.catFernDesc, params: '?type=fern', icon: '🌿' },
         { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?habitat=aquatic', icon: '💧' },
       ]
+
+      // Stash category items for ItemList JSON-LD rich-results in the schema builder
+      req._ssrDebug.routeData = { categoryItems }
 
       pageContent = `
         <article>
@@ -33794,7 +33799,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plants) searchPopularPlants = plants
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'search'
+      req._ssrDebug.routeData = { popularPlants: searchPopularPlants }
+
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
       pageContent = `
@@ -33828,6 +33836,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
 
     else if (effectivePath[0] === 'blog' && !effectivePath[1]) {
+      req._ssrDebug.matchedRoute = 'blog_listing'
       title = `📚 ${tr.blogTitle} - ${tr.blogTagline}`
       description = tr.blogDesc
 
@@ -33842,6 +33851,9 @@ async function generateCrawlerHtml(req, pagePath) {
             .limit(10),
           'blog_listing'
         )
+
+        // Stash recent posts for Blog/ItemList JSON-LD rich-results
+        req._ssrDebug.routeData = { posts: posts || [] }
 
         if (posts?.length) {
           // Use the most recent post's cover image if available
@@ -33911,7 +33923,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (gardens) listGardens = gardens
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'gardens_listing'
+      req._ssrDebug.routeData = { gardens: listGardens }
+
       title = `🏡 ${tr.gardensTitle} | Aphylia`
       description = tr.gardensDesc
       pageContent = `
@@ -33958,7 +33973,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plants) discoveryPlants = plants
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'discovery'
+      req._ssrDebug.routeData = { discoveryPlants }
+
       title = `🎴 ${tr.discoveryTitle}`
       description = tr.discoveryDesc
       pageContent = `
@@ -33993,6 +34011,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Pricing page
     else if (effectivePath[0] === 'pricing') {
+      req._ssrDebug.matchedRoute = 'pricing'
       title = `💎 ${tr.pricingTitle}`
       description = tr.pricingDesc
       pageContent = `
@@ -34028,6 +34047,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Download page
     else if (effectivePath[0] === 'download') {
+      req._ssrDebug.matchedRoute = 'download'
       title = `📲 ${tr.downloadTitle}`
       description = tr.downloadDesc
       pageContent = `
@@ -34058,6 +34078,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Terms page
     else if (effectivePath[0] === 'terms') {
+      req._ssrDebug.matchedRoute = 'terms'
       const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
       title = `📜 ${tr.termsTitle} | Aphylia`
       description = tr.termsDesc
@@ -34086,6 +34107,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Contact page
     else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
+      req._ssrDebug.matchedRoute = 'contact_business'
       title = `🤝 ${tr.businessTitle} | Aphylia`
       description = tr.businessDesc
       pageContent = `
@@ -34111,6 +34133,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
 
     else if (effectivePath[0] === 'contact') {
+      req._ssrDebug.matchedRoute = 'contact'
       title = `💬 ${tr.contactTitle}`
       description = tr.contactDesc
       pageContent = `
@@ -34140,6 +34163,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Privacy page
     else if (effectivePath[0] === 'privacy') {
+      req._ssrDebug.matchedRoute = 'privacy'
       title = `🔒 ${tr.privacyTitle}`
       description = tr.privacyDesc
       pageContent = `
@@ -34955,6 +34979,239 @@ async function generateCrawlerHtml(req, pagePath) {
       { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
       { name: crumbLabel('collections'), item: `${siteUrlNoTrailing}/` },
       { name: bookmarkName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'categories') {
+    // Plant categories landing page → CollectionPage with an ItemList of
+    // category links. ItemList is eligible for list-style rich results in
+    // SERPs and gives Google an explicit map of the encyclopedia's facets.
+    const items = Array.isArray(req._ssrDebug?.routeData?.categoryItems)
+      ? req._ssrDebug.routeData.categoryItems
+      : []
+    const categoriesName = (detectedLang === 'fr') ? 'Catégories de plantes' : 'Plant Categories'
+    const itemList = {
+      '@type': 'ItemList',
+      name: categoriesName,
+      numberOfItems: items.length,
+      itemListElement: items.map((cat, idx) => ({
+        '@type': 'ListItem',
+        position: idx + 1,
+        name: cat.name,
+        url: `${siteUrlNoTrailing}/search${cat.params || ''}`,
+        ...(cat.desc ? { description: cat.desc } : {}),
+      })),
+    }
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: categoriesName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+      mainEntity: itemList,
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: `${siteUrlNoTrailing}/search` },
+      { name: categoriesName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'search') {
+    // Encyclopedia search landing → CollectionPage with sitelinks SearchAction.
+    // Surfacing popular plants as an ItemList builds internal-link equity for
+    // detail pages and helps Google understand the page's intent.
+    const popular = Array.isArray(req._ssrDebug?.routeData?.popularPlants)
+      ? req._ssrDebug.routeData.popularPlants
+      : []
+    const searchName = (detectedLang === 'fr') ? 'Encyclopédie des plantes' : 'Plant Encyclopedia'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: searchName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${siteUrlNoTrailing}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    }
+    if (popular.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: (detectedLang === 'fr') ? 'Plantes populaires' : 'Popular Plants',
+        numberOfItems: popular.length,
+        itemListElement: popular.map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: p.name,
+          url: `${siteUrlNoTrailing}/plants/${encodeURIComponent(p.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'blog_listing') {
+    // Blog index → Blog schema with embedded BlogPosting items. Helps Google
+    // recognise this as a content hub and surface fresh posts as sitelinks.
+    const posts = Array.isArray(req._ssrDebug?.routeData?.posts)
+      ? req._ssrDebug.routeData.posts
+      : []
+    const blogName = (detectedLang === 'fr') ? 'Blog Aphylia' : 'Aphylia Blog'
+    const blogSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Blog',
+      name: blogName,
+      description: description,
+      url: canonicalUrl,
+      inLanguage: detectedLang,
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: { '@type': 'ImageObject', url: `${siteUrl}/icons/icon-512x512.png` },
+      },
+    }
+    if (posts.length) {
+      blogSchema.blogPost = posts.map((p) => {
+        const postUrl = `${siteUrlNoTrailing}/blog/${encodeURIComponent(p.id)}`
+        const datePublished = p.published_at ? new Date(p.published_at).toISOString() : undefined
+        return {
+          '@type': 'BlogPosting',
+          headline: p.title,
+          ...(p.excerpt ? { description: p.excerpt } : {}),
+          ...(p.cover_image_url ? { image: ensureAbsoluteUrl(p.cover_image_url) } : {}),
+          ...(datePublished ? { datePublished } : {}),
+          url: postUrl,
+          mainEntityOfPage: { '@type': 'WebPage', '@id': postUrl },
+          author: { '@type': 'Organization', name: 'Aphylia' },
+        }
+      })
+    }
+    jsonLdSchemas.push(blogSchema)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('blog'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'gardens_listing') {
+    const gardens = Array.isArray(req._ssrDebug?.routeData?.gardens)
+      ? req._ssrDebug.routeData.gardens
+      : []
+    const gardensName = (detectedLang === 'fr') ? 'Jardins de la communauté' : 'Community Gardens'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: gardensName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    }
+    if (gardens.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: gardensName,
+        numberOfItems: gardens.length,
+        itemListElement: gardens.map((g, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: g.name || 'Garden',
+          url: `${siteUrlNoTrailing}/garden/${encodeURIComponent(g.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('gardens'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'discovery') {
+    const discoveryPlants = Array.isArray(req._ssrDebug?.routeData?.discoveryPlants)
+      ? req._ssrDebug.routeData.discoveryPlants
+      : []
+    const discoveryName = (detectedLang === 'fr') ? 'Découverte de plantes' : 'Plant Discovery'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: discoveryName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    }
+    if (discoveryPlants.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: discoveryName,
+        numberOfItems: discoveryPlants.length,
+        itemListElement: discoveryPlants.map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: p.name,
+          url: `${siteUrlNoTrailing}/plants/${encodeURIComponent(p.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'about') {
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: title.replace(/^[^\w]+/u, '').trim() || 'About Aphylia',
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'À Propos' : 'About', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'contact' || req._ssrDebug?.matchedRoute === 'contact_business') {
+    const isBusiness = req._ssrDebug.matchedRoute === 'contact_business'
+    const contactLabel = (detectedLang === 'fr') ? 'Contact' : 'Contact'
+    const businessLabel = (detectedLang === 'fr') ? 'Partenariats' : 'Business'
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'ContactPage',
+      name: title.replace(/^[^\w]+/u, '').trim() || (isBusiness ? 'Business Contact' : 'Contact'),
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    })
+    const crumbs = [
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: contactLabel, item: isBusiness ? `${siteUrlNoTrailing}/contact` : canonicalUrl },
+    ]
+    if (isBusiness) crumbs.push({ name: businessLabel, item: canonicalUrl })
+    jsonLdSchemas.push(buildBreadcrumb(crumbs))
+  } else if (req._ssrDebug?.matchedRoute === 'pricing') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Tarifs' : 'Pricing', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'download') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Télécharger' : 'Download', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'terms') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Conditions' : 'Terms', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'privacy') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Confidentialité' : 'Privacy', item: canonicalUrl },
     ]))
   } else {
     // Generic website schema (homepage / unmatched routes) - sitelinks searchbox
