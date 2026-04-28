@@ -1926,8 +1926,6 @@ export const AdminPage: React.FC = () => {
     );
     // Aphydle (sister daily plant guessing game) — players for today's puzzle
     const [aphydlePlayersToday, setAphydlePlayersToday] = React.useState<number | null>(null);
-    const [aphydleVisitsToday, setAphydleVisitsToday] = React.useState<number | null>(null);
-    const [aphydlePuzzleNo, setAphydlePuzzleNo] = React.useState<number | null>(null);
     const [aphydleStatsLoading, setAphydleStatsLoading] = React.useState<boolean>(true);
     const [aphydleStatsRefreshing, setAphydleStatsRefreshing] = React.useState<boolean>(false);
     const [aphydleStatsUpdatedAt, setAphydleStatsUpdatedAt] = React.useState<number | null>(null);
@@ -5350,8 +5348,6 @@ export const AdminPage: React.FC = () => {
         if (resp && resp.ok) {
           const data = await safeJson(resp);
           if (typeof data?.playersToday === "number") setAphydlePlayersToday(data.playersToday);
-          if (typeof data?.visitsToday === "number") setAphydleVisitsToday(data.visitsToday);
-          if (typeof data?.puzzleNo === "number") setAphydlePuzzleNo(data.puzzleNo);
           setAphydleStatsUpdatedAt(Date.now());
         }
       } catch (e) {
@@ -7349,8 +7345,12 @@ export const AdminPage: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* Quick Stats Cards */}
-                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                      {/* Quick Stats Cards
+                          Layout: 3 equal-width main cards + a compact Aphydle
+                          card on the right at lg+. The custom grid template
+                          keeps the 3 originals at their original width instead
+                          of squashing them to fit a 4-equal-column layout. */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-[repeat(3,minmax(0,1fr))_auto] gap-3">
                         {/* Currently Online Card — powered by GA Realtime */}
                         <div className="group relative rounded-2xl border border-emerald-200/70 dark:border-emerald-800/40 bg-gradient-to-br from-emerald-50/80 to-teal-50/50 dark:from-emerald-950/30 dark:to-teal-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-emerald-500/8 transition-all duration-200 overflow-hidden">
                           <div className="flex items-center justify-between mb-3">
@@ -7471,21 +7471,16 @@ export const AdminPage: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* Aphydle Players Today Card — sister daily plant guessing game */}
-                        <div className="group relative rounded-2xl border border-fuchsia-200/70 dark:border-fuchsia-800/40 bg-gradient-to-br from-fuchsia-50/80 to-violet-50/50 dark:from-fuchsia-950/30 dark:to-violet-950/20 p-4 shadow-sm hover:shadow-md hover:shadow-fuchsia-500/8 transition-all duration-200 overflow-hidden">
-                          <div className="flex items-center justify-between mb-3">
-                            <div className="flex items-center gap-2.5">
-                              <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
-                                <Gamepad2 className="h-4.5 w-4.5 text-white" />
+                        {/* Aphydle Card — sister daily plant guessing game.
+                            Compact: fixed width on lg so it doesn't stretch
+                            the three main cards next to it. */}
+                        <div className="group relative rounded-2xl border border-fuchsia-200/70 dark:border-fuchsia-800/40 bg-gradient-to-br from-fuchsia-50/80 to-violet-50/50 dark:from-fuchsia-950/30 dark:to-violet-950/20 p-3 shadow-sm hover:shadow-md hover:shadow-fuchsia-500/8 transition-all duration-200 overflow-hidden lg:w-44">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-fuchsia-500 to-violet-500 flex items-center justify-center shadow-sm shadow-fuchsia-500/20">
+                                <Gamepad2 className="h-4 w-4 text-white" />
                               </div>
-                              <div>
-                                <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle Players</div>
-                                <div className="text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60">
-                                  {aphydlePuzzleNo != null
-                                    ? `Puzzle #${aphydlePuzzleNo} · ${aphydleStatsUpdatedAt ? formatTimeAgo(aphydleStatsUpdatedAt) : "Updating..."}`
-                                    : aphydleStatsUpdatedAt ? formatTimeAgo(aphydleStatsUpdatedAt) : "Updating..."}
-                                </div>
-                              </div>
+                              <div className="text-xs font-semibold text-fuchsia-900 dark:text-fuchsia-100">Aphydle</div>
                             </div>
                             <Button
                               variant="ghost"
@@ -7493,24 +7488,19 @@ export const AdminPage: React.FC = () => {
                               aria-label="Refresh aphydle players"
                               onClick={() => loadAphydleStats({ initial: false })}
                               disabled={aphydleStatsLoading || aphydleStatsRefreshing}
-                              className="h-7 w-7 rounded-lg text-fuchsia-600 dark:text-fuchsia-400"
+                              className="h-6 w-6 rounded-lg text-fuchsia-600 dark:text-fuchsia-400"
                             >
-                              <RefreshCw className={`h-3.5 w-3.5 ${aphydleStatsLoading || aphydleStatsRefreshing ? "animate-spin" : ""}`} />
+                              <RefreshCw className={`h-3 w-3 ${aphydleStatsLoading || aphydleStatsRefreshing ? "animate-spin" : ""}`} />
                             </Button>
                           </div>
                           <div className="flex items-baseline gap-1.5">
-                            <div className="text-3xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300">
+                            <div className="text-2xl font-bold tabular-nums text-fuchsia-700 dark:text-fuchsia-300 leading-none">
                               {aphydleStatsLoading ? (
-                                <span className="inline-block w-10 h-8 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
+                                <span className="inline-block w-8 h-6 bg-fuchsia-200/50 dark:bg-fuchsia-800/30 rounded-lg animate-pulse" />
                               ) : aphydleStatsUpdatedAt !== null ? (aphydlePlayersToday ?? "-") : "-"}
                             </div>
-                            <span className="text-xs font-medium text-fuchsia-500 dark:text-fuchsia-400">today</span>
+                            <span className="text-[11px] font-medium text-fuchsia-500 dark:text-fuchsia-400">players today</span>
                           </div>
-                          {aphydleVisitsToday != null && aphydleVisitsToday > 0 && (
-                            <div className="mt-1.5 text-[10px] text-fuchsia-600/60 dark:text-fuchsia-400/60">
-                              {aphydleVisitsToday.toLocaleString()} visit{aphydleVisitsToday === 1 ? "" : "s"} today
-                            </div>
-                          )}
                         </div>
                       </div>
 
