@@ -85,6 +85,8 @@ import {
 // per plant-swipe.conf / setup.sh. Derive the URL from the current host (or
 // VITE_SITE_URL when SSRing) so each environment links to its own subdomain.
 // VITE_APHYDLE_URL overrides everything for special builds.
+const APHYDLE_LOGO_URL =
+  "https://media.aphylia.app/UTILITY/admin/aphydle/webp/final-c031f1aa-619f-440e-b748-291f29c8987b.webp"
 const getAphydleUrl = (): string => {
   const override = (import.meta.env.VITE_APHYDLE_URL as string | undefined)?.trim()
   if (override) {
@@ -2140,16 +2142,17 @@ const AphydleSection: React.FC = React.memo(() => {
             <div className="relative p-6 sm:p-8">
               {/* Top row: logo + text + CTA */}
               <div className="flex flex-col sm:flex-row items-center gap-6">
-                {/* Logo block — Aphydle's favicon (shared with Aphylia) */}
+                {/* Logo block — official Aphydle brand mark */}
                 <div className="relative shrink-0">
                   <div className="absolute inset-0 bg-gradient-to-br from-violet-500/30 to-emerald-500/30 rounded-2xl blur-lg group-hover:from-violet-500/40 group-hover:to-emerald-500/40 transition-colors" />
-                  <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm">
+                  <div className="relative h-20 w-20 rounded-2xl bg-white dark:bg-stone-950 border border-stone-200 dark:border-stone-800 flex items-center justify-center shadow-sm overflow-hidden">
                     <img
-                      src="/icons/plant-swipe-icon.svg"
-                      alt=""
-                      className="h-12 w-12 plant-icon-theme"
+                      src={APHYDLE_LOGO_URL}
+                      alt="Aphydle"
+                      className="h-16 w-16 object-contain"
+                      loading="lazy"
+                      decoding="async"
                       draggable="false"
-                      aria-hidden="true"
                     />
                     <span className="absolute -bottom-2 -right-2 h-7 w-7 rounded-full bg-gradient-to-br from-violet-500 to-emerald-500 flex items-center justify-center shadow-md ring-2 ring-white dark:ring-stone-950">
                       <Gamepad2 className="h-3.5 w-3.5 text-white" />
@@ -2174,12 +2177,14 @@ const AphydleSection: React.FC = React.memo(() => {
                   <p className="mt-2 text-sm sm:text-base text-stone-600 dark:text-stone-300 leading-relaxed">
                     {description}
                   </p>
-                  {/* Browser-tab style URL chip — favicon next to the host */}
+                  {/* Browser-tab style URL chip — Aphydle favicon next to the host */}
                   <div className="mt-3 inline-flex items-center gap-2 px-2.5 py-1 rounded-md bg-stone-100 dark:bg-stone-800/70 border border-stone-200/70 dark:border-stone-700/70 text-xs text-stone-600 dark:text-stone-300 font-mono">
                     <img
-                      src="/icons/plant-swipe-icon.svg"
+                      src={APHYDLE_LOGO_URL}
                       alt=""
-                      className="h-3.5 w-3.5 plant-icon-theme"
+                      className="h-3.5 w-3.5 object-contain"
+                      loading="lazy"
+                      decoding="async"
                       draggable="false"
                       aria-hidden="true"
                     />
