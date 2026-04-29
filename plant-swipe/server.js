@@ -13468,10 +13468,10 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 })
 
-// Admin: Aphydle stats — count of players who attempted today's puzzle and
-// page visits today. Reads aphydle.attempts / aphydle.daily_log directly via
-// the postgres-js client; aphydle.attempts has no SELECT RLS policy so the
-// REST fallback can't be used here.
+// Admin: Aphydle stats — count of players who finished today's puzzle and
+// page visits today. Reads aphydle.puzzle_results / aphydle.page_visits /
+// aphydle.daily_log directly via the postgres-js client; page_visits has
+// no SELECT RLS policy for anon, so REST can't be used as a fallback here.
 app.get('/api/admin/aphydle-stats', async (req, res) => {
   const uid = await ensureAdmin(req, res)
   if (!uid) return
@@ -13503,13 +13503,9 @@ app.get('/api/admin/aphydle-stats', async (req, res) => {
       }
 
       if (puzzleNo != null) {
-        // Source from aphydle.puzzle_results — one row per completed game
-        // (submitResult upserts on (puzzle_no, player_id) once at end). This
-        // matches the finalised data in the SQL editor. We avoid
-        // aphydle.attempts here because trackAttempt's per-guess upserts
-        // race against each other (App.jsx fires them un-awaited), so the
-        // final state of an `attempts` row can be a stale loser even after
-        // the player won.
+        // Source from aphydle.puzzle_results — one row per finalised game
+        // (submitResult upserts on (puzzle_no, player_id) at end of game).
+        // This is the authoritative table for outcomes.
         try {
           const rows = await sql`
             select count(*)::int as count
@@ -13551,16 +13547,10 @@ app.get('/api/admin/aphydle-stats', async (req, res) => {
 // Admin: Aphydle analytics — time series (visits / players / guesses / wins
 // per day) and details for the most recent puzzles, used by the admin
 // dashboard's "Aphydle" tab. Reads aphydle.* directly via the postgres-js
-// client because the schema's RLS policies don't grant SELECT on
-// page_visits to anon/authenticated.
+// client because page_visits has no SELECT RLS policy for anon.
 //
-// Source-of-truth: aphydle.puzzle_results, NOT aphydle.attempts. Aphydle's
-// trackAttempt() fires un-awaited upserts keyed on (anon_id, puzzle_no), so
-// when several guesses race the final `attempts` row can land in a stale
-// pre-win state and the daily_distribution view counts a corresponding 0
-// for the win bucket. puzzle_results is written once per finalised game
-// with the real outcome + guess_count, so it gives faithful numbers.
-//
+// Source-of-truth for outcomes is aphydle.puzzle_results — submitResult
+// writes one row per finalised game with the real outcome + guess_count.
 // puzzle_no → puzzle_date is derived from the rotation epoch (mirrors
 // PUZZLE_EPOCH_UTC = 2026-04-27 in Aphydle's src/engine/game.js).
 app.get('/api/admin/aphydle-analytics', async (req, res) => {
@@ -13619,9 +13609,8 @@ app.get('/api/admin/aphydle-analytics', async (req, res) => {
     `
 
     // Last 5 puzzles by completion activity (puzzle_results). The bucket
-    // histogram is computed inline from outcome + guess_count rather than
-    // from aphydle.daily_distribution (which sources from the racy
-    // aphydle.attempts table). plant_id is a best-effort join to daily_log.
+    // histogram is computed inline from outcome + guess_count.
+    // plant_id is a best-effort join to daily_log.
     const lastPuzzleRows = await sql`
       with recent_puzzles as (
         select distinct puzzle_no
