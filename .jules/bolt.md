@@ -47,3 +47,6 @@
 ## 2026-04-25 - Precomputed lookup dictionaries for static forms
 **Learning:** React form components rendering many fields using `O(N)` array lookups (like `.find()`) on every render can cause performance drops during keystroke re-renders.
 **Action:** Always precompute `O(1)` lookup maps (using `.reduce` or `for` loops) at the module scope for static form configurations instead of searching inline.
+## 2024-05-19 - Avoid allocating array and closures on every object validation call
+**Learning:** In hot paths (like `isRelevantThisMonth` during discovery scoring), creating an array of properties just to run `.some()` with an inline closure allocates unnecessary memory and closures, compounding garbage collection overhead on every scoring pass.
+**Action:** Replace `[val1, val2].some(fn)` with unrolled conditional statements (`fn(val1) || fn(val2)`) and explicitly named helper functions utilizing standard `for` loops to eliminate array allocations and function call overhead.

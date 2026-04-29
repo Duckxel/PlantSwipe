@@ -72,17 +72,24 @@ const W_RANDOM_MAX = 12
 // Helpers
 // ---------------------------------------------------------------------------
 
+// ⚡ Bolt: Helper to check if a month matches without allocating closures
+function hasMatchingMonth(months: string[] | null | undefined, currentMonth: number): boolean {
+  if (!months || months.length === 0) return false
+  for (let i = 0; i < months.length; i++) {
+    if (monthSlugToNumber(months[i]) === currentMonth) {
+      return true
+    }
+  }
+  return false
+}
+
 /** Check if plant is seasonally relevant (sowing/flowering/fruiting/harvesting) this month */
 function isRelevantThisMonth(plant: Plant, currentMonth: number): boolean {
-  const monthArrays = [
-    plant.sowingMonth,
-    plant.floweringMonth,
-    plant.fruitingMonth,
-    plant.harvestingMonth,
-  ]
-  return monthArrays.some(months =>
-    months?.some(slug => monthSlugToNumber(slug) === currentMonth),
-  )
+  // ⚡ Bolt: Avoid allocating [plant.sowingMonth, ...] array and closures on every check
+  return hasMatchingMonth(plant.sowingMonth, currentMonth) ||
+         hasMatchingMonth(plant.floweringMonth, currentMonth) ||
+         hasMatchingMonth(plant.fruitingMonth, currentMonth) ||
+         hasMatchingMonth(plant.harvestingMonth, currentMonth)
 }
 
 /** Score based on user's looking_for preference vs plant utility */
