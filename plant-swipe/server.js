@@ -18706,7 +18706,9 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       bugActionResponsesDeleted: 0,
       bugPointsHistoryDeleted: 0,
       gardenPlantImagesDeleted: 0,
-      mediaUploadsAnonymized: 0
+      mediaUploadsAnonymized: 0,
+      plantHistoryAnonymized: 0,
+      plantAdminNotesAnonymized: 0
     }
 
     try {
@@ -19112,6 +19114,48 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
         stats.mediaUploadsAnonymized = count || 0
       }
     } catch (err) { console.warn('[gdpr] admin_media_uploads anonymisation partial:', err?.message) }
+
+    try {
+      // 14o. Anonymise plant_history rows authored by this user.
+      // The FK author_id → profiles(id) is ON DELETE SET NULL, so the cascade
+      // already nulls author_id when the profile is deleted at step 15. We
+      // count the affected rows here so the audit log records what was
+      // anonymised. summary text is auto-generated from field labels (see
+      // plantHistoryDiff.ts) and never embeds user-identifying information,
+      // so the body itself does not need to be rewritten.
+      if (sql) {
+        const rows = await sql`SELECT COUNT(*)::int AS n FROM public.plant_history WHERE author_id = ${userId}`
+        stats.plantHistoryAnonymized = rows?.[0]?.n || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('plant_history')
+          .select('id', { count: 'exact', head: true })
+          .eq('author_id', userId)
+        stats.plantHistoryAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] plant_history anonymisation count partial:', err?.message) }
+
+    try {
+      // 14p. Anonymise plant_admin_notes authored by this user.
+      // The FK ON DELETE SET NULL severs the authorship link via cascade, but
+      // the free-text `body` would persist. To satisfy GDPR while preserving
+      // thread structure (other admins reference these notes editorially), we
+      // explicitly null author_id and replace body with a placeholder.
+      if (sql) {
+        const result = await sql`
+          UPDATE public.plant_admin_notes
+          SET body = '[deleted]', author_id = NULL
+          WHERE author_id = ${userId}
+        `
+        stats.plantAdminNotesAnonymized = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('plant_admin_notes')
+          .update({ body: '[deleted]', author_id: null })
+          .eq('author_id', userId)
+        stats.plantAdminNotesAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] plant_admin_notes anonymisation partial:', err?.message) }
 
     try {
       // 15. Delete avatar image and profile
@@ -19804,10 +19848,42 @@ app.get('/api/account/export', async (req, res) => {
           return data || []
         }
       })(),
+      // 29. Plant history entries authored by user
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, plant_id, action, field, summary, created_at
+            FROM public.plant_history WHERE author_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('plant_history')
+            .select('id, plant_id, action, field, summary, created_at')
+            .eq('author_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
+      // 30. Plant admin notes authored by user
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, plant_id, body, created_at, updated_at
+            FROM public.plant_admin_notes WHERE author_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('plant_admin_notes')
+            .select('id, plant_id, body, created_at, updated_at')
+            .eq('author_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
     ])
 
-    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs', 'gardenPlantImages', 'mediaUploads']
-    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs', 'Garden plant images', 'Media uploads']
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs', 'gardenPlantImages', 'mediaUploads', 'plantHistoryAuthored', 'plantAdminNotesAuthored']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs', 'Garden plant images', 'Media uploads', 'Plant history authored', 'Plant admin notes authored']
     for (let i = 0; i < gdprParallelResults.length; i++) {
       const r = gdprParallelResults[i]
       if (r.status === 'fulfilled') {
