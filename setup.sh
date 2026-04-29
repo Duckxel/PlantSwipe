@@ -1655,9 +1655,17 @@ setup_aphydle() {
     _primary_for_env="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
     if [[ -n "$_primary_for_env" && "$_primary_for_env" != "__PRIMARY_DOMAIN__" ]]; then
       local _host_url="https://$_primary_for_env"
-      log "Injecting VITE_APHYLIA_HOST_URL=$_host_url into Aphydle .env"
-      $SUDO sed -i '/^VITE_APHYLIA_HOST_URL=/d; /^VITE_APHYLIA_API_URL=/d' "$aphydle_env"
-      $SUDO bash -c "printf 'VITE_APHYLIA_HOST_URL=%s\nVITE_APHYLIA_API_URL=%s\n' '$_host_url' '$_host_url' >> '$aphydle_env'"
+      local _aphydle_site_url="https://aphydle.$_primary_for_env"
+      # VITE_APP_SITE_URL is read by Aphydle's vite.config.js seoArtifactsPlugin
+      # at build time. Without it Vite falls back to the hardcoded
+      # https://aphydle.aphylia.com default, which produces a sitemap.xml,
+      # robots.txt, canonical <link>, OG/Twitter tags, and JSON-LD that all
+      # point at the wrong host on every non-canonical deploy. Derive it
+      # from domain.json's primary so dev01/staging/prod each get a
+      # self-consistent SEO bundle.
+      log "Injecting VITE_APHYLIA_HOST_URL=$_host_url and VITE_APP_SITE_URL=$_aphydle_site_url into Aphydle .env"
+      $SUDO sed -i '/^VITE_APHYLIA_HOST_URL=/d; /^VITE_APHYLIA_API_URL=/d; /^VITE_APP_SITE_URL=/d' "$aphydle_env"
+      $SUDO bash -c "printf 'VITE_APHYLIA_HOST_URL=%s\nVITE_APHYLIA_API_URL=%s\nVITE_APP_SITE_URL=%s\n' '$_host_url' '$_host_url' '$_aphydle_site_url' >> '$aphydle_env'"
       $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$aphydle_env"
     fi
   fi
