@@ -1614,11 +1614,22 @@ setup_aphydle() {
 
   log "Setting up Aphydle (daily plant guessing game)…"
 
-  # Clone or update Aphydle repo
+  # Clone or update Aphydle repo. Use fetch + reset --hard (not pull --ff-only)
+  # because scripts/refresh-aphydle.sh's image-proxy patcher dirties tracked
+  # files (src/lib/data.js); pull --ff-only would abort with "local changes
+  # would be overwritten by merge" and silently leave the build stale.
   if [[ -d "$APHYDLE_DIR/.git" ]]; then
-    log "Aphydle repo present at $APHYDLE_DIR — pulling latest…"
-    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" pull --ff-only 2>&1; then
-      log "[WARN] git pull failed for Aphydle; continuing with existing checkout."
+    log "Aphydle repo present at $APHYDLE_DIR — fetching latest…"
+    local aphydle_branch
+    aphydle_branch="$(sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" symbolic-ref --short HEAD 2>/dev/null || true)"
+    [[ -n "$aphydle_branch" && "$aphydle_branch" != "HEAD" ]] || aphydle_branch="main"
+    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" fetch origin "$aphydle_branch" 2>&1; then
+      log "[ERROR] git fetch failed for Aphydle (branch $aphydle_branch); aborting Aphydle setup to avoid shipping a stale build."
+      return 1
+    fi
+    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" reset --hard "origin/$aphydle_branch" 2>&1; then
+      log "[ERROR] git reset --hard origin/$aphydle_branch failed for Aphydle; aborting Aphydle setup to avoid shipping a stale build."
+      return 1
     fi
   else
     log "Cloning Aphydle from $APHYDLE_REPO_URL → $APHYDLE_DIR"
