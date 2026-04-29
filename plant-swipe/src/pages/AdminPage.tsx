@@ -7746,6 +7746,28 @@ export const AdminPage: React.FC = () => {
                                 {refreshingAphydle ? "Refreshing..." : "Refresh Aphydle"}
                               </Button>
 
+                              {/* Open Aphydle Export — Aphydle's /export route renders the
+                                  share-card archive picker. Derive the host from the current
+                                  domain (e.g. dev01.aphylia.app → aphydle.dev01.aphylia.app)
+                                  so this Just Works on every deploy that registers the
+                                  Aphydle subdomain in domain.json. */}
+                              <Button
+                                variant="outline"
+                                className="w-full rounded-xl justify-start gap-2"
+                                onClick={() => {
+                                  const host = window.location.hostname;
+                                  const isLocal = host === "localhost" || host === "127.0.0.1" || host.endsWith(".local");
+                                  const url = isLocal
+                                    ? `${window.location.protocol}//${host}:4173/export`
+                                    : `https://aphydle.${host}/export`;
+                                  window.open(url, "_blank", "noopener,noreferrer");
+                                }}
+                                title="Open Aphydle's admin export archive in a new tab"
+                              >
+                                <ExternalLink className="h-4 w-4" />
+                                Open Aphydle Export
+                              </Button>
+
                               {/* Clear Memory Button */}
                               <Button
                                 variant="outline"
