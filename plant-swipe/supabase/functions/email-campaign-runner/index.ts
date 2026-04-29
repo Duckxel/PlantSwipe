@@ -1082,8 +1082,10 @@ async function sendBatch(
     // Generate random 10-character string (uppercase, lowercase, numbers)
     const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
     let randomStr = ""
+    const randomValues = new Uint32Array(10)
+    crypto.getRandomValues(randomValues)
     for (let i = 0; i < 10; i++) {
-      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      randomStr += chars.charAt(randomValues[i] % chars.length)
     }
     
     const websiteUrl = Deno.env.get("WEBSITE_URL") ?? "https://aphylia.app"
