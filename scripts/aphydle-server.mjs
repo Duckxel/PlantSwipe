@@ -63,9 +63,23 @@ const server = http.createServer((req, res) => {
     return;
   }
 
-  const exists = existsSync(abs);
-  const isFile = exists && statSync(abs).isFile();
-  if (!isFile) {
+  let stat = existsSync(abs) ? statSync(abs) : null;
+
+  // Directory → promote to its index.html. Required so vite-emitted
+  // extensionless permalinks like /puzzle/<n>/ also serve correctly when
+  // the client omits the trailing slash (e.g. typed URLs, sitemap entries
+  // mirrored without the slash). Without this we'd fall through to
+  // dist/index.html (the SPA shell) and lose the per-page canonical, OG,
+  // JSON-LD, and breadcrumb metadata the puzzle archive relies on.
+  if (stat?.isDirectory()) {
+    const indexPath = join(abs, "index.html");
+    if (existsSync(indexPath) && statSync(indexPath).isFile()) {
+      abs = indexPath;
+      stat = statSync(abs);
+    }
+  }
+
+  if (!stat?.isFile()) {
     // SPA fallback: paths without an extension fall back to index.html
     const reqPath = (() => {
       try { return new URL(req.url, "http://x").pathname; } catch { return "/"; }

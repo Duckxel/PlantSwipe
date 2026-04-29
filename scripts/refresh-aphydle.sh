@@ -116,12 +116,11 @@ if [[ ! -d "$APHYDLE_DIR/.git" ]]; then
 fi
 
 # ── 2. git fetch + hard reset ────────────────────────────────────────────────
-# Fetch+reset (not pull --ff-only): the patchers below modify tracked files
-# (src/lib/data.js, index.html). Those edits are idempotent and re-applied
-# every run, so discarding them before pulling is safe — and avoids the
-# "local changes would be overwritten by merge" abort that would otherwise
-# leave the checkout stuck on an old commit missing newly-committed assets
-# (e.g. src/assets/FINAL.png).
+# Fetch+reset (not pull --ff-only): aphydle-patch-image-proxy.mjs below
+# modifies a tracked file (src/lib/data.js). That edit is idempotent and
+# re-applied on every run, so discarding it before pulling is safe — and
+# avoids the "local changes would be overwritten by merge" abort that would
+# otherwise leave the checkout stuck on an old commit.
 if [[ "$SKIP_PULL" != "true" ]]; then
   log "Pulling latest Aphydle…"
   if [[ "$EUID" -eq 0 ]]; then
@@ -196,19 +195,11 @@ if [[ -f "$APHYDLE_PATCHER" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
   fi
 fi
 
-# Branding: drop in the Aphylia favicon links and replace the procedural
-# MosaicLeaf with the PlantSwipe icon SVG. Aphylia/PlantSwipe icon files are
-# copied into dist/icons/ after build (step 5b below) so the patched paths
-# resolve at runtime.
-APHYDLE_BRANDING_PATCHER="$WORK_DIR/scripts/aphydle-patch-branding.mjs"
-if [[ -f "$APHYDLE_BRANDING_PATCHER" && -f "$APHYDLE_DIR/index.html" ]]; then
-  log "Patching Aphydle source for Aphylia branding (favicon + logo)…"
-  if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
-  else
-    node "$APHYDLE_BRANDING_PATCHER" "$APHYDLE_DIR"
-  fi
-fi
+# Branding (favicon + logo) is intentionally NOT patched here: Aphydle ships
+# its own inline-SVG favicon in index.html and its own MosaicLeaf component,
+# and we respect upstream's art direction. The previous aphydle-patch-branding.mjs
+# patcher and the post-build dist/favicon.ico copy were removed for the same
+# reason — see git history if you ever need to resurrect a host-side override.
 
 # ── 4. locate Bun ────────────────────────────────────────────────────────────
 OWNER_HOME="$(getent passwd "$REPO_OWNER" | cut -d: -f6 2>/dev/null || echo "$HOME")"
@@ -272,27 +263,10 @@ if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
   exit 1
 fi
 
-# ── 5b. drop a same-origin favicon.ico for the browser's auto-fetch ─────────
-# Even with `<link rel="icon">` in index.html (injected by aphydle-patch-
-# branding.mjs and hashed by Vite into dist/assets/<hash>.png), some clients
-# still poke /favicon.ico — copy the upstream brand asset there so the
-# console stays clean. The hashed dist asset and the in-app <MosaicLeaf>
-# image don't need any post-build copy: Vite already emits and references
-# them via src/assets/FINAL.png.
-APHYDLE_FAVICON_DEST="$APHYDLE_DIR/dist/favicon.ico"
-APHYDLE_FAVICON_SRC="$APHYDLE_DIR/src/assets/FINAL.png"
-if [[ -f "$APHYDLE_FAVICON_SRC" ]]; then
-  log "Installing favicon.ico into Aphydle dist (from $APHYDLE_FAVICON_SRC)"
-  if [[ "$EUID" -eq 0 ]]; then
-    sudo -u "$REPO_OWNER" -H install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
-      log "[WARN] Failed to install Aphydle favicon"
-  else
-    install -m 0644 "$APHYDLE_FAVICON_SRC" "$APHYDLE_FAVICON_DEST" || \
-      log "[WARN] Failed to install Aphydle favicon"
-  fi
-else
-  log "[WARN] $APHYDLE_FAVICON_SRC not found; Aphydle /favicon.ico will 404."
-fi
+# (Removed) post-build dist/favicon.ico copy. Aphydle owns its favicon via the
+# inline-SVG <link rel="icon"> in its index.html; we no longer override it
+# host-side. Browsers that probe /favicon.ico will 404 quietly — that's
+# upstream's call to make.
 
 # ── 6. ensure /var/www/Aphydle symlink ──────────────────────────────────────
 $SUDO mkdir -p "$(dirname "$APHYDLE_WEB_ROOT_LINK")"
