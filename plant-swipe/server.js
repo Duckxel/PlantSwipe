@@ -699,7 +699,7 @@ async function processEmailCampaigns() {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
           let randomStr = ''
           for (let i = 0; i < 10; i++) {
-            randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+            randomStr += chars.charAt(crypto.randomInt(0, chars.length))
           }
 
           const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
@@ -12136,7 +12136,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
-      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      randomStr += chars.charAt(crypto.randomInt(0, chars.length))
     }
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
@@ -12308,7 +12308,7 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
-      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      randomStr += chars.charAt(crypto.randomInt(0, chars.length))
     }
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
