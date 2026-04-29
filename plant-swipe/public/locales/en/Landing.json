@@ -263,6 +263,14 @@
     "ctaDownload": "Download Aphylia",
     "ctaDocs": "View docs"
   },
+  "aphydle": {
+    "eyebrow": "From the Aphylia team",
+    "title": "Aphydle",
+    "tagline": "Daily plant guessing game",
+    "description": "A new mystery plant every day. Use progressive botanical clues — foliage, habitat, family — to guess the species before you run out of tries.",
+    "cta": "Play Aphydle",
+    "tease": "Can you guess what's growing today?"
+  },
   "footer": {
     "about": "About",
     "blog": "Blog",

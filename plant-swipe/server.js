@@ -13468,6 +13468,269 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 })
 
+// Admin: Aphydle stats — count of players who finished today's puzzle and
+// page visits today. Reads aphydle.puzzle_results / aphydle.page_visits /
+// aphydle.daily_log directly via the postgres-js client; page_visits has
+// no SELECT RLS policy for anon, so REST can't be used as a fallback here.
+app.get('/api/admin/aphydle-stats', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  try {
+    let playersToday = null
+    let visitsToday = null
+    let puzzleNo = null
+    let puzzleDate = null
+
+    if (sql) {
+      // Today's puzzle_no: prefer daily_log (matches what the runtime served),
+      // fall back to date-math against the rotation epoch (2026-04-27, mirrors
+      // PUZZLE_EPOCH_UTC in Aphydle's src/engine/game.js) if no row has been
+      // stamped yet.
+      try {
+        const pnRows = await sql`
+          select coalesce(
+            (select puzzle_no from aphydle.daily_log where puzzle_date = (now() at time zone 'utc')::date),
+            ((now() at time zone 'utc')::date - date '2026-04-27') + 1
+          )::int as puzzle_no,
+          to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as puzzle_date
+        `
+        if (Array.isArray(pnRows) && pnRows[0]) {
+          puzzleNo = Number(pnRows[0].puzzle_no)
+          puzzleDate = pnRows[0].puzzle_date || null
+        }
+      } catch (e) {
+        console.warn('[aphydle-stats] puzzle_no lookup failed:', e?.message)
+      }
+
+      if (puzzleNo != null) {
+        // Source from aphydle.puzzle_results — one row per finalised game
+        // (submitResult upserts on (puzzle_no, player_id) at end of game).
+        // This is the authoritative table for outcomes.
+        try {
+          const rows = await sql`
+            select count(*)::int as count
+            from aphydle.puzzle_results
+            where puzzle_no = ${puzzleNo}
+          `
+          if (Array.isArray(rows) && rows[0]) playersToday = Number(rows[0].count)
+        } catch (e) {
+          console.warn('[aphydle-stats] players query failed:', e?.message)
+        }
+      }
+
+      try {
+        const rows = await sql`
+          select count(*)::int as count
+          from aphydle.page_visits
+          where visited_at >= (now() at time zone 'utc')::date
+        `
+        if (Array.isArray(rows) && rows[0]) visitsToday = Number(rows[0].count)
+      } catch (e) {
+        console.warn('[aphydle-stats] visits query failed:', e?.message)
+      }
+    }
+
+    res.json({ ok: true, playersToday, visitsToday, puzzleNo, puzzleDate })
+  } catch (e) {
+    res.status(200).json({
+      ok: true,
+      playersToday: null,
+      visitsToday: null,
+      puzzleNo: null,
+      puzzleDate: null,
+      error: e?.message || 'Failed to load aphydle stats',
+      errorCode: 'ADMIN_APHYDLE_STATS_ERROR',
+    })
+  }
+})
+
+// Admin: Aphydle analytics — time series (visits / players / guesses / wins
+// per day) and details for the most recent puzzles, used by the admin
+// dashboard's "Aphydle" tab. Reads aphydle.* directly via the postgres-js
+// client because page_visits has no SELECT RLS policy for anon.
+//
+// Source-of-truth for outcomes is aphydle.puzzle_results — submitResult
+// writes one row per finalised game with the real outcome + guess_count.
+// puzzle_no → puzzle_date is derived from the rotation epoch (mirrors
+// PUZZLE_EPOCH_UTC = 2026-04-27 in Aphydle's src/engine/game.js).
+app.get('/api/admin/aphydle-analytics', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  const days = Math.max(1, Math.min(90, Number.parseInt(req.query.days, 10) || 30))
+  if (!sql) {
+    return res.json({
+      ok: false,
+      error: 'Database connection not available',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
+  }
+
+  // Compute the window in JS so SQL never has to do parameterised date
+  // arithmetic (postgres-js mishandles "${n}::int - 1" in some setups).
+  const APHYDLE_EPOCH_UTC_MS = Date.UTC(2026, 3, 27) // April 27 2026, month is 0-indexed
+  const DAY_MS = 24 * 3600 * 1000
+  const todayUtcMs = Math.floor(Date.now() / DAY_MS) * DAY_MS
+  const todayPuzzleNo = Math.floor((todayUtcMs - APHYDLE_EPOCH_UTC_MS) / DAY_MS) + 1
+  const cutoffPuzzleNo = todayPuzzleNo - (days - 1)
+  const cutoffUtcMs = todayUtcMs - (days - 1) * DAY_MS
+  const cutoffISO = new Date(cutoffUtcMs).toISOString() // "YYYY-MM-DDT00:00:00.000Z"
+  const epochISODate = '2026-04-27' // mirrors APHYDLE_EPOCH_UTC_MS, used as a Postgres date literal
+
+  // Helper: puzzle_no → "YYYY-MM-DD" in UTC, used to densify the time series
+  // and to label the lastPuzzles cards on the client.
+  const puzzleDateOf = (n) => new Date(APHYDLE_EPOCH_UTC_MS + (n - 1) * DAY_MS).toISOString().slice(0, 10)
+
+  try {
+    // Visits per UTC day. No daily_log dependency.
+    const visitsRows = await sql`
+      select to_char(date_trunc('day', visited_at at time zone 'utc'), 'YYYY-MM-DD') as date,
+             count(*)::int as visits
+      from aphydle.page_visits
+      where visited_at >= ${cutoffISO}::timestamptz
+      group by 1
+      order by 1
+    `
+
+    // Players + total guesses + wins per puzzle, sourced from
+    // aphydle.puzzle_results. Each row is one finalised game so count(*) is
+    // the number of players and sum(guess_count) is the total guesses.
+    const playsRows = await sql`
+      select pr.puzzle_no::int as puzzle_no,
+             count(*)::int as players,
+             coalesce(sum(pr.guess_count), 0)::int as attempts,
+             sum(case when pr.outcome = 'won' then 1 else 0 end)::int as wins
+      from aphydle.puzzle_results pr
+      where pr.puzzle_no >= ${cutoffPuzzleNo} and pr.puzzle_no <= ${todayPuzzleNo}
+      group by pr.puzzle_no
+      order by pr.puzzle_no
+    `
+
+    // Last 5 puzzles by completion activity (puzzle_results). The bucket
+    // histogram is computed inline from outcome + guess_count.
+    // plant_id is a best-effort join to daily_log.
+    const lastPuzzleRows = await sql`
+      with recent_puzzles as (
+        select distinct puzzle_no
+        from aphydle.puzzle_results
+        order by puzzle_no desc
+        limit 5
+      )
+      select rp.puzzle_no::int as puzzle_no,
+             dl.plant_id,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 1  then 1 else 0 end)::int as bucket_1,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 2  then 1 else 0 end)::int as bucket_2,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 3  then 1 else 0 end)::int as bucket_3,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 4  then 1 else 0 end)::int as bucket_4,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 5  then 1 else 0 end)::int as bucket_5,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 6  then 1 else 0 end)::int as bucket_6,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 7  then 1 else 0 end)::int as bucket_7,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 8  then 1 else 0 end)::int as bucket_8,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 9  then 1 else 0 end)::int as bucket_9,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 10 then 1 else 0 end)::int as bucket_10,
+             sum(case when pr.outcome = 'lost' then 1 else 0 end)::int as bucket_lost,
+             count(pr.id)::int as total_played,
+             count(pr.id)::int as players
+      from recent_puzzles rp
+      left join aphydle.daily_log dl on dl.puzzle_no = rp.puzzle_no
+      left join aphydle.puzzle_results pr on pr.puzzle_no = rp.puzzle_no
+      group by rp.puzzle_no, dl.plant_id
+      order by rp.puzzle_no desc
+    `
+
+    // Resolve plant common names (best-effort; ignored on failure).
+    const plantIds = Array.from(new Set(lastPuzzleRows.map(r => r.plant_id).filter(Boolean).map(String)))
+    const plantNamesById = {}
+    if (plantIds.length) {
+      try {
+        const plantRows = await sql`select id::text as id, name from public.plants where id::text = any(${plantIds})`
+        for (const p of plantRows) plantNamesById[p.id] = p.name
+      } catch { /* swallow — names are nice-to-have */ }
+    }
+
+    // Totals over the window. Plays/guesses/wins from puzzle_results so
+    // they reflect finalised outcomes rather than the racy attempts state.
+    const totalsRows = await sql`
+      select
+        coalesce((select count(*)::int from aphydle.page_visits
+                  where visited_at >= ${cutoffISO}::timestamptz), 0) as visits_total,
+        coalesce((select count(*)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as plays_total,
+        coalesce((select sum(guess_count)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as guesses_total,
+        coalesce((select count(*)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}
+                    and outcome = 'won'), 0) as wins_total
+    `
+    const tot = totalsRows[0] || {}
+
+    // Densify the time series so every UTC day in the window has a row.
+    const seriesByDate = {}
+    for (let i = 0; i < days; i++) {
+      const d = new Date(cutoffUtcMs + i * DAY_MS)
+      const key = d.toISOString().slice(0, 10)
+      seriesByDate[key] = { date: key, visits: 0, players: 0, attempts: 0, wins: 0 }
+    }
+    for (const r of visitsRows) {
+      if (seriesByDate[r.date]) seriesByDate[r.date].visits = Number(r.visits) || 0
+    }
+    for (const r of playsRows) {
+      const key = puzzleDateOf(Number(r.puzzle_no))
+      if (seriesByDate[key]) {
+        seriesByDate[key].players = Number(r.players) || 0
+        seriesByDate[key].attempts = Number(r.attempts) || 0
+        seriesByDate[key].wins = Number(r.wins) || 0
+      }
+    }
+    const timeSeries = Object.values(seriesByDate).sort((a, b) => a.date.localeCompare(b.date))
+
+    res.json({
+      ok: true,
+      days,
+      epoch: epochISODate,
+      todayPuzzleNo,
+      totals: {
+        visits: Number(tot.visits_total) || 0,
+        plays: Number(tot.plays_total) || 0,
+        guesses: Number(tot.guesses_total) || 0,
+        wins: Number(tot.wins_total) || 0,
+      },
+      timeSeries,
+      lastPuzzles: lastPuzzleRows.map(r => ({
+        puzzleNo: Number(r.puzzle_no),
+        puzzleDate: puzzleDateOf(Number(r.puzzle_no)),
+        plantId: r.plant_id || null,
+        plantName: r.plant_id ? (plantNamesById[String(r.plant_id)] || null) : null,
+        players: Number(r.players) || 0,
+        wins: Number(r.bucket_1) + Number(r.bucket_2) + Number(r.bucket_3) + Number(r.bucket_4) +
+              Number(r.bucket_5) + Number(r.bucket_6) + Number(r.bucket_7) + Number(r.bucket_8) +
+              Number(r.bucket_9) + Number(r.bucket_10),
+        losses: Number(r.bucket_lost) || 0,
+        totalPlayed: Number(r.total_played) || 0,
+        buckets: [
+          Number(r.bucket_1) || 0, Number(r.bucket_2) || 0, Number(r.bucket_3) || 0,
+          Number(r.bucket_4) || 0, Number(r.bucket_5) || 0, Number(r.bucket_6) || 0,
+          Number(r.bucket_7) || 0, Number(r.bucket_8) || 0, Number(r.bucket_9) || 0,
+          Number(r.bucket_10) || 0,
+        ],
+      })),
+    })
+  } catch (e) {
+    console.error('[aphydle-analytics] failed:', e?.message)
+    res.status(200).json({
+      ok: false,
+      error: e?.message || 'Failed to load aphydle analytics',
+      errorCode: 'ADMIN_APHYDLE_ANALYTICS_ERROR',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
+  }
+})
+
 // Admin: lookup member by email (returns user, profile, and known IPs)
 app.get('/api/admin/member', async (req, res) => {
   try {
@@ -30983,6 +31246,25 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
+// Derive the Aphydle (sister daily plant guessing game) origin from the primary
+// site URL. Aphydle is served on `aphydle.<primary>` per plant-swipe.conf /
+// setup.sh. PLANTSWIPE_APHYDLE_URL or APHYDLE_URL can override the default.
+function deriveAphydleOrigin(siteUrl) {
+  const override = (process.env.PLANTSWIPE_APHYDLE_URL || process.env.APHYDLE_URL || '').trim()
+  if (override) {
+    try { return new URL(override).origin } catch { /* fall through */ }
+  }
+  try {
+    const parsed = new URL(siteUrl)
+    let host = parsed.hostname
+    if (host.startsWith('www.')) host = host.slice(4)
+    if (!host.startsWith('aphydle.')) host = `aphydle.${host}`
+    return `${parsed.protocol}//${host}`
+  } catch {
+    return null
+  }
+}
+
 // Dynamic sitemap.xml generator
 // Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
 // Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
@@ -31024,6 +31306,20 @@ app.get('/sitemap.xml', async (req, res) => {
 
   // Build sitemap XML - generate URLs for each language
   let urls = ''
+
+  // Sister app: Aphydle (daily plant guessing game) hosted on aphydle.<primary>.
+  // Top priority cross-link so crawlers discover the second property.
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
+  if (aphydleOrigin) {
+    const aphydleHref = `${aphydleOrigin}/`
+    urls += `  <url>
+    <loc>${aphydleHref}</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="x-default" href="${aphydleHref}" />
+  </url>\n`
+  }
+
   for (const lang of languages) {
     urls += staticPages.map(page => `  <url>
     <loc>${langUrl(page.loc, lang)}</loc>
@@ -31282,6 +31578,7 @@ ${urls}
 // Analogous to sitemap.xml but optimized for LLM consumption.
 app.get('/llms-full.txt', async (req, res) => {
   const siteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').replace(/\/+$/, '')
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
   const now = new Date().toISOString()
   const db = supabaseServiceClient || supabaseServer
 
@@ -31291,6 +31588,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`# Website: ${siteUrl}`)
   lines.push(`# Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`# LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`# Sister app — Aphydle (daily plant guessing game): ${aphydleOrigin}/`)
+  }
   lines.push('')
   lines.push('> This file is dynamically generated from the Aphylia database.')
   lines.push('> It lists every plant with key care data, all blog posts, public gardens, public profiles, and public bookmark collections.')
@@ -31588,6 +31888,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`Website: ${siteUrl}`)
   lines.push(`Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`Sister app — Aphydle: ${aphydleOrigin}/`)
+  }
   lines.push(`Contact: ${siteUrl}/contact`)
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
