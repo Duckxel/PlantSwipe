@@ -13503,12 +13503,17 @@ app.get('/api/admin/aphydle-stats', async (req, res) => {
       }
 
       if (puzzleNo != null) {
-        // (anon_id, puzzle_no) is unique on aphydle.attempts, so count(*) on
-        // today's puzzle_no is the number of distinct players today.
+        // Source from aphydle.puzzle_results — one row per completed game
+        // (submitResult upserts on (puzzle_no, player_id) once at end). This
+        // matches the finalised data in the SQL editor. We avoid
+        // aphydle.attempts here because trackAttempt's per-guess upserts
+        // race against each other (App.jsx fires them un-awaited), so the
+        // final state of an `attempts` row can be a stale loser even after
+        // the player won.
         try {
           const rows = await sql`
             select count(*)::int as count
-            from aphydle.attempts
+            from aphydle.puzzle_results
             where puzzle_no = ${puzzleNo}
           `
           if (Array.isArray(rows) && rows[0]) playersToday = Number(rows[0].count)
@@ -13543,18 +13548,21 @@ app.get('/api/admin/aphydle-stats', async (req, res) => {
   }
 })
 
-// Admin: Aphydle analytics — time series (visits / players / attempts / wins
+// Admin: Aphydle analytics — time series (visits / players / guesses / wins
 // per day) and details for the most recent puzzles, used by the admin
 // dashboard's "Aphydle" tab. Reads aphydle.* directly via the postgres-js
-// client because the schema's RLS policies don't grant SELECT on attempts /
+// client because the schema's RLS policies don't grant SELECT on
 // page_visits to anon/authenticated.
 //
-// Important: queries are deliberately driven by aphydle.attempts.puzzle_no
-// (not aphydle.daily_log) because daily_log only fills in when the cron job
-// fires or someone visits the page; older sessions whose attempts predate
-// the daily_log row would otherwise vanish from the chart. The puzzle_no →
-// puzzle_date mapping is derived from the rotation epoch instead, mirroring
-// PUZZLE_EPOCH_UTC in Aphydle's src/engine/game.js.
+// Source-of-truth: aphydle.puzzle_results, NOT aphydle.attempts. Aphydle's
+// trackAttempt() fires un-awaited upserts keyed on (anon_id, puzzle_no), so
+// when several guesses race the final `attempts` row can land in a stale
+// pre-win state and the daily_distribution view counts a corresponding 0
+// for the win bucket. puzzle_results is written once per finalised game
+// with the real outcome + guess_count, so it gives faithful numbers.
+//
+// puzzle_no → puzzle_date is derived from the rotation epoch (mirrors
+// PUZZLE_EPOCH_UTC = 2026-04-27 in Aphydle's src/engine/game.js).
 app.get('/api/admin/aphydle-analytics', async (req, res) => {
   const uid = await ensureAdmin(req, res)
   if (!uid) return
@@ -13596,50 +13604,50 @@ app.get('/api/admin/aphydle-analytics', async (req, res) => {
       order by 1
     `
 
-    // Players + total guesses + wins per puzzle. Each row in aphydle.attempts
-    // is one player-puzzle pairing (unique constraint), so count(*) is the
-    // number of players for that puzzle and sum(attempt_no) is the total
-    // guess count across them. Bucket by puzzle_no, then map to puzzle_date
-    // in JS via the rotation epoch.
+    // Players + total guesses + wins per puzzle, sourced from
+    // aphydle.puzzle_results. Each row is one finalised game so count(*) is
+    // the number of players and sum(guess_count) is the total guesses.
     const playsRows = await sql`
-      select a.puzzle_no::int as puzzle_no,
+      select pr.puzzle_no::int as puzzle_no,
              count(*)::int as players,
-             coalesce(sum(a.attempt_no), 0)::int as attempts,
-             sum(case when a.is_correct then 1 else 0 end)::int as wins
-      from aphydle.attempts a
-      where a.puzzle_no >= ${cutoffPuzzleNo} and a.puzzle_no <= ${todayPuzzleNo}
-      group by a.puzzle_no
-      order by a.puzzle_no
+             coalesce(sum(pr.guess_count), 0)::int as attempts,
+             sum(case when pr.outcome = 'won' then 1 else 0 end)::int as wins
+      from aphydle.puzzle_results pr
+      where pr.puzzle_no >= ${cutoffPuzzleNo} and pr.puzzle_no <= ${todayPuzzleNo}
+      group by pr.puzzle_no
+      order by pr.puzzle_no
     `
 
-    // Last 5 puzzles by activity (driven by attempts, not daily_log) so the
-    // list never goes empty on a fresh DB where the cron hasn't stamped any
-    // log rows yet. plant_id and the bucket histogram are best-effort joins.
+    // Last 5 puzzles by completion activity (puzzle_results). The bucket
+    // histogram is computed inline from outcome + guess_count rather than
+    // from aphydle.daily_distribution (which sources from the racy
+    // aphydle.attempts table). plant_id is a best-effort join to daily_log.
     const lastPuzzleRows = await sql`
       with recent_puzzles as (
         select distinct puzzle_no
-        from aphydle.attempts
+        from aphydle.puzzle_results
         order by puzzle_no desc
         limit 5
       )
       select rp.puzzle_no::int as puzzle_no,
              dl.plant_id,
-             coalesce(dd.bucket_1,  0)::int as bucket_1,
-             coalesce(dd.bucket_2,  0)::int as bucket_2,
-             coalesce(dd.bucket_3,  0)::int as bucket_3,
-             coalesce(dd.bucket_4,  0)::int as bucket_4,
-             coalesce(dd.bucket_5,  0)::int as bucket_5,
-             coalesce(dd.bucket_6,  0)::int as bucket_6,
-             coalesce(dd.bucket_7,  0)::int as bucket_7,
-             coalesce(dd.bucket_8,  0)::int as bucket_8,
-             coalesce(dd.bucket_9,  0)::int as bucket_9,
-             coalesce(dd.bucket_10, 0)::int as bucket_10,
-             coalesce(dd.bucket_lost, 0)::int as bucket_lost,
-             coalesce(dd.total_played, 0)::int as total_played,
-             (select count(*)::int from aphydle.attempts a where a.puzzle_no = rp.puzzle_no) as players
+             sum(case when pr.outcome = 'won' and pr.guess_count = 1  then 1 else 0 end)::int as bucket_1,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 2  then 1 else 0 end)::int as bucket_2,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 3  then 1 else 0 end)::int as bucket_3,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 4  then 1 else 0 end)::int as bucket_4,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 5  then 1 else 0 end)::int as bucket_5,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 6  then 1 else 0 end)::int as bucket_6,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 7  then 1 else 0 end)::int as bucket_7,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 8  then 1 else 0 end)::int as bucket_8,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 9  then 1 else 0 end)::int as bucket_9,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 10 then 1 else 0 end)::int as bucket_10,
+             sum(case when pr.outcome = 'lost' then 1 else 0 end)::int as bucket_lost,
+             count(pr.id)::int as total_played,
+             count(pr.id)::int as players
       from recent_puzzles rp
       left join aphydle.daily_log dl on dl.puzzle_no = rp.puzzle_no
-      left join aphydle.daily_distribution dd on dd.puzzle_no = rp.puzzle_no
+      left join aphydle.puzzle_results pr on pr.puzzle_no = rp.puzzle_no
+      group by rp.puzzle_no, dl.plant_id
       order by rp.puzzle_no desc
     `
 
@@ -13653,17 +13661,19 @@ app.get('/api/admin/aphydle-analytics', async (req, res) => {
       } catch { /* swallow — names are nice-to-have */ }
     }
 
-    // Totals over the window (same windowing as the per-day series above).
+    // Totals over the window. Plays/guesses/wins from puzzle_results so
+    // they reflect finalised outcomes rather than the racy attempts state.
     const totalsRows = await sql`
       select
         coalesce((select count(*)::int from aphydle.page_visits
                   where visited_at >= ${cutoffISO}::timestamptz), 0) as visits_total,
-        coalesce((select count(*)::int from aphydle.attempts
+        coalesce((select count(*)::int from aphydle.puzzle_results
                   where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as plays_total,
-        coalesce((select sum(attempt_no)::int from aphydle.attempts
+        coalesce((select sum(guess_count)::int from aphydle.puzzle_results
                   where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as guesses_total,
-        coalesce((select sum(case when is_correct then 1 else 0 end)::int from aphydle.attempts
-                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as wins_total
+        coalesce((select count(*)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}
+                    and outcome = 'won'), 0) as wins_total
     `
     const tot = totalsRows[0] || {}
 
