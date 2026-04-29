@@ -2920,23 +2920,27 @@ WantedBy=multi-user.target
 EOF
 "
 
-# Aphydle static-server unit (only installed when Aphydle was set up)
+# Aphydle front-server unit (only installed when Aphydle was set up).
+# Aphydle ships its own server.mjs which static-serves dist/ and renders SSR
+# HTML for crawlers on /puzzle/<n>/ and /puzzle/. EnvironmentFile pulls the
+# Supabase credentials and VITE_APP_SITE_URL / VITE_APP_OG_IMAGE the SSR path
+# needs at request time (Vite only injected those at build time).
 APHYDLE_SERVICE_FILE="/etc/systemd/system/$SERVICE_APHYDLE.service"
-APHYDLE_SERVE_SCRIPT="$REPO_DIR/scripts/aphydle-server.mjs"
+APHYDLE_SERVE_SCRIPT="$APHYDLE_DIR/server.mjs"
 if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_SERVE_SCRIPT" ]]; then
   log "Installing Aphydle systemd unit ($SERVICE_APHYDLE)…"
   $SUDO bash -c "cat > '$APHYDLE_SERVICE_FILE' <<EOF
 [Unit]
-Description=Aphydle daily plant guessing game (static bundle server)
+Description=Aphydle daily plant guessing game (SSR front-server)
 Wants=network-online.target
 After=network-online.target
 
 [Service]
 User=www-data
 Group=www-data
+EnvironmentFile=-$APHYDLE_DIR/.env
 Environment=APHYDLE_HOST=$APHYDLE_HOST
 Environment=APHYDLE_PORT=$APHYDLE_PORT
-Environment=APHYDLE_DIST=$APHYDLE_WEB_ROOT_LINK/dist
 WorkingDirectory=$APHYDLE_DIR
 ExecStart=/usr/bin/node $APHYDLE_SERVE_SCRIPT
 Restart=always
@@ -2951,7 +2955,7 @@ WantedBy=multi-user.target
 EOF
 "
 else
-  log "Aphydle systemd unit not installed (Aphydle setup skipped or server script missing)."
+  log "Aphydle systemd unit not installed (Aphydle setup skipped or server.mjs missing)."
   # Clean up stale unit if Aphydle was disabled after a previous install
   if [[ -f "$APHYDLE_SERVICE_FILE" && "${APHYDLE_SETUP_DONE:-0}" != "1" ]]; then
     log "Removing stale Aphydle unit at $APHYDLE_SERVICE_FILE"
