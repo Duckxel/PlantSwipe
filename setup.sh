@@ -1681,6 +1681,21 @@ setup_aphydle() {
     fi
   fi
 
+  # Patch Aphydle source for image-proxy CORS wrapping. Mirrors the same step
+  # in scripts/refresh-aphydle.sh so a fresh `setup.sh` run produces an
+  # already-patched build — without this, the build embedded the unmodified
+  # upstream src/lib/data.js and operators had to re-run refresh-aphydle.sh
+  # afterward to get a working image proxy. The patcher is idempotent and
+  # fails loudly if the upstream function shape changes.
+  local aphydle_patcher="$REPO_DIR/scripts/aphydle-patch-image-proxy.mjs"
+  if [[ -f "$aphydle_patcher" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
+    log "Patching Aphydle source for image-proxy CORS wrapping…"
+    if ! sudo -u "$SERVICE_USER" -H node "$aphydle_patcher" "$APHYDLE_DIR" 2>&1; then
+      log "[ERROR] Aphydle image-proxy patcher failed; aborting Aphydle setup to avoid shipping a broken build."
+      return 1
+    fi
+  fi
+
   # Locate Bun for the service user (matches plant-swipe convention)
   local owner_home owner_bun_dir owner_bun_bin
   owner_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
