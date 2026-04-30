@@ -1790,7 +1790,7 @@ export async function ensureTaskOccurrence(taskId: string, gardenPlantId: string
       .from('garden_plant_task_occurrences')
       .upsert(
         { task_id: taskId, garden_plant_id: gardenPlantId, due_at: dueAtIso, required_count: requiredCount },
-        { onConflict: 'task_id, due_at' }
+        { onConflict: 'task_id,due_at' }
       )
     if (error) throw error
   } catch (e: unknown) {
