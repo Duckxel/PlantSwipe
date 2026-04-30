@@ -40,13 +40,13 @@ export function AdminExportPanel() {
     setPlants((data ?? []) as PlantLite[]); setLoading(false);
   })(); }, []);
 
-  const searchPlants = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
-    const q = query.toLowerCase().trim();
-    return plants.filter((p) => !q || `${p.common_name || ""} ${p.scientific_name}`.toLowerCase().includes(q)).slice(0, 80).map((p) => ({
-      id: p.id, label: p.common_name || p.scientific_name, description: p.scientific_name, meta: p.native_area || "Plant",
-      icon: p.image_url ? <img src={p.image_url} className="h-8 w-8 rounded object-cover" /> : undefined,
-    }));
-  }, [plants]);
+  const plantOptions = React.useMemo<SearchItemOption[]>(() => plants.map((p) => ({
+    id: p.id,
+    label: p.common_name || p.scientific_name,
+    description: p.scientific_name,
+    meta: p.native_area || "Plant",
+    icon: p.image_url ? <img src={p.image_url} className="h-8 w-8 rounded object-cover" /> : undefined,
+  })), [plants]);
 
   const selected = React.useMemo(() => plants.find((p) => p.id === pickedOption?.id) ?? null, [plants, pickedOption]);
   const generate = React.useCallback(() => {
@@ -82,7 +82,7 @@ export function AdminExportPanel() {
     <div className="rounded-2xl border p-4 bg-white/90 dark:bg-[#1b1b1d] space-y-3">
       <div className="text-sm text-stone-500">Choose a plant, then launch generation.</div>
       <div className="flex flex-wrap gap-3 items-center">
-        <SearchItem value={pickedOption?.id ?? null} onSelect={setPickedOption} onSearch={searchPlants} initialOption={pickedOption} placeholder="Pick a plant" title="Pick plant" description="Select a plant for social card generation" searchPlaceholder="Search plant" className="min-w-[280px]"/>
+        <SearchItem value={pickedOption?.id ?? null} onSelect={setPickedOption} options={plantOptions} initialOption={pickedOption} placeholder="Pick a plant" title="Pick plant" description="Select a plant for social card generation" searchPlaceholder="Search plant" className="min-w-[280px]"/>
         <Button onClick={generate} disabled={!selected}><WandSparkles className="h-4 w-4 mr-2"/>Generate 4 cards</Button>
         <Button variant="outline" onClick={regenerateWildFact} disabled={!generatedPlant}><Sparkles className="h-4 w-4 mr-2"/>New wild fact</Button>
         <Button onClick={exportZip} disabled={!generatedPlant}><Download className="h-4 w-4 mr-2"/>Download .zip</Button>
