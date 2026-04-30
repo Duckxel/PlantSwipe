@@ -5210,6 +5210,109 @@ app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
   res.status(204).end()
 })
 
+// Admin/Editor: Generate a verified, story-worthy historical fact about a
+// plant for the social-export "Deep Knowledge" card. The card surfaces a
+// strange use case, discovery story, or macabre/folklore note — the kind of
+// thing that makes a reader want to share or learn more — capped to a
+// ~280-char tweet-sized snippet so it fits on the IG card without wrapping
+// past three lines. Refuses to fabricate when nothing verifiable exists.
+app.post('/api/admin/ai/plant-historical-fact', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const scientificName = typeof body.scientificName === 'string' ? body.scientificName.trim() : ''
+    const family = typeof body.family === 'string' ? body.family.trim() : ''
+    const maxChars = Math.max(120, Math.min(360, Number(body.maxChars) || 280))
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const instructions = `You are a botanical historian writing a single, verified, share-worthy fact for an Instagram card. The reader should finish the sentence and think "I never knew that".
+
+PRIORITIZE these angles, in order:
+1. A documented strange or unexpected historical use (folk medicine, ritual, dye, weapon, poison, embalming, perfumery — anything genuinely odd that's in the historical record)
+2. A discovery / naming / explorer story (botanist who found it, era it reached Europe, why it was so prized it triggered a craze, a smuggling story, etc.)
+3. A macabre or dark folklore association that's actually attested (witch trials, funeral rites, executions, gallows plants, graveyard symbolism)
+4. A surprising fact about its biology only if it has a story attached (e.g. "the seeds were so toxic Victorian poisoners favored them")
+
+HARD RULES:
+- ONLY include facts you are confident are TRUE and historically attested. If you don't know a verified strange fact, return a single empty string.
+- Never invent dates, names, or events.
+- Never use hedging like "some say", "it is rumored", "legend has it" — only state attested history.
+- One self-contained sentence (max two short sentences).
+- Hard cap: ${maxChars} characters total. Aim for ~80% of that.
+- Plain prose, no markdown, no quotes around the whole thing, no leading "Did you know" or similar filler.
+- Return ONLY a JSON object: {"fact": "...", "confidence": "high"|"medium"|"low"}.
+- Set confidence "low" if you had to reach for the fact; the caller may discard low-confidence outputs.`
+
+    const promptParts = [`Plant: ${plantName}`]
+    if (scientificName) promptParts.push(`Scientific name: ${scientificName}`)
+    if (family) promptParts.push(`Family: ${family}`)
+    promptParts.push(`Return one verified historical fact as JSON: {"fact": "...", "confidence": "high"|"medium"|"low"}.`)
+    const prompt = promptParts.join('\n')
+
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'medium' },
+      instructions,
+      input: prompt,
+    })
+    logAiUsage({
+      userId: caller,
+      feature: 'admin_plant_historical_fact',
+      model: openaiModel,
+      response,
+      metadata: { plantName, scientificName },
+    })
+
+    const raw = (response.output_text || '').trim()
+    let fact = ''
+    let confidence = 'low'
+    try {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (m) {
+        const parsed = JSON.parse(m[0])
+        if (typeof parsed.fact === 'string') fact = parsed.fact.trim()
+        if (typeof parsed.confidence === 'string') confidence = parsed.confidence.trim().toLowerCase()
+      } else if (raw && !raw.includes('{')) {
+        // Fallback: model returned bare prose.
+        fact = raw.replace(/^["']|["']$/g, '').trim()
+        confidence = 'medium'
+      }
+    } catch {
+      fact = raw.replace(/^["']|["']$/g, '').trim()
+      confidence = 'low'
+    }
+
+    if (fact.length > maxChars) {
+      // Hard-truncate at a word boundary so a single-line ellipsis lands cleanly.
+      const cut = fact.slice(0, maxChars)
+      const lastSpace = cut.lastIndexOf(' ')
+      fact = (lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
+    }
+
+    res.json({ success: true, fact, confidence })
+  } catch (err) {
+    console.error('[server] AI historical fact failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to generate fact' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-historical-fact', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // ========================================
 // External Image Sources (GBIF + Smithsonian)
 // ========================================

@@ -163,6 +163,69 @@ type IconSet = {
   sunCream: HTMLImageElement | null;
 };
 
+// Build the same auth headers shape lib/aiPlantFill.ts uses so the export
+// panel hits the admin AI endpoints with both Supabase JWT (the canonical
+// auth path) and the static admin token (fallback for the local dev shell
+// where session refresh is flaky).
+async function buildAdminAuthHeaders(): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "application/json",
+  };
+  try {
+    const session = (await supabase.auth.getSession()).data.session;
+    const token = session?.access_token;
+    if (token) headers["Authorization"] = `Bearer ${token}`;
+  } catch {
+    /* ignore */
+  }
+  try {
+    const t = (
+      globalThis as typeof globalThis & {
+        __ENV__?: { VITE_ADMIN_STATIC_TOKEN?: unknown };
+      }
+    ).__ENV__?.VITE_ADMIN_STATIC_TOKEN;
+    if (t) headers["X-Admin-Token"] = String(t);
+  } catch {
+    /* ignore */
+  }
+  return headers;
+}
+
+async function fetchHistoricalFact(
+  plantName: string,
+  scientificName: string,
+  family: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (!plantName) return "";
+  try {
+    const headers = await buildAdminAuthHeaders();
+    const res = await fetch("/api/admin/ai/plant-historical-fact", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        plantName,
+        scientificName,
+        family,
+        maxChars: 280,
+      }),
+      signal,
+    });
+    if (!res.ok) return "";
+    const data = (await res.json()) as {
+      success?: boolean;
+      fact?: string;
+      confidence?: string;
+    };
+    if (!data?.success || typeof data.fact !== "string") return "";
+    if (data.confidence === "low") return "";
+    return data.fact.trim();
+  } catch {
+    return "";
+  }
+}
+
 async function ensureFontsReady() {
   if (typeof document === "undefined" || !document.fonts) return;
   try {
@@ -1136,15 +1199,14 @@ function drawCardDeep(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   origin: string[],
-  worldMap: HTMLImageElement | null,
-  presentation: string,
+  worldMapFallback: HTMLImageElement | null,
+  originMap: HTMLImageElement | null,
+  historicalFact: string,
   logoWhite: HTMLImageElement | null,
 ) {
-  // Background
+  // Background.
   ctx.fillStyle = C.forest;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
-
-  // soft radial vignette
   const rg = ctx.createRadialGradient(
     CARD_W / 2,
     CARD_H * 0.35,
@@ -1158,145 +1220,177 @@ function drawCardDeep(
   ctx.fillStyle = rg;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // World map silhouette behind origin
-  if (worldMap) {
-    ctx.save();
-    ctx.globalAlpha = 0.18;
-    const mw = CARD_W - 120;
-    const mh = mw / 2; // SVG is 1024×512
-    drawCoverImage(ctx, worldMap, 60, 280, mw, mh);
-    ctx.restore();
-  }
+  drawBrandHeader(ctx, 3, 4, "SCIENCE", C.cream, C.mint, logoWhite);
 
-  drawBrandHeader(ctx, 3, 4, "ORIGIN", C.cream, C.mint, logoWhite);
-
-  // eyebrow
+  // — Title ----------------------------------------------------------
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = C.mint;
-  ctx.font = `600 18px ${FONT_MONO}`;
+  ctx.font = `600 14px ${FONT_MONO}`;
   ctx.letterSpacing = "8px";
-  ctx.fillText("DEEP KNOWLEDGE", 64, 200);
+  ctx.fillText("DEEP KNOWLEDGE · 03", 64, 195);
   ctx.letterSpacing = "0px";
-
-  // hairline
   ctx.strokeStyle = "rgba(91,211,148,0.5)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(64, 215);
-  ctx.lineTo(290, 215);
+  ctx.moveTo(64, 207);
+  ctx.lineTo(140, 207);
   ctx.stroke();
 
-  // ORIGIN — uppercase mono with wrapping
   const originText = (
     origin.length ? joinPretty(origin, " · ", 2) : "Cultivated Worldwide"
   ).toUpperCase();
-  ctx.font = `700 56px ${FONT_MONO}`;
+  ctx.font = `700 44px ${FONT_MONO}`;
   ctx.fillStyle = C.cream;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "3px";
-  const originBottom = drawWrap(ctx, originText, 64, 290, CARD_W - 128, 70, 3);
+  const originBottom = drawWrap(ctx, originText, 64, 250, CARD_W - 128, 56, 2);
   ctx.letterSpacing = "0px";
 
-  // pinpoint coordinates-style row
-  ctx.font = `500 16px ${FONT_MONO}`;
+  ctx.font = `500 14px ${FONT_MONO}`;
   ctx.fillStyle = "rgba(168,240,204,0.7)";
   ctx.letterSpacing = "5px";
   ctx.fillText(
     `◯ ${origin.length > 1 ? "NATIVE RANGE" : "NATIVE TO"}`,
     64,
-    originBottom + 36,
+    originBottom + 28,
   );
   ctx.letterSpacing = "0px";
 
-  // Stats grid 2 × 3
-  const gridTop = 700;
-  const gx = 64;
-  const gw = (CARD_W - 128 - 24) / 2;
-  const gh = 145;
-  const gap = 24;
+  // — Map block ------------------------------------------------------
+  // Same map asset (and pin coordinates) the public Plant Info page uses, so
+  // the carousel reads as part of the same visual system.
+  const mapTop = originBottom + 64;
+  const mapX = 64;
+  const mapW = CARD_W - 128;
+  const mapAR = ORIGIN_MAP_VIEW_W / ORIGIN_MAP_VIEW_H; // 1.637
+  const mapH = Math.round(mapW / mapAR);
 
-  const climate = joinPretty(asArr(plant.climate));
-  const lifecycle = joinPretty(asArr(plant.life_cycle));
-  const foliage = joinPretty(asArr(plant.foliage_persistence));
-  const heightCm = Number(plant.height_cm) || 0;
-  const heightStr =
-    heightCm > 0
-      ? heightCm >= 100
-        ? `${(heightCm / 100).toFixed(heightCm >= 1000 ? 0 : 1)} m`
-        : `${heightCm} cm`
-      : "—";
-  const wingCm = Number(plant.wingspan_cm) || 0;
-  const wingStr =
-    wingCm > 0
-      ? wingCm >= 100
-        ? `${(wingCm / 100).toFixed(wingCm >= 1000 ? 0 : 1)} m`
-        : `${wingCm} cm`
-      : "—";
-  const tMin = plant.temperature_min;
-  const tMax = plant.temperature_max;
-  const tempStr =
-    tMin != null && tMax != null
-      ? `${tMin}° / ${tMax}°C`
-      : tMin != null
-        ? `min ${tMin}°C`
-        : tMax != null
-          ? `max ${tMax}°C`
-          : "—";
+  // Backing card so the map sits on its own surface.
+  roundRectPath(ctx, mapX, mapTop, mapW, mapH, 22);
+  ctx.fillStyle = "rgba(22,39,29,0.7)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(91,211,148,0.25)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
 
-  const cells: Array<{ k: string; v: string }> = [
-    { k: "Climate", v: climate },
-    { k: "Life Cycle", v: lifecycle },
-    { k: "Foliage", v: foliage },
-    { k: "Height", v: heightStr },
-    { k: "Wingspan", v: wingStr },
-    { k: "Temperature", v: tempStr },
-  ];
-
-  cells.forEach((cell, i) => {
-    const cx = gx + (i % 2) * (gw + gap);
-    const cy = gridTop + Math.floor(i / 2) * (gh + gap);
-    roundRectPath(ctx, cx, cy, gw, gh, 18);
-    ctx.fillStyle = "rgba(22,39,29,0.85)";
+  ctx.save();
+  roundRectPath(ctx, mapX, mapTop, mapW, mapH, 22);
+  ctx.clip();
+  const mapImg = originMap || worldMapFallback;
+  if (mapImg) {
+    ctx.globalAlpha = 0.35;
+    drawCoverImage(ctx, mapImg, mapX, mapTop, mapW, mapH);
+    ctx.globalAlpha = 1;
+  }
+  // Plot a glowing pin per recognised origin country.
+  const sx = mapW / ORIGIN_MAP_VIEW_W;
+  const sy = mapH / ORIGIN_MAP_VIEW_H;
+  for (const o of origin) {
+    const coords = matchOriginToCoords(o);
+    if (!coords) continue;
+    const px = mapX + (coords[0] - ORIGIN_MAP_VIEW_X) * sx;
+    const py = mapTop + (coords[1] - ORIGIN_MAP_VIEW_Y) * sy;
+    // pulse halo
+    ctx.beginPath();
+    ctx.arc(px, py, 18, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(91,211,148,0.18)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(91,211,148,0.25)";
+    // glow
+    ctx.beginPath();
+    ctx.arc(px, py, 11, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(91,211,148,0.32)";
+    ctx.fill();
+    // pin dot
+    ctx.beginPath();
+    ctx.arc(px, py, 6, 0, Math.PI * 2);
+    ctx.fillStyle = C.mint;
+    ctx.fill();
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // Origin tags below the map.
+  let tagY = mapTop + mapH + 22;
+  if (origin.length > 0) {
+    let tagX = 64;
+    for (const o of origin.slice(0, 4)) {
+      const lbl = tidy(o).toUpperCase();
+      ctx.font = `700 12px ${FONT_MONO}`;
+      const w = ctx.measureText(lbl).width + 28;
+      if (tagX + w > CARD_W - 64) break;
+      drawChip(ctx, tagX, tagY, lbl, {
+        bg: "rgba(91,211,148,0.15)",
+        fg: C.mintGlow,
+        border: "rgba(91,211,148,0.5)",
+        size: 12,
+        family: FONT_MONO,
+        weight: "700",
+        paddingX: 14,
+        paddingY: 7,
+      });
+      tagX += w + 8;
+    }
+    tagY += 36;
+  }
+
+  // — Historical fact callout ---------------------------------------
+  if (historicalFact) {
+    const factTop = tagY + 12;
+    const factX = 64;
+    const factW = CARD_W - 128;
+    const factH = 280;
+    roundRectPath(ctx, factX, factTop, factW, factH, 22);
+    ctx.fillStyle = "rgba(245,239,226,0.06)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(245,239,226,0.18)";
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    ctx.fillStyle = C.mint;
-    ctx.font = `600 13px ${FONT_MONO}`;
+    // Eyebrow with tracked accent.
+    ctx.fillStyle = C.gold;
+    ctx.font = `700 12px ${FONT_MONO}`;
     ctx.textAlign = "left";
-    ctx.letterSpacing = "5px";
-    ctx.fillText(cell.k.toUpperCase(), cx + 22, cy + 36);
+    ctx.textBaseline = "alphabetic";
+    ctx.letterSpacing = "6px";
+    ctx.fillText("◇ HISTORICAL · ARCHIVED", factX + 24, factTop + 36);
     ctx.letterSpacing = "0px";
 
-    const valSize = fitText(
-      ctx,
-      cell.v,
-      gw - 44,
-      32,
-      18,
-      "700",
-      FONT_MONO,
-    );
-    ctx.font = `700 ${valSize}px ${FONT_MONO}`;
-    ctx.fillStyle = C.cream;
-    ctx.fillText(cell.v, cx + 22, cy + 90);
-  });
+    // Big quote-mark accent.
+    ctx.font = `700 110px ${FONT_MONO}`;
+    ctx.fillStyle = "rgba(224,178,82,0.18)";
+    ctx.fillText('"', factX + 24, factTop + 130);
 
-  // Bottom: presentation snippet (italic serif)
-  if (presentation) {
-    const bx = 64;
-    const by = gridTop + 3 * (gh + gap) + 16;
-    ctx.fillStyle = "rgba(168,240,204,0.5)";
-    ctx.font = `600 12px ${FONT_MONO}`;
+    // Fact body.
+    ctx.fillStyle = C.cream;
+    ctx.font = `500 22px ${FONT_MONO}`;
+    drawWrap(ctx, historicalFact, factX + 24, factTop + 90, factW - 48, 32, 6);
+
+    // Source line.
+    ctx.fillStyle = "rgba(168,240,204,0.6)";
+    ctx.font = `500 11px ${FONT_MONO}`;
     ctx.letterSpacing = "5px";
-    ctx.fillText("FIELD NOTES", bx, by);
+    ctx.fillText("VERIFIED HISTORICAL RECORD", factX + 24, factTop + factH - 24);
     ctx.letterSpacing = "0px";
-
-    ctx.fillStyle = C.cream;
-    ctx.font = `400 22px ${FONT_MONO}`;
-    drawWrap(ctx, `"${presentation}"`, bx, by + 36, CARD_W - 128, 30, 3);
+  } else if (plant) {
+    // No fact returned — fall back to a presentation snippet so the card
+    // doesn't have a yawning gap.
+    const presentation = String(
+      (plant as { presentation?: string }).presentation || "",
+    ).trim();
+    if (presentation) {
+      const bx = 64;
+      const by = tagY + 24;
+      ctx.fillStyle = "rgba(168,240,204,0.5)";
+      ctx.font = `600 12px ${FONT_MONO}`;
+      ctx.letterSpacing = "5px";
+      ctx.fillText("FIELD NOTES", bx, by);
+      ctx.letterSpacing = "0px";
+      ctx.fillStyle = C.cream;
+      ctx.font = `400 20px ${FONT_MONO}`;
+      drawWrap(ctx, presentation, bx, by + 36, CARD_W - 128, 28, 4);
+    }
   }
 
   drawBrandFooter(ctx, C.cream, C.mintGlow);
@@ -1470,10 +1564,106 @@ type Bundle = {
    */
   images: HTMLImageElement[];
   worldMap: HTMLImageElement | null;
+  /**
+   * Pixelated origin map used by the public Plant Info page; same asset, same
+   * coordinate system, so card 3's pins line up identically. Null until the
+   * remote SVG finishes loading (Card 3 falls back to the local silhouette).
+   */
+  originMap: HTMLImageElement | null;
+  /**
+   * AI-generated, verified historical fact about the plant — surfaced on Card
+   * 3 (Deep Knowledge). Empty string when generation fails or returns
+   * low-confidence output (better to show no fact than a fabricated one).
+   */
+  historicalFact: string;
   icons: IconSet | null;
   logoWhite: HTMLImageElement | null;
   logoBlack: HTMLImageElement | null;
 };
+
+// Country → [x, y] coords in the same SVG viewBox the Plant Info page uses
+// (103.51 165.78 → 924, 667). Synced from PlantInfoPage.tsx — keep in sync if
+// new entries are added there.
+const ORIGIN_MAP_URL =
+  "https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg";
+const ORIGIN_MAP_VIEW_X = 103.51;
+const ORIGIN_MAP_VIEW_Y = 165.78;
+const ORIGIN_MAP_VIEW_W = 820.44;
+const ORIGIN_MAP_VIEW_H = 501.3;
+const ORIGIN_COUNTRY_COORDS: Record<string, [number, number]> = {
+  "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
+  Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
+  Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
+  "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
+  Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
+  Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
+  Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
+  "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
+  Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
+  Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
+  "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
+  Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
+  Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
+  Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
+  Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
+  Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
+  Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
+  "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
+  Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
+  "Côte d'Ivoire": [464.0, 385.3], Cameroon: [504.0, 391.0], "Democratic Republic of the Congo": [542.0, 415.0],
+  Angola: [524.0, 446.0], Mozambique: [570.0, 470.0], Zimbabwe: [553.0, 468.0], Uganda: [570.3, 408.6],
+  Rwanda: [565.0, 415.0], "Ivory Coast": [464.0, 385.3], Mali: [475.0, 355.0], "Burkina Faso": [478.0, 368.0],
+  Niger: [500.0, 355.0], Chad: [520.0, 360.0], Sudan: [560.0, 355.0], Libya: [520.0, 320.0],
+  Venezuela: [298.0, 381.0], Ecuador: [265.0, 415.0], Bolivia: [304.0, 465.0], Paraguay: [318.0, 480.0],
+  Uruguay: [326.0, 508.0], "Costa Rica": [237.0, 370.0], Panama: [250.0, 375.0], Guatemala: [220.0, 350.0],
+  Honduras: [230.0, 354.0], "El Salvador": [223.0, 358.0], Nicaragua: [235.0, 362.0], Cuba: [252.0, 330.0],
+  "Dominican Republic": [278.0, 338.0], Jamaica: [261.0, 340.0], "Puerto Rico": [286.0, 338.0],
+  "Trinidad and Tobago": [298.0, 368.0], Haiti: [273.0, 338.0],
+  Iraq: [590.0, 305.0], Iran: [618.0, 308.0], Afghanistan: [644.0, 305.0], Myanmar: [733.0, 348.0],
+  Cambodia: [756.0, 370.0], Laos: [750.0, 348.0], "North Korea": [801.0, 280.0], Mongolia: [740.0, 264.0],
+  Kazakhstan: [645.0, 260.0], Uzbekistan: [635.0, 275.0], Turkmenistan: [625.0, 285.0],
+  Kyrgyzstan: [658.0, 275.0], Tajikistan: [650.0, 285.0], Georgia: [568.0, 275.0], Armenia: [575.0, 280.0],
+  Azerbaijan: [580.0, 278.0], Jordan: [568.0, 318.0], Lebanon: [565.0, 305.0], Syria: [573.0, 298.0],
+  Kuwait: [600.0, 320.0], Bahrain: [607.0, 325.0], Qatar: [610.0, 328.0], Oman: [620.0, 345.0],
+  Yemen: [600.0, 350.0], "Papua New Guinea": [868.0, 430.0], Fiji: [920.0, 465.0],
+  Madagascar: [585.0, 470.0], Mauritius: [605.0, 468.0], Réunion: [600.0, 472.0],
+  "Bosnia and Herzegovina": [521.0, 272.0], Slovenia: [513.0, 264.0], "North Macedonia": [533.0, 275.0],
+  Albania: [529.0, 278.0], Montenegro: [525.0, 274.0], Kosovo: [530.0, 273.0], Moldova: [545.0, 258.0],
+  Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
+};
+
+function normalizeCountryName(name: string): string {
+  return name
+    .normalize("NFKD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/[_-]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+const NORMALIZED_ORIGIN_COORDS: Array<{ normalized: string; coords: [number, number] }> =
+  Object.entries(ORIGIN_COUNTRY_COORDS).map(([country, coords]) => ({
+    normalized: normalizeCountryName(country),
+    coords,
+  }));
+
+function matchOriginToCoords(origin: string): [number, number] | null {
+  const trimmed = origin.trim();
+  if (ORIGIN_COUNTRY_COORDS[trimmed]) return ORIGIN_COUNTRY_COORDS[trimmed];
+  const base = trimmed.replace(/\s*\(.*?\)\s*$/, "").trim();
+  if (ORIGIN_COUNTRY_COORDS[base]) return ORIGIN_COUNTRY_COORDS[base];
+  const norm = normalizeCountryName(base);
+  for (const entry of NORMALIZED_ORIGIN_COORDS) {
+    if (entry.normalized === norm) return entry.coords;
+  }
+  for (const entry of NORMALIZED_ORIGIN_COORDS) {
+    if (entry.normalized.includes(norm) || norm.includes(entry.normalized)) {
+      return entry.coords;
+    }
+  }
+  return null;
+}
 
 // Pick the first defined image from the bundle, falling back through the array
 // so an off-by-one (e.g. plant has only 1 image, identity wants index 1) still
@@ -1526,7 +1716,8 @@ async function renderCardCanvas(
         b.plant,
         b.origin,
         b.worldMap,
-        b.presentation,
+        b.originMap,
+        b.historicalFact,
         b.logoWhite,
       );
       break;
@@ -1555,6 +1746,10 @@ export function AdminExportPanel() {
   const [loading, setLoading] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const [worldMap, setWorldMap] = React.useState<HTMLImageElement | null>(null);
+  // The pixelated world map used by the public Plant Info page. Loaded once
+  // and shared with Card 3's origin map. Falls through to the existing
+  // worldMapDarkUrl fallback if the asset can't be fetched (CORS, offline).
+  const [originMap, setOriginMap] = React.useState<HTMLImageElement | null>(null);
   const [icons, setIcons] = React.useState<IconSet | null>(null);
   const [logoWhite, setLogoWhite] = React.useState<HTMLImageElement | null>(null);
   const [logoBlack, setLogoBlack] = React.useState<HTMLImageElement | null>(null);
@@ -1569,6 +1764,11 @@ export function AdminExportPanel() {
     void ensureFontsReady();
     void loadImage(worldMapDarkUrl, { crossOrigin: null }).then((img) => {
       if (!cancelled) setWorldMap(img);
+    });
+    // Plant Info's pixelated origin map. Goes through loadCanvasImage so a
+    // missing CORS header on media.aphylia.app falls back to /api/image-proxy.
+    void loadCanvasImage(ORIGIN_MAP_URL).then((img) => {
+      if (!cancelled) setOriginMap(img);
     });
     void loadImage("/icons/icon-500_transparent_white.png", { crossOrigin: null }).then(
       (img) => {
@@ -1765,12 +1965,16 @@ export function AdminExportPanel() {
               (USE_PRIORITY[b.use ?? ""] ?? 99),
           )
           .slice(0, 4);
-      const loaded = await Promise.all(
-        rawImgs.map((r) => loadCanvasImage(r.link)),
-      );
-      const images = loaded.filter(
-        (i): i is HTMLImageElement => !!i,
-      );
+      // Fire image loads + AI fact in parallel so the slow OpenAI hop
+      // overlaps with the network round-trips for the photos.
+      const plantNameStr = String(plant.name || "").trim();
+      const sciNameStr = String(plant.scientific_name_species || "").trim();
+      const familyStr = String(plant.family || "").trim();
+      const [loaded, historicalFact] = await Promise.all([
+        Promise.all(rawImgs.map((r) => loadCanvasImage(r.link))),
+        fetchHistoricalFact(plantNameStr, sciNameStr, familyStr),
+      ]);
+      const images = loaded.filter((i): i is HTMLImageElement => !!i);
 
       setBundle({
         plant,
@@ -1781,6 +1985,8 @@ export function AdminExportPanel() {
         colors,
         images,
         worldMap,
+        originMap,
+        historicalFact,
         icons,
         logoWhite,
         logoBlack,
@@ -1788,13 +1994,36 @@ export function AdminExportPanel() {
     } finally {
       setLoading(false);
     }
-  }, [picked, worldMap]);
+  }, [picked, worldMap, originMap, icons, logoWhite, logoBlack]);
 
-  // Splice in the world-map silhouette once it finishes loading after generate.
+  // Splice late-loading static assets back into the active bundle so the
+  // previews repaint when icons/logos/maps finish loading after generate.
   React.useEffect(() => {
-    if (!bundle || !worldMap || bundle.worldMap === worldMap) return;
-    setBundle({ ...bundle, worldMap });
-  }, [worldMap, bundle]);
+    if (!bundle) return;
+    let changed = false;
+    const next = { ...bundle };
+    if (worldMap && bundle.worldMap !== worldMap) {
+      next.worldMap = worldMap;
+      changed = true;
+    }
+    if (originMap && bundle.originMap !== originMap) {
+      next.originMap = originMap;
+      changed = true;
+    }
+    if (icons && bundle.icons !== icons) {
+      next.icons = icons;
+      changed = true;
+    }
+    if (logoWhite && bundle.logoWhite !== logoWhite) {
+      next.logoWhite = logoWhite;
+      changed = true;
+    }
+    if (logoBlack && bundle.logoBlack !== logoBlack) {
+      next.logoBlack = logoBlack;
+      changed = true;
+    }
+    if (changed) setBundle(next);
+  }, [worldMap, originMap, icons, logoWhite, logoBlack, bundle]);
 
   // Single source of truth for preview rendering. Re-fires whenever the bundle
   // changes — including after the worldMap effect above splices in the map.
