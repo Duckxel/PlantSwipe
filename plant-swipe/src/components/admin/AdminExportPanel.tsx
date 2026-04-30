@@ -2413,6 +2413,47 @@ export function AdminExportPanel() {
           blob,
         );
       }
+      // info.txt — drop the assembled Instagram caption (AI body + plant
+      // link + Aphylia CTA + hashtags) into the zip so the user has the
+      // copy-paste post text bundled with the cards. Mirrors what the
+      // textarea + Copy button surface in the UI; identical content so a
+      // poster can grab the zip on one device, the caption on another.
+      const plantName = String(bundle.plant.name || "Plant");
+      const sci = String(bundle.plant.scientific_name_species || "").trim();
+      const headerLines = [
+        `Aphylia · ${plantName}${sci ? ` (${sci})` : ""}`,
+        `Plant page: ${bundle.plantUrl}`,
+        `Generated: ${new Date().toISOString()}`,
+        "",
+        "── INSTAGRAM CAPTION ───────────────────────────────",
+        "",
+      ];
+      const captionForFile = fullCaption || "(caption unavailable)";
+      const tipBlock = bundle.gardenerTip
+        ? [
+            "",
+            "── GARDENER'S NOTE ─────────────────────────────────",
+            "",
+            bundle.gardenerTip,
+          ]
+        : [];
+      const factBlock = bundle.historicalFact
+        ? [
+            "",
+            "── HISTORICAL FACT ─────────────────────────────────",
+            "",
+            bundle.historicalFact,
+          ]
+        : [];
+      const infoText = [
+        ...headerLines,
+        captionForFile,
+        ...tipBlock,
+        ...factBlock,
+        "",
+      ].join("\n");
+      zip.file("info.txt", infoText);
+
       const a = document.createElement("a");
       a.href = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
       a.download = `${stem}-aphylia-cards.zip`;
@@ -2500,38 +2541,64 @@ export function AdminExportPanel() {
 
       {bundle && (
         <div className="rounded-2xl border bg-white/90 dark:bg-[#17171a] p-4 space-y-3">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex items-start justify-between gap-2">
             <div>
               <div className="text-xs uppercase tracking-[0.2em] text-stone-500">
                 Instagram caption
               </div>
               <div className="text-xs text-stone-400 mt-0.5">
-                AI-generated body + plant link + Aphylia CTA + hashtags. Edit
-                inline before posting if you want to tweak the tone.
+                Click the block to select all, or hit Copy. Also saved as
+                <code className="mx-1 px-1 py-0.5 rounded bg-stone-200/80 dark:bg-stone-800 text-[11px]">info.txt</code>
+                inside the ZIP.
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => void copyCaption()}
-              disabled={!fullCaption}
-              className="shrink-0"
-            >
-              {captionCopied ? (
-                <Check className="h-4 w-4 mr-2 text-emerald-500" />
-              ) : (
-                <Copy className="h-4 w-4 mr-2" />
-              )}
-              {captionCopied ? "Copied" : "Copy caption"}
-            </Button>
           </div>
-          <textarea
-            value={fullCaption}
-            readOnly
-            spellCheck={false}
-            rows={10}
-            className="w-full resize-y rounded-xl border bg-stone-50 dark:bg-[#0f1011] dark:border-stone-700/50 p-3 font-mono text-[13px] leading-relaxed text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-          />
+          <div className="group relative rounded-xl border border-stone-300 dark:border-stone-700/60 bg-[#0f1011] shadow-inner overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-stone-800 bg-[#17181b]">
+              <div className="flex items-center gap-1.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+                <span className="ml-2 text-[11px] uppercase tracking-[0.2em] text-stone-400 font-mono">
+                  caption.txt
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => void copyCaption()}
+                disabled={!fullCaption}
+                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-mono transition-colors ${
+                  captionCopied
+                    ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30"
+                    : "bg-stone-800/80 hover:bg-stone-700 text-stone-200 border border-stone-700"
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                {captionCopied ? (
+                  <>
+                    <Check className="h-3.5 w-3.5" /> Copied
+                  </>
+                ) : (
+                  <>
+                    <Copy className="h-3.5 w-3.5" /> Copy
+                  </>
+                )}
+              </button>
+            </div>
+            <pre
+              onClick={(e) => {
+                const range = document.createRange();
+                range.selectNodeContents(e.currentTarget);
+                const sel = window.getSelection();
+                if (sel) {
+                  sel.removeAllRanges();
+                  sel.addRange(range);
+                }
+              }}
+              className="m-0 p-4 max-h-[420px] overflow-auto font-mono text-[13px] leading-relaxed text-stone-100 whitespace-pre-wrap break-words cursor-text selection:bg-emerald-500/30"
+            >
+              {fullCaption || "(caption unavailable)"}
+            </pre>
+          </div>
         </div>
       )}
 
