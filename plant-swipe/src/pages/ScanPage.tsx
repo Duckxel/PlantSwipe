@@ -894,12 +894,21 @@ export const ScanPage: React.FC = () => {
                   <div className="space-y-2">
                     {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => {
                       const thumb = suggestion.similarImages?.[0]
+                      const inDatabase = Boolean(suggestion.matchedPlantId)
                       return (
                         <button
                           key={suggestion.id || idx}
-                          onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
+                          onClick={() => {
+                            if (suggestion.matchedPlantId) {
+                              goToPlantInfo(suggestion.matchedPlantId)
+                            } else {
+                              navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)
+                            }
+                          }}
                           className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
-                          title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
+                          title={inDatabase
+                            ? t('scan.viewPlantDetails', { defaultValue: 'View Plant Details' })
+                            : t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
                         >
                           {/* Thumbnail — same Kindwise call, no extra API cost. Click opens fullscreen. */}
                           <div
@@ -936,19 +945,24 @@ export const ScanPage: React.FC = () => {
                             <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
                               {suggestion.name}
                             </span>
-                            {/* Show infraspecies/cultivar if available */}
-                            {suggestion.infraspecies && (() => {
-                              const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
-                              if (!infraInfo) return null
-                              return (
-                                <div className="flex items-center gap-1 mt-1">
+                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                              {inDatabase && (
+                                <Badge className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
+                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
+                                  {t('scan.inDatabase', { defaultValue: 'In Database' })}
+                                </Badge>
+                              )}
+                              {suggestion.infraspecies && (() => {
+                                const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
+                                if (!infraInfo) return null
+                                return (
                                   <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
                                     <FlaskConical className="h-2.5 w-2.5 mr-1" />
                                     {infraInfo.value}
                                   </Badge>
-                                </div>
-                              )
-                            })()}
+                                )
+                              })()}
+                            </div>
                             {/* Show common names if available */}
                             {suggestion.commonNames && suggestion.commonNames.length > 0 && (
                               <p className="text-xs text-stone-400 mt-0.5 truncate">
@@ -960,7 +974,11 @@ export const ScanPage: React.FC = () => {
                             <Badge variant="outline" className="rounded-full text-xs">
                               {formatProbability(suggestion.probability)}
                             </Badge>
-                            <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            {inDatabase ? (
+                              <ExternalLink className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            ) : (
+                              <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
                           </div>
                         </button>
                       )
