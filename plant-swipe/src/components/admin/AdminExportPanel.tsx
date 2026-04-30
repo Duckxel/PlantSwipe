@@ -1653,152 +1653,247 @@ function drawCardDeep(
 }
 
 // — card 4: WILD CARD CTA ------------------------------------------------
-// Editorial poster: cream paper, coral accent, NO forest green so it doesn't
-// blend with Card 3. The website domain is the visual hero — billboard style —
-// because the entire job of this card is "send the reader to aphylia.app".
+// On-brand recap card. App identity is emerald + cream + dark forest panels
+// (matches Discovery / Plant Info). Plant photo is the hero anchor at the
+// top — without it the card reads as generic typography and breaks
+// continuity with the rest of the carousel. Three concrete reasons to visit
+// the app sit on a clean cream surface, then an emerald CTA pill drives
+// the click.
 
 function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
-  _images: HTMLImageElement[],
+  images: HTMLImageElement[],
   icons: IconSet | null,
-  logoBlack: HTMLImageElement | null,
+  logoWhite: HTMLImageElement | null,
 ) {
-  // Cream paper background. ONE soft coral wash sweeping in from the top-right
-  // corner — that's the only secondary color, no green on this card at all.
-  ctx.fillStyle = C.cream;
+  // App emerald brand colors. Match `emerald-500` / `emerald-600` /
+  // `emerald-700` from tailwind so the card looks like a slice of the
+  // actual product, not a generic poster.
+  const APP_EMERALD = "#10B981"; // emerald-500
+  const APP_EMERALD_DARK = "#059669"; // emerald-600
+  const APP_EMERALD_DEEPER = "#047857"; // emerald-700
+  const APP_PAPER = C.cream; // matches Plant Info light-mode surface
+  const APP_INK = "#0F1F1F"; // dark plant-info panel ink
+
+  // — Background: cream paper with emerald wash on the top-right ------
+  ctx.fillStyle = APP_PAPER;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  const wash = ctx.createRadialGradient(
-    CARD_W * 0.95,
-    -120,
-    100,
-    CARD_W * 0.95,
-    -120,
-    CARD_W * 1.1,
-  );
-  wash.addColorStop(0, "rgba(255,138,101,0.55)");
-  wash.addColorStop(0.45, "rgba(242,200,183,0.32)");
-  wash.addColorStop(1, "rgba(244,239,226,0)");
-  ctx.fillStyle = wash;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
+  // — Hero band: full-width plant photo at the top ---------------------
+  // The lead photo anchors the card to the actual plant the user just read
+  // about. Without it, the card reads as decoupled marketing.
+  const heroH = 700;
+  const hero = images[0] ?? null;
+  if (hero) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, CARD_W, heroH);
+    ctx.clip();
+    drawCoverImage(ctx, hero, 0, 0, CARD_W, heroH);
 
-  // Bottom-left whisper of warm gold for balance — kept very subtle.
-  const corner = ctx.createRadialGradient(
-    -100,
-    CARD_H + 100,
-    0,
-    -100,
-    CARD_H + 100,
-    700,
-  );
-  corner.addColorStop(0, "rgba(224,178,82,0.18)");
-  corner.addColorStop(1, "rgba(244,239,226,0)");
-  ctx.fillStyle = corner;
-  ctx.fillRect(0, 0, CARD_W, CARD_H);
+    // Emerald-tinted gradient overlay at the bottom of the hero so the
+    // headline stays readable without dimming the whole photo.
+    const overlay = ctx.createLinearGradient(0, heroH * 0.45, 0, heroH);
+    overlay.addColorStop(0, "rgba(15,31,31,0)");
+    overlay.addColorStop(0.55, "rgba(15,31,31,0.55)");
+    overlay.addColorStop(1, "rgba(15,31,31,0.92)");
+    ctx.fillStyle = overlay;
+    ctx.fillRect(0, 0, CARD_W, heroH);
 
-  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.ink, C.coral, logoBlack);
+    // Subtle emerald glow on the right edge to tie back to the brand.
+    const glow = ctx.createRadialGradient(
+      CARD_W,
+      heroH * 0.25,
+      0,
+      CARD_W,
+      heroH * 0.25,
+      CARD_W * 0.6,
+    );
+    glow.addColorStop(0, "rgba(16,185,129,0.35)");
+    glow.addColorStop(1, "rgba(16,185,129,0)");
+    ctx.fillStyle = glow;
+    ctx.fillRect(0, 0, CARD_W, heroH);
+    ctx.restore();
+  } else {
+    // No photo available — fall back to an emerald gradient so the card
+    // still reads on-brand. Shouldn't happen for plants we'd export.
+    const g = ctx.createLinearGradient(0, 0, 0, heroH);
+    g.addColorStop(0, APP_EMERALD);
+    g.addColorStop(1, APP_EMERALD_DEEPER);
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, CARD_W, heroH);
+  }
 
-  // — Eyebrow ---------------------------------------------------------
+  // White logo on the photo header so it reads cleanly against the dark
+  // emerald-tinted overlay at the top of the hero.
+  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.cream, "rgba(168,240,204,0.85)", logoWhite);
+
+  // — Headline over the hero (bottom of photo band) -------------------
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.fillStyle = C.coral;
+
+  // Eyebrow on photo
+  ctx.fillStyle = "rgba(168,240,204,0.95)";
   ctx.font = `700 13px ${FONT_MONO}`;
   ctx.letterSpacing = "9px";
-  ctx.fillText("DAILY PLANT ENCYCLOPEDIA", 64, 220);
+  ctx.fillText("LOVED THIS PLANT?", 64, heroH - 180);
   ctx.letterSpacing = "0px";
 
-  // Coral hairline under eyebrow.
-  ctx.strokeStyle = C.coral;
+  // Hairline accent
+  ctx.strokeStyle = APP_EMERALD;
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.moveTo(64, heroH - 165);
+  ctx.lineTo(120, heroH - 165);
+  ctx.stroke();
+
+  // Big headline on photo
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `700 64px ${FONT_MONO}`;
+  ctx.letterSpacing = "2px";
+  ctx.fillText("FIND YOUR NEXT", 64, heroH - 100);
+  ctx.fillStyle = "rgba(168,240,204,0.95)";
+  ctx.fillText("FAVOURITE.", 64, heroH - 40);
+  ctx.letterSpacing = "0px";
+
+  // — Cream content panel below the hero ------------------------------
+  // Three concrete reasons to visit the app — anything less specific reads
+  // as marketing fluff. Pulls from what the app actually offers.
+  const reasonsTop = heroH + 60;
+
+  ctx.fillStyle = APP_EMERALD_DEEPER;
+  ctx.font = `700 12px ${FONT_MONO}`;
+  ctx.letterSpacing = "8px";
+  ctx.fillText("WHAT YOU'LL FIND", 64, reasonsTop);
+  ctx.letterSpacing = "0px";
+
+  ctx.strokeStyle = APP_EMERALD;
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(64, 234);
-  ctx.lineTo(140, 234);
+  ctx.moveTo(64, reasonsTop + 12);
+  ctx.lineTo(120, reasonsTop + 12);
   ctx.stroke();
 
-  // — Headline stack --------------------------------------------------
-  // "JOIN THE / WAITING / LIST" style poster — three short verbs, one per
-  // line, with the verb that points to the website rendered in coral. Reads
-  // top-to-bottom and the eye lands on the URL beneath.
-  ctx.fillStyle = C.ink;
-  ctx.font = `700 84px ${FONT_MONO}`;
-  ctx.letterSpacing = "4px";
-  ctx.fillText("LEARN.", 64, 330);
-  ctx.fillText("GROW.", 64, 420);
-  ctx.fillStyle = C.coral;
-  ctx.fillText("REPEAT.", 64, 510);
-  ctx.letterSpacing = "0px";
+  type Reason = { stat: string; label: string };
+  const reasons: Reason[] = [
+    { stat: "10K+", label: "PLANTS, ALL CURATED" },
+    { stat: "DAILY", label: "NEW DISCOVERIES" },
+    { stat: "REAL", label: "GROWERS' ADVICE" },
+  ];
+  const reasonY = reasonsTop + 50;
+  const reasonRowH = 70;
+  for (let i = 0; i < reasons.length; i++) {
+    const r = reasons[i];
+    const ry = reasonY + i * reasonRowH;
 
-  // — Body line -------------------------------------------------------
-  ctx.fillStyle = C.inkDim;
-  ctx.font = `500 19px ${FONT_MONO}`;
-  drawWrap(
-    ctx,
-    "Daily plant cards — from the windowsill jungle to the wild meadow. Curated, sourced, no noise.",
-    64,
-    580,
-    CARD_W - 128,
-    30,
-    3,
-  );
+    // Emerald check disc
+    const cx = 80;
+    const cy = ry + 18;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.fillStyle = APP_EMERALD;
+    ctx.fill();
+    // White checkmark
+    ctx.strokeStyle = "#FFFFFF";
+    ctx.lineWidth = 3;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.beginPath();
+    ctx.moveTo(cx - 7, cy);
+    ctx.lineTo(cx - 2, cy + 6);
+    ctx.lineTo(cx + 8, cy - 6);
+    ctx.stroke();
 
-  // — Domain billboard ------------------------------------------------
-  // The URL is the hero element. Big mono-typeset ink letters with a
-  // coral underline ribbon — looks like a book title, reads instantly.
-  const billY = 720;
-  const billH = 280;
+    // Stat in big emerald
+    ctx.fillStyle = APP_EMERALD_DARK;
+    ctx.font = `700 28px ${FONT_MONO}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(r.stat, 116, ry + 28);
 
-  // Pure coral block running edge-to-edge as a stage for the URL.
-  ctx.fillStyle = C.coral;
-  ctx.fillRect(0, billY, CARD_W, billH);
+    // Label after stat
+    const statW = ctx.measureText(r.stat).width;
+    ctx.fillStyle = APP_INK;
+    ctx.font = `600 17px ${FONT_MONO}`;
+    ctx.letterSpacing = "3px";
+    ctx.fillText(r.label, 116 + statW + 16, ry + 28);
+    ctx.letterSpacing = "0px";
+  }
 
-  // Subtle stamp lines top + bottom of the billboard for a poster feel.
-  ctx.strokeStyle = "rgba(21,32,26,0.18)";
-  ctx.lineWidth = 1.5;
-  ctx.beginPath();
-  ctx.moveTo(64, billY + 22);
-  ctx.lineTo(CARD_W - 64, billY + 22);
-  ctx.moveTo(64, billY + billH - 22);
-  ctx.lineTo(CARD_W - 64, billY + billH - 22);
-  ctx.stroke();
+  // — Emerald CTA pill (the actual click magnet) ----------------------
+  const ctaY = reasonY + reasons.length * reasonRowH + 30;
+  const ctaH = 96;
+  const ctaX = 64;
+  const ctaW = CARD_W - 128;
 
-  ctx.fillStyle = C.cream;
-  ctx.font = `600 13px ${FONT_MONO}`;
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.letterSpacing = "10px";
-  ctx.fillText("VISIT THE GARDEN", CARD_W / 2, billY + 60);
-  ctx.letterSpacing = "0px";
-
-  // The URL — big, ink, centered.
-  ctx.fillStyle = C.ink;
-  ctx.font = `700 96px ${FONT_MONO}`;
-  ctx.letterSpacing = "2px";
-  const url = "aphylia.app";
-  const urlMetrics = ctx.measureText(url);
-  const urlY = billY + 170;
-  ctx.fillText(url, CARD_W / 2, urlY);
-  ctx.letterSpacing = "0px";
-
-  // Cream underline ribbon under the URL — gives it the billboard "stamp" feel.
-  const underlineW = Math.min(urlMetrics.width + 80, CARD_W - 200);
-  const underlineX = (CARD_W - underlineW) / 2;
-  ctx.fillStyle = C.cream;
-  roundRectPath(ctx, underlineX, urlY + 18, underlineW, 8, 4);
+  // Pill background — emerald gradient so it pops as the action.
+  const ctaGrad = ctx.createLinearGradient(ctaX, ctaY, ctaX + ctaW, ctaY);
+  ctaGrad.addColorStop(0, APP_EMERALD_DARK);
+  ctaGrad.addColorStop(1, APP_EMERALD);
+  roundRectPath(ctx, ctaX, ctaY, ctaW, ctaH, ctaH / 2);
+  ctx.fillStyle = ctaGrad;
   ctx.fill();
 
-  // Sub-line: site tagline, cream over coral.
-  ctx.fillStyle = "rgba(244,239,226,0.85)";
-  ctx.font = `500 16px ${FONT_MONO}`;
-  ctx.letterSpacing = "6px";
-  ctx.fillText("CARDS · CARE · COMMUNITY", CARD_W / 2, billY + billH - 50);
+  // Soft outer shadow simulated as a second blurred fill — using a gradient
+  // shadow stripe under the pill.
+  ctx.save();
+  ctx.shadowColor = "rgba(16,185,129,0.40)";
+  ctx.shadowBlur = 28;
+  ctx.shadowOffsetY = 12;
+  roundRectPath(ctx, ctaX, ctaY, ctaW, ctaH, ctaH / 2);
+  ctx.fillStyle = ctaGrad;
+  ctx.fill();
+  ctx.restore();
+
+  // CTA text
+  ctx.fillStyle = "#FFFFFF";
+  ctx.font = `700 36px ${FONT_MONO}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.letterSpacing = "1px";
+  const ctaText = "aphylia.app";
+  ctx.fillText(ctaText, ctaX + 36, ctaY + ctaH / 2);
   ctx.letterSpacing = "0px";
 
-  // — Downward "read the caption" cue --------------------------------
-  // Ink-on-cream so it doesn't echo Card 3's mint glow.
-  const cueTop = billY + billH + 60;
-  ctx.fillStyle = C.ink;
-  ctx.font = `700 14px ${FONT_MONO}`;
+  // CTA arrow disc on the right
+  const arrCx = ctaX + ctaW - ctaH / 2 - 4;
+  const arrCy = ctaY + ctaH / 2;
+  const arrR = ctaH / 2 - 12;
+  ctx.beginPath();
+  ctx.arc(arrCx, arrCy, arrR, 0, Math.PI * 2);
+  ctx.fillStyle = "#FFFFFF";
+  ctx.fill();
+
+  ctx.strokeStyle = APP_EMERALD_DEEPER;
+  ctx.lineWidth = 4;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  ctx.beginPath();
+  ctx.moveTo(arrCx - 11, arrCy);
+  ctx.lineTo(arrCx + 11, arrCy);
+  ctx.moveTo(arrCx + 3, arrCy - 8);
+  ctx.lineTo(arrCx + 11, arrCy);
+  ctx.lineTo(arrCx + 3, arrCy + 8);
+  ctx.stroke();
+
+  // — Plant-name personalisation under the CTA -----------------------
+  // "Loved arum?" → "open the app and find your next favourite" tone.
+  ctx.fillStyle = APP_INK;
+  ctx.font = `500 15px ${FONT_MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  const nameForLine = tidy(plant.name || "this plant").toUpperCase();
+  const personalLine = `STARTED WITH ${nameForLine} · KEEP EXPLORING`;
+  const personalY = ctaY + ctaH + 40;
+  ctx.letterSpacing = "4px";
+  ctx.fillText(personalLine, CARD_W / 2, personalY);
+  ctx.letterSpacing = "0px";
+
+  // — Downward chevron cue ('caption below') ------------------------
+  const cueTop = personalY + 40;
+  ctx.fillStyle = APP_EMERALD_DARK;
+  ctx.font = `700 13px ${FONT_MONO}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "8px";
@@ -1806,13 +1901,9 @@ function drawCardWild(
   ctx.letterSpacing = "0px";
 
   if (icons?.chevDown) {
-    // Re-tint the chevron stack: the icon was rasterised in mint for Card 3,
-    // but here we want ink so it matches the warm cream/coral palette. We
-    // draw it as a soft-multiply mask against an ink fill.
     const sizes = [
-      { y: cueTop + 24, op: 0.95, sz: 48 },
-      { y: cueTop + 56, op: 0.55, sz: 42 },
-      { y: cueTop + 84, op: 0.28, sz: 36 },
+      { y: cueTop + 14, op: 0.85, sz: 36 },
+      { y: cueTop + 38, op: 0.5, sz: 30 },
     ];
     for (const s of sizes) {
       ctx.save();
@@ -1826,36 +1917,15 @@ function drawCardWild(
       );
       ctx.restore();
     }
-  } else {
-    ctx.strokeStyle = C.ink;
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    for (let i = 0; i < 3; i++) {
-      const y = cueTop + 30 + i * 22;
-      const span = 22 - i * 4;
-      ctx.globalAlpha = 1 - i * 0.3;
-      ctx.beginPath();
-      ctx.moveTo(CARD_W / 2 - span, y);
-      ctx.lineTo(CARD_W / 2, y + span * 0.5);
-      ctx.lineTo(CARD_W / 2 + span, y);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1;
   }
 
-  // Featuring footer — small, ink-dim, centered.
-  const statsY = 1300;
-  const statName = tidy(plant.name || "this plant");
-  ctx.font = `500 11px ${FONT_MONO}`;
-  ctx.fillStyle = "rgba(21,32,26,0.55)";
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.letterSpacing = "5px";
-  ctx.fillText(`FEATURING · ${statName.toUpperCase()}`, CARD_W / 2, statsY);
-  ctx.letterSpacing = "0px";
-
-  drawGrain(ctx, CARD_W, CARD_H, 0.025, 600);
+  // Soft grain on the cream half only — keeps the photo half pristine.
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(0, heroH, CARD_W, CARD_H - heroH);
+  ctx.clip();
+  drawGrain(ctx, CARD_W, CARD_H, 0.025, 500);
+  ctx.restore();
 }
 
 // — orchestration --------------------------------------------------------
@@ -1967,7 +2037,7 @@ async function renderCardCanvas(
       break;
     case 3:
       // Wild card rotates through every available image in the orb collage.
-      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoBlack);
+      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoWhite);
       break;
   }
   return c;
