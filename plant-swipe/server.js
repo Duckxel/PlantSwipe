@@ -5371,15 +5371,15 @@ factConfidence:
 - "medium" if it's documented but less mainstream.
 - "low" if you reached for it — caller will discard low-confidence outputs.
 
-gardenerTip (max ${tipMax} chars):
-- Write as a hands-on hobbyist who has actually grown THIS specific plant for years — not as a generic care label.
-- Must be unmistakably tied to the plant's known quirks. Reference a behaviour, structure, or sensitivity that is specific to this species or genus (e.g. "Caladium tubers turn to mush in cold-wet soil — I lift them indoors when nights drop below 16°C and store them dry in newspaper until spring").
-- Mention an observable, sensory cue you watch for (drooping leaves, soil pulling from the pot wall, a particular scent, rustling stems) — something that signals when to act.
-- Mention an actual personal habit or ritual ("I bottom-water mine once a week", "I rotate the pot a quarter-turn every Sunday") so it reads as lived experience.
-- ONE genuine pitfall a beginner would hit with this plant, plus how to avoid it. No platitudes ("water regularly", "give it light").
-- Speak in first person where natural ("I" / "mine"). One or two short sentences. Plain prose. No markdown. No leading "Tip:" or "Pro tip:".
-- If two species share the genus quirk, name the quirk — not the plant.
-- Always return a real, specific tip. If the plant is genuinely unfussy, name the ONE thing that does still trip people up.
+gardenerTip (HARD MAX ${tipMax} characters, including spaces and punctuation):
+- LENGTH IS A HARD LIMIT. Count characters before returning. If your tip is over ${tipMax} characters, rewrite it shorter — do NOT exceed the budget. Truncated tips will be discarded.
+- Aim for ONE sentence (two only if both fit comfortably under ${tipMax} chars).
+- Specific to THIS plant's documented quirk — a behaviour, structure, or sensitivity tied to this species or genus (rot pattern, dormancy, light/temperature window, toxicity hazard, root habit, propagation gotcha, etc.).
+- Concrete and actionable: name the pitfall + how to avoid it (e.g. "Caladium tubers rot in cold, wet soil — keep them above 16°C and let the topsoil dry between waterings").
+- Use second-person or imperative voice. NEVER first person — no "I", "my", "mine", "I find", "I keep", or any personal anecdote / story / "this happened to me" framing. The reader doesn't care about anyone else's plant; they want the rule.
+- No platitudes ("water regularly", "give it bright light"). No leading filler ("Tip:", "Pro tip:", "Remember:"). No markdown.
+- If the plant is genuinely unfussy, name the ONE thing that still trips beginners up.
+- Stay under ${tipMax} chars. Re-read your draft and shorten before returning.
 
 postDescription (max ${captionMax} chars):
 - The body of the Instagram caption that goes BELOW the carousel.
