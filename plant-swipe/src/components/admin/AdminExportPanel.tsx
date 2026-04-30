@@ -22,6 +22,11 @@ import {
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
+import {
+  ImageViewer,
+  useImageViewer,
+  type ImageViewerImage,
+} from "@/components/ui/image-viewer";
 import worldMapDarkUrl from "@/assets/world-map-dark.svg";
 
 type PlantRow = Record<string, unknown>;
@@ -1754,6 +1759,34 @@ export function AdminExportPanel() {
   const [logoWhite, setLogoWhite] = React.useState<HTMLImageElement | null>(null);
   const [logoBlack, setLogoBlack] = React.useState<HTMLImageElement | null>(null);
   const previewRefs = React.useRef<Array<HTMLCanvasElement | null>>([]);
+  const viewer = useImageViewer();
+
+  // Snapshot every preview canvas to a PNG data URL and open the shared
+  // ImageViewer at the clicked card. Lazy: built on click so the data URLs
+  // always reflect the latest paint (post-AI fact arrival, post-asset splice)
+  // instead of going stale next to React state.
+  const openFullPreview = React.useCallback(
+    (clickedIndex: number) => {
+      const imgs: ImageViewerImage[] = [];
+      for (let i = 0; i < 4; i++) {
+        const c = previewRefs.current[i];
+        if (!c) continue;
+        try {
+          imgs.push({
+            src: c.toDataURL("image/png"),
+            alt: `Aphylia card ${i + 1} — ${CARD_LABELS[i]}`,
+          });
+        } catch {
+          // Tainted canvas (a plant image failed CORS, fallback also blocked)
+          // — skip the card rather than throw the whole gallery.
+        }
+      }
+      if (imgs.length === 0) return;
+      const start = Math.min(Math.max(clickedIndex, 0), imgs.length - 1);
+      viewer.openGallery(imgs, start);
+    },
+    [viewer],
+  );
 
   // Preload static assets once: world map silhouette, fonts, the Aphylia logo
   // glyphs (white + black variants for dark/light cards), and every Lucide
@@ -2102,13 +2135,15 @@ export function AdminExportPanel() {
             ) : (
               <WandSparkles className="h-4 w-4 mr-2" />
             )}
-            {loading ? "Generating…" : "Generate cards"}
+            {loading
+              ? "Generating cards + AI fact…"
+              : "Generate cards"}
           </Button>
           <Button
             variant="outline"
             onClick={() => void generate()}
             disabled={!bundle || loading}
-            title="Regenerate previews"
+            title="Re-run plant data + AI fact (same as Generate)"
           >
             <Sparkles className="h-4 w-4 mr-2" />
             Refresh
@@ -2124,7 +2159,12 @@ export function AdminExportPanel() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="space-y-2">
-              <div className="rounded-2xl overflow-hidden bg-black/30 border border-stone-700/30 shadow-xl">
+              <button
+                type="button"
+                onClick={() => openFullPreview(i)}
+                title="Click to preview at full size"
+                className="block w-full rounded-2xl overflow-hidden bg-black/30 border border-stone-700/30 shadow-xl cursor-zoom-in transition-transform hover:scale-[1.015] hover:border-emerald-500/40 hover:shadow-2xl focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+              >
                 <canvas
                   ref={(el) => {
                     previewRefs.current[i] = el;
@@ -2133,7 +2173,7 @@ export function AdminExportPanel() {
                   height={CARD_H}
                   style={{ width: "100%", height: "auto", display: "block" }}
                 />
-              </div>
+              </button>
               <div className="flex items-center justify-between text-xs text-stone-500">
                 <span className="font-mono tracking-[0.2em] uppercase">
                   {String(i + 1).padStart(2, "0")} · {CARD_LABELS[i]}
@@ -2144,6 +2184,12 @@ export function AdminExportPanel() {
           ))}
         </div>
       )}
+
+      <ImageViewer
+        {...viewer.props}
+        title="Aphylia plant cards preview"
+        enableDownload={false}
+      />
     </div>
   );
 }
