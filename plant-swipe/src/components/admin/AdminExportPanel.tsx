@@ -1317,9 +1317,14 @@ export function AdminExportPanel() {
 
   const searchPlants = React.useCallback(
     async (query: string): Promise<SearchItemOption[]> => {
+      // Hide in-progress plants — they're missing the fields the cards rely on
+      // (colors, watering frequencies, family, origin, …) so the export comes
+      // out with a lot of em-dashes. `or(status.is.null,status.neq.in_progress)`
+      // also keeps legacy rows where status was never set.
       let q = supabase
         .from("plants")
-        .select("id,name,scientific_name_species")
+        .select("id,name,scientific_name_species,status")
+        .or("status.is.null,status.neq.in_progress")
         .order("name")
         .limit(30);
       if (query.trim()) q = q.ilike("name", `%${query.trim()}%`);
