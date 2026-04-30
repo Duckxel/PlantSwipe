@@ -1,6 +1,24 @@
 import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import JSZip from "jszip";
-import { Download, Sparkles, WandSparkles, RefreshCw } from "lucide-react";
+import {
+  Download,
+  Sparkles,
+  WandSparkles,
+  RefreshCw,
+  Sun,
+  Droplet,
+  Wind,
+  Palette,
+  Sprout,
+  AlertTriangle,
+  MapPin,
+  Leaf,
+  Thermometer,
+  Clock,
+  Ruler,
+  type LucideIcon,
+} from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
@@ -101,6 +119,49 @@ function loadImage(
     img.src = url;
   });
 }
+
+// Render a lucide-react icon component to a canvas-loadable image. Each icon
+// is rasterized once at a chosen color/stroke and cached so the cards can
+// drawImage() it like any other asset. We render the SVG to a string via
+// react-dom/server (the same call the app already uses elsewhere) and inline
+// it as a data URL — no network, no taint.
+async function lucideImage(
+  Icon: LucideIcon,
+  color: string,
+  size = 64,
+  strokeWidth = 2,
+): Promise<HTMLImageElement | null> {
+  try {
+    const node = React.createElement(Icon, {
+      size,
+      color,
+      strokeWidth,
+    });
+    const svg = renderToStaticMarkup(node);
+    const dataUrl = `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+    return await loadImage(dataUrl, { crossOrigin: null });
+  } catch {
+    return null;
+  }
+}
+
+type IconSet = {
+  sunFilled: HTMLImageElement | null;
+  sunEmpty: HTMLImageElement | null;
+  dropletFilled: HTMLImageElement | null;
+  dropletEmpty: HTMLImageElement | null;
+  wind: HTMLImageElement | null;
+  palette: HTMLImageElement | null;
+  sproutInk: HTMLImageElement | null;
+  sproutCream: HTMLImageElement | null;
+  alert: HTMLImageElement | null;
+  mapPin: HTMLImageElement | null;
+  leaf: HTMLImageElement | null;
+  thermo: HTMLImageElement | null;
+  clock: HTMLImageElement | null;
+  ruler: HTMLImageElement | null;
+  sunCream: HTMLImageElement | null;
+};
 
 async function ensureFontsReady() {
   if (typeof document === "undefined" || !document.fonts) return;
@@ -252,70 +313,6 @@ function waterLevel(plant: PlantRow): number {
   return 0;
 }
 
-function drawSunGauge(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  level: number,
-  fillColor = C.gold,
-  emptyColor = "rgba(0,0,0,0.08)",
-) {
-  const r = 13;
-  const gap = 30;
-  for (let i = 0; i < 5; i++) {
-    const cx = x + r + i * (r * 2 + gap);
-    const filled = i < level;
-    ctx.beginPath();
-    ctx.arc(cx, y, r, 0, Math.PI * 2);
-    ctx.fillStyle = filled ? fillColor : emptyColor;
-    ctx.fill();
-    if (filled) {
-      ctx.strokeStyle = fillColor;
-      ctx.lineWidth = 3;
-      ctx.lineCap = "round";
-      for (let a = 0; a < 8; a++) {
-        const ang = (a / 8) * Math.PI * 2;
-        const r1 = r + 5;
-        const r2 = r + 13;
-        ctx.beginPath();
-        ctx.moveTo(cx + Math.cos(ang) * r1, y + Math.sin(ang) * r1);
-        ctx.lineTo(cx + Math.cos(ang) * r2, y + Math.sin(ang) * r2);
-        ctx.stroke();
-      }
-    }
-  }
-}
-
-function drawDropGauge(
-  ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  level: number,
-  fillColor = C.mint,
-  emptyColor = "rgba(0,0,0,0.18)",
-) {
-  const w = 22,
-    h = 30,
-    gap = 20;
-  for (let i = 0; i < 5; i++) {
-    const dx = x + i * (w + gap);
-    const cx = dx + w / 2;
-    ctx.beginPath();
-    ctx.moveTo(cx, y - h / 2);
-    ctx.bezierCurveTo(dx + w, y - h / 6, dx + w, y + h / 2, cx, y + h / 2);
-    ctx.bezierCurveTo(dx, y + h / 2, dx, y - h / 6, cx, y - h / 2);
-    ctx.closePath();
-    if (i < level) {
-      ctx.fillStyle = fillColor;
-      ctx.fill();
-    } else {
-      ctx.strokeStyle = emptyColor;
-      ctx.lineWidth = 2;
-      ctx.stroke();
-    }
-  }
-}
-
 function drawColorSwatches(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -416,19 +413,30 @@ function drawBrandHeader(
   label: string,
   fg: string,
   accent: string,
+  logo: HTMLImageElement | null,
 ) {
   const padX = 64;
-  const top = 64;
+  const top = 56;
+  const logoSize = 56;
+
+  // Aphylia logo glyph (PNG asset). Falls through to a text-only mark when the
+  // logo isn't available yet so the cards still render before assets resolve.
+  let textX = padX;
+  if (logo && logo.width > 0) {
+    ctx.drawImage(logo, padX, top, logoSize, logoSize);
+    textX = padX + logoSize + 14;
+  }
 
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = fg;
-  ctx.font = `700 30px ${FONT_MONO}`;
-  ctx.fillText("Aphylia", padX, top + 28);
+  ctx.font = `700 26px ${FONT_MONO}`;
+  ctx.fillText("Aphylia", textX, top + logoSize / 2 + 9);
 
-  // dot
+  // accent dot
+  const dotX = textX + ctx.measureText("Aphylia").width + 14;
   ctx.beginPath();
-  ctx.arc(padX + ctx.measureText("Aphylia").width + 16, top + 18, 4, 0, Math.PI * 2);
+  ctx.arc(dotX, top + logoSize / 2, 4, 0, Math.PI * 2);
   ctx.fillStyle = accent;
   ctx.fill();
 
@@ -438,7 +446,7 @@ function drawBrandHeader(
   ctx.textAlign = "right";
   const indicator = `${String(page).padStart(2, "0")} / ${String(total).padStart(2, "0")} · ${label}`;
   ctx.letterSpacing = "3px";
-  ctx.fillText(indicator, CARD_W - padX, top + 26);
+  ctx.fillText(indicator, CARD_W - padX, top + logoSize / 2 + 6);
   ctx.letterSpacing = "0px";
 }
 
@@ -469,195 +477,292 @@ function drawBrandFooter(
 
 // — card 1: COVER --------------------------------------------------------
 
+// Draws a floating teaser pill on the cover photo. Each pill carries a Lucide
+// icon + an uppercase mono label and lives at semi-transparent dark fill so
+// the photo still reads behind it. The icons are pre-rasterized at the
+// component level (see lucideImage / IconSet).
+function drawTeaserChip(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  icon: HTMLImageElement | null,
+  text: string,
+): { width: number; height: number } {
+  const padX = 22;
+  const padY = 14;
+  const iconSize = 28;
+  const gap = 10;
+  ctx.font = `700 14px ${FONT_MONO}`;
+  ctx.letterSpacing = "3px";
+  const textW = ctx.measureText(text).width;
+  const w =
+    padX + (icon ? iconSize + gap : 0) + textW + ctx.measureText(" ").width + padX;
+  const h = Math.max(iconSize, 14) + padY * 2;
+  // shadow pad
+  ctx.save();
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = 24;
+  ctx.shadowOffsetY = 6;
+  roundRectPath(ctx, x, y, w, h, h / 2);
+  ctx.fillStyle = "rgba(6,18,11,0.72)";
+  ctx.fill();
+  ctx.restore();
+  // hairline ring
+  roundRectPath(ctx, x, y, w, h, h / 2);
+  ctx.strokeStyle = "rgba(168,240,204,0.45)";
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  // icon
+  if (icon) {
+    ctx.drawImage(icon, x + padX, y + (h - iconSize) / 2, iconSize, iconSize);
+  }
+  // text
+  ctx.fillStyle = C.cream;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
+  ctx.fillText(text, x + padX + (icon ? iconSize + gap : 0), y + h / 2 + 1);
+  ctx.letterSpacing = "0px";
+  return { width: w, height: h };
+}
+
 function drawCardCover(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   hero: HTMLImageElement | null,
   variety: string,
+  icons: IconSet | null,
+  logoWhite: HTMLImageElement | null,
+  origin: string[],
 ) {
-  // Base
+  // 1. Base fill (matches palette so empty image areas don't flash white).
   ctx.fillStyle = C.forestDeep;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // Layer 1: blurred backdrop image, oversized
+  // 2. Full-bleed plant photo. The image dominates the card — magazine-cover
+  //    style — and a heavy bottom gradient carries the title type.
   if (hero) {
-    ctx.save();
-    if ("filter" in ctx) {
-      (ctx as CanvasRenderingContext2D & { filter: string }).filter =
-        "blur(40px) saturate(1.1)";
-    }
-    drawCoverImage(ctx, hero, -80, -80, CARD_W + 160, CARD_H + 160);
-    if ("filter" in ctx) {
-      (ctx as CanvasRenderingContext2D & { filter: string }).filter = "none";
-    }
-    ctx.restore();
-
-    // forest tint to keep palette cohesive
-    ctx.fillStyle = "rgba(11,26,18,0.55)";
-    ctx.fillRect(0, 0, CARD_W, CARD_H);
+    drawCoverImage(ctx, hero, 0, 0, CARD_W, CARD_H);
   }
 
-  // Layer 2: sharp framed hero
-  if (hero) {
-    const px = 96;
-    const py = 240;
-    const fw = CARD_W - px * 2;
-    const fh = 660;
-    ctx.save();
-    // soft shadow
-    ctx.shadowColor = "rgba(0,0,0,0.55)";
-    ctx.shadowBlur = 60;
-    ctx.shadowOffsetY = 24;
-    roundRectPath(ctx, px, py, fw, fh, 36);
-    ctx.fillStyle = C.forestDeep;
-    ctx.fill();
-    ctx.restore();
+  // 3. Top vignette so the brand chrome reads on bright photos.
+  const topG = ctx.createLinearGradient(0, 0, 0, 280);
+  topG.addColorStop(0, "rgba(6,18,11,0.7)");
+  topG.addColorStop(1, "rgba(6,18,11,0)");
+  ctx.fillStyle = topG;
+  ctx.fillRect(0, 0, CARD_W, 280);
 
-    ctx.save();
-    roundRectPath(ctx, px, py, fw, fh, 36);
-    ctx.clip();
-    drawCoverImage(ctx, hero, px, py, fw, fh);
-    // bottom gradient inside frame for legibility
-    const g = ctx.createLinearGradient(0, py + fh - 200, 0, py + fh);
-    g.addColorStop(0, "rgba(6,18,11,0)");
-    g.addColorStop(1, "rgba(6,18,11,0.85)");
-    ctx.fillStyle = g;
-    ctx.fillRect(px, py + fh - 200, fw, 200);
-    ctx.restore();
+  // 4. Heavy bottom gradient — covers ~55% of the card to back the title block
+  //    and the bottom-anchored brand footer.
+  const botStart = Math.round(CARD_H * 0.42);
+  const botG = ctx.createLinearGradient(0, botStart, 0, CARD_H);
+  botG.addColorStop(0, "rgba(6,18,11,0)");
+  botG.addColorStop(0.45, "rgba(6,18,11,0.6)");
+  botG.addColorStop(1, "rgba(6,18,11,0.96)");
+  ctx.fillStyle = botG;
+  ctx.fillRect(0, botStart, CARD_W, CARD_H - botStart);
 
-    // hairline border on the frame
-    roundRectPath(ctx, px, py, fw, fh, 36);
-    ctx.strokeStyle = "rgba(245,239,226,0.18)";
-    ctx.lineWidth = 1;
-    ctx.stroke();
+  // 5. Brand chrome (logo + 01/04 indicator).
+  drawBrandHeader(ctx, 1, 4, "COVER", C.cream, C.mint, logoWhite);
+
+  // 6. Floating teaser chips on the photo — peek at what's inside cards 2 & 3
+  //    to invite a swipe. Stacked vertically left-side, mid-card, so they
+  //    don't fight the title block below.
+  const teasers: Array<{ icon: HTMLImageElement | null; text: string }> = [];
+  if (origin[0]) {
+    teasers.push({
+      icon: icons?.mapPin ?? null,
+      text: tidy(origin[0]).toUpperCase(),
+    });
+  }
+  const sun = asArr(plant.sunlight);
+  if (sun[0]) {
+    teasers.push({
+      icon: icons?.sunCream ?? null,
+      text: tidy(sun[0]).toUpperCase(),
+    });
+  }
+  const care = asArr(plant.care_level)[0];
+  if (care) {
+    teasers.push({
+      icon: icons?.sproutCream ?? null,
+      text: tidy(care).toUpperCase(),
+    });
+  }
+  // Position: stacked left, vertically centered around y=560.
+  let chipY = 380;
+  for (const t of teasers.slice(0, 3)) {
+    const sz = drawTeaserChip(ctx, 64, chipY, t.icon, t.text);
+    chipY += sz.height + 16;
   }
 
-  drawBrandHeader(ctx, 1, 4, "COVER", C.cream, C.mint);
-
-  // Bottom-bottom: bottom of card holds title/variety/family
-  const titleAreaTop = 940;
-
-  // small eyebrow
-  ctx.textAlign = "center";
-  ctx.textBaseline = "alphabetic";
-  ctx.font = `600 18px ${FONT_MONO}`;
-  ctx.fillStyle = C.mintGlow;
+  // 7. Right-edge vertical decorative strip — "PLANT NO. 01 · APHYLIA STUDIO"
+  //    rotated 90° downward. Adds editorial / poster vibe.
+  ctx.save();
+  ctx.translate(CARD_W - 50, 380);
+  ctx.rotate(Math.PI / 2);
+  ctx.fillStyle = "rgba(245,239,226,0.55)";
+  ctx.font = `500 14px ${FONT_MONO}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "middle";
   ctx.letterSpacing = "8px";
-  ctx.fillText("PLANT STUDIO · 01", CARD_W / 2, titleAreaTop);
+  ctx.fillText("PLANT NO. 01 · APHYLIA STUDIO", 0, 0);
+  ctx.letterSpacing = "0px";
+  ctx.restore();
+
+  // 8. Title block — anchored bottom-left of the card.
+  const padX = 64;
+  const titleBaseline = CARD_H - 290;
+
+  // Eyebrow
+  ctx.fillStyle = C.mint;
+  ctx.font = `600 15px ${FONT_MONO}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "8px";
+  ctx.fillText("APHYLIA STUDIO · COVER", padX, titleBaseline - 175);
   ctx.letterSpacing = "0px";
 
-  // title — auto-fit. Fira Code is wide; cap at 92px and uppercase for impact.
-  const nameRaw = tidy(plant.name || "Plant");
-  const name = nameRaw.toUpperCase();
-  const titleSize = fitText(ctx, name, CARD_W - 200, 92, 48, "700", FONT_MONO);
+  // Accent hairline
+  ctx.strokeStyle = C.mint;
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(padX, titleBaseline - 152);
+  ctx.lineTo(padX + 64, titleBaseline - 152);
+  ctx.stroke();
+
+  // Big title — auto-fit, uppercase, tracked.
+  const name = tidy(plant.name || "Plant").toUpperCase();
+  const titleSize = fitText(ctx, name, CARD_W - 128, 130, 64, "700", FONT_MONO);
   ctx.font = `700 ${titleSize}px ${FONT_MONO}`;
   ctx.fillStyle = C.cream;
-  ctx.textAlign = "center";
-  ctx.letterSpacing = "4px";
-  ctx.fillText(name, CARD_W / 2, titleAreaTop + titleSize + 36);
+  ctx.letterSpacing = "5px";
+  ctx.fillText(name, padX, titleBaseline);
   ctx.letterSpacing = "0px";
 
-  // variety pill (italic) — only if present
+  // Variety / sci-name subtitle
   const variantTextRaw = variety && variety.trim() ? variety.trim() : "";
-  if (variantTextRaw) {
-    const variantText = `'${variantTextRaw}'`;
-    ctx.font = `400 32px ${FONT_MONO}`;
-    const tw = ctx.measureText(variantText).width + 56;
-    const ty = titleAreaTop + titleSize + 84;
-    roundRectPath(ctx, (CARD_W - tw) / 2, ty, tw, 60, 30);
-    ctx.fillStyle = "rgba(245,239,226,0.08)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(168,240,204,0.45)";
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    ctx.fillStyle = C.cream;
-    ctx.textBaseline = "middle";
-    ctx.fillText(variantText, CARD_W / 2, ty + 32);
-  } else {
-    // sci name fallback
-    const sci = String(plant.scientific_name_species || "");
-    if (sci) {
-      ctx.font = `400 30px ${FONT_MONO}`;
-      ctx.fillStyle = "rgba(245,239,226,0.7)";
-      ctx.textAlign = "center";
-      ctx.textBaseline = "alphabetic";
-      ctx.fillText(sci, CARD_W / 2, titleAreaTop + titleSize + 100);
-    }
+  const sci = String(plant.scientific_name_species || "").trim();
+  const sub = variantTextRaw
+    ? `'${variantTextRaw}' · ${sci}`
+    : sci;
+  if (sub) {
+    ctx.font = `400 26px ${FONT_MONO}`;
+    ctx.fillStyle = "rgba(245,239,226,0.85)";
+    ctx.fillText(sub, padX, titleBaseline + 50);
   }
 
-  // family chip
+  // Family + plant_type chips on a single row.
   const family = tidy(plant.family || "");
+  const plantType = tidy(plant.plant_type || "");
+  const chipsRowY = titleBaseline + 80;
+  let cursorX = padX;
   if (family) {
-    ctx.font = `600 14px ${FONT_MONO}`;
-    const lbl = `FAMILY · ${family.toUpperCase()}`;
-    const cw = ctx.measureText(lbl).width + 36;
-    const cy = CARD_H - 158;
-    roundRectPath(ctx, (CARD_W - cw) / 2, cy, cw, 42, 21);
-    ctx.fillStyle = "rgba(91,211,148,0.16)";
-    ctx.fill();
-    ctx.strokeStyle = "rgba(91,211,148,0.55)";
-    ctx.stroke();
-    ctx.fillStyle = C.mintGlow;
-    ctx.textBaseline = "middle";
-    ctx.fillText(lbl, (CARD_W - cw) / 2 + 18, cy + 22);
+    const sz = drawChip(ctx, cursorX, chipsRowY, family.toUpperCase(), {
+      bg: C.mint,
+      fg: C.forestDeep,
+      size: 13,
+      family: FONT_MONO,
+      weight: "700",
+      paddingX: 16,
+      paddingY: 10,
+    });
+    cursorX += sz.width + 10;
+  }
+  if (plantType) {
+    drawChip(ctx, cursorX, chipsRowY, plantType.toUpperCase(), {
+      bg: "rgba(0,0,0,0.55)",
+      fg: C.cream,
+      border: "rgba(245,239,226,0.5)",
+      size: 13,
+      family: FONT_MONO,
+      weight: "700",
+      paddingX: 16,
+      paddingY: 10,
+    });
   }
 
-  // corner ticks (decorative)
-  ctx.strokeStyle = "rgba(245,239,226,0.35)";
+  // 9. Decorative corner ticks (top + bottom).
+  ctx.strokeStyle = "rgba(245,239,226,0.5)";
   ctx.lineWidth = 1.5;
   const t = 28;
   const inset = 36;
   ctx.beginPath();
-  // TL
   ctx.moveTo(inset, inset + t);
   ctx.lineTo(inset, inset);
   ctx.lineTo(inset + t, inset);
-  // TR
   ctx.moveTo(CARD_W - inset - t, inset);
   ctx.lineTo(CARD_W - inset, inset);
   ctx.lineTo(CARD_W - inset, inset + t);
-  // BL
   ctx.moveTo(inset, CARD_H - inset - t);
   ctx.lineTo(inset, CARD_H - inset);
   ctx.lineTo(inset + t, CARD_H - inset);
-  // BR
   ctx.moveTo(CARD_W - inset - t, CARD_H - inset);
   ctx.lineTo(CARD_W - inset, CARD_H - inset);
   ctx.lineTo(CARD_W - inset, CARD_H - inset - t);
   ctx.stroke();
 
-  drawGrain(ctx, CARD_W, CARD_H, 0.05, 800);
+  drawGrain(ctx, CARD_W, CARD_H, 0.04, 600);
   drawBrandFooter(ctx, C.cream, C.mint);
 }
 
 // — card 2: IDENTITY -----------------------------------------------------
+
+// Repeats a single icon image N times across a row, switching between filled
+// and empty variants based on `level` (e.g. 3 of 5 droplets filled). Used for
+// the Sun and Water gauges on the identity card.
+function drawIconRow(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  count: number,
+  level: number,
+  filled: HTMLImageElement | null,
+  empty: HTMLImageElement | null,
+  size = 32,
+  gap = 14,
+) {
+  for (let i = 0; i < count; i++) {
+    const img = i < level ? filled : empty;
+    const dx = x + i * (size + gap);
+    if (img) {
+      ctx.drawImage(img, dx, y, size, size);
+    } else {
+      // Fallback dot if the icon failed to rasterize.
+      ctx.beginPath();
+      ctx.arc(dx + size / 2, y + size / 2, size * 0.28, 0, Math.PI * 2);
+      ctx.fillStyle = i < level ? C.mint : "rgba(0,0,0,0.15)";
+      ctx.fill();
+    }
+  }
+}
 
 function drawCardIdentity(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   hero: HTMLImageElement | null,
   colors: ColorRow[],
+  commonNames: string[],
+  icons: IconSet | null,
+  logoBlack: HTMLImageElement | null,
 ) {
-  // Paper
+  // Paper background with a soft top-light gradient.
   ctx.fillStyle = C.cream;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
-
-  // subtle vertical paper gradient
-  const g = ctx.createLinearGradient(0, 0, 0, CARD_H);
-  g.addColorStop(0, "rgba(255,255,255,0.6)");
-  g.addColorStop(1, "rgba(0,0,0,0.04)");
-  ctx.fillStyle = g;
+  const bgG = ctx.createLinearGradient(0, 0, 0, CARD_H);
+  bgG.addColorStop(0, "rgba(255,255,255,0.6)");
+  bgG.addColorStop(1, "rgba(0,0,0,0.05)");
+  ctx.fillStyle = bgG;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  drawBrandHeader(ctx, 2, 4, "IDENTITY", C.ink, C.mintDim);
+  drawBrandHeader(ctx, 2, 4, "IDENTITY", C.ink, C.mintDim, logoBlack);
 
-  // hero image circle (top-right)
+  // Hero crop — circular, top-right corner. Tucked next to title block.
   if (hero) {
-    const r = 200;
-    const cx = CARD_W - 220;
-    const cy = 270;
+    const r = 130;
+    const cx = CARD_W - 170;
+    const cy = 285;
     ctx.save();
-    ctx.shadowColor = "rgba(0,0,0,0.18)";
+    ctx.shadowColor = "rgba(0,0,0,0.22)";
     ctx.shadowBlur = 30;
     ctx.shadowOffsetY = 10;
     ctx.beginPath();
@@ -665,191 +770,224 @@ function drawCardIdentity(
     ctx.fillStyle = "#fff";
     ctx.fill();
     ctx.restore();
-
     ctx.save();
     ctx.beginPath();
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.clip();
-    const sz = r * 2;
-    drawCoverImage(ctx, hero, cx - r, cy - r, sz, sz);
+    drawCoverImage(ctx, hero, cx - r, cy - r, r * 2, r * 2);
     ctx.restore();
-
-    // ring
     ctx.beginPath();
-    ctx.arc(cx, cy, r + 6, 0, Math.PI * 2);
+    ctx.arc(cx, cy, r + 5, 0, Math.PI * 2);
     ctx.strokeStyle = C.mintDim;
     ctx.lineWidth = 1.5;
     ctx.stroke();
   }
 
-  // Title block
+  // — Title block ------------------------------------------------------
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = C.inkDim;
-  ctx.font = `600 18px ${FONT_MONO}`;
+  ctx.font = `600 14px ${FONT_MONO}`;
   ctx.letterSpacing = "8px";
-  ctx.fillText("IDENTITY", 64, 200);
+  ctx.fillText("IDENTITY · 02", 64, 195);
   ctx.letterSpacing = "0px";
 
+  // Hairline accent under eyebrow.
+  ctx.strokeStyle = C.mintDim;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.moveTo(64, 208);
+  ctx.lineTo(140, 208);
+  ctx.stroke();
+
   const name = tidy(plant.name || "Plant").toUpperCase();
-  const nameSize = fitText(ctx, name, 600, 64, 36, "700", FONT_MONO);
+  const nameSize = fitText(ctx, name, 600, 56, 32, "700", FONT_MONO);
   ctx.font = `700 ${nameSize}px ${FONT_MONO}`;
   ctx.fillStyle = C.ink;
   ctx.letterSpacing = "3px";
-  const titleY = 200 + nameSize + 24;
-  ctx.fillText(name, 64, titleY);
+  ctx.fillText(name, 64, 230 + nameSize);
   ctx.letterSpacing = "0px";
 
-  // scientific name
   const sci = String(plant.scientific_name_species || "").trim();
-  let chipsY = titleY + 56;
+  let nextY = 230 + nameSize + 50;
   if (sci) {
-    ctx.font = `400 24px ${FONT_MONO}`;
+    ctx.font = `400 22px ${FONT_MONO}`;
     ctx.fillStyle = C.inkDim;
-    ctx.fillText(sci, 64, titleY + 40);
-    chipsY = titleY + 80;
+    ctx.fillText(sci, 64, nextY);
+    nextY += 34;
   }
 
-  // family chip + plant_type chip
+  // Family + Type chips.
   const family = tidy(plant.family || "");
   const plantType = tidy(plant.plant_type || "");
   let cursorX = 64;
   if (family) {
-    const sz = drawChip(ctx, cursorX, chipsY, family.toUpperCase(), {
+    const sz = drawChip(ctx, cursorX, nextY, family.toUpperCase(), {
       bg: C.ink,
       fg: C.cream,
-      size: 13,
+      size: 12,
       family: FONT_MONO,
       weight: "700",
-      paddingX: 16,
+      paddingX: 14,
       paddingY: 8,
     });
-    cursorX += sz.width + 12;
+    cursorX += sz.width + 10;
   }
   if (plantType) {
-    drawChip(ctx, cursorX, chipsY, plantType.toUpperCase(), {
+    drawChip(ctx, cursorX, nextY, plantType.toUpperCase(), {
       bg: "transparent",
       fg: C.ink,
       border: C.ink,
-      size: 13,
+      size: 12,
       family: FONT_MONO,
       weight: "700",
-      paddingX: 16,
+      paddingX: 14,
       paddingY: 8,
     });
   }
+  nextY += 50;
 
-  // — Stat rows below ---------------------------------------------------
-  const rowsTop = 590;
-  const rowH = 130;
-  const rowX = 64;
-  const rowW = CARD_W - 128;
-
-  // helper to draw a stat row
-  const drawStatRow = (
-    i: number,
-    label: string,
-    drawValue: (yMid: number) => void,
-  ) => {
-    const y = rowsTop + i * rowH;
-    // subtle divider
-    ctx.strokeStyle = "rgba(21,32,26,0.15)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(rowX, y);
-    ctx.lineTo(rowX + rowW, y);
-    ctx.stroke();
-
+  // — Common Names -----------------------------------------------------
+  if (commonNames.length > 0) {
     ctx.fillStyle = C.inkDim;
-    ctx.font = `600 14px ${FONT_MONO}`;
+    ctx.font = `600 11px ${FONT_MONO}`;
+    ctx.letterSpacing = "5px";
+    ctx.fillText("ALSO KNOWN AS", 64, nextY);
+    ctx.letterSpacing = "0px";
+    nextY += 24;
+
+    ctx.font = `500 19px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    const list = commonNames.slice(0, 4).join("  ·  ");
+    drawWrap(ctx, list, 64, nextY, CARD_W - 128, 28, 2);
+    nextY += 60;
+  }
+
+  // — Field Guide section ---------------------------------------------
+  const guideY = Math.max(nextY + 20, 620);
+
+  // Section header.
+  ctx.fillStyle = C.inkDim;
+  ctx.font = `600 13px ${FONT_MONO}`;
+  ctx.letterSpacing = "6px";
+  ctx.fillText("FIELD GUIDE", 64, guideY);
+  ctx.letterSpacing = "0px";
+  ctx.strokeStyle = "rgba(21,32,26,0.25)";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(216, guideY - 5);
+  ctx.lineTo(CARD_W - 64, guideY - 5);
+  ctx.stroke();
+
+  // 4 × 2 grid of stat boxes — 8 stats give the card real depth.
+  const gridX = 64;
+  const gridY = guideY + 24;
+  const cellW = 224;
+  const cellH = 140;
+  const cellGap = 16;
+
+  const drawStatBox = (
+    col: number,
+    row: number,
+    icon: HTMLImageElement | null,
+    label: string,
+    drawValue: (cx: number, cy: number, cw: number, ch: number) => void,
+  ) => {
+    const x = gridX + col * (cellW + cellGap);
+    const y = gridY + row * (cellH + cellGap);
+    roundRectPath(ctx, x, y, cellW, cellH, 18);
+    ctx.fillStyle = "rgba(255,255,255,0.55)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(21,32,26,0.12)";
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    if (icon) {
+      ctx.drawImage(icon, x + 18, y + 16, 26, 26);
+    }
+    ctx.fillStyle = C.inkDim;
+    ctx.font = `600 10px ${FONT_MONO}`;
+    ctx.letterSpacing = "4px";
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.letterSpacing = "4px";
-    ctx.fillText(label.toUpperCase(), rowX, y + 36);
+    ctx.fillText(label.toUpperCase(), x + 52, y + 35);
     ctx.letterSpacing = "0px";
-
-    drawValue(y + rowH / 2 + 12);
+    drawValue(x, y, cellW, cellH);
   };
 
-  // ROW 1: Sun
+  // BOX 1: Sun
   const sun = sunLevel(asArr(plant.sunlight));
-  drawStatRow(0, "Sun Needs", (yMid) => {
-    drawSunGauge(ctx, rowX + 360, yMid - 6, sun);
-    ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_MONO}`;
-    ctx.textAlign = "right";
-    ctx.fillText(
-      tidy(asArr(plant.sunlight)[0] || "—"),
-      rowX + rowW,
-      yMid + 4,
+  drawStatBox(0, 0, icons?.sunFilled ?? null, "Sun", (x, y, w) => {
+    drawIconRow(
+      ctx,
+      x + 18,
+      y + 60,
+      5,
+      sun,
+      icons?.sunFilled ?? null,
+      icons?.sunEmpty ?? null,
+      22,
+      8,
     );
+    const v = tidy(asArr(plant.sunlight)[0] || "—").toUpperCase();
+    const sz = fitText(ctx, v, w - 36, 18, 12, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.fillText(v, x + 18, y + 118);
   });
 
-  // ROW 2: Water
+  // BOX 2: Water
   const water = waterLevel(plant);
   const warmFreq = Number(plant.watering_frequency_warm) || 0;
-  drawStatRow(1, "Water Needs", (yMid) => {
-    drawDropGauge(ctx, rowX + 360, yMid - 6, water);
+  drawStatBox(1, 0, icons?.dropletFilled ?? null, "Water", (x, y, w) => {
+    drawIconRow(
+      ctx,
+      x + 18,
+      y + 60,
+      5,
+      water,
+      icons?.dropletFilled ?? null,
+      icons?.dropletEmpty ?? null,
+      22,
+      8,
+    );
+    const v = warmFreq > 0 ? `${warmFreq}× / WEEK` : "—";
+    const sz = fitText(ctx, v, w - 36, 18, 12, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_MONO}`;
-    ctx.textAlign = "right";
-    const label = warmFreq > 0 ? `${warmFreq}× / week` : "—";
-    ctx.fillText(label, rowX + rowW, yMid + 4);
+    ctx.textAlign = "left";
+    ctx.fillText(v, x + 18, y + 118);
   });
 
-  // ROW 3: Humidity
+  // BOX 3: Humidity
   const hyg = Number(plant.hygrometry) || 0;
-  drawStatRow(2, "Humidity", (yMid) => {
-    // bar
-    const bx = rowX + 360;
-    const by = yMid - 12;
-    const bw = 380;
-    const bh = 24;
+  drawStatBox(2, 0, icons?.wind ?? null, "Humidity", (x, y, w) => {
+    const bx = x + 18;
+    const by = y + 64;
+    const bw = w - 36;
+    const bh = 16;
     roundRectPath(ctx, bx, by, bw, bh, bh / 2);
     ctx.fillStyle = "rgba(21,32,26,0.08)";
     ctx.fill();
     if (hyg > 0) {
       const pct = Math.max(0, Math.min(1, hyg / 100));
-      roundRectPath(ctx, bx, by, bw * pct, bh, bh / 2);
+      roundRectPath(ctx, bx, by, Math.max(bh, bw * pct), bh, bh / 2);
       const grad = ctx.createLinearGradient(bx, by, bx + bw, by);
       grad.addColorStop(0, C.mint);
       grad.addColorStop(1, C.mintDim);
       ctx.fillStyle = grad;
       ctx.fill();
     }
+    ctx.font = `700 22px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_MONO}`;
-    ctx.textAlign = "right";
-    ctx.fillText(hyg > 0 ? `${hyg}%` : "—", rowX + rowW, yMid + 4);
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(hyg > 0 ? `${hyg}%` : "—", x + 18, y + 118);
   });
 
-  // ROW 4: Colors
-  drawStatRow(3, "Signature Colors", (yMid) => {
-    drawColorSwatches(
-      ctx,
-      rowX + 360,
-      yMid - 4,
-      colors,
-      "rgba(21,32,26,0.25)",
-      C.inkDim,
-    );
-    if (colors.length) {
-      ctx.fillStyle = C.ink;
-      ctx.font = `700 24px ${FONT_MONO}`;
-      ctx.textAlign = "right";
-      ctx.fillText(
-        colors.length === 1
-          ? tidy(colors[0].name || "")
-          : `${colors.length} hues`,
-        rowX + rowW,
-        yMid + 4,
-      );
-    }
-  });
-
-  // ROW 5: Care level
+  // BOX 4: Care level
   const care = tidy(asArr(plant.care_level)[0] || "");
-  drawStatRow(4, "Care Level", (yMid) => {
+  drawStatBox(3, 0, icons?.sproutInk ?? null, "Care", (x, y, w) => {
     if (care) {
       const careColor =
         care.toLowerCase().includes("easy")
@@ -857,50 +995,137 @@ function drawCardIdentity(
           : care.toLowerCase().includes("complex")
             ? C.coral
             : C.gold;
-      ctx.font = `700 22px ${FONT_MONO}`;
-      const w = ctx.measureText(care.toUpperCase()).width + 36;
-      const cx = rowX + 360;
-      const cy = yMid - 22;
-      roundRectPath(ctx, cx, cy, w, 44, 22);
+      const upper = care.toUpperCase();
+      ctx.font = `700 16px ${FONT_MONO}`;
+      const cw = Math.min(w - 36, ctx.measureText(upper).width + 28);
+      const cx = x + 18;
+      const cy = y + 60;
+      roundRectPath(ctx, cx, cy, cw, 32, 16);
       ctx.fillStyle = careColor;
       ctx.fill();
       ctx.fillStyle = "#FFFFFF";
-      ctx.textAlign = "left";
+      ctx.textAlign = "center";
       ctx.textBaseline = "middle";
-      ctx.fillText(care.toUpperCase(), cx + 18, cy + 22);
+      ctx.fillText(upper, cx + cw / 2, cy + 17);
+    }
 
-      // toxicity (only when meaningful)
-      const toxRaw = String(plant.toxicity_pets || plant.toxicity_human || "");
-      const toxLow = toxRaw.toLowerCase();
-      if (
-        toxLow &&
-        !toxLow.includes("non_toxic") &&
-        !toxLow.includes("non-toxic") &&
-        !toxLow.includes("undetermined")
-      ) {
-        const tox = tidy(toxRaw);
-        ctx.font = `500 18px ${FONT_MONO}`;
-        ctx.textAlign = "right";
-        ctx.textBaseline = "alphabetic";
-        const isDanger = /toxic|deadly|severe|high/.test(toxLow);
-        ctx.fillStyle = isDanger ? C.warning : C.inkDim;
-        ctx.fillText(`${isDanger ? "⚠ " : ""}${tox}`, rowX + rowW, yMid + 4);
-      }
-    } else {
-      ctx.fillStyle = C.inkDim;
-      ctx.font = `500 22px ${FONT_MONO}`;
+    // Toxicity inside the care box, small footnote.
+    const toxRaw = String(plant.toxicity_pets || plant.toxicity_human || "");
+    const toxLow = toxRaw.toLowerCase();
+    if (
+      toxLow &&
+      !toxLow.includes("non_toxic") &&
+      !toxLow.includes("non-toxic") &&
+      !toxLow.includes("undetermined")
+    ) {
+      const isDanger = /toxic|deadly|severe|high/.test(toxLow);
+      const tox = tidy(toxRaw).toUpperCase();
+      ctx.font = `600 11px ${FONT_MONO}`;
+      ctx.fillStyle = isDanger ? C.warning : C.inkDim;
       ctx.textAlign = "left";
-      ctx.fillText("—", rowX + 360, yMid + 4);
+      ctx.textBaseline = "alphabetic";
+      ctx.letterSpacing = "3px";
+      let tx = x + 18;
+      if (isDanger && icons?.alert) {
+        ctx.drawImage(icons.alert, x + 18, y + 105, 18, 18);
+        tx = x + 42;
+      }
+      ctx.fillText(tox, tx, y + 119);
+      ctx.letterSpacing = "0px";
     }
   });
 
-  // closing divider
-  ctx.strokeStyle = "rgba(21,32,26,0.15)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(rowX, rowsTop + 5 * rowH);
-  ctx.lineTo(rowX + rowW, rowsTop + 5 * rowH);
-  ctx.stroke();
+  // Row 2 — taxonomy / lifecycle stats.
+  const lifecycle = tidy(asArr(plant.life_cycle)[0] || "—");
+  drawStatBox(0, 1, icons?.clock ?? null, "Lifecycle", (x, y, w) => {
+    const sz = fitText(ctx, lifecycle.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(lifecycle.toUpperCase(), x + 18, y + 90);
+  });
+
+  const foliage = tidy(asArr(plant.foliage_persistence)[0] || "—");
+  drawStatBox(1, 1, icons?.leaf ?? null, "Foliage", (x, y, w) => {
+    const sz = fitText(ctx, foliage.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(foliage.toUpperCase(), x + 18, y + 90);
+  });
+
+  const habit = tidy(asArr(plant.plant_habit)[0] || "—");
+  drawStatBox(2, 1, icons?.sproutInk ?? null, "Form", (x, y, w) => {
+    const sz = fitText(ctx, habit.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(habit.toUpperCase(), x + 18, y + 90);
+  });
+
+  const heightCm = Number(plant.height_cm) || 0;
+  const heightStr =
+    heightCm > 0
+      ? heightCm >= 100
+        ? `${(heightCm / 100).toFixed(heightCm >= 1000 ? 0 : 1)} M`
+        : `${heightCm} CM`
+      : "—";
+  drawStatBox(3, 1, icons?.ruler ?? null, "Height", (x, y, w) => {
+    const sz = fitText(ctx, heightStr, w - 36, 32, 16, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(heightStr, x + 18, y + 90);
+  });
+
+  // — Palette + Utility row -------------------------------------------
+  const paletteY = gridY + 2 * (cellH + cellGap) + 24;
+
+  if (colors.length > 0) {
+    ctx.fillStyle = C.inkDim;
+    ctx.font = `600 11px ${FONT_MONO}`;
+    ctx.letterSpacing = "5px";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("PALETTE", 64, paletteY);
+    ctx.letterSpacing = "0px";
+    drawColorSwatches(
+      ctx,
+      170,
+      paletteY - 10,
+      colors,
+      "rgba(21,32,26,0.25)",
+      C.inkDim,
+    );
+  }
+
+  // Utility chips (ornamental, edible, medicinal, …) on the right side.
+  const utilities = asArr(plant.utility);
+  if (utilities.length > 0) {
+    let uX = CARD_W - 64;
+    const uY = paletteY - 18;
+    for (const u of utilities.slice(0, 3).reverse()) {
+      ctx.font = `700 11px ${FONT_MONO}`;
+      const lbl = tidy(u).toUpperCase();
+      const w = ctx.measureText(lbl).width + 28;
+      uX -= w;
+      drawChip(ctx, uX, uY, lbl, {
+        bg: "transparent",
+        fg: C.ink,
+        border: "rgba(21,32,26,0.5)",
+        size: 11,
+        family: FONT_MONO,
+        weight: "700",
+        paddingX: 14,
+        paddingY: 6,
+      });
+      uX -= 8;
+    }
+  }
 
   drawBrandFooter(ctx, C.ink, C.mintDim);
 }
@@ -913,6 +1138,7 @@ function drawCardDeep(
   origin: string[],
   worldMap: HTMLImageElement | null,
   presentation: string,
+  logoWhite: HTMLImageElement | null,
 ) {
   // Background
   ctx.fillStyle = C.forest;
@@ -942,7 +1168,7 @@ function drawCardDeep(
     ctx.restore();
   }
 
-  drawBrandHeader(ctx, 3, 4, "ORIGIN", C.cream, C.mint);
+  drawBrandHeader(ctx, 3, 4, "ORIGIN", C.cream, C.mint, logoWhite);
 
   // eyebrow
   ctx.textAlign = "left";
@@ -1082,6 +1308,7 @@ function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   images: HTMLImageElement[],
+  logoWhite: HTMLImageElement | null,
 ) {
   // Mesh gradient background — multiple radial stops
   ctx.fillStyle = C.forestDeep;
@@ -1105,7 +1332,7 @@ function drawCardWild(
   ctx.fillStyle = "rgba(6,18,11,0.4)";
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.cream, C.mintGlow);
+  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.cream, C.mintGlow, logoWhite);
 
   // Photo collage — 5 circular orbs scattered, rotating through every
   // available plant photo so multi-image plants get genuine visual variety.
@@ -1233,6 +1460,7 @@ type Bundle = {
   variety: string;
   presentation: string;
   origin: string[];
+  commonNames: string[];
   colors: ColorRow[];
   /**
    * Up to 4 plant photos, sorted by `use` priority. `images[0]` is the lead
@@ -1242,6 +1470,9 @@ type Bundle = {
    */
   images: HTMLImageElement[];
   worldMap: HTMLImageElement | null;
+  icons: IconSet | null;
+  logoWhite: HTMLImageElement | null;
+  logoBlack: HTMLImageElement | null;
 };
 
 // Pick the first defined image from the bundle, falling back through the array
@@ -1266,19 +1497,42 @@ async function renderCardCanvas(
   switch (index) {
     case 0:
       // Cover always leads with the primary photo.
-      drawCardCover(ctx, b.plant, pickImage(b.images, 0), b.variety);
+      drawCardCover(
+        ctx,
+        b.plant,
+        pickImage(b.images, 0),
+        b.variety,
+        b.icons,
+        b.logoWhite,
+        b.origin,
+      );
       break;
     case 1:
       // Identity uses the second photo when available so it doesn't repeat
       // the cover; falls back to the primary on single-photo plants.
-      drawCardIdentity(ctx, b.plant, pickImage(b.images, 1), b.colors);
+      drawCardIdentity(
+        ctx,
+        b.plant,
+        pickImage(b.images, 1),
+        b.colors,
+        b.commonNames,
+        b.icons,
+        b.logoBlack,
+      );
       break;
     case 2:
-      drawCardDeep(ctx, b.plant, b.origin, b.worldMap, b.presentation);
+      drawCardDeep(
+        ctx,
+        b.plant,
+        b.origin,
+        b.worldMap,
+        b.presentation,
+        b.logoWhite,
+      );
       break;
     case 3:
       // Wild card rotates through every available image in the orb collage.
-      drawCardWild(ctx, b.plant, b.images);
+      drawCardWild(ctx, b.plant, b.images, b.logoWhite);
       break;
   }
   return c;
@@ -1301,15 +1555,84 @@ export function AdminExportPanel() {
   const [loading, setLoading] = React.useState(false);
   const [exporting, setExporting] = React.useState(false);
   const [worldMap, setWorldMap] = React.useState<HTMLImageElement | null>(null);
+  const [icons, setIcons] = React.useState<IconSet | null>(null);
+  const [logoWhite, setLogoWhite] = React.useState<HTMLImageElement | null>(null);
+  const [logoBlack, setLogoBlack] = React.useState<HTMLImageElement | null>(null);
   const previewRefs = React.useRef<Array<HTMLCanvasElement | null>>([]);
 
-  // preload world map silhouette + warm fonts once
+  // Preload static assets once: world map silhouette, fonts, the Aphylia logo
+  // glyphs (white + black variants for dark/light cards), and every Lucide
+  // icon the cards draw. All rasterized to HTMLImageElement so the canvas can
+  // ctx.drawImage them like any plant photo.
   React.useEffect(() => {
     let cancelled = false;
     void ensureFontsReady();
     void loadImage(worldMapDarkUrl, { crossOrigin: null }).then((img) => {
       if (!cancelled) setWorldMap(img);
     });
+    void loadImage("/icons/icon-500_transparent_white.png", { crossOrigin: null }).then(
+      (img) => {
+        if (!cancelled) setLogoWhite(img);
+      },
+    );
+    void loadImage("/icons/icon-500_transparent_black.png", { crossOrigin: null }).then(
+      (img) => {
+        if (!cancelled) setLogoBlack(img);
+      },
+    );
+    void (async () => {
+      const [
+        sunFilled,
+        sunEmpty,
+        dropletFilled,
+        dropletEmpty,
+        wind,
+        palette,
+        sproutInk,
+        sproutCream,
+        alert,
+        mapPin,
+        leaf,
+        thermo,
+        clock,
+        ruler,
+        sunCream,
+      ] = await Promise.all([
+        lucideImage(Sun, C.gold, 64, 2.4),
+        lucideImage(Sun, "rgba(21,32,26,0.18)", 64, 2),
+        lucideImage(Droplet, C.mint, 64, 2.4),
+        lucideImage(Droplet, "rgba(21,32,26,0.18)", 64, 2),
+        lucideImage(Wind, C.ink, 64, 2),
+        lucideImage(Palette, C.ink, 64, 2),
+        lucideImage(Sprout, C.ink, 64, 2),
+        lucideImage(Sprout, C.cream, 64, 2),
+        lucideImage(AlertTriangle, C.warning, 64, 2.4),
+        lucideImage(MapPin, C.cream, 64, 2.2),
+        lucideImage(Leaf, C.ink, 64, 2),
+        lucideImage(Thermometer, C.ink, 64, 2),
+        lucideImage(Clock, C.ink, 64, 2),
+        lucideImage(Ruler, C.ink, 64, 2),
+        lucideImage(Sun, C.cream, 64, 2.2),
+      ]);
+      if (cancelled) return;
+      setIcons({
+        sunFilled,
+        sunEmpty,
+        dropletFilled,
+        dropletEmpty,
+        wind,
+        palette,
+        sproutInk,
+        sproutCream,
+        alert,
+        mapPin,
+        leaf,
+        thermo,
+        clock,
+        ruler,
+        sunCream,
+      });
+    })();
     return () => {
       cancelled = true;
     };
@@ -1408,6 +1731,10 @@ export function AdminExportPanel() {
         tEn && Array.isArray(tEn.origin)
           ? tEn.origin.map(tidy).filter(Boolean)
           : [];
+      const commonNames: string[] =
+        tEn && Array.isArray(tEn.common_names)
+          ? tEn.common_names.map(tidy).filter(Boolean)
+          : [];
 
       const colorLinks =
         (colorLinksRes.data as Array<{ colors: ColorRow | ColorRow[] | null }>) ||
@@ -1445,7 +1772,19 @@ export function AdminExportPanel() {
         (i): i is HTMLImageElement => !!i,
       );
 
-      setBundle({ plant, variety, presentation, origin, colors, images, worldMap });
+      setBundle({
+        plant,
+        variety,
+        presentation,
+        origin,
+        commonNames,
+        colors,
+        images,
+        worldMap,
+        icons,
+        logoWhite,
+        logoBlack,
+      });
     } finally {
       setLoading(false);
     }
