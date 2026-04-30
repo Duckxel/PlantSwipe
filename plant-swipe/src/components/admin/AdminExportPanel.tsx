@@ -7,11 +7,11 @@ import { Input } from "@/components/ui/input";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 
 type PlantLite = {
-  id: string; name: string; scientific_name_species: string | null; sunlight: string | null;
-  temperature_min: number | null; temperature_max: number | null; humidity: number | null;
-  substrate: string | null; origin: string | null; family: string | null; genus: string | null;
-  species: string | null; toxicity_pets: string | null; toxicity: string | null; fun_fact: string | null;
-  description: string | null; lifecycle: string | null; maintenance: string | null; image_url?: string | null;
+  id: string; name: string; scientific_name_species?: string | null; image_url?: string | null;
+  sunlight?: string | null; temperature_min?: number | null; temperature_max?: number | null; humidity?: number | null;
+  substrate?: string | null; origin?: string | null; family?: string | null; genus?: string | null; species?: string | null;
+  toxicity_pets?: string | null; toxicity?: string | null; fun_fact?: string | null; description?: string | null;
+  lifecycle?: string | null; maintenance?: string | null;
 };
 const CARD_SIZE = { width: 1080, height: 1350 };
 const slugify = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -19,7 +19,6 @@ const toPng = (node: HTMLElement) => new Promise<Blob>((resolve, reject) => { co
 
 export function AdminExportPanel() {
   const [plantOptions, setPlantOptions] = React.useState<SearchItemOption[]>([]);
-  const [plantMap, setPlantMap] = React.useState<Map<string, PlantLite>>(new Map());
   const [pickedOption, setPickedOption] = React.useState<SearchItemOption | null>(null);
   const [generatedPlant, setGeneratedPlant] = React.useState<PlantLite | null>(null);
   const [wildFact, setWildFact] = React.useState("");
@@ -27,7 +26,7 @@ export function AdminExportPanel() {
 
   const searchPlants = React.useCallback(async (query: string): Promise<SearchItemOption[]> => {
     const trimmed = query.trim();
-    let q = supabase.from('plants').select('id, name, scientific_name_species, sunlight, temperature_min, temperature_max, humidity, substrate, origin, family, genus, species, toxicity, toxicity_pets, fun_fact, description, lifecycle, maintenance').order('name').limit(30);
+    let q = supabase.from('plants').select('id, name, scientific_name_species').order('name').limit(30);
     if (trimmed) q = q.ilike('name', `%${trimmed}%`);
     const { data, error } = await q;
     if (error || !data) return [];
@@ -35,23 +34,29 @@ export function AdminExportPanel() {
     const { data: imgs } = await supabase.from('plant_images').select('plant_id, link').in('plant_id', ids).eq('use', 'primary');
     const imgMap = new Map<string, string>();
     (imgs || []).forEach((i: { plant_id: string; link: string }) => { if (i.plant_id && i.link) imgMap.set(i.plant_id, i.link); });
-    const nextMap = new Map(plantMap);
-    const options = data.map((r: Record<string, unknown>) => {
-      const p: PlantLite = { ...(r as unknown as PlantLite), image_url: imgMap.get(r.id as string) || null };
-      nextMap.set(p.id, p);
-      return { id: p.id, label: p.name, description: p.scientific_name_species || "", meta: p.origin || "Plant", icon: p.image_url ? <img src={p.image_url} className="h-8 w-8 rounded object-cover" /> : undefined };
-    });
-    setPlantMap(nextMap); setPlantOptions(options);
+    const options = data.map((r: Record<string, unknown>) => ({
+      id: r.id as string,
+      label: (r.name as string) || 'Unknown plant',
+      description: (r.scientific_name_species as string) || '',
+      meta: 'Plant',
+      icon: imgMap.get(r.id as string) ? <img src={imgMap.get(r.id as string)} className="h-8 w-8 rounded object-cover" /> : undefined,
+    }));
+    setPlantOptions(options);
     return options;
-  }, [plantMap]);
+  }, []);
 
   const generate = React.useCallback(() => {
     if (!pickedOption?.id) return;
-    const selected = plantMap.get(pickedOption.id);
-    if (!selected) return;
-    setGeneratedPlant(selected);
-    setWildFact(selected.fun_fact || selected.description || `${selected.name} is the perfect flex: dramatic look, manageable care, instant jungle mood.`);
-  }, [pickedOption, plantMap]);
+    const run = async () => {
+      const { data } = await supabase.from('plants').select('*').eq('id', pickedOption.id).single();
+      if (!data) return;
+      const { data: img } = await supabase.from('plant_images').select('link').eq('plant_id', pickedOption.id).eq('use', 'primary').maybeSingle();
+      const selected = { ...(data as PlantLite), image_url: (img?.link as string | undefined) || null, name: (data as Record<string, unknown>).name as string } as PlantLite;
+      setGeneratedPlant(selected);
+      setWildFact(selected.fun_fact || selected.description || `${selected.name} is the perfect flex: dramatic look, manageable care, instant jungle mood.`);
+    };
+    void run();
+  }, [pickedOption]);
 
   const exportZip = React.useCallback(async () => {
     if (!generatedPlant) return; const zip = new JSZip();
