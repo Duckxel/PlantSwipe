@@ -19,6 +19,7 @@ import {
   Ruler,
   ScrollText,
   ChevronsDown,
+  Shovel,
   Copy,
   Check,
   type LucideIcon,
@@ -182,6 +183,7 @@ type IconSet = {
   scrollGold: HTMLImageElement | null;
   chevDown: HTMLImageElement | null;
   chevDownInk: HTMLImageElement | null;
+  shovel: HTMLImageElement | null;
   sunCream: HTMLImageElement | null;
 };
 
@@ -1116,8 +1118,13 @@ function drawCardIdentity(
   });
 
   // BOX 2: Water
+  // Show the HOT-season frequency (peak demand) when set; fall back to the
+  // cold-season value so plants that only have one of the two recorded
+  // still display a real number instead of an em-dash.
   const water = waterLevel(plant);
   const warmFreq = Number(plant.watering_frequency_warm) || 0;
+  const coldFreq = Number(plant.watering_frequency_cold) || 0;
+  const primaryWaterFreq = warmFreq || coldFreq;
   drawStatBox(1, 0, icons?.dropletFilled ?? null, "Water", (x, y, w) => {
     drawIconRow(
       ctx,
@@ -1130,7 +1137,7 @@ function drawCardIdentity(
       22,
       8,
     );
-    const v = warmFreq > 0 ? `${warmFreq}× / WEEK` : "—";
+    const v = primaryWaterFreq > 0 ? `${primaryWaterFreq}× / WEEK` : "—";
     const sz = fitText(ctx, v, w - 36, 18, 12, "700", FONT_MONO);
     ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
@@ -1194,17 +1201,17 @@ function drawCardIdentity(
   // *live with* the plant. Toxicity gets its own box (was crammed into the
   // Care box footnote); cold-season watering and form/habit complete the row.
 
-  // Cold-season watering — distinct from warm; gardeners often miss the
-  // shift and rot the plant in winter.
-  const coldFreq = Number(plant.watering_frequency_cold) || 0;
-  drawStatBox(0, 1, icons?.dropletEmpty ?? null, "Water · Cold", (x, y, w) => {
-    const v = coldFreq > 0 ? `${coldFreq}× / WEEK` : "—";
-    const sz = fitText(ctx, v, w - 36, 22, 13, "700", FONT_MONO);
+  // Soil / substrate — what the plant likes to live in. The water box
+  // already covers both seasons (hot value with cold fallback), so this
+  // slot is freed for a different living-with-it stat.
+  const substrate = tidy(asArr(plant.substrate)[0] || "—");
+  drawStatBox(0, 1, icons?.shovel ?? null, "Soil", (x, y, w) => {
+    const sz = fitText(ctx, substrate.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
     ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(v, x + 18, y + 90);
+    ctx.fillText(substrate.toUpperCase(), x + 18, y + 90);
   });
 
   // Toxicity — own box now, with severity-coloured chip when relevant.
@@ -2251,6 +2258,7 @@ export function AdminExportPanel() {
         scrollGold,
         chevDown,
         chevDownInk,
+        shovel,
         sunCream,
       ] = await Promise.all([
         lucideImage(Sun, C.gold, 64, 2.4),
@@ -2273,6 +2281,7 @@ export function AdminExportPanel() {
         // Emerald-dark chevron for Card 4's cream surface — using the
         // cream-tinted version on the light bg made the cue invisible.
         lucideImage(ChevronsDown, "#059669", 96, 2.5),
+        lucideImage(Shovel, C.ink, 64, 2),
         lucideImage(Sun, C.cream, 64, 2.2),
       ]);
       if (cancelled) return;
@@ -2295,6 +2304,7 @@ export function AdminExportPanel() {
         scrollGold,
         chevDown,
         chevDownInk,
+        shovel,
         sunCream,
       });
     })();
