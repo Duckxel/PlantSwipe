@@ -17,6 +17,10 @@ import {
   Thermometer,
   Clock,
   Ruler,
+  ScrollText,
+  ChevronsDown,
+  Copy,
+  Check,
   type LucideIcon,
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
@@ -165,6 +169,9 @@ type IconSet = {
   thermo: HTMLImageElement | null;
   clock: HTMLImageElement | null;
   ruler: HTMLImageElement | null;
+  scroll: HTMLImageElement | null;
+  scrollGold: HTMLImageElement | null;
+  chevDown: HTMLImageElement | null;
   sunCream: HTMLImageElement | null;
 };
 
@@ -197,37 +204,57 @@ async function buildAdminAuthHeaders(): Promise<Record<string, string>> {
   return headers;
 }
 
-async function fetchHistoricalFact(
+type ExportAiContent = {
+  historicalFact: string;
+  gardenerTip: string;
+  postDescription: string;
+};
+
+const EMPTY_AI_CONTENT: ExportAiContent = {
+  historicalFact: "",
+  gardenerTip: "",
+  postDescription: "",
+};
+
+async function fetchExportAiContent(
   plantName: string,
   scientificName: string,
   family: string,
   signal?: AbortSignal,
-): Promise<string> {
-  if (!plantName) return "";
+): Promise<ExportAiContent> {
+  if (!plantName) return EMPTY_AI_CONTENT;
   try {
     const headers = await buildAdminAuthHeaders();
-    const res = await fetch("/api/admin/ai/plant-historical-fact", {
+    const res = await fetch("/api/admin/ai/plant-export-content", {
       method: "POST",
       headers,
-      body: JSON.stringify({
-        plantName,
-        scientificName,
-        family,
-        maxChars: 280,
-      }),
+      body: JSON.stringify({ plantName, scientificName, family }),
       signal,
     });
-    if (!res.ok) return "";
+    if (!res.ok) return EMPTY_AI_CONTENT;
     const data = (await res.json()) as {
       success?: boolean;
-      fact?: string;
-      confidence?: string;
+      historicalFact?: string;
+      factConfidence?: string;
+      gardenerTip?: string;
+      postDescription?: string;
     };
-    if (!data?.success || typeof data.fact !== "string") return "";
-    if (data.confidence === "low") return "";
-    return data.fact.trim();
+    if (!data?.success) return EMPTY_AI_CONTENT;
+    const fact =
+      data.factConfidence === "low" || typeof data.historicalFact !== "string"
+        ? ""
+        : data.historicalFact.trim();
+    return {
+      historicalFact: fact,
+      gardenerTip:
+        typeof data.gardenerTip === "string" ? data.gardenerTip.trim() : "",
+      postDescription:
+        typeof data.postDescription === "string"
+          ? data.postDescription.trim()
+          : "",
+    };
   } catch {
-    return "";
+    return EMPTY_AI_CONTENT;
   }
 }
 
@@ -632,9 +659,10 @@ function drawCardCover(
   // 5. Brand chrome (logo + 01/04 indicator).
   drawBrandHeader(ctx, 1, 4, "COVER", C.cream, C.mint, logoWhite);
 
-  // 6. Floating teaser chips on the photo — peek at what's inside cards 2 & 3
-  //    to invite a swipe. Stacked vertically left-side, mid-card, so they
-  //    don't fight the title block below.
+  // 6. Floating teaser chips on the photo — Discovery-page-style at-a-glance
+  //    info badges. Each chip is icon + uppercase mono label so the reader
+  //    scans the plant's vital stats without needing to swipe (and is invited
+  //    to swipe for the full details).
   const teasers: Array<{ icon: HTMLImageElement | null; text: string }> = [];
   if (origin[0]) {
     teasers.push({
@@ -649,6 +677,13 @@ function drawCardCover(
       text: tidy(sun[0]).toUpperCase(),
     });
   }
+  const warmFreq = Number(plant.watering_frequency_warm) || 0;
+  if (warmFreq > 0) {
+    teasers.push({
+      icon: icons?.dropletFilled ?? null,
+      text: `${warmFreq}× / WEEK`,
+    });
+  }
   const care = asArr(plant.care_level)[0];
   if (care) {
     teasers.push({
@@ -656,11 +691,26 @@ function drawCardCover(
       text: tidy(care).toUpperCase(),
     });
   }
+  // Toxicity warning — only when the plant is genuinely flagged. Coral icon
+  // breaks the otherwise-mint sidebar so the reader's eye lands on it.
+  const toxLow = String(plant.toxicity_pets || plant.toxicity_human || "").toLowerCase();
+  if (
+    toxLow &&
+    !toxLow.includes("non_toxic") &&
+    !toxLow.includes("non-toxic") &&
+    !toxLow.includes("undetermined") &&
+    /toxic|deadly|severe|high/.test(toxLow)
+  ) {
+    teasers.push({
+      icon: icons?.alert ?? null,
+      text: `${tidy(toxLow).toUpperCase()}`,
+    });
+  }
   // Position: stacked left, vertically centered around y=560.
-  let chipY = 380;
-  for (const t of teasers.slice(0, 3)) {
+  let chipY = 320;
+  for (const t of teasers.slice(0, 5)) {
     const sz = drawTeaserChip(ctx, 64, chipY, t.icon, t.text);
-    chipY += sz.height + 16;
+    chipY += sz.height + 14;
   }
 
   // 7. Right-edge vertical decorative strip — "PLANT NO. 01 · APHYLIA STUDIO"
@@ -810,6 +860,7 @@ function drawCardIdentity(
   hero: HTMLImageElement | null,
   colors: ColorRow[],
   commonNames: string[],
+  gardenerTip: string,
   icons: IconSet | null,
   logoBlack: HTMLImageElement | null,
 ) {
@@ -1150,9 +1201,10 @@ function drawCardIdentity(
     ctx.fillText(heightStr, x + 18, y + 90);
   });
 
-  // — Palette + Utility row -------------------------------------------
-  const paletteY = gridY + 2 * (cellH + cellGap) + 24;
+  // — Palette + Utility row (compact) ---------------------------------
+  const paletteY = gridY + 2 * (cellH + cellGap) + 22;
 
+  // Palette eyebrow + swatches inline on the left.
   if (colors.length > 0) {
     ctx.fillStyle = C.inkDim;
     ctx.font = `600 11px ${FONT_MONO}`;
@@ -1163,7 +1215,7 @@ function drawCardIdentity(
     ctx.letterSpacing = "0px";
     drawColorSwatches(
       ctx,
-      170,
+      160,
       paletteY - 10,
       colors,
       "rgba(21,32,26,0.25)",
@@ -1171,28 +1223,78 @@ function drawCardIdentity(
     );
   }
 
-  // Utility chips (ornamental, edible, medicinal, …) on the right side.
+  // Utility — promoted to a prominent labelled row of solid chips. This is
+  // the answer to "is the plant for me?" so it deserves more visual weight
+  // than a tiny corner pill (gardeners care a lot about edible / aromatic /
+  // medicinal use).
   const utilities = asArr(plant.utility);
+  const utilityY = paletteY + 38;
   if (utilities.length > 0) {
-    let uX = CARD_W - 64;
-    const uY = paletteY - 18;
-    for (const u of utilities.slice(0, 3).reverse()) {
-      ctx.font = `700 11px ${FONT_MONO}`;
+    ctx.fillStyle = C.inkDim;
+    ctx.font = `600 11px ${FONT_MONO}`;
+    ctx.letterSpacing = "5px";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText("UTILITY", 64, utilityY);
+    ctx.letterSpacing = "0px";
+
+    // Solid mint chip per use; wraps to a second line if needed.
+    let uX = 160;
+    const utilTop = utilityY - 24;
+    for (const u of utilities.slice(0, 5)) {
       const lbl = tidy(u).toUpperCase();
-      const w = ctx.measureText(lbl).width + 28;
-      uX -= w;
-      drawChip(ctx, uX, uY, lbl, {
-        bg: "transparent",
-        fg: C.ink,
-        border: "rgba(21,32,26,0.5)",
-        size: 11,
+      ctx.font = `700 13px ${FONT_MONO}`;
+      const w = ctx.measureText(lbl).width + 32;
+      if (uX + w > CARD_W - 64) break;
+      drawChip(ctx, uX, utilTop, lbl, {
+        bg: C.mintDim,
+        fg: "#FFFFFF",
+        size: 13,
         family: FONT_MONO,
         weight: "700",
-        paddingX: 14,
-        paddingY: 6,
+        paddingX: 16,
+        paddingY: 9,
       });
-      uX -= 8;
+      uX += w + 8;
     }
+  }
+
+  // — Gardener's Note (AI-generated tip) -----------------------------
+  // Highlighted callout — the "what a real gardener would whisper to a
+  // beginner" moment. Sproutgreen surface so it visually reads as advice
+  // (different from the field-guide stat boxes).
+  if (gardenerTip) {
+    const noteTop = utilityY + 28;
+    const noteX = 64;
+    const noteW = CARD_W - 128;
+    const noteH = 200;
+    roundRectPath(ctx, noteX, noteTop, noteW, noteH, 22);
+    ctx.fillStyle = "rgba(91,211,148,0.08)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(59,127,90,0.45)";
+    ctx.lineWidth = 1.2;
+    ctx.stroke();
+
+    if (icons?.sproutInk) {
+      ctx.drawImage(icons.sproutInk, noteX + 22, noteTop + 24, 36, 36);
+    }
+    ctx.fillStyle = C.mintDim;
+    ctx.font = `700 12px ${FONT_MONO}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.letterSpacing = "6px";
+    ctx.fillText("◇ GARDENER'S NOTE", noteX + 70, noteTop + 38);
+    ctx.letterSpacing = "0px";
+
+    ctx.fillStyle = "rgba(21,32,26,0.5)";
+    ctx.font = `500 10px ${FONT_MONO}`;
+    ctx.letterSpacing = "5px";
+    ctx.fillText("AI · BEGINNER TIP", noteX + 70, noteTop + 56);
+    ctx.letterSpacing = "0px";
+
+    ctx.fillStyle = C.ink;
+    ctx.font = `500 19px ${FONT_MONO}`;
+    drawWrap(ctx, gardenerTip, noteX + 24, noteTop + 100, noteW - 48, 28, 4);
   }
 
   drawBrandFooter(ctx, C.ink, C.mintDim);
@@ -1207,6 +1309,7 @@ function drawCardDeep(
   worldMapFallback: HTMLImageElement | null,
   originMap: HTMLImageElement | null,
   historicalFact: string,
+  icons: IconSet | null,
   logoWhite: HTMLImageElement | null,
 ) {
   // Background.
@@ -1245,33 +1348,34 @@ function drawCardDeep(
   const originText = (
     origin.length ? joinPretty(origin, " · ", 2) : "Cultivated Worldwide"
   ).toUpperCase();
-  ctx.font = `700 44px ${FONT_MONO}`;
+  ctx.font = `700 36px ${FONT_MONO}`;
   ctx.fillStyle = C.cream;
   ctx.letterSpacing = "3px";
-  const originBottom = drawWrap(ctx, originText, 64, 250, CARD_W - 128, 56, 2);
+  const originBottom = drawWrap(ctx, originText, 64, 250, CARD_W - 128, 46, 2);
   ctx.letterSpacing = "0px";
 
-  ctx.font = `500 14px ${FONT_MONO}`;
+  ctx.font = `500 13px ${FONT_MONO}`;
   ctx.fillStyle = "rgba(168,240,204,0.7)";
   ctx.letterSpacing = "5px";
   ctx.fillText(
     `◯ ${origin.length > 1 ? "NATIVE RANGE" : "NATIVE TO"}`,
     64,
-    originBottom + 28,
+    originBottom + 26,
   );
   ctx.letterSpacing = "0px";
 
-  // — Map block ------------------------------------------------------
-  // Same map asset (and pin coordinates) the public Plant Info page uses, so
-  // the carousel reads as part of the same visual system.
-  const mapTop = originBottom + 64;
-  const mapX = 64;
-  const mapW = CARD_W - 128;
-  const mapAR = ORIGIN_MAP_VIEW_W / ORIGIN_MAP_VIEW_H; // 1.637
-  const mapH = Math.round(mapW / mapAR);
+  // — Split row: half-width map (left) + stats grid (right) ----------
+  const splitTop = originBottom + 56;
+  const padX = 64;
+  const splitGap = 24;
+  const splitW = (CARD_W - padX * 2 - splitGap) / 2; // 472
+  const splitH = 380;
 
-  // Backing card so the map sits on its own surface.
-  roundRectPath(ctx, mapX, mapTop, mapW, mapH, 22);
+  // LEFT: map. Always sized to its native aspect inside the panel; pinned
+  // origins stay aligned with PlantInfoPage.
+  const mapX = padX;
+  const mapY = splitTop;
+  roundRectPath(ctx, mapX, mapY, splitW, splitH, 20);
   ctx.fillStyle = "rgba(22,39,29,0.7)";
   ctx.fill();
   ctx.strokeStyle = "rgba(91,211,148,0.25)";
@@ -1279,122 +1383,200 @@ function drawCardDeep(
   ctx.stroke();
 
   ctx.save();
-  roundRectPath(ctx, mapX, mapTop, mapW, mapH, 22);
+  roundRectPath(ctx, mapX, mapY, splitW, splitH, 20);
   ctx.clip();
   const mapImg = originMap || worldMapFallback;
   if (mapImg) {
-    ctx.globalAlpha = 0.35;
-    drawCoverImage(ctx, mapImg, mapX, mapTop, mapW, mapH);
+    // Fit the map to width inside the panel so it fills the available space
+    // without distorting the geographic proportions.
+    const mapAR = ORIGIN_MAP_VIEW_W / ORIGIN_MAP_VIEW_H;
+    const drawW = splitW;
+    const drawH = drawW / mapAR;
+    const drawY = mapY + (splitH - drawH) / 2;
+    ctx.globalAlpha = 0.4;
+    drawCoverImage(ctx, mapImg, mapX, drawY, drawW, drawH);
     ctx.globalAlpha = 1;
+
+    // Pins use the same coordinate system PlantInfoPage relies on.
+    const sx = drawW / ORIGIN_MAP_VIEW_W;
+    const sy = drawH / ORIGIN_MAP_VIEW_H;
+    for (const o of origin) {
+      const coords = matchOriginToCoords(o);
+      if (!coords) continue;
+      const px = mapX + (coords[0] - ORIGIN_MAP_VIEW_X) * sx;
+      const py = drawY + (coords[1] - ORIGIN_MAP_VIEW_Y) * sy;
+      ctx.beginPath();
+      ctx.arc(px, py, 14, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(91,211,148,0.18)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, py, 8, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(91,211,148,0.35)";
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(px, py, 4, 0, Math.PI * 2);
+      ctx.fillStyle = C.mint;
+      ctx.fill();
+      ctx.strokeStyle = "#FFFFFF";
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
   }
-  // Plot a glowing pin per recognised origin country.
-  const sx = mapW / ORIGIN_MAP_VIEW_W;
-  const sy = mapH / ORIGIN_MAP_VIEW_H;
-  for (const o of origin) {
-    const coords = matchOriginToCoords(o);
-    if (!coords) continue;
-    const px = mapX + (coords[0] - ORIGIN_MAP_VIEW_X) * sx;
-    const py = mapTop + (coords[1] - ORIGIN_MAP_VIEW_Y) * sy;
-    // pulse halo
-    ctx.beginPath();
-    ctx.arc(px, py, 18, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(91,211,148,0.18)";
-    ctx.fill();
-    // glow
-    ctx.beginPath();
-    ctx.arc(px, py, 11, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(91,211,148,0.32)";
-    ctx.fill();
-    // pin dot
-    ctx.beginPath();
-    ctx.arc(px, py, 6, 0, Math.PI * 2);
-    ctx.fillStyle = C.mint;
-    ctx.fill();
-    ctx.strokeStyle = "#FFFFFF";
-    ctx.lineWidth = 2;
-    ctx.stroke();
-  }
+  // Map label inside the panel, top-left.
+  ctx.fillStyle = "rgba(168,240,204,0.55)";
+  ctx.font = `600 10px ${FONT_MONO}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "5px";
+  ctx.fillText("◯ NATIVE RANGE", mapX + 16, mapY + 24);
+  ctx.letterSpacing = "0px";
   ctx.restore();
 
-  // Origin tags below the map.
-  let tagY = mapTop + mapH + 22;
-  if (origin.length > 0) {
-    let tagX = 64;
-    for (const o of origin.slice(0, 4)) {
-      const lbl = tidy(o).toUpperCase();
-      ctx.font = `700 12px ${FONT_MONO}`;
-      const w = ctx.measureText(lbl).width + 28;
-      if (tagX + w > CARD_W - 64) break;
-      drawChip(ctx, tagX, tagY, lbl, {
-        bg: "rgba(91,211,148,0.15)",
-        fg: C.mintGlow,
-        border: "rgba(91,211,148,0.5)",
-        size: 12,
-        family: FONT_MONO,
-        weight: "700",
-        paddingX: 14,
-        paddingY: 7,
-      });
-      tagX += w + 8;
-    }
-    tagY += 36;
-  }
+  // RIGHT: 2x3 stats grid sharing space with the map.
+  const statsX = mapX + splitW + splitGap;
+  const cellH = (splitH - 8) / 3; // 124 each
+  const cellW = splitW;
 
-  // — Historical fact callout ---------------------------------------
-  if (historicalFact) {
-    const factTop = tagY + 12;
-    const factX = 64;
-    const factW = CARD_W - 128;
-    const factH = 280;
-    roundRectPath(ctx, factX, factTop, factW, factH, 22);
-    ctx.fillStyle = "rgba(245,239,226,0.06)";
+  const climate = joinPretty(asArr(plant.climate), " · ", 2);
+  const lifecycle = tidy(asArr(plant.life_cycle)[0] || "—");
+  const foliage = tidy(asArr(plant.foliage_persistence)[0] || "—");
+  const heightCm = Number(plant.height_cm) || 0;
+  const heightStr =
+    heightCm > 0
+      ? heightCm >= 100
+        ? `${(heightCm / 100).toFixed(heightCm >= 1000 ? 0 : 1)} M`
+        : `${heightCm} CM`
+      : "—";
+  const tMin = plant.temperature_min;
+  const tMax = plant.temperature_max;
+  const tempStr =
+    tMin != null && tMax != null
+      ? `${tMin}° / ${tMax}°C`
+      : tMin != null
+        ? `MIN ${tMin}°C`
+        : tMax != null
+          ? `MAX ${tMax}°C`
+          : "—";
+  const conservation = tidy(asArr(plant.conservation_status)[0] || "—");
+
+  const cells: Array<{
+    icon: HTMLImageElement | null;
+    label: string;
+    value: string;
+  }> = [
+    { icon: icons?.thermo ?? null, label: "Climate", value: climate.toUpperCase() },
+    { icon: icons?.thermo ?? null, label: "Temperature", value: tempStr },
+    { icon: icons?.clock ?? null, label: "Lifecycle", value: lifecycle.toUpperCase() },
+    { icon: icons?.leaf ?? null, label: "Foliage", value: foliage.toUpperCase() },
+    { icon: icons?.ruler ?? null, label: "Height", value: heightStr },
+    { icon: icons?.alert ?? null, label: "Conservation", value: conservation.toUpperCase() },
+  ];
+  // 2 cols × 3 rows
+  const innerCols = 2;
+  const innerRows = 3;
+  const innerCellW = (cellW - 8) / innerCols;
+  const innerCellH = cellH - 8;
+
+  for (let i = 0; i < cells.length; i++) {
+    const col = i % innerCols;
+    const row = Math.floor(i / innerCols);
+    const cx = statsX + col * (innerCellW + 8);
+    const cy = splitTop + row * (innerCellH + 8);
+    roundRectPath(ctx, cx, cy, innerCellW, innerCellH, 14);
+    ctx.fillStyle = "rgba(22,39,29,0.85)";
     ctx.fill();
-    ctx.strokeStyle = "rgba(245,239,226,0.18)";
+    ctx.strokeStyle = "rgba(91,211,148,0.18)";
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // Eyebrow with tracked accent.
-    ctx.fillStyle = C.gold;
-    ctx.font = `700 12px ${FONT_MONO}`;
+    const cell = cells[i];
+    if (cell.icon) {
+      // tinted icon background circle for parity with the discovery-card chips
+      ctx.beginPath();
+      ctx.arc(cx + 30, cy + 30, 16, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(91,211,148,0.18)";
+      ctx.fill();
+      ctx.drawImage(cell.icon, cx + 18, cy + 18, 24, 24);
+    }
+    ctx.fillStyle = "rgba(168,240,204,0.7)";
+    ctx.font = `600 10px ${FONT_MONO}`;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.letterSpacing = "6px";
-    ctx.fillText("◇ HISTORICAL · ARCHIVED", factX + 24, factTop + 36);
+    ctx.letterSpacing = "4px";
+    ctx.fillText(cell.label.toUpperCase(), cx + 56, cy + 28);
     ctx.letterSpacing = "0px";
 
-    // Big quote-mark accent.
-    ctx.font = `700 110px ${FONT_MONO}`;
-    ctx.fillStyle = "rgba(224,178,82,0.18)";
-    ctx.fillText('"', factX + 24, factTop + 130);
-
-    // Fact body.
+    const valSize = fitText(
+      ctx,
+      cell.value,
+      innerCellW - 24,
+      22,
+      11,
+      "700",
+      FONT_MONO,
+    );
+    ctx.font = `700 ${valSize}px ${FONT_MONO}`;
     ctx.fillStyle = C.cream;
-    ctx.font = `500 22px ${FONT_MONO}`;
-    drawWrap(ctx, historicalFact, factX + 24, factTop + 90, factW - 48, 32, 6);
+    ctx.fillText(cell.value, cx + 16, cy + innerCellH - 18);
+  }
 
-    // Source line.
-    ctx.fillStyle = "rgba(168,240,204,0.6)";
-    ctx.font = `500 11px ${FONT_MONO}`;
-    ctx.letterSpacing = "5px";
-    ctx.fillText("VERIFIED HISTORICAL RECORD", factX + 24, factTop + factH - 24);
-    ctx.letterSpacing = "0px";
-  } else if (plant) {
-    // No fact returned — fall back to a presentation snippet so the card
-    // doesn't have a yawning gap.
+  // — Historical fact callout (with distinctive scroll icon) ---------
+  // Icon + gold accent + cream surface set this section apart from the
+  // factual stats above so the reader knows it's a story, not data.
+  const factTop = splitTop + splitH + 32;
+  const factX = padX;
+  const factW = CARD_W - padX * 2;
+  const factH = 240;
+  roundRectPath(ctx, factX, factTop, factW, factH, 22);
+  ctx.fillStyle = "rgba(224,178,82,0.08)";
+  ctx.fill();
+  ctx.strokeStyle = "rgba(224,178,82,0.45)";
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+
+  // Big scroll icon in the top-left of the callout.
+  if (icons?.scrollGold) {
+    ctx.drawImage(icons.scrollGold, factX + 24, factTop + 24, 56, 56);
+  }
+
+  // Eyebrow with gold accent — different colour from the rest of the card
+  // so the eye registers it as a separate kind of content.
+  ctx.fillStyle = C.gold;
+  ctx.font = `700 12px ${FONT_MONO}`;
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "6px";
+  ctx.fillText("◇ AI · HISTORICAL RECORD", factX + 96, factTop + 44);
+  ctx.letterSpacing = "0px";
+
+  ctx.fillStyle = "rgba(224,178,82,0.7)";
+  ctx.font = `500 11px ${FONT_MONO}`;
+  ctx.letterSpacing = "5px";
+  ctx.fillText("VERIFIED ARCHIVED FACT", factX + 96, factTop + 66);
+  ctx.letterSpacing = "0px";
+
+  if (historicalFact) {
+    ctx.fillStyle = C.cream;
+    ctx.font = `500 20px ${FONT_MONO}`;
+    drawWrap(ctx, historicalFact, factX + 24, factTop + 110, factW - 48, 30, 4);
+  } else {
+    // No fact — fall back to presentation if available, otherwise a
+    // friendly hint instead of a blank panel.
     const presentation = String(
       (plant as { presentation?: string }).presentation || "",
     ).trim();
     if (presentation) {
-      const bx = 64;
-      const by = tagY + 24;
-      ctx.fillStyle = "rgba(168,240,204,0.5)";
-      ctx.font = `600 12px ${FONT_MONO}`;
-      ctx.letterSpacing = "5px";
-      ctx.fillText("FIELD NOTES", bx, by);
-      ctx.letterSpacing = "0px";
       ctx.fillStyle = C.cream;
-      ctx.font = `400 20px ${FONT_MONO}`;
-      drawWrap(ctx, presentation, bx, by + 36, CARD_W - 128, 28, 4);
+      ctx.font = `400 18px ${FONT_MONO}`;
+      drawWrap(ctx, presentation, factX + 24, factTop + 110, factW - 48, 28, 4);
+    } else {
+      ctx.fillStyle = "rgba(245,239,226,0.55)";
+      ctx.font = `400 16px ${FONT_MONO}`;
+      ctx.fillText(
+        "No verified historical record surfaced this generation.",
+        factX + 24,
+        factTop + 130,
+      );
     }
   }
 
@@ -1407,6 +1589,7 @@ function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   images: HTMLImageElement[],
+  icons: IconSet | null,
   logoWhite: HTMLImageElement | null,
 ) {
   // Mesh gradient background — multiple radial stops
@@ -1507,46 +1690,99 @@ function drawCardWild(
     4,
   );
 
-  // CTA chip
-  const ctaY = 1100;
-  ctx.font = `700 38px ${FONT_MONO}`;
+  // CTA chip — kept compact so the downward cue can dominate the bottom band.
+  const ctaY = 1010;
+  ctx.font = `700 32px ${FONT_MONO}`;
   const ctaText = "aphylia.app";
-  const ctaW = ctx.measureText(ctaText).width + 80;
-  roundRectPath(ctx, 64, ctaY, ctaW, 88, 44);
+  const ctaW = ctx.measureText(ctaText).width + 64;
+  roundRectPath(ctx, 64, ctaY, ctaW, 70, 35);
   ctx.fillStyle = C.cream;
   ctx.fill();
   ctx.fillStyle = C.forestDeep;
   ctx.textBaseline = "middle";
   ctx.textAlign = "left";
-  ctx.fillText(ctaText, 64 + 40, ctaY + 46);
+  ctx.fillText(ctaText, 64 + 32, ctaY + 37);
 
-  // arrow circle next to chip
-  const arrCx = 64 + ctaW + 36;
-  const arrCy = ctaY + 44;
+  // small arrow circle next to chip.
+  const arrCx = 64 + ctaW + 30;
+  const arrCy = ctaY + 35;
   ctx.beginPath();
-  ctx.arc(arrCx, arrCy, 44, 0, Math.PI * 2);
+  ctx.arc(arrCx, arrCy, 35, 0, Math.PI * 2);
   ctx.fillStyle = C.mint;
   ctx.fill();
   ctx.strokeStyle = C.cream;
   ctx.lineWidth = 3;
   ctx.lineCap = "round";
   ctx.beginPath();
-  ctx.moveTo(arrCx - 14, arrCy);
-  ctx.lineTo(arrCx + 14, arrCy);
-  ctx.moveTo(arrCx + 4, arrCy - 10);
-  ctx.lineTo(arrCx + 14, arrCy);
-  ctx.lineTo(arrCx + 4, arrCy + 10);
+  ctx.moveTo(arrCx - 11, arrCy);
+  ctx.lineTo(arrCx + 11, arrCy);
+  ctx.moveTo(arrCx + 3, arrCy - 8);
+  ctx.lineTo(arrCx + 11, arrCy);
+  ctx.lineTo(arrCx + 3, arrCy + 8);
   ctx.stroke();
 
-  // tiny stat row
-  const statsY = 1240;
+  // — Downward "read the caption" cue --------------------------------
+  // Big animated-looking arrow stack pointing down, with a tracked label.
+  // The whole bottom band visually suggests the eye should keep going past
+  // the carousel into the post text below.
+  const cueTop = 1130;
+  ctx.fillStyle = C.mintGlow;
+  ctx.font = `700 16px ${FONT_MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "8px";
+  ctx.fillText("READ THE FULL POST BELOW", CARD_W / 2, cueTop);
+  ctx.letterSpacing = "0px";
+
+  // Three stacked chevrons (Lucide ChevronsDown rendered three times at
+  // decreasing opacity).
+  if (icons?.chevDown) {
+    const sizes = [
+      { y: cueTop + 30, op: 1.0, sz: 56 },
+      { y: cueTop + 70, op: 0.6, sz: 48 },
+      { y: cueTop + 105, op: 0.3, sz: 40 },
+    ];
+    for (const s of sizes) {
+      ctx.save();
+      ctx.globalAlpha = s.op;
+      ctx.drawImage(
+        icons.chevDown,
+        CARD_W / 2 - s.sz / 2,
+        s.y,
+        s.sz,
+        s.sz,
+      );
+      ctx.restore();
+    }
+  } else {
+    // SVG fallback — three chevrons drawn with strokes if the Lucide image
+    // didn't rasterize.
+    ctx.strokeStyle = C.mintGlow;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    for (let i = 0; i < 3; i++) {
+      const y = cueTop + 30 + i * 24;
+      const span = 24 - i * 4;
+      ctx.globalAlpha = 1 - i * 0.3;
+      ctx.beginPath();
+      ctx.moveTo(CARD_W / 2 - span, y);
+      ctx.lineTo(CARD_W / 2, y + span * 0.5);
+      ctx.lineTo(CARD_W / 2 + span, y);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // tiny featuring stat row at the very bottom
+  const statsY = 1300;
   const statName = tidy(plant.name || "this plant");
-  ctx.font = `500 16px ${FONT_MONO}`;
-  ctx.fillStyle = "rgba(168,240,204,0.7)";
-  ctx.textAlign = "left";
+  ctx.font = `500 12px ${FONT_MONO}`;
+  ctx.fillStyle = "rgba(168,240,204,0.5)";
+  ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "5px";
-  ctx.fillText(`FEATURING · ${statName.toUpperCase()}`, 64, statsY);
+  ctx.fillText(`FEATURING · ${statName.toUpperCase()}`, CARD_W / 2, statsY);
   ctx.letterSpacing = "0px";
 
   drawGrain(ctx, CARD_W, CARD_H, 0.04, 700);
@@ -1581,6 +1817,21 @@ type Bundle = {
    * low-confidence output (better to show no fact than a fabricated one).
    */
   historicalFact: string;
+  /**
+   * One concrete care tip a beginner gardener would miss. Surfaced on Card 2
+   * (Identity) as the "Gardener's Note".
+   */
+  gardenerTip: string;
+  /**
+   * Instagram-caption body (without URLs/hashtags). Shown in the panel UI
+   * with a copy button — the user pastes it under their carousel post.
+   */
+  postDescription: string;
+  /**
+   * Public Aphylia URL of the plant (constructed from plant.id). Tagged onto
+   * the post description in the UI when the user copies the caption.
+   */
+  plantUrl: string;
   icons: IconSet | null;
   logoWhite: HTMLImageElement | null;
   logoBlack: HTMLImageElement | null;
@@ -1711,6 +1962,7 @@ async function renderCardCanvas(
         pickImage(b.images, 1),
         b.colors,
         b.commonNames,
+        b.gardenerTip,
         b.icons,
         b.logoBlack,
       );
@@ -1723,12 +1975,13 @@ async function renderCardCanvas(
         b.worldMap,
         b.originMap,
         b.historicalFact,
+        b.icons,
         b.logoWhite,
       );
       break;
     case 3:
       // Wild card rotates through every available image in the orb collage.
-      drawCardWild(ctx, b.plant, b.images, b.logoWhite);
+      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoWhite);
       break;
   }
   return c;
@@ -1760,6 +2013,52 @@ export function AdminExportPanel() {
   const [logoBlack, setLogoBlack] = React.useState<HTMLImageElement | null>(null);
   const previewRefs = React.useRef<Array<HTMLCanvasElement | null>>([]);
   const viewer = useImageViewer();
+  const [captionCopied, setCaptionCopied] = React.useState(false);
+
+  // Build the full Instagram caption: AI-generated body + plant page link +
+  // aphylia.app CTA + a small hashtag set so the post is shareable as-is.
+  const fullCaption = React.useMemo(() => {
+    if (!bundle) return "";
+    const lines: string[] = [];
+    if (bundle.postDescription) lines.push(bundle.postDescription.trim());
+    lines.push("");
+    lines.push(`🔗 Full plant guide → ${bundle.plantUrl}`);
+    lines.push("🌿 Discover more on aphylia.app");
+    lines.push("");
+    const tagBase =
+      String(bundle.plant.name || "")
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "")
+        .slice(0, 24) || "plant";
+    lines.push(
+      `#aphylia #plants #plantsofinstagram #${tagBase} #plantcare #houseplants`,
+    );
+    return lines.join("\n");
+  }, [bundle]);
+
+  const copyCaption = React.useCallback(async () => {
+    if (!fullCaption) return;
+    try {
+      await navigator.clipboard.writeText(fullCaption);
+      setCaptionCopied(true);
+      window.setTimeout(() => setCaptionCopied(false), 1800);
+    } catch {
+      // Older browsers — fallback via a temp textarea.
+      const ta = document.createElement("textarea");
+      ta.value = fullCaption;
+      ta.style.position = "fixed";
+      ta.style.opacity = "0";
+      document.body.appendChild(ta);
+      ta.select();
+      try {
+        document.execCommand("copy");
+        setCaptionCopied(true);
+        window.setTimeout(() => setCaptionCopied(false), 1800);
+      } finally {
+        document.body.removeChild(ta);
+      }
+    }
+  }, [fullCaption]);
 
   // Snapshot every preview canvas to a PNG data URL and open the shared
   // ImageViewer at the clicked card. Lazy: built on click so the data URLs
@@ -1829,6 +2128,9 @@ export function AdminExportPanel() {
         thermo,
         clock,
         ruler,
+        scroll,
+        scrollGold,
+        chevDown,
         sunCream,
       ] = await Promise.all([
         lucideImage(Sun, C.gold, 64, 2.4),
@@ -1845,6 +2147,9 @@ export function AdminExportPanel() {
         lucideImage(Thermometer, C.ink, 64, 2),
         lucideImage(Clock, C.ink, 64, 2),
         lucideImage(Ruler, C.ink, 64, 2),
+        lucideImage(ScrollText, C.cream, 64, 2),
+        lucideImage(ScrollText, C.gold, 96, 2.2),
+        lucideImage(ChevronsDown, C.cream, 96, 2.5),
         lucideImage(Sun, C.cream, 64, 2.2),
       ]);
       if (cancelled) return;
@@ -1863,6 +2168,9 @@ export function AdminExportPanel() {
         thermo,
         clock,
         ruler,
+        scroll,
+        scrollGold,
+        chevDown,
         sunCream,
       });
     })();
@@ -1998,14 +2306,16 @@ export function AdminExportPanel() {
               (USE_PRIORITY[b.use ?? ""] ?? 99),
           )
           .slice(0, 4);
-      // Fire image loads + AI fact in parallel so the slow OpenAI hop
+      // Fire image loads + AI content in parallel so the slow OpenAI hop
       // overlaps with the network round-trips for the photos.
       const plantNameStr = String(plant.name || "").trim();
       const sciNameStr = String(plant.scientific_name_species || "").trim();
       const familyStr = String(plant.family || "").trim();
-      const [loaded, historicalFact] = await Promise.all([
+      const plantId = String(plant.id || picked.id || "");
+      const plantUrl = plantId ? `https://aphylia.app/plants/${plantId}` : "https://aphylia.app";
+      const [loaded, ai] = await Promise.all([
         Promise.all(rawImgs.map((r) => loadCanvasImage(r.link))),
-        fetchHistoricalFact(plantNameStr, sciNameStr, familyStr),
+        fetchExportAiContent(plantNameStr, sciNameStr, familyStr),
       ]);
       const images = loaded.filter((i): i is HTMLImageElement => !!i);
 
@@ -2019,7 +2329,10 @@ export function AdminExportPanel() {
         images,
         worldMap,
         originMap,
-        historicalFact,
+        historicalFact: ai.historicalFact,
+        gardenerTip: ai.gardenerTip,
+        postDescription: ai.postDescription,
+        plantUrl,
         icons,
         logoWhite,
         logoBlack,
@@ -2182,6 +2495,43 @@ export function AdminExportPanel() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {bundle && (
+        <div className="rounded-2xl border bg-white/90 dark:bg-[#17171a] p-4 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <div className="text-xs uppercase tracking-[0.2em] text-stone-500">
+                Instagram caption
+              </div>
+              <div className="text-xs text-stone-400 mt-0.5">
+                AI-generated body + plant link + Aphylia CTA + hashtags. Edit
+                inline before posting if you want to tweak the tone.
+              </div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void copyCaption()}
+              disabled={!fullCaption}
+              className="shrink-0"
+            >
+              {captionCopied ? (
+                <Check className="h-4 w-4 mr-2 text-emerald-500" />
+              ) : (
+                <Copy className="h-4 w-4 mr-2" />
+              )}
+              {captionCopied ? "Copied" : "Copy caption"}
+            </Button>
+          </div>
+          <textarea
+            value={fullCaption}
+            readOnly
+            spellCheck={false}
+            rows={10}
+            className="w-full resize-y rounded-xl border bg-stone-50 dark:bg-[#0f1011] dark:border-stone-700/50 p-3 font-mono text-[13px] leading-relaxed text-stone-800 dark:text-stone-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+          />
         </div>
       )}
 

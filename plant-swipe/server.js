@@ -5313,6 +5313,143 @@ app.options('/api/admin/ai/plant-historical-fact', (_req, res) => {
   res.status(204).end()
 })
 
+// Single combined endpoint that returns every AI-generated piece the export
+// panel needs in one round-trip. Avoids three sequential OpenAI calls per
+// plant (one for fact, one for tip, one for caption) — they cost the same
+// tokens collectively but a combined call reduces wall-clock latency.
+//
+// Returned fields:
+//   historicalFact    — verified strange/discovery/macabre history (~280 chars)
+//   gardenerTip       — 1-2 sentence beginner-facing care insight (~200 chars)
+//   postDescription   — Instagram caption body, no URLs (~600 chars). The
+//                       client appends plant + Aphylia links after.
+//   confidence        — overall confidence in the historical fact only.
+app.post('/api/admin/ai/plant-export-content', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const scientificName = typeof body.scientificName === 'string' ? body.scientificName.trim() : ''
+    const family = typeof body.family === 'string' ? body.family.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const factMax = 280
+    const tipMax = 200
+    const captionMax = 600
+
+    const instructions = `You are writing the AI content for an Instagram-style plant card carousel. Return EXACTLY one JSON object with these keys:
+
+{
+  "historicalFact": "...",
+  "factConfidence": "high" | "medium" | "low",
+  "gardenerTip": "...",
+  "postDescription": "..."
+}
+
+historicalFact (max ${factMax} chars):
+- ONE verified, share-worthy fact prioritising:
+  1. documented strange or unexpected historical use (folk medicine, ritual, dye, weapon, poison, embalming, perfumery)
+  2. discovery / explorer / craze / smuggling story
+  3. attested macabre or dark folklore (witch trials, funeral rites, gallows associations, graveyard symbolism)
+  4. surprising biology only if it has a story attached
+- ONLY attested history. NEVER hedge ("some say", "legend has it"). NEVER invent dates/names/events.
+- One self-contained sentence (max two short sentences).
+- Plain prose, no markdown, no leading filler ("Did you know"), no quotes around the whole thing.
+- If you don't have a verified strange fact, return an empty string and set factConfidence to "low".
+
+factConfidence:
+- "high" if the fact is widely attested in mainstream botanical / historical sources.
+- "medium" if it's documented but less mainstream.
+- "low" if you reached for it — caller will discard low-confidence outputs.
+
+gardenerTip (max ${tipMax} chars):
+- ONE genuine care tip a hobby gardener would tell a beginner about THIS plant — the kind of thing that's easy to miss in a generic care card.
+- Concrete and actionable. Mention the actual mistake to avoid (e.g. "let the topsoil dry between waterings — caladiums rot fast in saturated soil").
+- One or two short sentences. Plain prose. No markdown. No leading "Tip:" filler.
+- Always return a real tip — beginners always need one, even for easy plants.
+
+postDescription (max ${captionMax} chars):
+- The body of the Instagram caption that goes BELOW the carousel.
+- Open with a hook sentence about the plant (avoid the literal phrase "did you know").
+- Mention 2-3 concrete care tips or interesting traits.
+- Friendly, conversational tone. Use line breaks (\\n) for rhythm.
+- Do NOT include any URLs, hashtags, or @-mentions — the client appends links and hashtags after.
+- Do NOT mention "Instagram" or "swipe" — let the carousel do that work.
+- Plain prose only, no markdown.
+
+Return ONLY the JSON object. No commentary before or after.`
+
+    const promptParts = [`Plant: ${plantName}`]
+    if (scientificName) promptParts.push(`Scientific name: ${scientificName}`)
+    if (family) promptParts.push(`Family: ${family}`)
+    promptParts.push('Generate the JSON object now.')
+    const prompt = promptParts.join('\n')
+
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'medium' },
+      instructions,
+      input: prompt,
+    })
+    logAiUsage({
+      userId: caller,
+      feature: 'admin_plant_export_content',
+      model: openaiModel,
+      response,
+      metadata: { plantName, scientificName },
+    })
+
+    const raw = (response.output_text || '').trim()
+    let parsed = null
+    try {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (m) parsed = JSON.parse(m[0])
+    } catch {
+      parsed = null
+    }
+
+    const truncate = (s, max) => {
+      if (typeof s !== 'string') return ''
+      const trimmed = s.trim()
+      if (trimmed.length <= max) return trimmed
+      const cut = trimmed.slice(0, max)
+      const lastSpace = cut.lastIndexOf(' ')
+      return (lastSpace > max * 0.7 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
+    }
+
+    const factConfidenceRaw =
+      typeof parsed?.factConfidence === 'string' ? parsed.factConfidence.trim().toLowerCase() : 'low'
+    const factConfidence = ['high', 'medium', 'low'].includes(factConfidenceRaw) ? factConfidenceRaw : 'low'
+
+    res.json({
+      success: true,
+      historicalFact: truncate(parsed?.historicalFact, factMax),
+      factConfidence,
+      gardenerTip: truncate(parsed?.gardenerTip, tipMax),
+      postDescription: truncate(parsed?.postDescription, captionMax),
+    })
+  } catch (err) {
+    console.error('[server] AI export-content failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to generate export content' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-export-content', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
 // ========================================
 // External Image Sources (GBIF + Smithsonian)
 // ========================================
