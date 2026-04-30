@@ -1081,7 +1081,7 @@ function drawCardDeep(
 function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
-  hero: HTMLImageElement | null,
+  images: HTMLImageElement[],
 ) {
   // Mesh gradient background — multiple radial stops
   ctx.fillStyle = C.forestDeep;
@@ -1107,29 +1107,31 @@ function drawCardWild(
 
   drawBrandHeader(ctx, 4, 4, "DISCOVER", C.cream, C.mintGlow);
 
-  // Photo collage — 5 circular crops scattered
-  if (hero) {
+  // Photo collage — 5 circular orbs scattered, rotating through every
+  // available plant photo so multi-image plants get genuine visual variety.
+  if (images.length > 0) {
     const orbs: Array<{ x: number; y: number; r: number; alpha: number }> = [
-      { x: 720, y: 360, r: 130, alpha: 0.88 },
-      { x: 220, y: 480, r: 95, alpha: 0.7 },
-      { x: 880, y: 620, r: 70, alpha: 0.55 },
-      { x: 380, y: 720, r: 60, alpha: 0.45 },
-      { x: 140, y: 290, r: 50, alpha: 0.4 },
+      { x: 720, y: 360, r: 130, alpha: 0.92 },
+      { x: 220, y: 480, r: 95, alpha: 0.78 },
+      { x: 880, y: 620, r: 70, alpha: 0.62 },
+      { x: 380, y: 720, r: 60, alpha: 0.5 },
+      { x: 140, y: 290, r: 50, alpha: 0.45 },
     ];
-    for (const o of orbs) {
+    orbs.forEach((o, i) => {
+      const img = images[i % images.length];
       ctx.save();
       ctx.globalAlpha = o.alpha;
       ctx.beginPath();
       ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
       ctx.clip();
-      drawCoverImage(ctx, hero, o.x - o.r, o.y - o.r, o.r * 2, o.r * 2);
+      drawCoverImage(ctx, img, o.x - o.r, o.y - o.r, o.r * 2, o.r * 2);
       ctx.restore();
       ctx.beginPath();
       ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
       ctx.strokeStyle = "rgba(245,239,226,0.45)";
       ctx.lineWidth = 1.5;
       ctx.stroke();
-    }
+    });
   }
 
   // Eyebrow
@@ -1232,9 +1234,23 @@ type Bundle = {
   presentation: string;
   origin: string[];
   colors: ColorRow[];
-  hero: HTMLImageElement | null;
+  /**
+   * Up to 4 plant photos, sorted by `use` priority. `images[0]` is the lead
+   * (primary/card/cover/hero/thumbnail in that preference). Cards that need a
+   * single hero pull `images[0]`; the wild card rotates through all of them
+   * in the orb collage so multi-photo plants get visible variety.
+   */
+  images: HTMLImageElement[];
   worldMap: HTMLImageElement | null;
 };
+
+// Pick the first defined image from the bundle, falling back through the array
+// so an off-by-one (e.g. plant has only 1 image, identity wants index 1) still
+// renders something instead of leaving a hole.
+function pickImage(images: HTMLImageElement[], preferred: number): HTMLImageElement | null {
+  if (preferred < images.length) return images[preferred];
+  return images[0] ?? null;
+}
 
 async function renderCardCanvas(
   index: number,
@@ -1249,16 +1265,20 @@ async function renderCardCanvas(
   ctx.imageSmoothingQuality = "high";
   switch (index) {
     case 0:
-      drawCardCover(ctx, b.plant, b.hero, b.variety);
+      // Cover always leads with the primary photo.
+      drawCardCover(ctx, b.plant, pickImage(b.images, 0), b.variety);
       break;
     case 1:
-      drawCardIdentity(ctx, b.plant, b.hero, b.colors);
+      // Identity uses the second photo when available so it doesn't repeat
+      // the cover; falls back to the primary on single-photo plants.
+      drawCardIdentity(ctx, b.plant, pickImage(b.images, 1), b.colors);
       break;
     case 2:
       drawCardDeep(ctx, b.plant, b.origin, b.worldMap, b.presentation);
       break;
     case 3:
-      drawCardWild(ctx, b.plant, b.hero);
+      // Wild card rotates through every available image in the orb collage.
+      drawCardWild(ctx, b.plant, b.images);
       break;
   }
   return c;
@@ -1354,16 +1374,14 @@ export function AdminExportPanel() {
       const plant = plantData as PlantRow;
 
       const [
-        imgRes,
+        imgsRes,
         translationsRes,
         colorLinksRes,
       ] = await Promise.all([
         supabase
           .from("plant_images")
-          .select("link")
-          .eq("plant_id", picked.id)
-          .eq("use", "primary")
-          .maybeSingle(),
+          .select("link, use")
+          .eq("plant_id", picked.id),
         supabase
           .from("plant_translations")
           .select("language, variety, presentation, common_names, origin")
@@ -1393,11 +1411,36 @@ export function AdminExportPanel() {
         .map((l) => (Array.isArray(l.colors) ? l.colors[0] : l.colors))
         .filter((c): c is ColorRow => !!c && !!c.hex_code);
 
-      const heroUrl =
-        (imgRes.data as { link: string } | null)?.link || null;
-      const hero = await loadCanvasImage(heroUrl);
+      // Sort plant_images by use-priority so the lead photo is the strongest
+      // candidate (primary first, then card/cover/hero/thumbnail, then any).
+      // Take the top 4 to load in parallel — that's enough variety for the
+      // wild-card collage without bloating the export beyond what feed posts
+      // need.
+      const USE_PRIORITY: Record<string, number> = {
+        primary: 0,
+        card: 1,
+        cover: 2,
+        hero: 3,
+        thumbnail: 4,
+      };
+      const rawImgs =
+        ((imgsRes.data as Array<{ link: string; use: string | null }> | null) ||
+          [])
+          .filter((r) => !!r?.link)
+          .sort(
+            (a, b) =>
+              (USE_PRIORITY[a.use ?? ""] ?? 99) -
+              (USE_PRIORITY[b.use ?? ""] ?? 99),
+          )
+          .slice(0, 4);
+      const loaded = await Promise.all(
+        rawImgs.map((r) => loadCanvasImage(r.link)),
+      );
+      const images = loaded.filter(
+        (i): i is HTMLImageElement => !!i,
+      );
 
-      setBundle({ plant, variety, presentation, origin, colors, hero, worldMap });
+      setBundle({ plant, variety, presentation, origin, colors, images, worldMap });
     } finally {
       setLoading(false);
     }
