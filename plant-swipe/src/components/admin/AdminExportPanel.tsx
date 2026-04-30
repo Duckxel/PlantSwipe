@@ -32,6 +32,15 @@ import {
   type ImageViewerImage,
 } from "@/components/ui/image-viewer";
 import worldMapDarkUrl from "@/assets/world-map-dark.svg";
+import {
+  ORIGIN_MAP_URL,
+  ORIGIN_MAP_VIEW_X,
+  ORIGIN_MAP_VIEW_Y,
+  ORIGIN_MAP_VIEW_W,
+  ORIGIN_MAP_VIEW_H,
+  resolveOriginPins,
+  type OriginPin,
+} from "@/lib/originCoords";
 
 type PlantRow = Record<string, unknown>;
 type ColorRow = { name?: string; hex_code?: string };
@@ -1371,10 +1380,14 @@ function drawCardDeep(
   const splitW = (CARD_W - padX * 2 - splitGap) / 2; // 472
   const splitH = 380;
 
-  // LEFT: map. Always sized to its native aspect inside the panel; pinned
-  // origins stay aligned with PlantInfoPage.
+  // LEFT: map (when at least one origin pin resolves) or an empty-state
+  // badge (when origin is missing/unmappable). An empty world map with no
+  // pins reads as broken; the badge is honest.
   const mapX = padX;
   const mapY = splitTop;
+  const pins: OriginPin[] = resolveOriginPins(origin);
+  const hasPins = pins.length > 0;
+
   roundRectPath(ctx, mapX, mapY, splitW, splitH, 20);
   ctx.fillStyle = "rgba(22,39,29,0.7)";
   ctx.fill();
@@ -1385,51 +1398,88 @@ function drawCardDeep(
   ctx.save();
   roundRectPath(ctx, mapX, mapY, splitW, splitH, 20);
   ctx.clip();
-  const mapImg = originMap || worldMapFallback;
-  if (mapImg) {
-    // Fit the map to width inside the panel so it fills the available space
-    // without distorting the geographic proportions.
-    const mapAR = ORIGIN_MAP_VIEW_W / ORIGIN_MAP_VIEW_H;
-    const drawW = splitW;
-    const drawH = drawW / mapAR;
-    const drawY = mapY + (splitH - drawH) / 2;
-    ctx.globalAlpha = 0.4;
-    drawCoverImage(ctx, mapImg, mapX, drawY, drawW, drawH);
-    ctx.globalAlpha = 1;
 
-    // Pins use the same coordinate system PlantInfoPage relies on.
-    const sx = drawW / ORIGIN_MAP_VIEW_W;
-    const sy = drawH / ORIGIN_MAP_VIEW_H;
-    for (const o of origin) {
-      const coords = matchOriginToCoords(o);
-      if (!coords) continue;
-      const px = mapX + (coords[0] - ORIGIN_MAP_VIEW_X) * sx;
-      const py = drawY + (coords[1] - ORIGIN_MAP_VIEW_Y) * sy;
-      ctx.beginPath();
-      ctx.arc(px, py, 14, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(91,211,148,0.18)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(px, py, 8, 0, Math.PI * 2);
-      ctx.fillStyle = "rgba(91,211,148,0.35)";
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(px, py, 4, 0, Math.PI * 2);
-      ctx.fillStyle = C.mint;
-      ctx.fill();
-      ctx.strokeStyle = "#FFFFFF";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
+  if (hasPins) {
+    const mapImg = originMap || worldMapFallback;
+    if (mapImg) {
+      const mapAR = ORIGIN_MAP_VIEW_W / ORIGIN_MAP_VIEW_H;
+      const drawW = splitW;
+      const drawH = drawW / mapAR;
+      const drawY = mapY + (splitH - drawH) / 2;
+      ctx.globalAlpha = 0.4;
+      drawCoverImage(ctx, mapImg, mapX, drawY, drawW, drawH);
+      ctx.globalAlpha = 1;
+
+      // Pins use the same coordinate system PlantInfoPage relies on.
+      const sx = drawW / ORIGIN_MAP_VIEW_W;
+      const sy = drawH / ORIGIN_MAP_VIEW_H;
+      for (const pin of pins) {
+        const px = mapX + (pin.coords[0] - ORIGIN_MAP_VIEW_X) * sx;
+        const py = drawY + (pin.coords[1] - ORIGIN_MAP_VIEW_Y) * sy;
+        ctx.beginPath();
+        ctx.arc(px, py, 14, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(91,211,148,0.18)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px, py, 8, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(91,211,148,0.35)";
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(px, py, 4, 0, Math.PI * 2);
+        ctx.fillStyle = C.mint;
+        ctx.fill();
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+      }
     }
+    ctx.fillStyle = "rgba(168,240,204,0.55)";
+    ctx.font = `600 10px ${FONT_MONO}`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "alphabetic";
+    ctx.letterSpacing = "5px";
+    ctx.fillText("◯ NATIVE RANGE", mapX + 16, mapY + 24);
+    ctx.letterSpacing = "0px";
+  } else {
+    // Empty-state — origin text exists but doesn't map to any pin (or is
+    // empty). Better than a blank world map.
+    const cx = mapX + splitW / 2;
+    const cy = mapY + splitH / 2;
+    // Faint globe ring as a graphic anchor.
+    ctx.strokeStyle = "rgba(91,211,148,0.25)";
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.arc(cx, cy - 40, 56, 0, Math.PI * 2);
+    ctx.stroke();
+    // Latitude/longitude lines for the globe feel.
+    ctx.beginPath();
+    ctx.ellipse(cx, cy - 40, 56, 22, 0, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - 96);
+    ctx.lineTo(cx, cy + 16);
+    ctx.stroke();
+
+    ctx.fillStyle = C.cream;
+    ctx.font = `700 22px ${FONT_MONO}`;
+    ctx.textAlign = "center";
+    ctx.textBaseline = "alphabetic";
+    ctx.letterSpacing = "3px";
+    ctx.fillText(
+      origin.length ? "ORIGIN UNCHARTED" : "CULTIVATED WORLDWIDE",
+      cx,
+      cy + 60,
+    );
+    ctx.letterSpacing = "0px";
+
+    ctx.font = `500 13px ${FONT_MONO}`;
+    ctx.fillStyle = "rgba(168,240,204,0.7)";
+    const hint = origin.length
+      ? "Listed by region — no specific country to pin."
+      : "No documented native range on file.";
+    drawWrap(ctx, hint, mapX + 32, cy + 92, splitW - 64, 20, 3);
+    ctx.textAlign = "left";
   }
-  // Map label inside the panel, top-left.
-  ctx.fillStyle = "rgba(168,240,204,0.55)";
-  ctx.font = `600 10px ${FONT_MONO}`;
-  ctx.textAlign = "left";
-  ctx.textBaseline = "alphabetic";
-  ctx.letterSpacing = "5px";
-  ctx.fillText("◯ NATIVE RANGE", mapX + 16, mapY + 24);
-  ctx.letterSpacing = "0px";
   ctx.restore();
 
   // RIGHT: 2x3 stats grid sharing space with the map.
@@ -1473,7 +1523,6 @@ function drawCardDeep(
   ];
   // 2 cols × 3 rows
   const innerCols = 2;
-  const innerRows = 3;
   const innerCellW = (cellW - 8) / innerCols;
   const innerCellH = cellH - 8;
 
@@ -1836,90 +1885,6 @@ type Bundle = {
   logoWhite: HTMLImageElement | null;
   logoBlack: HTMLImageElement | null;
 };
-
-// Country → [x, y] coords in the same SVG viewBox the Plant Info page uses
-// (103.51 165.78 → 924, 667). Synced from PlantInfoPage.tsx — keep in sync if
-// new entries are added there.
-const ORIGIN_MAP_URL =
-  "https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg";
-const ORIGIN_MAP_VIEW_X = 103.51;
-const ORIGIN_MAP_VIEW_Y = 165.78;
-const ORIGIN_MAP_VIEW_W = 820.44;
-const ORIGIN_MAP_VIEW_H = 501.3;
-const ORIGIN_COUNTRY_COORDS: Record<string, [number, number]> = {
-  "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
-  Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
-  Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
-  "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
-  Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
-  Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
-  Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
-  "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
-  Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
-  Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
-  "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
-  Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
-  Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
-  Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
-  Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
-  Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
-  Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
-  "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
-  Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
-  "Côte d'Ivoire": [464.0, 385.3], Cameroon: [504.0, 391.0], "Democratic Republic of the Congo": [542.0, 415.0],
-  Angola: [524.0, 446.0], Mozambique: [570.0, 470.0], Zimbabwe: [553.0, 468.0], Uganda: [570.3, 408.6],
-  Rwanda: [565.0, 415.0], "Ivory Coast": [464.0, 385.3], Mali: [475.0, 355.0], "Burkina Faso": [478.0, 368.0],
-  Niger: [500.0, 355.0], Chad: [520.0, 360.0], Sudan: [560.0, 355.0], Libya: [520.0, 320.0],
-  Venezuela: [298.0, 381.0], Ecuador: [265.0, 415.0], Bolivia: [304.0, 465.0], Paraguay: [318.0, 480.0],
-  Uruguay: [326.0, 508.0], "Costa Rica": [237.0, 370.0], Panama: [250.0, 375.0], Guatemala: [220.0, 350.0],
-  Honduras: [230.0, 354.0], "El Salvador": [223.0, 358.0], Nicaragua: [235.0, 362.0], Cuba: [252.0, 330.0],
-  "Dominican Republic": [278.0, 338.0], Jamaica: [261.0, 340.0], "Puerto Rico": [286.0, 338.0],
-  "Trinidad and Tobago": [298.0, 368.0], Haiti: [273.0, 338.0],
-  Iraq: [590.0, 305.0], Iran: [618.0, 308.0], Afghanistan: [644.0, 305.0], Myanmar: [733.0, 348.0],
-  Cambodia: [756.0, 370.0], Laos: [750.0, 348.0], "North Korea": [801.0, 280.0], Mongolia: [740.0, 264.0],
-  Kazakhstan: [645.0, 260.0], Uzbekistan: [635.0, 275.0], Turkmenistan: [625.0, 285.0],
-  Kyrgyzstan: [658.0, 275.0], Tajikistan: [650.0, 285.0], Georgia: [568.0, 275.0], Armenia: [575.0, 280.0],
-  Azerbaijan: [580.0, 278.0], Jordan: [568.0, 318.0], Lebanon: [565.0, 305.0], Syria: [573.0, 298.0],
-  Kuwait: [600.0, 320.0], Bahrain: [607.0, 325.0], Qatar: [610.0, 328.0], Oman: [620.0, 345.0],
-  Yemen: [600.0, 350.0], "Papua New Guinea": [868.0, 430.0], Fiji: [920.0, 465.0],
-  Madagascar: [585.0, 470.0], Mauritius: [605.0, 468.0], Réunion: [600.0, 472.0],
-  "Bosnia and Herzegovina": [521.0, 272.0], Slovenia: [513.0, 264.0], "North Macedonia": [533.0, 275.0],
-  Albania: [529.0, 278.0], Montenegro: [525.0, 274.0], Kosovo: [530.0, 273.0], Moldova: [545.0, 258.0],
-  Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
-};
-
-function normalizeCountryName(name: string): string {
-  return name
-    .normalize("NFKD")
-    .replace(/[̀-ͯ]/g, "")
-    .toLowerCase()
-    .replace(/[_-]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-const NORMALIZED_ORIGIN_COORDS: Array<{ normalized: string; coords: [number, number] }> =
-  Object.entries(ORIGIN_COUNTRY_COORDS).map(([country, coords]) => ({
-    normalized: normalizeCountryName(country),
-    coords,
-  }));
-
-function matchOriginToCoords(origin: string): [number, number] | null {
-  const trimmed = origin.trim();
-  if (ORIGIN_COUNTRY_COORDS[trimmed]) return ORIGIN_COUNTRY_COORDS[trimmed];
-  const base = trimmed.replace(/\s*\(.*?\)\s*$/, "").trim();
-  if (ORIGIN_COUNTRY_COORDS[base]) return ORIGIN_COUNTRY_COORDS[base];
-  const norm = normalizeCountryName(base);
-  for (const entry of NORMALIZED_ORIGIN_COORDS) {
-    if (entry.normalized === norm) return entry.coords;
-  }
-  for (const entry of NORMALIZED_ORIGIN_COORDS) {
-    if (entry.normalized.includes(norm) || norm.includes(entry.normalized)) {
-      return entry.coords;
-    }
-  }
-  return null;
-}
 
 // Pick the first defined image from the bundle, falling back through the array
 // so an off-by-one (e.g. plant has only 1 image, identity wants index 1) still
