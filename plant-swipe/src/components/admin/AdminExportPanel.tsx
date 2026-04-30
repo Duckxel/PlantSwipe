@@ -230,6 +230,7 @@ async function fetchExportAiContent(
   plantName: string,
   scientificName: string,
   family: string,
+  variety: string,
   signal?: AbortSignal,
 ): Promise<ExportAiContent> {
   if (!plantName) return EMPTY_AI_CONTENT;
@@ -238,7 +239,7 @@ async function fetchExportAiContent(
     const res = await fetch("/api/admin/ai/plant-export-content", {
       method: "POST",
       headers,
-      body: JSON.stringify({ plantName, scientificName, family }),
+      body: JSON.stringify({ plantName, scientificName, family, variety }),
       signal,
     });
     if (!res.ok) return EMPTY_AI_CONTENT;
@@ -1665,13 +1666,13 @@ function drawCardDeep(
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "6px";
-  ctx.fillText("◇ HISTORICAL RECORD", factX + 96, factTop + 44);
+  ctx.fillText("◇ FROM THE ARCHIVES", factX + 96, factTop + 44);
   ctx.letterSpacing = "0px";
 
   ctx.fillStyle = "rgba(224,178,82,0.7)";
   ctx.font = `500 11px ${FONT_MONO}`;
   ctx.letterSpacing = "5px";
-  ctx.fillText("VERIFIED ARCHIVED FACT", factX + 96, factTop + 66);
+  ctx.fillText("HISTORY · MYTH · MEANING", factX + 96, factTop + 66);
   ctx.letterSpacing = "0px";
 
   if (historicalFact) {
@@ -1692,7 +1693,7 @@ function drawCardDeep(
       ctx.fillStyle = "rgba(245,239,226,0.55)";
       ctx.font = `400 16px ${FONT_MONO}`;
       ctx.fillText(
-        "No verified historical record surfaced this generation.",
+        "No verified history, myth, or naming story surfaced for this plant.",
         factX + 24,
         factTop + 130,
       );
@@ -2461,7 +2462,7 @@ export function AdminExportPanel() {
       const plantUrl = plantId ? `https://aphylia.app/plants/${plantId}` : "https://aphylia.app";
       const [loaded, ai] = await Promise.all([
         Promise.all(rawImgs.map((r) => loadCanvasImage(r.link))),
-        fetchExportAiContent(plantNameStr, sciNameStr, familyStr),
+        fetchExportAiContent(plantNameStr, sciNameStr, familyStr, variety),
       ]);
       const images = loaded.filter((i): i is HTMLImageElement => !!i);
 

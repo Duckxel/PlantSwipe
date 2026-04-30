@@ -5337,6 +5337,7 @@ app.post('/api/admin/ai/plant-export-content', async (req, res) => {
     const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
     const scientificName = typeof body.scientificName === 'string' ? body.scientificName.trim() : ''
     const family = typeof body.family === 'string' ? body.family.trim() : ''
+    const variety = typeof body.variety === 'string' ? body.variety.trim() : ''
     if (!plantName) {
       res.status(400).json({ error: 'Plant name is required' })
       return
@@ -5356,20 +5357,34 @@ app.post('/api/admin/ai/plant-export-content', async (req, res) => {
 }
 
 historicalFact (max ${factMax} chars):
-- ONE verified, share-worthy fact prioritising:
-  1. documented strange or unexpected historical use (folk medicine, ritual, dye, weapon, poison, embalming, perfumery)
-  2. discovery / explorer / craze / smuggling story
-  3. attested macabre or dark folklore (witch trials, funeral rites, gallows associations, graveyard symbolism)
-  4. surprising biology only if it has a story attached
-- ONLY attested history. NEVER hedge ("some say", "legend has it"). NEVER invent dates/names/events.
+- ONE verified, share-worthy fact. Walk down this priority ladder and pick the first tier with a real, attested story for THIS plant. Do NOT skip ahead — exhaust each tier before falling back.
+
+  TIER 1 — Documented historical use or event:
+    a. strange / unexpected use in history (folk medicine, ritual, dye, weapon, poison, embalming, perfumery, currency, food preservation)
+    b. discovery / explorer / craze / smuggling / botanical-trade story
+    c. attested macabre or dark folklore (witch trials, funeral rites, gallows associations, graveyard symbolism)
+    d. surprising biology only if it has a documented historical story attached
+
+  TIER 2 — Belief, mythology, symbolism (use only if Tier 1 has nothing):
+    a. role in a documented mythology (Greek, Roman, Norse, Hindu, Buddhist, Indigenous, etc.) — name the source
+    b. attested cultural symbolism / "language of flowers" / heraldry / national or regional emblem
+    c. astrology, zodiac, planetary correspondence, moon-cycle gardening tradition (only if it appears in a recognised tradition or text — name it)
+    d. religious or ceremonial significance recorded in literature
+
+  TIER 3 — Etymology + naming (last resort, only if Tiers 1 & 2 have nothing):
+    a. origin of the common name — what language, what it literally translates to, who named it and why
+    b. origin of the genus / species epithet — Latin / Greek root, which botanist coined it, what it commemorates
+    c. interesting nomenclatural story (renaming, mistaken identity, dispute, dedication to a person)
+
+- ONLY attested content with a real source basis. NEVER hedge ("some say", "legend has it" without a tradition named). NEVER invent dates, names, persons, or events.
 - One self-contained sentence (max two short sentences).
 - Plain prose, no markdown, no leading filler ("Did you know"), no quotes around the whole thing.
-- If you don't have a verified strange fact, return an empty string and set factConfidence to "low".
+- If even Tier 3 has nothing verifiable, return an empty string and set factConfidence to "low".
 
 factConfidence:
-- "high" if the fact is widely attested in mainstream botanical / historical sources.
-- "medium" if it's documented but less mainstream.
-- "low" if you reached for it — caller will discard low-confidence outputs.
+- "high" if the fact is widely attested in mainstream botanical / historical / mythological sources.
+- "medium" if it's documented but less mainstream, OR if you fell back to Tier 2 / Tier 3.
+- "low" only if you genuinely reached for something unverified — caller will discard.
 
 gardenerTip (HARD MAX ${tipMax} characters, including spaces and punctuation):
 - LENGTH IS A HARD LIMIT. Count characters before returning. If your tip is over ${tipMax} characters, rewrite it shorter — do NOT exceed the budget. Truncated tips will be discarded.
@@ -5392,9 +5407,19 @@ postDescription (max ${captionMax} chars):
 
 Return ONLY the JSON object. No commentary before or after.`
 
-    const promptParts = [`Plant: ${plantName}`]
+    // The variety / cultivar disambiguates same-named plants (Tomato vs
+    // Tomato 'Cherry' vs Tomato 'San Marzano'); the AI needs it so the
+    // historical fact and gardener tip target the actual subject of the
+    // card — without it, generic content for the species sneaks through.
+    const promptParts = [`Plant common name: ${plantName}`]
+    if (variety) promptParts.push(`Variety / cultivar: ${variety}`)
     if (scientificName) promptParts.push(`Scientific name: ${scientificName}`)
     if (family) promptParts.push(`Family: ${family}`)
+    if (variety) {
+      promptParts.push(
+        `IMPORTANT: this card is about "${plantName} '${variety}'" specifically. Where the variety has its own documented history, mythology, or naming origin distinct from the species, write about THE VARIETY. Where it doesn't, write about the species.`,
+      )
+    }
     promptParts.push('Generate the JSON object now.')
     const prompt = promptParts.join('\n')
 
