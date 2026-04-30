@@ -47,3 +47,6 @@
 ## 2026-04-25 - Precomputed lookup dictionaries for static forms
 **Learning:** React form components rendering many fields using `O(N)` array lookups (like `.find()`) on every render can cause performance drops during keystroke re-renders.
 **Action:** Always precompute `O(1)` lookup maps (using `.reduce` or `for` loops) at the module scope for static form configurations instead of searching inline.
+## 2024-05-19 - Combine multiple aggregations in single-pass loops
+**Learning:** Performing multiple \`.reduce()\` or chained \`.filter().length\` operations over the same array to calculate related metrics (e.g., total required tasks and total completed tasks) increases time complexity to O(2N) and adds unnecessary function call overhead.
+**Action:** Replace multiple \`.reduce()\` calls or \`.filter().length\` chains on the same array with a single-pass \`for\` loop that computes all required aggregates simultaneously, avoiding intermediate array allocations and reducing loop overhead.
