@@ -1298,7 +1298,7 @@ function drawCardIdentity(
     ctx.fillStyle = "rgba(21,32,26,0.5)";
     ctx.font = `500 10px ${FONT_MONO}`;
     ctx.letterSpacing = "5px";
-    ctx.fillText("AI · BEGINNER TIP", noteX + 70, noteTop + 56);
+    ctx.fillText("GARDENER'S NOTE", noteX + 70, noteTop + 56);
     ctx.letterSpacing = "0px";
 
     ctx.fillStyle = C.ink;
@@ -1595,7 +1595,7 @@ function drawCardDeep(
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "6px";
-  ctx.fillText("◇ AI · HISTORICAL RECORD", factX + 96, factTop + 44);
+  ctx.fillText("◇ HISTORICAL RECORD", factX + 96, factTop + 44);
   ctx.letterSpacing = "0px";
 
   ctx.fillStyle = "rgba(224,178,82,0.7)";
