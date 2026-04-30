@@ -19,6 +19,7 @@ import {
   Ruler,
   ScrollText,
   ChevronsDown,
+  Shovel,
   Copy,
   Check,
   type LucideIcon,
@@ -181,6 +182,8 @@ type IconSet = {
   scroll: HTMLImageElement | null;
   scrollGold: HTMLImageElement | null;
   chevDown: HTMLImageElement | null;
+  chevDownInk: HTMLImageElement | null;
+  shovel: HTMLImageElement | null;
   sunCream: HTMLImageElement | null;
 };
 
@@ -229,6 +232,7 @@ async function fetchExportAiContent(
   plantName: string,
   scientificName: string,
   family: string,
+  variety: string,
   signal?: AbortSignal,
 ): Promise<ExportAiContent> {
   if (!plantName) return EMPTY_AI_CONTENT;
@@ -237,7 +241,7 @@ async function fetchExportAiContent(
     const res = await fetch("/api/admin/ai/plant-export-content", {
       method: "POST",
       headers,
-      body: JSON.stringify({ plantName, scientificName, family }),
+      body: JSON.stringify({ plantName, scientificName, family, variety }),
       signal,
     });
     if (!res.ok) return EMPTY_AI_CONTENT;
@@ -766,22 +770,44 @@ function drawCardCover(
   ctx.fillText(name, padX, titleBaseline);
   ctx.letterSpacing = "0px";
 
-  // Variety / sci-name subtitle
+  // Variety — own prominent line under the name. Same plant `name` can have
+  // many varieties (Tomato → Cherry / Beefsteak / Roma); without it the card
+  // is ambiguous. Rendered in mint accent at ~half the title size so it
+  // reads as a clearly tied second-line cultivar.
   const variantTextRaw = variety && variety.trim() ? variety.trim() : "";
+  let cursorBaseline = titleBaseline;
+  if (variantTextRaw) {
+    const variantUpper = variantTextRaw.toUpperCase();
+    const varietySize = fitText(
+      ctx,
+      variantUpper,
+      CARD_W - 128,
+      Math.round(titleSize * 0.55),
+      28,
+      "600",
+      FONT_MONO,
+    );
+    ctx.font = `600 ${varietySize}px ${FONT_MONO}`;
+    ctx.fillStyle = C.mint;
+    ctx.letterSpacing = "4px";
+    cursorBaseline = titleBaseline + Math.round(titleSize * 0.7);
+    ctx.fillText(variantUpper, padX, cursorBaseline);
+    ctx.letterSpacing = "0px";
+  }
+
+  // Scientific-name subtitle — third row, lighter so it doesn't compete
+  // with the variety.
   const sci = String(plant.scientific_name_species || "").trim();
-  const sub = variantTextRaw
-    ? `'${variantTextRaw}' · ${sci}`
-    : sci;
-  if (sub) {
+  if (sci) {
     ctx.font = `400 26px ${FONT_MONO}`;
     ctx.fillStyle = "rgba(245,239,226,0.85)";
-    ctx.fillText(sub, padX, titleBaseline + 50);
+    ctx.fillText(sci, padX, cursorBaseline + 44);
   }
 
   // Family + plant_type chips on a single row.
   const family = tidy(plant.family || "");
   const plantType = tidy(plant.plant_type || "");
-  const chipsRowY = titleBaseline + 80;
+  const chipsRowY = cursorBaseline + 78;
   let cursorX = padX;
   if (family) {
     const sz = drawChip(ctx, cursorX, chipsRowY, family.toUpperCase(), {
@@ -869,6 +895,7 @@ function drawCardIdentity(
   hero: HTMLImageElement | null,
   colors: ColorRow[],
   commonNames: string[],
+  variety: string,
   gardenerTip: string,
   icons: IconSet | null,
   logoBlack: HTMLImageElement | null,
@@ -936,8 +963,34 @@ function drawCardIdentity(
   ctx.fillText(name, 64, 230 + nameSize);
   ctx.letterSpacing = "0px";
 
+  // Variety — prominent second tier in the title stack. The plant `name`
+  // alone (e.g. "Tomato") collides with every other tomato variety; the
+  // cultivar is what disambiguates the card.
+  let nextY = 230 + nameSize + 14;
+  const variantTextRaw = variety && variety.trim() ? variety.trim() : "";
+  if (variantTextRaw) {
+    const variantUpper = variantTextRaw.toUpperCase();
+    const varietySize = fitText(
+      ctx,
+      variantUpper,
+      600,
+      Math.round(nameSize * 0.55),
+      18,
+      "600",
+      FONT_MONO,
+    );
+    ctx.font = `600 ${varietySize}px ${FONT_MONO}`;
+    ctx.fillStyle = C.mintDim;
+    ctx.letterSpacing = "3px";
+    nextY += varietySize;
+    ctx.fillText(variantUpper, 64, nextY);
+    ctx.letterSpacing = "0px";
+    nextY += 22;
+  } else {
+    nextY += 36;
+  }
+
   const sci = String(plant.scientific_name_species || "").trim();
-  let nextY = 230 + nameSize + 50;
   if (sci) {
     ctx.font = `400 22px ${FONT_MONO}`;
     ctx.fillStyle = C.inkDim;
@@ -1065,8 +1118,13 @@ function drawCardIdentity(
   });
 
   // BOX 2: Water
+  // Show the HOT-season frequency (peak demand) when set; fall back to the
+  // cold-season value so plants that only have one of the two recorded
+  // still display a real number instead of an em-dash.
   const water = waterLevel(plant);
   const warmFreq = Number(plant.watering_frequency_warm) || 0;
+  const coldFreq = Number(plant.watering_frequency_cold) || 0;
+  const primaryWaterFreq = warmFreq || coldFreq;
   drawStatBox(1, 0, icons?.dropletFilled ?? null, "Water", (x, y, w) => {
     drawIconRow(
       ctx,
@@ -1079,7 +1137,7 @@ function drawCardIdentity(
       22,
       8,
     );
-    const v = warmFreq > 0 ? `${warmFreq}× / WEEK` : "—";
+    const v = primaryWaterFreq > 0 ? `${primaryWaterFreq}× / WEEK` : "—";
     const sz = fitText(ctx, v, w - 36, 18, 12, "700", FONT_MONO);
     ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
@@ -1143,17 +1201,17 @@ function drawCardIdentity(
   // *live with* the plant. Toxicity gets its own box (was crammed into the
   // Care box footnote); cold-season watering and form/habit complete the row.
 
-  // Cold-season watering — distinct from warm; gardeners often miss the
-  // shift and rot the plant in winter.
-  const coldFreq = Number(plant.watering_frequency_cold) || 0;
-  drawStatBox(0, 1, icons?.dropletEmpty ?? null, "Water · Cold", (x, y, w) => {
-    const v = coldFreq > 0 ? `${coldFreq}× / WEEK` : "—";
-    const sz = fitText(ctx, v, w - 36, 22, 13, "700", FONT_MONO);
+  // Soil / substrate — what the plant likes to live in. The water box
+  // already covers both seasons (hot value with cold fallback), so this
+  // slot is freed for a different living-with-it stat.
+  const substrate = tidy(asArr(plant.substrate)[0] || "—");
+  drawStatBox(0, 1, icons?.shovel ?? null, "Soil", (x, y, w) => {
+    const sz = fitText(ctx, substrate.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
     ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(v, x + 18, y + 90);
+    ctx.fillText(substrate.toUpperCase(), x + 18, y + 90);
   });
 
   // Toxicity — own box now, with severity-coloured chip when relevant.
@@ -1615,13 +1673,13 @@ function drawCardDeep(
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "6px";
-  ctx.fillText("◇ HISTORICAL RECORD", factX + 96, factTop + 44);
+  ctx.fillText("◇ FROM THE ARCHIVES", factX + 96, factTop + 44);
   ctx.letterSpacing = "0px";
 
   ctx.fillStyle = "rgba(224,178,82,0.7)";
   ctx.font = `500 11px ${FONT_MONO}`;
   ctx.letterSpacing = "5px";
-  ctx.fillText("VERIFIED ARCHIVED FACT", factX + 96, factTop + 66);
+  ctx.fillText("HISTORY · MYTH · MEANING", factX + 96, factTop + 66);
   ctx.letterSpacing = "0px";
 
   if (historicalFact) {
@@ -1642,7 +1700,7 @@ function drawCardDeep(
       ctx.fillStyle = "rgba(245,239,226,0.55)";
       ctx.font = `400 16px ${FONT_MONO}`;
       ctx.fillText(
-        "No verified historical record surfaced this generation.",
+        "No verified history, myth, or naming story surfaced for this plant.",
         factX + 24,
         factTop + 130,
       );
@@ -1664,6 +1722,7 @@ function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
   images: HTMLImageElement[],
+  variety: string,
   icons: IconSet | null,
   logoWhite: HTMLImageElement | null,
 ) {
@@ -1692,12 +1751,21 @@ function drawCardWild(
     ctx.clip();
     drawCoverImage(ctx, hero, 0, 0, CARD_W, heroH);
 
-    // Emerald-tinted gradient overlay at the bottom of the hero so the
-    // headline stays readable without dimming the whole photo.
-    const overlay = ctx.createLinearGradient(0, heroH * 0.45, 0, heroH);
+    // Top scrim — guarantees the brand header reads cleanly even on a
+    // busy/light foliage photo. Stronger than before; was too subtle and
+    // brand text was getting lost.
+    const topScrim = ctx.createLinearGradient(0, 0, 0, 180);
+    topScrim.addColorStop(0, "rgba(15,31,31,0.78)");
+    topScrim.addColorStop(1, "rgba(15,31,31,0)");
+    ctx.fillStyle = topScrim;
+    ctx.fillRect(0, 0, CARD_W, 180);
+
+    // Bottom scrim — stronger so the headline is fully legible against
+    // any photo, not just dark ones.
+    const overlay = ctx.createLinearGradient(0, heroH * 0.35, 0, heroH);
     overlay.addColorStop(0, "rgba(15,31,31,0)");
-    overlay.addColorStop(0.55, "rgba(15,31,31,0.55)");
-    overlay.addColorStop(1, "rgba(15,31,31,0.92)");
+    overlay.addColorStop(0.45, "rgba(15,31,31,0.65)");
+    overlay.addColorStop(1, "rgba(15,31,31,0.96)");
     ctx.fillStyle = overlay;
     ctx.fillRect(0, 0, CARD_W, heroH);
 
@@ -1710,7 +1778,7 @@ function drawCardWild(
       heroH * 0.25,
       CARD_W * 0.6,
     );
-    glow.addColorStop(0, "rgba(16,185,129,0.35)");
+    glow.addColorStop(0, "rgba(16,185,129,0.30)");
     glow.addColorStop(1, "rgba(16,185,129,0)");
     ctx.fillStyle = glow;
     ctx.fillRect(0, 0, CARD_W, heroH);
@@ -1758,14 +1826,15 @@ function drawCardWild(
   ctx.letterSpacing = "0px";
 
   // — Cream content panel below the hero ------------------------------
-  // Three concrete reasons to visit the app — anything less specific reads
-  // as marketing fluff. Pulls from what the app actually offers.
+  // Honest descriptors only — no fabricated numbers ("10K+", "DAILY") that
+  // we can't substantiate. Three short truthful pillars of what the site
+  // actually is, with emerald check discs.
   const reasonsTop = heroH + 60;
 
   ctx.fillStyle = APP_EMERALD_DEEPER;
   ctx.font = `700 12px ${FONT_MONO}`;
   ctx.letterSpacing = "8px";
-  ctx.fillText("WHAT YOU'LL FIND", 64, reasonsTop);
+  ctx.fillText("WHY APHYLIA", 64, reasonsTop);
   ctx.letterSpacing = "0px";
 
   ctx.strokeStyle = APP_EMERALD;
@@ -1775,16 +1844,17 @@ function drawCardWild(
   ctx.lineTo(120, reasonsTop + 12);
   ctx.stroke();
 
-  type Reason = { stat: string; label: string };
-  const reasons: Reason[] = [
-    { stat: "10K+", label: "PLANTS, ALL CURATED" },
-    { stat: "DAILY", label: "NEW DISCOVERIES" },
-    { stat: "REAL", label: "GROWERS' ADVICE" },
+  // Single label per row — no fake stats, no superlatives. Each line is a
+  // direct, defensible statement about what the site offers.
+  const reasons: string[] = [
+    "CURATED PLANT CARDS",
+    "STRAIGHTFORWARD CARE GUIDES",
+    "FREE TO BROWSE, NO ACCOUNT NEEDED",
   ];
   const reasonY = reasonsTop + 50;
-  const reasonRowH = 70;
+  const reasonRowH = 64;
   for (let i = 0; i < reasons.length; i++) {
-    const r = reasons[i];
+    const label = reasons[i];
     const ry = reasonY + i * reasonRowH;
 
     // Emerald check disc
@@ -1805,19 +1875,14 @@ function drawCardWild(
     ctx.lineTo(cx + 8, cy - 6);
     ctx.stroke();
 
-    // Stat in big emerald
-    ctx.fillStyle = APP_EMERALD_DARK;
-    ctx.font = `700 28px ${FONT_MONO}`;
+    // Single-tier label — fitText so longer copy still fits the line.
+    ctx.fillStyle = APP_INK;
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(r.stat, 116, ry + 28);
-
-    // Label after stat
-    const statW = ctx.measureText(r.stat).width;
-    ctx.fillStyle = APP_INK;
-    ctx.font = `600 17px ${FONT_MONO}`;
+    const sz = fitText(ctx, label, CARD_W - 64 - 116, 19, 13, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.letterSpacing = "3px";
-    ctx.fillText(r.label, 116 + statW + 16, ry + 28);
+    ctx.fillText(label, 116, ry + 28);
     ctx.letterSpacing = "0px";
   }
 
@@ -1884,7 +1949,11 @@ function drawCardWild(
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   const nameForLine = tidy(plant.name || "this plant").toUpperCase();
-  const personalLine = `STARTED WITH ${nameForLine} · KEEP EXPLORING`;
+  const variantForLine = variety && variety.trim() ? variety.trim().toUpperCase() : "";
+  const fullName = variantForLine
+    ? `${nameForLine} · ${variantForLine}`
+    : nameForLine;
+  const personalLine = `STARTED WITH ${fullName} · KEEP EXPLORING`;
   const personalY = ctaY + ctaH + 40;
   ctx.letterSpacing = "4px";
   ctx.fillText(personalLine, CARD_W / 2, personalY);
@@ -1900,16 +1969,16 @@ function drawCardWild(
   ctx.fillText("READ THE FULL POST BELOW", CARD_W / 2, cueTop);
   ctx.letterSpacing = "0px";
 
-  if (icons?.chevDown) {
+  if (icons?.chevDownInk) {
     const sizes = [
-      { y: cueTop + 14, op: 0.85, sz: 36 },
-      { y: cueTop + 38, op: 0.5, sz: 30 },
+      { y: cueTop + 14, op: 0.9, sz: 36 },
+      { y: cueTop + 38, op: 0.55, sz: 30 },
     ];
     for (const s of sizes) {
       ctx.save();
       ctx.globalAlpha = s.op;
       ctx.drawImage(
-        icons.chevDown,
+        icons.chevDownInk,
         CARD_W / 2 - s.sz / 2,
         s.y,
         s.sz,
@@ -2018,6 +2087,7 @@ async function renderCardCanvas(
         pickImage(b.images, 1),
         b.colors,
         b.commonNames,
+        b.variety,
         b.gardenerTip,
         b.icons,
         b.logoBlack,
@@ -2037,7 +2107,7 @@ async function renderCardCanvas(
       break;
     case 3:
       // Wild card rotates through every available image in the orb collage.
-      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoWhite);
+      drawCardWild(ctx, b.plant, b.images, b.variety, b.icons, b.logoWhite);
       break;
   }
   return c;
@@ -2187,6 +2257,8 @@ export function AdminExportPanel() {
         scroll,
         scrollGold,
         chevDown,
+        chevDownInk,
+        shovel,
         sunCream,
       ] = await Promise.all([
         lucideImage(Sun, C.gold, 64, 2.4),
@@ -2206,6 +2278,10 @@ export function AdminExportPanel() {
         lucideImage(ScrollText, C.cream, 64, 2),
         lucideImage(ScrollText, C.gold, 96, 2.2),
         lucideImage(ChevronsDown, C.cream, 96, 2.5),
+        // Emerald-dark chevron for Card 4's cream surface — using the
+        // cream-tinted version on the light bg made the cue invisible.
+        lucideImage(ChevronsDown, "#059669", 96, 2.5),
+        lucideImage(Shovel, C.ink, 64, 2),
         lucideImage(Sun, C.cream, 64, 2.2),
       ]);
       if (cancelled) return;
@@ -2227,6 +2303,8 @@ export function AdminExportPanel() {
         scroll,
         scrollGold,
         chevDown,
+        chevDownInk,
+        shovel,
         sunCream,
       });
     })();
@@ -2254,29 +2332,47 @@ export function AdminExportPanel() {
         return [];
       }
       const ids = (data as PlantRow[]).map((p) => p.id as string);
-      const { data: imgs } = await supabase
-        .from("plant_images")
-        .select("plant_id,link")
-        .in("plant_id", ids)
-        .eq("use", "primary");
-      const map = new Map(
-        ((imgs as { plant_id: string; link: string }[]) || []).map((i) => [
-          i.plant_id,
-          i.link,
-        ]),
+      // Fetch primary image AND English variety in parallel — variety is the
+      // common "Cherry" / "Beefsteak" suffix that disambiguates two rows
+      // sharing the same `name` (Tomato + Tomato), so the picker has to show
+      // it inline. Without it, two cards with identical labels are
+      // indistinguishable.
+      const [imgsRes, transRes] = await Promise.all([
+        supabase
+          .from("plant_images")
+          .select("plant_id,link")
+          .in("plant_id", ids)
+          .eq("use", "primary"),
+        supabase
+          .from("plant_translations")
+          .select("plant_id,language,variety")
+          .in("plant_id", ids)
+          .eq("language", "en"),
+      ]);
+      const imgMap = new Map(
+        ((imgsRes.data as { plant_id: string; link: string }[]) || []).map(
+          (i) => [i.plant_id, i.link],
+        ),
       );
-      const rows: SearchItemOption[] = (data as PlantRow[]).map((p) => ({
-        id: p.id as string,
-        label: (p.name as string) || "Unknown",
-        description: (p.scientific_name_species as string) || "",
-        icon: map.get(p.id as string) ? (
-          <img
-            src={map.get(p.id as string) as string}
-            className="h-9 w-9 rounded object-cover"
-            alt=""
-          />
-        ) : undefined,
-      }));
+      const varMap = new Map(
+        ((transRes.data as { plant_id: string; variety: string | null }[]) ||
+          []).map((t) => [t.plant_id, (t.variety || "").trim()]),
+      );
+      const rows: SearchItemOption[] = (data as PlantRow[]).map((p) => {
+        const id = p.id as string;
+        const baseName = (p.name as string) || "Unknown";
+        const variety = varMap.get(id) || "";
+        const photoUrl = imgMap.get(id) || "";
+        // Garden-style tile rendering — icon, label, description carry just
+        // what the custom renderItem needs. Family / scientific name dropped
+        // intentionally so the tile reads cleanly.
+        return {
+          id,
+          label: baseName,
+          description: variety,
+          meta: photoUrl,
+        };
+      });
       setOptions(rows);
       return rows;
     },
@@ -2371,7 +2467,7 @@ export function AdminExportPanel() {
       const plantUrl = plantId ? `https://aphylia.app/plants/${plantId}` : "https://aphylia.app";
       const [loaded, ai] = await Promise.all([
         Promise.all(rawImgs.map((r) => loadCanvasImage(r.link))),
-        fetchExportAiContent(plantNameStr, sciNameStr, familyStr),
+        fetchExportAiContent(plantNameStr, sciNameStr, familyStr, variety),
       ]);
       const images = loaded.filter((i): i is HTMLImageElement => !!i);
 
@@ -2538,6 +2634,39 @@ export function AdminExportPanel() {
             description="Select a plant — we generate four Instagram-ready cards"
             searchPlaceholder="Search plants by name"
             className="min-w-[280px]"
+            renderItem={(option) => {
+              const photoUrl = option.meta || "";
+              const variety = (option.description || "").trim();
+              return (
+                <div className="flex flex-col w-full">
+                  <div className="relative aspect-[4/3] bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 overflow-hidden">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt={option.label}
+                        loading="lazy"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-40">
+                        🌿
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                  </div>
+                  <div className="px-3 py-2.5">
+                    <div className="font-semibold text-sm text-stone-900 dark:text-white truncate">
+                      {option.label}
+                    </div>
+                    {variety && (
+                      <div className="mt-0.5 text-xs font-extrabold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent tracking-tight truncate">
+                        &lsquo;{variety}&rsquo;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
           />
           <Button onClick={() => void generate()} disabled={!picked || loading}>
             {loading ? (
