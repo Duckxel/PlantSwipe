@@ -2352,20 +2352,15 @@ export function AdminExportPanel() {
         const id = p.id as string;
         const baseName = (p.name as string) || "Unknown";
         const variety = varMap.get(id) || "";
-        // Show "Tomato · Cherry" so two same-named rows are distinguishable
-        // at a glance. Falls back to bare name when no variety is set.
-        const label = variety ? `${baseName} · ${variety}` : baseName;
+        const photoUrl = imgMap.get(id) || "";
+        // Garden-style tile rendering — icon, label, description carry just
+        // what the custom renderItem needs. Family / scientific name dropped
+        // intentionally so the tile reads cleanly.
         return {
           id,
-          label,
-          description: (p.scientific_name_species as string) || "",
-          icon: imgMap.get(id) ? (
-            <img
-              src={imgMap.get(id) as string}
-              className="h-9 w-9 rounded object-cover"
-              alt=""
-            />
-          ) : undefined,
+          label: baseName,
+          description: variety,
+          meta: photoUrl,
         };
       });
       setOptions(rows);
@@ -2629,6 +2624,39 @@ export function AdminExportPanel() {
             description="Select a plant — we generate four Instagram-ready cards"
             searchPlaceholder="Search plants by name"
             className="min-w-[280px]"
+            renderItem={(option) => {
+              const photoUrl = option.meta || "";
+              const variety = (option.description || "").trim();
+              return (
+                <div className="flex flex-col w-full">
+                  <div className="relative aspect-[4/3] bg-gradient-to-br from-stone-100 to-stone-200 dark:from-stone-800 dark:to-stone-900 overflow-hidden">
+                    {photoUrl ? (
+                      <img
+                        src={photoUrl}
+                        alt={option.label}
+                        loading="lazy"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center text-3xl opacity-40">
+                        🌿
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+                  </div>
+                  <div className="px-3 py-2.5">
+                    <div className="font-semibold text-sm text-stone-900 dark:text-white truncate">
+                      {option.label}
+                    </div>
+                    {variety && (
+                      <div className="mt-0.5 text-xs font-extrabold bg-gradient-to-r from-emerald-500 to-teal-500 bg-clip-text text-transparent tracking-tight truncate">
+                        &lsquo;{variety}&rsquo;
+                      </div>
+                    )}
+                  </div>
+                </div>
+              );
+            }}
           />
           <Button onClick={() => void generate()} disabled={!picked || loading}>
             {loading ? (
