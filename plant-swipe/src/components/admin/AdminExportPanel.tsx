@@ -1136,54 +1136,76 @@ function drawCardIdentity(
       ctx.textBaseline = "middle";
       ctx.fillText(upper, cx + cw / 2, cy + 17);
     }
+  });
 
-    // Toxicity inside the care box, small footnote.
-    const toxRaw = String(plant.toxicity_pets || plant.toxicity_human || "");
-    const toxLow = toxRaw.toLowerCase();
-    if (
-      toxLow &&
-      !toxLow.includes("non_toxic") &&
-      !toxLow.includes("non-toxic") &&
-      !toxLow.includes("undetermined")
-    ) {
-      const isDanger = /toxic|deadly|severe|high/.test(toxLow);
-      const tox = tidy(toxRaw).toUpperCase();
-      ctx.font = `600 11px ${FONT_MONO}`;
-      ctx.fillStyle = isDanger ? C.warning : C.inkDim;
+  // Row 2 — handling / care-specific stats. Lifecycle, foliage, and height
+  // moved exclusively to Card 3 so this card focuses on what it's like to
+  // *live with* the plant. Toxicity gets its own box (was crammed into the
+  // Care box footnote); cold-season watering and form/habit complete the row.
+
+  // Cold-season watering — distinct from warm; gardeners often miss the
+  // shift and rot the plant in winter.
+  const coldFreq = Number(plant.watering_frequency_cold) || 0;
+  drawStatBox(0, 1, icons?.dropletEmpty ?? null, "Water · Cold", (x, y, w) => {
+    const v = coldFreq > 0 ? `${coldFreq}× / WEEK` : "—";
+    const sz = fitText(ctx, v, w - 36, 22, 13, "700", FONT_MONO);
+    ctx.font = `700 ${sz}px ${FONT_MONO}`;
+    ctx.fillStyle = C.ink;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "middle";
+    ctx.fillText(v, x + 18, y + 90);
+  });
+
+  // Toxicity — own box now, with severity-coloured chip when relevant.
+  const toxRaw = String(plant.toxicity_pets || plant.toxicity_human || "");
+  const toxLow = toxRaw.toLowerCase();
+  const toxIsKnown =
+    toxLow &&
+    !toxLow.includes("non_toxic") &&
+    !toxLow.includes("non-toxic") &&
+    !toxLow.includes("undetermined");
+  const toxIsDanger = /toxic|deadly|severe|high/.test(toxLow);
+  drawStatBox(1, 1, icons?.alert ?? null, "Toxicity", (x, y, w) => {
+    if (toxIsKnown) {
+      const upper = tidy(toxRaw).toUpperCase();
+      ctx.font = `700 14px ${FONT_MONO}`;
+      const cw = Math.min(w - 36, ctx.measureText(upper).width + 28);
+      const cy = y + 60;
+      const cx = x + 18;
+      roundRectPath(ctx, cx, cy, cw, 32, 16);
+      ctx.fillStyle = toxIsDanger ? C.warning : C.gold;
+      ctx.fill();
+      ctx.fillStyle = "#FFFFFF";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(upper, cx + cw / 2, cy + 17);
+      // tiny pets/human qualifier line below the chip
+      ctx.fillStyle = C.inkDim;
+      ctx.font = `500 10px ${FONT_MONO}`;
       ctx.textAlign = "left";
       ctx.textBaseline = "alphabetic";
       ctx.letterSpacing = "3px";
-      let tx = x + 18;
-      if (isDanger && icons?.alert) {
-        ctx.drawImage(icons.alert, x + 18, y + 105, 18, 18);
-        tx = x + 42;
-      }
-      ctx.fillText(tox, tx, y + 119);
+      const who =
+        plant.toxicity_pets && plant.toxicity_human
+          ? "PETS + HUMANS"
+          : plant.toxicity_pets
+            ? "PETS"
+            : "HUMANS";
+      ctx.fillText(who, x + 18, y + 118);
       ctx.letterSpacing = "0px";
+    } else {
+      ctx.fillStyle = C.mintDim;
+      ctx.font = `700 16px ${FONT_MONO}`;
+      ctx.textAlign = "left";
+      ctx.textBaseline = "middle";
+      ctx.fillText("SAFE", x + 18, y + 78);
+      ctx.fillStyle = C.inkDim;
+      ctx.font = `500 11px ${FONT_MONO}`;
+      ctx.fillText("PETS + HUMANS", x + 18, y + 110);
     }
   });
 
-  // Row 2 — taxonomy / lifecycle stats.
-  const lifecycle = tidy(asArr(plant.life_cycle)[0] || "—");
-  drawStatBox(0, 1, icons?.clock ?? null, "Lifecycle", (x, y, w) => {
-    const sz = fitText(ctx, lifecycle.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
-    ctx.font = `700 ${sz}px ${FONT_MONO}`;
-    ctx.fillStyle = C.ink;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(lifecycle.toUpperCase(), x + 18, y + 90);
-  });
-
-  const foliage = tidy(asArr(plant.foliage_persistence)[0] || "—");
-  drawStatBox(1, 1, icons?.leaf ?? null, "Foliage", (x, y, w) => {
-    const sz = fitText(ctx, foliage.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
-    ctx.font = `700 ${sz}px ${FONT_MONO}`;
-    ctx.fillStyle = C.ink;
-    ctx.textAlign = "left";
-    ctx.textBaseline = "middle";
-    ctx.fillText(foliage.toUpperCase(), x + 18, y + 90);
-  });
-
+  // Form / habit — kept; identifies the plant's overall growth shape.
   const habit = tidy(asArr(plant.plant_habit)[0] || "—");
   drawStatBox(2, 1, icons?.sproutInk ?? null, "Form", (x, y, w) => {
     const sz = fitText(ctx, habit.toUpperCase(), w - 36, 22, 13, "700", FONT_MONO);
@@ -1194,20 +1216,18 @@ function drawCardIdentity(
     ctx.fillText(habit.toUpperCase(), x + 18, y + 90);
   });
 
-  const heightCm = Number(plant.height_cm) || 0;
-  const heightStr =
-    heightCm > 0
-      ? heightCm >= 100
-        ? `${(heightCm / 100).toFixed(heightCm >= 1000 ? 0 : 1)} M`
-        : `${heightCm} CM`
-      : "—";
-  drawStatBox(3, 1, icons?.ruler ?? null, "Height", (x, y, w) => {
-    const sz = fitText(ctx, heightStr, w - 36, 32, 16, "700", FONT_MONO);
+  // Hygrometry already covered → use this slot for "Best Use" — pulls the
+  // primary utility tag (the chips below show the full list, but having the
+  // top one called out as a stat makes the card scannable).
+  const utilities = asArr(plant.utility);
+  const topUtility = tidy(utilities[0] || "—").toUpperCase();
+  drawStatBox(3, 1, icons?.palette ?? null, "Best Use", (x, y, w) => {
+    const sz = fitText(ctx, topUtility, w - 36, 22, 13, "700", FONT_MONO);
     ctx.font = `700 ${sz}px ${FONT_MONO}`;
     ctx.fillStyle = C.ink;
     ctx.textAlign = "left";
     ctx.textBaseline = "middle";
-    ctx.fillText(heightStr, x + 18, y + 90);
+    ctx.fillText(topUtility, x + 18, y + 90);
   });
 
   // — Palette + Utility row (compact) ---------------------------------
@@ -1235,8 +1255,8 @@ function drawCardIdentity(
   // Utility — promoted to a prominent labelled row of solid chips. This is
   // the answer to "is the plant for me?" so it deserves more visual weight
   // than a tiny corner pill (gardeners care a lot about edible / aromatic /
-  // medicinal use).
-  const utilities = asArr(plant.utility);
+  // medicinal use). The Best Use stat box above pulls utilities[0]; here we
+  // reuse the same array so the chip row enumerates the rest.
   const utilityY = paletteY + 38;
   if (utilities.length > 0) {
     ctx.fillStyle = C.inkDim;
@@ -1633,163 +1653,166 @@ function drawCardDeep(
 }
 
 // — card 4: WILD CARD CTA ------------------------------------------------
+// Editorial poster: cream paper, coral accent, NO forest green so it doesn't
+// blend with Card 3. The website domain is the visual hero — billboard style —
+// because the entire job of this card is "send the reader to aphylia.app".
 
 function drawCardWild(
   ctx: CanvasRenderingContext2D,
   plant: PlantRow,
-  images: HTMLImageElement[],
+  _images: HTMLImageElement[],
   icons: IconSet | null,
-  logoWhite: HTMLImageElement | null,
+  logoBlack: HTMLImageElement | null,
 ) {
-  // Mesh gradient background — multiple radial stops
-  ctx.fillStyle = C.forestDeep;
+  // Cream paper background. ONE soft coral wash sweeping in from the top-right
+  // corner — that's the only secondary color, no green on this card at all.
+  ctx.fillStyle = C.cream;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  const blobs: Array<{ x: number; y: number; r: number; c: string }> = [
-    { x: CARD_W * 0.85, y: CARD_H * 0.18, r: 700, c: "rgba(91,211,148,0.55)" },
-    { x: CARD_W * 0.15, y: CARD_H * 0.4, r: 620, c: "rgba(255,138,101,0.32)" },
-    { x: CARD_W * 0.6, y: CARD_H * 0.85, r: 800, c: "rgba(168,240,204,0.4)" },
-    { x: CARD_W * 0.3, y: CARD_H * 0.95, r: 500, c: "rgba(224,178,82,0.28)" },
-  ];
-  for (const b of blobs) {
-    const g = ctx.createRadialGradient(b.x, b.y, 0, b.x, b.y, b.r);
-    g.addColorStop(0, b.c);
-    g.addColorStop(1, "rgba(6,18,11,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, CARD_W, CARD_H);
-  }
-
-  // dark overlay to keep text legible
-  ctx.fillStyle = "rgba(6,18,11,0.4)";
+  const wash = ctx.createRadialGradient(
+    CARD_W * 0.95,
+    -120,
+    100,
+    CARD_W * 0.95,
+    -120,
+    CARD_W * 1.1,
+  );
+  wash.addColorStop(0, "rgba(255,138,101,0.55)");
+  wash.addColorStop(0.45, "rgba(242,200,183,0.32)");
+  wash.addColorStop(1, "rgba(244,239,226,0)");
+  ctx.fillStyle = wash;
   ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.cream, C.mintGlow, logoWhite);
+  // Bottom-left whisper of warm gold for balance — kept very subtle.
+  const corner = ctx.createRadialGradient(
+    -100,
+    CARD_H + 100,
+    0,
+    -100,
+    CARD_H + 100,
+    700,
+  );
+  corner.addColorStop(0, "rgba(224,178,82,0.18)");
+  corner.addColorStop(1, "rgba(244,239,226,0)");
+  ctx.fillStyle = corner;
+  ctx.fillRect(0, 0, CARD_W, CARD_H);
 
-  // Photo collage — 5 circular orbs scattered, rotating through every
-  // available plant photo so multi-image plants get genuine visual variety.
-  if (images.length > 0) {
-    const orbs: Array<{ x: number; y: number; r: number; alpha: number }> = [
-      { x: 720, y: 360, r: 130, alpha: 0.92 },
-      { x: 220, y: 480, r: 95, alpha: 0.78 },
-      { x: 880, y: 620, r: 70, alpha: 0.62 },
-      { x: 380, y: 720, r: 60, alpha: 0.5 },
-      { x: 140, y: 290, r: 50, alpha: 0.45 },
-    ];
-    orbs.forEach((o, i) => {
-      const img = images[i % images.length];
-      ctx.save();
-      ctx.globalAlpha = o.alpha;
-      ctx.beginPath();
-      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-      ctx.clip();
-      drawCoverImage(ctx, img, o.x - o.r, o.y - o.r, o.r * 2, o.r * 2);
-      ctx.restore();
-      ctx.beginPath();
-      ctx.arc(o.x, o.y, o.r, 0, Math.PI * 2);
-      ctx.strokeStyle = "rgba(245,239,226,0.45)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-    });
-  }
+  drawBrandHeader(ctx, 4, 4, "DISCOVER", C.ink, C.coral, logoBlack);
 
-  // Eyebrow
-  ctx.fillStyle = C.mintGlow;
-  ctx.font = `600 18px ${FONT_MONO}`;
+  // — Eyebrow ---------------------------------------------------------
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
-  ctx.letterSpacing = "10px";
-  ctx.fillText("YOUR NEXT PLANT", 64, 220);
+  ctx.fillStyle = C.coral;
+  ctx.font = `700 13px ${FONT_MONO}`;
+  ctx.letterSpacing = "9px";
+  ctx.fillText("DAILY PLANT ENCYCLOPEDIA", 64, 220);
   ctx.letterSpacing = "0px";
 
-  // hairline
-  ctx.strokeStyle = "rgba(168,240,204,0.5)";
+  // Coral hairline under eyebrow.
+  ctx.strokeStyle = C.coral;
+  ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(64, 240);
-  ctx.lineTo(360, 240);
+  ctx.moveTo(64, 234);
+  ctx.lineTo(140, 234);
   ctx.stroke();
 
-  // big stacked headline — uppercase mono with strong tracking
-  ctx.fillStyle = C.cream;
-  ctx.font = `700 110px ${FONT_MONO}`;
-  ctx.letterSpacing = "6px";
-  ctx.fillText("DISCOVER", 64, 400);
-
-  ctx.font = `400 110px ${FONT_MONO}`;
-  ctx.fillStyle = "rgba(245,239,226,0.65)";
-  ctx.fillText("MORE  →", 64, 530);
+  // — Headline stack --------------------------------------------------
+  // "JOIN THE / WAITING / LIST" style poster — three short verbs, one per
+  // line, with the verb that points to the website rendered in coral. Reads
+  // top-to-bottom and the eye lands on the URL beneath.
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 84px ${FONT_MONO}`;
+  ctx.letterSpacing = "4px";
+  ctx.fillText("LEARN.", 64, 330);
+  ctx.fillText("GROW.", 64, 420);
+  ctx.fillStyle = C.coral;
+  ctx.fillText("REPEAT.", 64, 510);
   ctx.letterSpacing = "0px";
 
-  // sub-headline
-  ctx.fillStyle = C.cream;
-  ctx.font = `500 22px ${FONT_MONO}`;
-  ctx.letterSpacing = "5px";
-  ctx.fillText("SWIPE · LEARN · GROW", 64, 600);
-  ctx.letterSpacing = "0px";
-
-  // body
-  ctx.fillStyle = "rgba(245,239,226,0.78)";
-  ctx.font = `400 22px ${FONT_MONO}`;
+  // — Body line -------------------------------------------------------
+  ctx.fillStyle = C.inkDim;
+  ctx.font = `500 19px ${FONT_MONO}`;
   drawWrap(
     ctx,
-    "A daily encyclopedia of plants — from the windowsill jungle to the wild meadow. Curated cards, real care advice, zero noise.",
+    "Daily plant cards — from the windowsill jungle to the wild meadow. Curated, sourced, no noise.",
     64,
-    660,
-    700,
-    34,
-    4,
+    580,
+    CARD_W - 128,
+    30,
+    3,
   );
 
-  // CTA chip — kept compact so the downward cue can dominate the bottom band.
-  const ctaY = 1010;
-  ctx.font = `700 32px ${FONT_MONO}`;
-  const ctaText = "aphylia.app";
-  const ctaW = ctx.measureText(ctaText).width + 64;
-  roundRectPath(ctx, 64, ctaY, ctaW, 70, 35);
-  ctx.fillStyle = C.cream;
-  ctx.fill();
-  ctx.fillStyle = C.forestDeep;
-  ctx.textBaseline = "middle";
-  ctx.textAlign = "left";
-  ctx.fillText(ctaText, 64 + 32, ctaY + 37);
+  // — Domain billboard ------------------------------------------------
+  // The URL is the hero element. Big mono-typeset ink letters with a
+  // coral underline ribbon — looks like a book title, reads instantly.
+  const billY = 720;
+  const billH = 280;
 
-  // small arrow circle next to chip.
-  const arrCx = 64 + ctaW + 30;
-  const arrCy = ctaY + 35;
+  // Pure coral block running edge-to-edge as a stage for the URL.
+  ctx.fillStyle = C.coral;
+  ctx.fillRect(0, billY, CARD_W, billH);
+
+  // Subtle stamp lines top + bottom of the billboard for a poster feel.
+  ctx.strokeStyle = "rgba(21,32,26,0.18)";
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(arrCx, arrCy, 35, 0, Math.PI * 2);
-  ctx.fillStyle = C.mint;
-  ctx.fill();
-  ctx.strokeStyle = C.cream;
-  ctx.lineWidth = 3;
-  ctx.lineCap = "round";
-  ctx.beginPath();
-  ctx.moveTo(arrCx - 11, arrCy);
-  ctx.lineTo(arrCx + 11, arrCy);
-  ctx.moveTo(arrCx + 3, arrCy - 8);
-  ctx.lineTo(arrCx + 11, arrCy);
-  ctx.lineTo(arrCx + 3, arrCy + 8);
+  ctx.moveTo(64, billY + 22);
+  ctx.lineTo(CARD_W - 64, billY + 22);
+  ctx.moveTo(64, billY + billH - 22);
+  ctx.lineTo(CARD_W - 64, billY + billH - 22);
   ctx.stroke();
 
+  ctx.fillStyle = C.cream;
+  ctx.font = `600 13px ${FONT_MONO}`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "10px";
+  ctx.fillText("VISIT THE GARDEN", CARD_W / 2, billY + 60);
+  ctx.letterSpacing = "0px";
+
+  // The URL — big, ink, centered.
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 96px ${FONT_MONO}`;
+  ctx.letterSpacing = "2px";
+  const url = "aphylia.app";
+  const urlMetrics = ctx.measureText(url);
+  const urlY = billY + 170;
+  ctx.fillText(url, CARD_W / 2, urlY);
+  ctx.letterSpacing = "0px";
+
+  // Cream underline ribbon under the URL — gives it the billboard "stamp" feel.
+  const underlineW = Math.min(urlMetrics.width + 80, CARD_W - 200);
+  const underlineX = (CARD_W - underlineW) / 2;
+  ctx.fillStyle = C.cream;
+  roundRectPath(ctx, underlineX, urlY + 18, underlineW, 8, 4);
+  ctx.fill();
+
+  // Sub-line: site tagline, cream over coral.
+  ctx.fillStyle = "rgba(244,239,226,0.85)";
+  ctx.font = `500 16px ${FONT_MONO}`;
+  ctx.letterSpacing = "6px";
+  ctx.fillText("CARDS · CARE · COMMUNITY", CARD_W / 2, billY + billH - 50);
+  ctx.letterSpacing = "0px";
+
   // — Downward "read the caption" cue --------------------------------
-  // Big animated-looking arrow stack pointing down, with a tracked label.
-  // The whole bottom band visually suggests the eye should keep going past
-  // the carousel into the post text below.
-  const cueTop = 1130;
-  ctx.fillStyle = C.mintGlow;
-  ctx.font = `700 16px ${FONT_MONO}`;
+  // Ink-on-cream so it doesn't echo Card 3's mint glow.
+  const cueTop = billY + billH + 60;
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 14px ${FONT_MONO}`;
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "8px";
   ctx.fillText("READ THE FULL POST BELOW", CARD_W / 2, cueTop);
   ctx.letterSpacing = "0px";
 
-  // Three stacked chevrons (Lucide ChevronsDown rendered three times at
-  // decreasing opacity).
   if (icons?.chevDown) {
+    // Re-tint the chevron stack: the icon was rasterised in mint for Card 3,
+    // but here we want ink so it matches the warm cream/coral palette. We
+    // draw it as a soft-multiply mask against an ink fill.
     const sizes = [
-      { y: cueTop + 30, op: 1.0, sz: 56 },
-      { y: cueTop + 70, op: 0.6, sz: 48 },
-      { y: cueTop + 105, op: 0.3, sz: 40 },
+      { y: cueTop + 24, op: 0.95, sz: 48 },
+      { y: cueTop + 56, op: 0.55, sz: 42 },
+      { y: cueTop + 84, op: 0.28, sz: 36 },
     ];
     for (const s of sizes) {
       ctx.save();
@@ -1804,15 +1827,13 @@ function drawCardWild(
       ctx.restore();
     }
   } else {
-    // SVG fallback — three chevrons drawn with strokes if the Lucide image
-    // didn't rasterize.
-    ctx.strokeStyle = C.mintGlow;
+    ctx.strokeStyle = C.ink;
     ctx.lineWidth = 4;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     for (let i = 0; i < 3; i++) {
-      const y = cueTop + 30 + i * 24;
-      const span = 24 - i * 4;
+      const y = cueTop + 30 + i * 22;
+      const span = 22 - i * 4;
       ctx.globalAlpha = 1 - i * 0.3;
       ctx.beginPath();
       ctx.moveTo(CARD_W / 2 - span, y);
@@ -1823,18 +1844,18 @@ function drawCardWild(
     ctx.globalAlpha = 1;
   }
 
-  // tiny featuring stat row at the very bottom
+  // Featuring footer — small, ink-dim, centered.
   const statsY = 1300;
   const statName = tidy(plant.name || "this plant");
-  ctx.font = `500 12px ${FONT_MONO}`;
-  ctx.fillStyle = "rgba(168,240,204,0.5)";
+  ctx.font = `500 11px ${FONT_MONO}`;
+  ctx.fillStyle = "rgba(21,32,26,0.55)";
   ctx.textAlign = "center";
   ctx.textBaseline = "alphabetic";
   ctx.letterSpacing = "5px";
   ctx.fillText(`FEATURING · ${statName.toUpperCase()}`, CARD_W / 2, statsY);
   ctx.letterSpacing = "0px";
 
-  drawGrain(ctx, CARD_W, CARD_H, 0.04, 700);
+  drawGrain(ctx, CARD_W, CARD_H, 0.025, 600);
 }
 
 // — orchestration --------------------------------------------------------
@@ -1946,7 +1967,7 @@ async function renderCardCanvas(
       break;
     case 3:
       // Wild card rotates through every available image in the orb collage.
-      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoWhite);
+      drawCardWild(ctx, b.plant, b.images, b.icons, b.logoBlack);
       break;
   }
   return c;

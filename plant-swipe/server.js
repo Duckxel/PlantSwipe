@@ -5372,10 +5372,14 @@ factConfidence:
 - "low" if you reached for it — caller will discard low-confidence outputs.
 
 gardenerTip (max ${tipMax} chars):
-- ONE genuine care tip a hobby gardener would tell a beginner about THIS plant — the kind of thing that's easy to miss in a generic care card.
-- Concrete and actionable. Mention the actual mistake to avoid (e.g. "let the topsoil dry between waterings — caladiums rot fast in saturated soil").
-- One or two short sentences. Plain prose. No markdown. No leading "Tip:" filler.
-- Always return a real tip — beginners always need one, even for easy plants.
+- Write as a hands-on hobbyist who has actually grown THIS specific plant for years — not as a generic care label.
+- Must be unmistakably tied to the plant's known quirks. Reference a behaviour, structure, or sensitivity that is specific to this species or genus (e.g. "Caladium tubers turn to mush in cold-wet soil — I lift them indoors when nights drop below 16°C and store them dry in newspaper until spring").
+- Mention an observable, sensory cue you watch for (drooping leaves, soil pulling from the pot wall, a particular scent, rustling stems) — something that signals when to act.
+- Mention an actual personal habit or ritual ("I bottom-water mine once a week", "I rotate the pot a quarter-turn every Sunday") so it reads as lived experience.
+- ONE genuine pitfall a beginner would hit with this plant, plus how to avoid it. No platitudes ("water regularly", "give it light").
+- Speak in first person where natural ("I" / "mine"). One or two short sentences. Plain prose. No markdown. No leading "Tip:" or "Pro tip:".
+- If two species share the genus quirk, name the quirk — not the plant.
+- Always return a real, specific tip. If the plant is genuinely unfussy, name the ONE thing that does still trip people up.
 
 postDescription (max ${captionMax} chars):
 - The body of the Instagram caption that goes BELOW the carousel.
