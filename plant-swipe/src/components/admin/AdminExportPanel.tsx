@@ -11,19 +11,39 @@ const CARD = { w: 1080, h: 1350 };
 const pretty = (v: unknown) => String(v ?? "—").replace(/_/g, " ").replace(/\b\w/g, (m) => m.toUpperCase());
 const slug = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-function toPng(node: HTMLElement): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    const xml = new XMLSerializer().serializeToString(node);
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD.w}" height="${CARD.h}"><foreignObject width="100%" height="100%">${xml}</foreignObject></svg>`;
-    const img = new Image();
-    img.onload = () => {
-      const c = document.createElement("canvas"); c.width = CARD.w; c.height = CARD.h;
-      const ctx = c.getContext("2d"); if (!ctx) return reject(new Error("canvas unavailable"));
-      ctx.drawImage(img, 0, 0); c.toBlob((b) => (b ? resolve(b) : reject(new Error("toBlob failed"))), "image/png", 1);
-    };
-    img.onerror = reject;
-    img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+async function loadImage(url: string): Promise<HTMLImageElement | null> {
+  if (!url) return null;
+  return new Promise((resolve) => {
+    const img = new Image(); img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img); img.onerror = () => resolve(null); img.src = url;
   });
+}
+
+async function renderCardBlob(index: number, plant: PlantRow, wildFact: string): Promise<Blob> {
+  const c = document.createElement("canvas"); c.width = CARD.w; c.height = CARD.h;
+  const ctx = c.getContext("2d"); if (!ctx) throw new Error("canvas unavailable");
+  const name = pretty(plant.name || "Plant"); const sci = String(plant.scientific_name_species || "");
+  const image = await loadImage(String(plant.image || ""));
+  const drawHeader = () => { ctx.fillStyle = "#ffffff"; ctx.font = "700 34px 'Fira Code', monospace"; ctx.fillText("Aphylia", 44, 58); ctx.fillStyle = "rgba(255,255,255,.8)"; ctx.font = "600 18px 'Fira Code', monospace"; ctx.fillText(`${String(index+1).padStart(2,"0")} / 04`, CARD.w-140, 58); };
+  if (index===0) {
+    ctx.fillStyle="#07120d";ctx.fillRect(0,0,CARD.w,CARD.h);
+    if (image) {ctx.drawImage(image,0,0,CARD.w,CARD.h);ctx.fillStyle='rgba(0,0,0,.45)';ctx.fillRect(0,0,CARD.w,CARD.h);} 
+    drawHeader(); ctx.fillStyle='#fff';ctx.font="700 96px 'Fira Code', monospace";ctx.fillText(name,64,1040);ctx.font="500 36px 'Fira Code', monospace";ctx.fillText(sci,64,1090);
+  } else if (index===1) {
+    ctx.fillStyle='#f3f3f3';ctx.fillRect(0,0,CARD.w,CARD.h); drawHeader(); ctx.fillStyle='#111';ctx.font="700 78px 'Fira Code', monospace";ctx.fillText('Surface Care',64,170);
+    const rows=[["Light",pretty(plant.sunlight)],["Soil",pretty(plant.substrate)],["Humidity",pretty(plant.humidity)],["Care",pretty(plant.maintenance)]];
+    rows.forEach((r,i)=>{const y=220+i*220;ctx.fillStyle='#fff';ctx.strokeStyle='#ddd';ctx.lineWidth=2;ctx.beginPath();ctx.roundRect(64,y,952,180,20);ctx.fill();ctx.stroke();ctx.fillStyle='#666';ctx.font="500 20px 'Fira Code', monospace";ctx.fillText(r[0],96,y+48);ctx.fillStyle='#000';ctx.font="700 46px 'Fira Code', monospace";ctx.fillText(r[1],96,y+118);});
+  } else if (index===2) {
+    ctx.fillStyle='#081014';ctx.fillRect(0,0,CARD.w,CARD.h); drawHeader(); ctx.fillStyle='#64f0c2';ctx.font="700 72px 'Fira Code', monospace";ctx.fillText('Science & Origin',64,160);
+    const rows=[["Origin",pretty(plant.origin)],["Family",pretty(plant.family)],["Genus",pretty(plant.genus)],["Species",pretty(plant.species)],["Temp",`${plant.temperature_min ?? '?'}-${plant.temperature_max ?? '?'}°C`],["Toxicity",pretty(plant.toxicity_pets||plant.toxicity)]];
+    rows.forEach((r,i)=>{const x=64+(i%2)*476,y=210+Math.floor(i/2)*300;ctx.fillStyle='rgba(14,40,30,.8)';ctx.strokeStyle='rgba(100,240,194,.35)';ctx.beginPath();ctx.roundRect(x,y,440,250,18);ctx.fill();ctx.stroke();ctx.fillStyle='#86ffd8';ctx.font="500 18px 'Fira Code', monospace";ctx.fillText(r[0],x+24,y+42);ctx.fillStyle='#fff';ctx.font="700 38px 'Fira Code', monospace";ctx.fillText(String(r[1]).slice(0,22),x+24,y+118);});
+  } else {
+    ctx.fillStyle='#2f9f73';ctx.fillRect(0,0,CARD.w,CARD.h); drawHeader(); ctx.fillStyle='#fff';ctx.font="700 140px 'Fira Code', monospace";ctx.fillText('12',64,180);
+    ctx.font="600 18px 'Fira Code', monospace";ctx.fillText('MONTHS TO REMEMBER',72,220);
+    ctx.fillStyle='rgba(15,18,17,.86)';ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.beginPath();ctx.roundRect(50,330,980,360,18);ctx.fill();ctx.stroke();ctx.fillStyle='#fff';ctx.font="600 34px 'Fira Code', monospace";ctx.fillText(wildFact.slice(0,95),80,430);
+    ctx.font="700 34px 'Fira Code', monospace";ctx.fillText('Go to APHYLIA.APP',730,1280);
+  }
+  return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error('toBlob failed')),'image/png',1));
 }
 
 const PreviewFrame = ({ children, setRef }: { children: React.ReactNode; setRef: (el: HTMLDivElement | null) => void }) => {
@@ -69,8 +89,7 @@ export function AdminExportPanel() {
     if (!generated) return;
     const zip = new JSZip();
     for (let i = 0; i < 4; i++) {
-      const n = cardRefs.current[i]; if (!n) continue;
-      zip.file(`${String(i + 1).padStart(2, "0")}-${slug(String(generated.name || "plant"))}.png`, await toPng(n));
+      zip.file(`${String(i + 1).padStart(2, "0")}-${slug(String(generated.name || "plant"))}.png`, await renderCardBlob(i, generated, wildFact));
     }
     const a = document.createElement("a");
     a.href = URL.createObjectURL(await zip.generateAsync({ type: "blob" }));
