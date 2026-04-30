@@ -892,45 +892,79 @@ export const ScanPage: React.FC = () => {
                     {t('scan.otherSuggestions', { defaultValue: 'Other Possibilities' })}
                   </h4>
                   <div className="space-y-2">
-                    {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => (
-                      <button 
-                        key={suggestion.id || idx}
-                        onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
-                        className="flex items-start justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
-                        title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            {suggestion.name}
-                          </span>
-                          {/* Show infraspecies/cultivar if available */}
-                          {suggestion.infraspecies && (() => {
-                            const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
-                            if (!infraInfo) return null
-                            return (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                  <FlaskConical className="h-2.5 w-2.5 mr-1" />
-                                  {infraInfo.value}
-                                </Badge>
+                    {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => {
+                      const thumb = suggestion.similarImages?.[0]
+                      return (
+                        <button
+                          key={suggestion.id || idx}
+                          onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
+                          title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
+                        >
+                          {/* Thumbnail — same Kindwise call, no extra API cost. Click opens fullscreen. */}
+                          <div
+                            onClick={(e) => {
+                              if (!thumb) return
+                              e.stopPropagation()
+                              imageViewer.open(thumb.url)
+                            }}
+                            className={cn(
+                              "flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-800 relative",
+                              thumb && "cursor-zoom-in group/img"
+                            )}
+                            aria-label={thumb ? t('scan.viewFullscreen', { defaultValue: 'View image fullscreen' }) : undefined}
+                          >
+                            {thumb ? (
+                              <>
+                                <img
+                                  src={thumb.urlSmall || thumb.url}
+                                  alt={suggestion.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
+                                  <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-lg" />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Leaf className="h-5 w-5 text-stone-400" />
                               </div>
-                            )
-                          })()}
-                          {/* Show common names if available */}
-                          {suggestion.commonNames && suggestion.commonNames.length > 0 && (
-                            <p className="text-xs text-stone-400 mt-0.5 truncate">
-                              {suggestion.commonNames.slice(0, 2).join(', ')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          <Badge variant="outline" className="rounded-full text-xs">
-                            {formatProbability(suggestion.probability)}
-                          </Badge>
-                          <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    ))}
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {suggestion.name}
+                            </span>
+                            {/* Show infraspecies/cultivar if available */}
+                            {suggestion.infraspecies && (() => {
+                              const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
+                              if (!infraInfo) return null
+                              return (
+                                <div className="flex items-center gap-1 mt-1">
+                                  <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                    <FlaskConical className="h-2.5 w-2.5 mr-1" />
+                                    {infraInfo.value}
+                                  </Badge>
+                                </div>
+                              )
+                            })()}
+                            {/* Show common names if available */}
+                            {suggestion.commonNames && suggestion.commonNames.length > 0 && (
+                              <p className="text-xs text-stone-400 mt-0.5 truncate">
+                                {suggestion.commonNames.slice(0, 2).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <Badge variant="outline" className="rounded-full text-xs">
+                              {formatProbability(suggestion.probability)}
+                            </Badge>
+                            <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
