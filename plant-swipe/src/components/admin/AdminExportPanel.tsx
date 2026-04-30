@@ -19,12 +19,10 @@ type Translation = {
 const CARD_W = 1080;
 const CARD_H = 1350;
 
-const FONT_SERIF =
-  '"Lavonte", "Playfair Display", "Cormorant Garamond", Georgia, serif';
+// Fira Code is the only typeface — loaded across 400/500/600/700 in main.tsx
+// (no italic variant exists for this family, so we never request italic).
 const FONT_MONO =
   '"Fira Code", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
-const FONT_SANS =
-  '"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 const C = {
   forest: "#0B1A12",
@@ -43,27 +41,23 @@ const C = {
   warning: "#E25555",
 } as const;
 
-// Wrap third-party plant_images.link through PlantSwipe's CORS-enabled image
-// proxy so `<img crossOrigin="anonymous">` can decode the bytes onto canvas
-// without tainting it. Same proxy used by the Aphydle daily-game export.
-function proxyImage(url: string | null | undefined): string {
-  if (!url) return "";
-  if (url.startsWith("data:") || url.startsWith("blob:")) return url;
-  try {
-    const u = new URL(url, window.location.origin);
-    const host = u.hostname.toLowerCase();
-    if (
-      host === window.location.hostname ||
-      host.endsWith(".supabase.co") ||
-      host === "aphylia.app" ||
-      host.endsWith(".aphylia.app")
-    ) {
-      return url;
-    }
-    return `/api/image-proxy?url=${encodeURIComponent(url)}`;
-  } catch {
-    return url;
+// Load a plant image for the canvas. Try direct first (works for Supabase and
+// CORS-friendly third-parties); fall back to PlantSwipe's CORS-permissive
+// /api/image-proxy when direct fails (third-party hosts that don't send
+// Access-Control-Allow-Origin). Vite dev forwards /api → :3000 already, so this
+// works whenever the express server is running; in pure-vite dev it'll just
+// log the failed direct attempt and stop there.
+async function loadCanvasImage(
+  url: string | null | undefined,
+): Promise<HTMLImageElement | null> {
+  if (!url) return null;
+  if (url.startsWith("data:") || url.startsWith("blob:")) {
+    return loadImage(url, { crossOrigin: null });
   }
+  const direct = await loadImage(url);
+  if (direct) return direct;
+  if (!/^https?:/i.test(url)) return null;
+  return loadImage(`/api/image-proxy?url=${encodeURIComponent(url)}`);
 }
 
 // — utils ----------------------------------------------------------------
@@ -429,7 +423,7 @@ function drawBrandHeader(
   ctx.textAlign = "left";
   ctx.textBaseline = "alphabetic";
   ctx.fillStyle = fg;
-  ctx.font = `700 30px ${FONT_SANS}`;
+  ctx.font = `700 30px ${FONT_MONO}`;
   ctx.fillText("Aphylia", padX, top + 28);
 
   // dot
@@ -552,19 +546,22 @@ function drawCardCover(
   ctx.fillText("PLANT STUDIO · 01", CARD_W / 2, titleAreaTop);
   ctx.letterSpacing = "0px";
 
-  // title — auto-fit
-  const name = tidy(plant.name || "Plant");
-  const titleSize = fitText(ctx, name, CARD_W - 200, 130, 64, "700", FONT_SERIF);
-  ctx.font = `700 ${titleSize}px ${FONT_SERIF}`;
+  // title — auto-fit. Fira Code is wide; cap at 92px and uppercase for impact.
+  const nameRaw = tidy(plant.name || "Plant");
+  const name = nameRaw.toUpperCase();
+  const titleSize = fitText(ctx, name, CARD_W - 200, 92, 48, "700", FONT_MONO);
+  ctx.font = `700 ${titleSize}px ${FONT_MONO}`;
   ctx.fillStyle = C.cream;
   ctx.textAlign = "center";
-  ctx.fillText(name, CARD_W / 2, titleAreaTop + titleSize + 30);
+  ctx.letterSpacing = "4px";
+  ctx.fillText(name, CARD_W / 2, titleAreaTop + titleSize + 36);
+  ctx.letterSpacing = "0px";
 
   // variety pill (italic) — only if present
   const variantTextRaw = variety && variety.trim() ? variety.trim() : "";
   if (variantTextRaw) {
     const variantText = `'${variantTextRaw}'`;
-    ctx.font = `400 italic 32px ${FONT_SERIF}`;
+    ctx.font = `400 32px ${FONT_MONO}`;
     const tw = ctx.measureText(variantText).width + 56;
     const ty = titleAreaTop + titleSize + 84;
     roundRectPath(ctx, (CARD_W - tw) / 2, ty, tw, 60, 30);
@@ -580,7 +577,7 @@ function drawCardCover(
     // sci name fallback
     const sci = String(plant.scientific_name_species || "");
     if (sci) {
-      ctx.font = `400 italic 30px ${FONT_SERIF}`;
+      ctx.font = `400 30px ${FONT_MONO}`;
       ctx.fillStyle = "rgba(245,239,226,0.7)";
       ctx.textAlign = "center";
       ctx.textBaseline = "alphabetic";
@@ -694,24 +691,28 @@ function drawCardIdentity(
   ctx.fillText("IDENTITY", 64, 200);
   ctx.letterSpacing = "0px";
 
-  const name = tidy(plant.name || "Plant");
-  const nameSize = fitText(ctx, name, 600, 84, 48, "700", FONT_SERIF);
-  ctx.font = `700 ${nameSize}px ${FONT_SERIF}`;
+  const name = tidy(plant.name || "Plant").toUpperCase();
+  const nameSize = fitText(ctx, name, 600, 64, 36, "700", FONT_MONO);
+  ctx.font = `700 ${nameSize}px ${FONT_MONO}`;
   ctx.fillStyle = C.ink;
-  ctx.fillText(name, 64, 200 + nameSize + 24);
+  ctx.letterSpacing = "3px";
+  const titleY = 200 + nameSize + 24;
+  ctx.fillText(name, 64, titleY);
+  ctx.letterSpacing = "0px";
 
-  // scientific name italic
+  // scientific name
   const sci = String(plant.scientific_name_species || "").trim();
+  let chipsY = titleY + 56;
   if (sci) {
-    ctx.font = `400 italic 30px ${FONT_SERIF}`;
+    ctx.font = `400 24px ${FONT_MONO}`;
     ctx.fillStyle = C.inkDim;
-    ctx.fillText(sci, 64, 200 + nameSize + 64);
+    ctx.fillText(sci, 64, titleY + 40);
+    chipsY = titleY + 80;
   }
 
   // family chip + plant_type chip
   const family = tidy(plant.family || "");
   const plantType = tidy(plant.plant_type || "");
-  const chipsY = 200 + nameSize + 96;
   let cursorX = 64;
   if (family) {
     const sz = drawChip(ctx, cursorX, chipsY, family.toUpperCase(), {
@@ -775,7 +776,7 @@ function drawCardIdentity(
   drawStatRow(0, "Sun Needs", (yMid) => {
     drawSunGauge(ctx, rowX + 360, yMid - 6, sun);
     ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_SERIF}`;
+    ctx.font = `700 24px ${FONT_MONO}`;
     ctx.textAlign = "right";
     ctx.fillText(
       tidy(asArr(plant.sunlight)[0] || "—"),
@@ -790,7 +791,7 @@ function drawCardIdentity(
   drawStatRow(1, "Water Needs", (yMid) => {
     drawDropGauge(ctx, rowX + 360, yMid - 6, water);
     ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_SERIF}`;
+    ctx.font = `700 24px ${FONT_MONO}`;
     ctx.textAlign = "right";
     const label = warmFreq > 0 ? `${warmFreq}× / week` : "—";
     ctx.fillText(label, rowX + rowW, yMid + 4);
@@ -817,7 +818,7 @@ function drawCardIdentity(
       ctx.fill();
     }
     ctx.fillStyle = C.ink;
-    ctx.font = `700 24px ${FONT_SERIF}`;
+    ctx.font = `700 24px ${FONT_MONO}`;
     ctx.textAlign = "right";
     ctx.fillText(hyg > 0 ? `${hyg}%` : "—", rowX + rowW, yMid + 4);
   });
@@ -834,7 +835,7 @@ function drawCardIdentity(
     );
     if (colors.length) {
       ctx.fillStyle = C.ink;
-      ctx.font = `700 24px ${FONT_SERIF}`;
+      ctx.font = `700 24px ${FONT_MONO}`;
       ctx.textAlign = "right";
       ctx.fillText(
         colors.length === 1
@@ -959,14 +960,17 @@ function drawCardDeep(
   ctx.lineTo(290, 215);
   ctx.stroke();
 
-  // ORIGIN — big serif
-  const originText = origin.length
-    ? joinPretty(origin, " · ", 2)
-    : "Cultivated Worldwide";
-  const oSize = fitText(ctx, originText, CARD_W - 128, 90, 50, "700", FONT_SERIF);
-  ctx.font = `700 ${oSize}px ${FONT_SERIF}`;
+  // ORIGIN — uppercase mono with wrapping
+  const originText = (
+    origin.length ? joinPretty(origin, " · ", 2) : "Cultivated Worldwide"
+  ).toUpperCase();
+  ctx.font = `700 56px ${FONT_MONO}`;
   ctx.fillStyle = C.cream;
-  ctx.fillText(originText, 64, 200 + oSize + 30);
+  ctx.textAlign = "left";
+  ctx.textBaseline = "alphabetic";
+  ctx.letterSpacing = "3px";
+  const originBottom = drawWrap(ctx, originText, 64, 290, CARD_W - 128, 70, 3);
+  ctx.letterSpacing = "0px";
 
   // pinpoint coordinates-style row
   ctx.font = `500 16px ${FONT_MONO}`;
@@ -975,7 +979,7 @@ function drawCardDeep(
   ctx.fillText(
     `◯ ${origin.length > 1 ? "NATIVE RANGE" : "NATIVE TO"}`,
     64,
-    200 + oSize + 60,
+    originBottom + 36,
   );
   ctx.letterSpacing = "0px";
 
@@ -1047,9 +1051,9 @@ function drawCardDeep(
       32,
       18,
       "700",
-      FONT_SERIF,
+      FONT_MONO,
     );
-    ctx.font = `700 ${valSize}px ${FONT_SERIF}`;
+    ctx.font = `700 ${valSize}px ${FONT_MONO}`;
     ctx.fillStyle = C.cream;
     ctx.fillText(cell.v, cx + 22, cy + 90);
   });
@@ -1065,7 +1069,7 @@ function drawCardDeep(
     ctx.letterSpacing = "0px";
 
     ctx.fillStyle = C.cream;
-    ctx.font = `400 italic 22px ${FONT_SERIF}`;
+    ctx.font = `400 22px ${FONT_MONO}`;
     drawWrap(ctx, `"${presentation}"`, bx, by + 36, CARD_W - 128, 30, 3);
   }
 
@@ -1144,23 +1148,27 @@ function drawCardWild(
   ctx.lineTo(360, 240);
   ctx.stroke();
 
-  // big stacked headline
+  // big stacked headline — uppercase mono with strong tracking
   ctx.fillStyle = C.cream;
-  ctx.font = `700 italic 152px ${FONT_SERIF}`;
-  ctx.fillText("Discover", 64, 410);
+  ctx.font = `700 110px ${FONT_MONO}`;
+  ctx.letterSpacing = "6px";
+  ctx.fillText("DISCOVER", 64, 400);
 
-  ctx.font = `400 138px ${FONT_SERIF}`;
-  ctx.fillStyle = "rgba(245,239,226,0.7)";
-  ctx.fillText("more →", 64, 540);
+  ctx.font = `400 110px ${FONT_MONO}`;
+  ctx.fillStyle = "rgba(245,239,226,0.65)";
+  ctx.fillText("MORE  →", 64, 530);
+  ctx.letterSpacing = "0px";
 
   // sub-headline
   ctx.fillStyle = C.cream;
-  ctx.font = `500 26px ${FONT_SANS}`;
-  ctx.fillText("Swipe. Learn. Grow.", 64, 600);
+  ctx.font = `500 22px ${FONT_MONO}`;
+  ctx.letterSpacing = "5px";
+  ctx.fillText("SWIPE · LEARN · GROW", 64, 600);
+  ctx.letterSpacing = "0px";
 
   // body
   ctx.fillStyle = "rgba(245,239,226,0.78)";
-  ctx.font = `400 22px ${FONT_SANS}`;
+  ctx.font = `400 22px ${FONT_MONO}`;
   drawWrap(
     ctx,
     "A daily encyclopedia of plants — from the windowsill jungle to the wild meadow. Curated cards, real care advice, zero noise.",
@@ -1173,7 +1181,7 @@ function drawCardWild(
 
   // CTA chip
   const ctaY = 1100;
-  ctx.font = `700 38px ${FONT_SERIF}`;
+  ctx.font = `700 38px ${FONT_MONO}`;
   const ctaText = "aphylia.app";
   const ctaW = ctx.measureText(ctaText).width + 80;
   roundRectPath(ctx, 64, ctaY, ctaW, 88, 44);
@@ -1318,7 +1326,7 @@ export function AdminExportPanel() {
         description: (p.scientific_name_species as string) || "",
         icon: map.get(p.id as string) ? (
           <img
-            src={proxyImage(map.get(p.id as string) as string)}
+            src={map.get(p.id as string) as string}
             className="h-9 w-9 rounded object-cover"
             alt=""
           />
@@ -1387,7 +1395,7 @@ export function AdminExportPanel() {
 
       const heroUrl =
         (imgRes.data as { link: string } | null)?.link || null;
-      const hero = await loadImage(proxyImage(heroUrl));
+      const hero = await loadCanvasImage(heroUrl);
 
       setBundle({ plant, variety, presentation, origin, colors, hero, worldMap });
     } finally {
