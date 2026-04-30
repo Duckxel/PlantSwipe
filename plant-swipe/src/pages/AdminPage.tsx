@@ -17,7 +17,7 @@ import { AdminNotificationsPanel } from "@/components/admin/AdminNotificationsPa
 import { AdminEmailsPanel } from "@/components/admin/AdminEmailsPanel";
 import { AdminAdvancedPanel } from "@/components/admin/AdminAdvancedPanel";
 import { AdminEventsPanel } from "@/components/admin/AdminEventsPanel";
-import { AdminStocksPanel } from "@/components/admin/AdminStocksPanel";
+import { AdminExportPanel } from "@/components/admin/AdminExportPanel";
 import { AdminReportsPanel } from "@/components/admin/AdminReportsPanel";
 import { AdminBugsPanel } from "@/components/admin/AdminBugsPanel";
 import { AdminPlantReportsPanel } from "@/components/admin/AdminPlantReportsPanel";
@@ -262,7 +262,7 @@ type AdminTab =
   | "members"
   | "plants"
   | "bugs"
-  | "stocks"
+  | "export"
   | "upload"
   | "notifications"
   | "emails"
@@ -5649,7 +5649,7 @@ export const AdminPage: React.FC = () => {
     { key: "members", label: "Members", Icon: Users, path: "/admin/members", adminOnly: true },
     { key: "plants", label: "Plants", Icon: Leaf, path: "/admin/plants" },
     { key: "bugs", label: "Bugs", Icon: Bug, path: "/admin/bugs", adminOnly: true },
-    { key: "stocks", label: "Stocks", Icon: Package, path: "/admin/stocks", adminOnly: true },
+    { key: "export", label: "Export", Icon: Package, path: "/admin/export", adminOnly: true },
     { key: "upload", label: "Upload and Media", Icon: CloudUpload, path: "/admin/upload" },
     { key: "notifications", label: "Notifications", Icon: BellRing, path: "/admin/notifications" },
     { key: "emails", label: "Emails", Icon: Mail, path: "/admin/emails" },
@@ -5668,7 +5668,7 @@ export const AdminPage: React.FC = () => {
     if (currentPath.includes("/admin/members")) return "members";
     if (currentPath.includes("/admin/plants")) return "plants";
     if (currentPath.includes("/admin/bugs")) return "bugs";
-    if (currentPath.includes("/admin/stocks")) return "stocks";
+    if (currentPath.includes("/admin/export")) return "export";
     if (currentPath.includes("/admin/upload")) return "upload";
     if (currentPath.includes("/admin/notifications")) return "notifications";
     if (currentPath.includes("/admin/emails")) return "emails";
@@ -5680,7 +5680,7 @@ export const AdminPage: React.FC = () => {
   // Redirect editors away from admin-only tabs
   React.useEffect(() => {
     if (isFullAdmin) return; // Admins can access everything
-    const adminOnlyTabs: AdminTab[] = ["overview", "members", "stocks", "admin_logs"];
+    const adminOnlyTabs: AdminTab[] = ["overview", "members", "export", "admin_logs"];
     if (adminOnlyTabs.includes(activeTab)) {
       // Redirect to plants tab (default for editors)
       navigate("/admin/plants", { replace: true });
@@ -9254,9 +9254,9 @@ export const AdminPage: React.FC = () => {
                   </>
                 )}
 
-                {/* Stocks Tab */}
-                {activeTab === "stocks" && (
-                  <AdminStocksPanel />
+                {/* Export Tab */}
+                {activeTab === "export" && (
+                  <AdminExportPanel />
                 )}
 
                 {/* Bugs Tab */}
