@@ -3164,7 +3164,11 @@ export default function PlantSwipe() {
 
       <Footer />
       <BroadcastToast />
-      <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
+      <RequestPlantDialog
+        open={requestPlantDialogOpen}
+        onOpenChange={setRequestPlantDialogOpen}
+        initialPlantName={query.trim() || undefined}
+      />
       
       {/* Message notification toast - shows when new messages arrive */}
       <MessageNotificationToast
