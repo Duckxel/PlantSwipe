@@ -22318,7 +22318,7 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       // Upload optimized image to storage
       const baseName = sanitizeUploadBaseName(file.originalname)
       const timestamp = Date.now()
-      const randomId = Math.random().toString(36).substring(2, 10)
+      const randomId = crypto.randomBytes(4).toString('hex')
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
       const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
@@ -26650,7 +26650,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
 
       // Generate unique filename
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
+      const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${finalExt}`
       const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
 
       // Upload to Supabase Storage (PHOTOS bucket)
