@@ -341,8 +341,9 @@ export const AdminTeamPanel: React.FC = () => {
                         type="button"
                         onClick={() => handleMoveUp(member)}
                         disabled={index === 0}
-                        className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         title="Move up"
+                        aria-label="Move up"
                       >
                         <ChevronUp className="h-4 w-4 text-stone-500" />
                       </button>
@@ -351,8 +352,9 @@ export const AdminTeamPanel: React.FC = () => {
                         type="button"
                         onClick={() => handleMoveDown(member)}
                         disabled={index === teamMembers.length - 1}
-                        className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed"
+                        className="p-1 rounded hover:bg-stone-200 dark:hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
                         title="Move down"
+                        aria-label="Move down"
                       >
                         <ChevronDown className="h-4 w-4 text-stone-500" />
                       </button>
@@ -404,12 +406,13 @@ export const AdminTeamPanel: React.FC = () => {
                         type="button"
                         onClick={() => handleToggleActive(member)}
                         className={cn(
-                          "p-2 rounded-lg transition-colors",
+                          "p-2 rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500",
                           member.is_active
                             ? "hover:bg-stone-100 dark:hover:bg-stone-800 text-emerald-600"
                             : "hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-400"
                         )}
                         title={member.is_active ? "Hide from About page" : "Show on About page"}
+                        aria-label={member.is_active ? "Hide from About page" : "Show on About page"}
                       >
                         {member.is_active ? (
                           <Eye className="h-4 w-4" />
@@ -420,16 +423,18 @@ export const AdminTeamPanel: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(member)}
-                        className="p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400"
-                        title="Edit"
+                        className="p-2 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 text-stone-600 dark:text-stone-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500"
+                        title="Edit member"
+                        aria-label="Edit member"
                       >
                         <Pencil className="h-4 w-4" />
                       </button>
                       <button
                         type="button"
                         onClick={() => setDeleteConfirmId(member.id)}
-                        className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500"
-                        title="Delete"
+                        className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-red-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500"
+                        title="Delete member"
+                        aria-label="Delete member"
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>

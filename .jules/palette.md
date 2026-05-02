@@ -55,3 +55,6 @@
 ## 2024-04-26 - Accessible Action Buttons within Preview Cards
 **Learning:** Action buttons overlaid on media/link preview cards (like Download or External Link icons) often lack explicit screen reader labels and keyboard focus indicators (`focus-visible`). This makes these contextual actions completely inaccessible to users relying on assistive technology or keyboard navigation.
 **Action:** Always add `aria-label` (translated via `t()`) and `focus-visible` utility classes (e.g. `focus-visible:ring-2 focus-visible:outline-none`) to any overlaid icon-only action button inside preview components. Also, ensure the preview container itself (if interactive/clickable) has a clear focus indicator.
+## 2026-05-02 - Accessible Icon-Only Buttons in Drag-and-Drop Lists
+**Learning:** Action buttons in sortable lists (like team members) often rely purely on icons for up/down movement, visibility toggling, editing, and deletion. Without explicitly defined ARIA labels and focus indicators, these list management interactions are completely invisible to screen readers and difficult to navigate via keyboard.
+**Action:** Always ensure that every icon-only button inside mapped lists or drag-and-drop sortable components includes an `aria-label` (or dynamically interpolated label) and a `focus-visible:ring-2` utility class.
