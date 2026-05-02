@@ -23,6 +23,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { breadcrumbSchema, faqSchema, productOfferSchemaForPricing } from "@/lib/seo/schemas"
 import { useAuth } from "@/context/AuthContext"
 
 // Feature type definition
@@ -73,18 +74,39 @@ const PricingPage: React.FC = () => {
   const { user } = useAuth()
   const { t } = useTranslation("common")
 
-  usePageMetadata({
-    title: t("pricing.pageTitle"),
-    description: t("pricing.pageDescription"),
-  })
-
   const rawFreeFeatures = t("pricing.free.features", { returnObjects: true })
   const rawPlusFeatures = t("pricing.plus.features", { returnObjects: true })
   const rawFaqItems = t("pricing.faq.items", { returnObjects: true })
-  
+
   const freeFeatures = Array.isArray(rawFreeFeatures) ? rawFreeFeatures as string[] : []
   const plusFeatures = Array.isArray(rawPlusFeatures) ? rawPlusFeatures as string[] : []
   const faqItems = Array.isArray(rawFaqItems) ? rawFaqItems as Array<{ q: string; a: string }> : []
+
+  // Pricing is the one place where Product schema *is* the right fit. Update tier names
+  // and prices below if the live pricing page changes — Google rejects rich-result eligibility
+  // when on-page price doesn't match the schema.
+  const pricingJsonLd = React.useMemo(() => {
+    const blocks: object[] = [
+      breadcrumbSchema([
+        { name: 'Aphylia', url: '/' },
+        { name: t('pricing.pageTitle', { defaultValue: 'Pricing' }), url: '/pricing' },
+      ]),
+      productOfferSchemaForPricing([
+        { name: 'Aphylia Free', price: '0', priceCurrency: 'USD', description: t('pricing.free.description', { defaultValue: 'Start tracking your garden for free.' }), url: '/pricing' },
+        { name: 'Aphylia Plus', price: '4.99', priceCurrency: 'USD', description: t('pricing.plus.description', { defaultValue: 'Unlock plant identification, analytics, and more.' }), url: '/pricing' },
+      ]),
+    ]
+    if (faqItems.length > 0) {
+      blocks.push(faqSchema(faqItems.map((f) => ({ question: f.q, answer: f.a }))))
+    }
+    return blocks
+  }, [t, faqItems])
+
+  usePageMetadata({
+    title: t("pricing.pageTitle"),
+    description: t("pricing.pageDescription"),
+    jsonLd: pricingJsonLd,
+  })
 
   return (
     <div className="max-w-6xl mx-auto px-4 py-8 md:py-12 space-y-16">

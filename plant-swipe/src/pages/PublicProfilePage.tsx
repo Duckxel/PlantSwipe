@@ -136,11 +136,13 @@ export default function PublicProfilePage() {
           defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
         })
       : fallbackProfileDescription)
-  usePageMetadata({ 
-    title: seoTitle, 
+  usePageMetadata({
+    title: seoTitle,
     description: seoDescription,
     image: pp?.avatar_url ?? undefined,
     url: preferredDisplayName ? `/u/${encodeURIComponent(preferredDisplayName)}` : undefined,
+    robots: 'noindex,follow',
+    type: 'profile',
   })
 
 

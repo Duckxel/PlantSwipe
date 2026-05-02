@@ -38,7 +38,7 @@ export const SearchPage: React.FC<SearchPageProps> = React.memo(({
   const seoDescription = t("seo.search.description", {
     defaultValue: "Filter by color, season, rarity, and uses to pinpoint the right species for your next planting plan.",
   });
-  usePageMetadata({ title: seoTitle, description: seoDescription });
+  usePageMetadata({ title: seoTitle, description: seoDescription, robots: 'noindex,follow' });
 
   const navigationType = useNavigationType();
   const isRestoringRef = useRef(navigationType === "POP");

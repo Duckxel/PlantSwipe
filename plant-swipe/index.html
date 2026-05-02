@@ -4,7 +4,7 @@
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
       <meta name="application-name" content="Aphylia" />
-      <meta name="description" content="Discover, swipe and manage the perfect plants for every garden." />
+      <meta name="description" content="Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds. Free." />
       <meta name="theme-color" content="#052e16" id="aphylia-theme-color-meta" />
       
       <!-- Canonical URL (updated dynamically by React) -->
@@ -14,19 +14,21 @@
       <meta property="og:type" content="website" />
       <meta property="og:site_name" content="Aphylia" />
       <meta property="og:url" content="https://aphylia.app" />
-      <meta property="og:title" content="Aphylia - Discover & Grow Your Perfect Garden" />
-      <meta property="og:description" content="Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden." />
-      <meta property="og:image" content="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" />
-      <meta property="og:image:alt" content="Aphylia - Your Personal Plant Companion" />
+      <meta property="og:title" content="Aphylia — Plant Care App for a Garden That Thrives" />
+      <meta property="og:description" content="Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds. Free." />
+      <meta property="og:image" content="https://aphylia.app/og/og-default.png" />
+      <meta property="og:image:width" content="1200" />
+      <meta property="og:image:height" content="630" />
+      <meta property="og:image:alt" content="Aphylia — Plant Care App for a Garden That Thrives" />
       <meta property="og:locale" content="en_US" />
       
       <!-- Twitter Card -->
       <meta name="twitter:card" content="summary_large_image" />
       <meta name="twitter:url" content="https://aphylia.app" />
-      <meta name="twitter:title" content="Aphylia - Discover & Grow Your Perfect Garden" />
-      <meta name="twitter:description" content="Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden." />
-      <meta name="twitter:image" content="https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png" />
-      <meta name="twitter:image:alt" content="Aphylia - Your Personal Plant Companion" />
+      <meta name="twitter:title" content="Aphylia — Plant Care App for a Garden That Thrives" />
+      <meta name="twitter:description" content="Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds. Free." />
+      <meta name="twitter:image" content="https://aphylia.app/og/og-default.png" />
+      <meta name="twitter:image:alt" content="Aphylia — Plant Care App for a Garden That Thrives" />
       <meta name="apple-mobile-web-app-capable" content="yes" />
       <meta name="mobile-web-app-capable" content="yes" />
       <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
@@ -224,7 +226,59 @@
       <!-- We'll leave a noscript fallback or rely on built assets. -->
       <!-- For dev/preview where src is served: -->
       <noscript><link rel="stylesheet" href="/src/index.scss" /></noscript>
-      <title>Aphylia</title>
+      <title>Aphylia — Plant Care App for a Garden That Thrives</title>
+
+      <!-- Structured data (Schema.org JSON-LD) — kept in sync with src/lib/seo/schemas.ts -->
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Aphylia",
+        "url": "https://aphylia.app",
+        "applicationCategory": "LifestyleApplication",
+        "operatingSystem": "Web, iOS, Android",
+        "description": "Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds.",
+        "image": "https://aphylia.app/og/og-default.png",
+        "screenshot": "https://aphylia.app/og/og-default.png",
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+      </script>
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "Aphylia",
+        "url": "https://aphylia.app",
+        "logo": "https://aphylia.app/icons/icon-512x512.png",
+        "email": "support@aphylia.app",
+        "sameAs": [
+          "https://www.instagram.com/aphylia_app/",
+          "https://x.com/aphylia_app",
+          "https://www.youtube.com/@aphylia_app",
+          "https://discord.gg/SRt74hDESC"
+        ]
+      }
+      </script>
+      <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Aphylia",
+        "url": "https://aphylia.app",
+        "potentialAction": {
+          "@type": "SearchAction",
+          "target": {
+            "@type": "EntryPoint",
+            "urlTemplate": "https://aphylia.app/search?q={search_term_string}"
+          },
+          "query-input": "required name=search_term_string"
+        }
+      }
+      </script>
 
       <!-- Ensure runtime environment variables load before the app initializes -->
       <script src="/env-loader.js" data-base="/" crossorigin="anonymous"></script>
@@ -257,11 +311,11 @@
           .noscript-content nav a { margin-right: 20px; text-decoration: none; font-weight: 500; }
           .noscript-content .features { display: grid; gap: 15px; margin: 20px 0; }
           .noscript-content .feature { padding: 15px; background: rgba(16, 185, 129, 0.1); border-radius: 8px; }
-          .noscript-content .archive-notice { 
-            background: #fef3c7; 
-            border: 1px solid #f59e0b; 
-            padding: 15px; 
-            border-radius: 8px; 
+          .noscript-content .static-notice {
+            background: #ecfdf5;
+            border: 1px solid #10b981;
+            padding: 15px;
+            border-radius: 8px;
             margin: 20px 0;
           }
           .noscript-content footer { margin-top: 40px; padding-top: 20px; border-top: 1px solid #d1d5db; color: #6b7280; font-size: 0.9em; }
@@ -279,12 +333,11 @@
             <a href="/contact">Contact</a>
           </nav>
 
-          <div class="archive-notice">
-            <strong>📚 Viewing an archived or non-JavaScript version</strong><br>
-            This page requires JavaScript for full functionality. If you're viewing this from a web archive, 
-            the content has been preserved but interactive features won't work.
+          <div class="static-notice">
+            <strong>🌱 Static preview</strong><br>
+            For the full Aphylia experience — plant identification, care reminders, and your interactive garden — please enable JavaScript or open the app in a modern browser.
             <br><br>
-            <a href="https://aphylia.app">Visit the live site →</a>
+            <a href="https://aphylia.app">Open the full app →</a>
           </div>
 
           <h2>Discover Your Perfect Plants</h2>
@@ -311,11 +364,11 @@
 
           <h2>Popular Plant Categories</h2>
           <ul>
-            <li><a href="/search?type=vegetable">Vegetables</a> - Tomatoes, peppers, lettuce, and more</li>
-            <li><a href="/search?type=herb">Herbs</a> - Basil, mint, rosemary, thyme</li>
-            <li><a href="/search?type=flower">Flowers</a> - Roses, tulips, sunflowers</li>
-            <li><a href="/search?type=succulent">Succulents</a> - Easy-care plants for beginners</li>
-            <li><a href="/search?type=tree">Trees & Shrubs</a> - Fruit trees, ornamentals</li>
+            <li><a href="/search/categories?type=vegetable">Vegetables</a> - Tomatoes, peppers, lettuce, and more</li>
+            <li><a href="/search/categories?type=herb">Herbs</a> - Basil, mint, rosemary, thyme</li>
+            <li><a href="/search/categories?type=flower">Flowers</a> - Roses, tulips, sunflowers</li>
+            <li><a href="/search/categories?type=succulent">Succulents</a> - Easy-care plants for beginners</li>
+            <li><a href="/search/categories?type=tree">Trees & Shrubs</a> - Fruit trees, ornamentals</li>
           </ul>
 
           <h2>Latest from Our Blog</h2>

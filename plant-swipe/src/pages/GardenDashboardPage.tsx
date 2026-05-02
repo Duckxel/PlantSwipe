@@ -3,6 +3,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
+import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { useTutorial } from "@/context/TutorialContext";
 import { DEMO_GARDENS, DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
@@ -153,6 +154,9 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation();
   const { user, profile } = useAuth();
   const { t } = useTranslation("common");
+  // User-generated, often thin, frequently private — keep these out of search
+  // results while still letting Google follow internal links to indexable pages.
+  usePageMetadata({ robots: 'noindex,follow' });
   const { active: _tutorialActive } = useTutorial();
   const isDemoGarden = !!(id && id.startsWith('demo-'));
   // Stable demo data — generated once, never changes across re-renders

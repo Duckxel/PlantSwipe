@@ -45,6 +45,17 @@ Disallow: /*/edit
 # Block error pages
 Disallow: /error
 
+# Block user-generated content from being indexed (kept shareable, but not crawl-promoted)
+# These pages emit <meta name="robots" content="noindex,follow"> at the page level too.
+Disallow: /u/
+Disallow: /bookmarks/
+Disallow: /garden/
+
+# Block faceted/query-string variants of search to avoid duplicate-content waste.
+# The clean /search and /search/categories pages stay crawlable but emit noindex meta.
+Disallow: /search?
+Disallow: /search/categories?
+
 # Block query parameters that don't change content
 Disallow: /*?_ssr=*
 Disallow: /*?utm_*

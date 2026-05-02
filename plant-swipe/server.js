@@ -32316,6 +32316,19 @@ app.use(
     },
   }),
 )
+
+// /favicon.ico — many browsers and link-preview services request this path directly
+// without parsing HTML. We don't ship a real .ico (the PNG icons in /icons/ already
+// cover Google SERPs and PWA via <link rel="icon">), so alias to the 192px PNG so
+// the URL stops 404'ing.
+app.get('/favicon.ico', (req, res) => {
+  res.set('Cache-Control', `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`)
+  res.type('image/png')
+  res.sendFile(path.join(distDir, 'icons', 'icon-192x192.png'), (err) => {
+    if (err) res.status(404).end()
+  })
+})
+
 // --- Crawler Detection and Server-Side Rendering for Web Archives ---
 // Detects crawlers (Wayback Machine, Googlebot, etc.) and serves pre-rendered HTML
 // This allows web archives to capture actual content instead of just a loading spinner
@@ -32486,12 +32499,15 @@ async function generateCrawlerHtml(req, pagePath) {
     return `<img src="${escapeHtml(url)}" alt="${escapeHtml(alt || 'Aphylia')}"${widthAttr}${heightAttr} style="${style}" loading="lazy" />`
   }
 
-  // Default meta tags
-  let title = 'Aphylia - Discover, Swipe and Manage Plants for Your Garden'
-  let description = 'Discover, swipe and manage the perfect plants for every garden. Track growth, get care reminders, and build your dream garden.'
-  
-  // Banner image ONLY for landing page - other pages should use specific images or no image
-  const LANDING_BANNER_IMAGE = 'https://media.aphylia.app/UTILITY/admin/uploads/png/baniere-logo-plus-titre-v2-54ef1ba8-2e4d-47fd-91bb-8bf4cbe01260.png'
+  // Default meta tags. Keep in sync with plant-swipe/index.html and src/constants/seo.ts
+  // so non-bot crawlers see the same head copy real users hit on the SPA.
+  let title = 'Aphylia — Plant Care App for a Garden That Thrives'
+  let description = 'Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds. Free.'
+
+  // Banner image ONLY for landing page - other pages should use specific images or no image.
+  // The /og/og-default.png file (1200×630) needs to exist in plant-swipe/public/og/ for
+  // social-card scrapers to render previews correctly.
+  const LANDING_BANNER_IMAGE = `${siteUrl.replace(/\/+$/, '')}/og/og-default.png`
   
   // Image settings - null means no image (don't show logo as fallback)
   // Only landing page gets the banner, other pages get specific images or nothing
@@ -35973,7 +35989,7 @@ async function generateCrawlerHtml(req, pagePath) {
       '@type': 'WebSite',
       name: 'Aphylia',
       url: siteUrl,
-      description: 'Discover, swipe and manage the perfect plants for every garden.',
+      description: 'Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds.',
       potentialAction: {
         '@type': 'SearchAction',
         target: `${siteUrl}/search?q={search_term_string}`,
@@ -36193,10 +36209,21 @@ ${safeJsonStringify(schema)}
 
   // Determine HTTP status code:
   // - 200 for static pages and found dynamic resources
-  // - 404 for dynamic routes where the resource genuinely doesn't exist
+  // - 410 Gone for /plants/{uuid} that no longer resolve. Plants are hard-deleted
+  //   editorially when we retire an entry; using 410 (not 404) tells Google to drop
+  //   the URL within days instead of leaving it in the "Not found" bucket for weeks.
+  //   For typos / never-existed UUIDs the 410 is still correct: there's no future
+  //   plan to bring those URLs back.
+  // - 404 for other dynamic routes where the resource doesn't exist (blog posts,
+  //   profiles, gardens, bookmarks — these can legitimately come back later).
   // - 503 for query errors/timeouts (tells Google to retry later, not mark as broken)
-  const statusCode = queryErrorOccurred ? 503 : (isDynamicRoute && !resourceFound) ? 404 : 200
-  
+  const isPlantRouteMissing = req._ssrDebug?.matchedRoute === 'plant' && !resourceFound
+  const statusCode = queryErrorOccurred
+    ? 503
+    : isPlantRouteMissing
+      ? 410
+      : (isDynamicRoute && !resourceFound) ? 404 : 200
+
   return { html, statusCode }
 }
 
@@ -36377,6 +36404,11 @@ app.get('*', async (req, res) => {
         // Query error/timeout — tell crawlers to retry later, don't cache the error
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
         res.setHeader('Retry-After', '600')
+      } else if (statusCode === 410) {
+        // Gone — cache aggressively so Google sees the same answer on every recrawl
+        // and drops the URL fast. noindex tag is belt-and-suspenders alongside the 410.
+        res.setHeader('Cache-Control', 'public, max-age=86400, stale-while-revalidate=86400')
+        res.setHeader('X-Robots-Tag', 'noindex, nofollow')
       } else if (statusCode === 404) {
         res.setHeader('Cache-Control', 'public, max-age=300, stale-while-revalidate=600')
         res.setHeader('X-Robots-Tag', 'noindex, follow')
@@ -36413,6 +36445,49 @@ app.get('*', async (req, res) => {
       .catch(() => { })
   } catch { }
   res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+  // Allowlist of SPA route prefixes. Anything not in this list is a genuine 404 —
+  // we still serve the SPA shell (so React Router can render the ErrorPage UI for
+  // users), but the HTTP status is 404 so crawlers don't index typo / probe URLs
+  // as low-quality "soft 404" pages. Keep in sync with the <Route> declarations
+  // in src/PlantSwipe.tsx.
+  const spaRouteAllowlist = [
+    /^\/(fr\/)?$/,
+    /^\/(fr\/)?discovery(\/.*)?$/,
+    /^\/(fr\/)?search(\/categories)?(\/.*)?$/,
+    /^\/(fr\/)?gardens(\/.*)?$/,
+    /^\/(fr\/)?garden\/[^/]+(\/.*)?$/,
+    /^\/(fr\/)?profile(\/.*)?$/,
+    /^\/(fr\/)?u\/[^/]+(\/.*)?$/,
+    /^\/(fr\/)?friends(\/.*)?$/,
+    /^\/(fr\/)?messages(\/.*)?$/,
+    /^\/(fr\/)?scan(\/.*)?$/,
+    /^\/(fr\/)?settings(\/.*)?$/,
+    /^\/(fr\/)?setup(\/.*)?$/,
+    /^\/(fr\/)?bug-catcher(\/.*)?$/,
+    /^\/(fr\/)?contact(\/business|\/bug)?$/,
+    /^\/(fr\/)?about$/,
+    /^\/(fr\/)?download$/,
+    /^\/(fr\/)?pricing$/,
+    /^\/(fr\/)?terms$/,
+    /^\/(fr\/)?privacy$/,
+    /^\/(fr\/)?blog(\/.*)?$/,
+    /^\/(fr\/)?admin(\/.*)?$/,
+    /^\/(fr\/)?create(\/.*)?$/,
+    /^\/(fr\/)?plants\/[^/]+(\/edit)?$/,
+    /^\/(fr\/)?bookmarks\/[^/]+$/,
+    /^\/(fr\/)?error\/.+$/,
+    /^\/(fr\/)?(login|forgot-password|email-verification|password-change|auth)(\/.*)?$/,
+    /^\/\.well-known(\/.*)?$/,
+  ]
+  const isKnownSpaRoute = spaRouteAllowlist.some((re) => re.test(pathWithoutQuery))
+  if (!isKnownSpaRoute) {
+    // Genuine 404. SPA shell still ships so React renders the in-app error UI,
+    // but the status code tells crawlers (and tools like the audit's curl probe)
+    // that this is not real content.
+    res.setHeader('X-Robots-Tag', 'noindex, follow')
+    res.status(404).sendFile(path.join(distDir, 'index.html'))
+    return
+  }
   res.sendFile(path.join(distDir, 'index.html'))
 })
 

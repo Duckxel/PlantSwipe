@@ -63,7 +63,11 @@ const resolveScopedPath = (pathname: string) => {
 const offlinePagePath = new URL('offline.html', self.registration.scope).pathname
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
-const notificationBadgeUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
+// Status-bar badge for push notifications. MUST be a white silhouette on a transparent
+// background — Android and iOS tint this icon and replace anything non-monochrome with a
+// generic white circle (which is why the colored icon-192x192.png produced the white
+// circle bug). notification-badge.png is deployed by setup.sh from assets/logo-dark.png.
+const notificationBadgeUrl = new URL('icons/notification-badge.png', self.registration.scope).href
 // 1x1 transparent PNG as data URI - prevents system-generated placeholder letters while showing nothing
 const transparentIconDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 const defaultNotificationTarget = new URL('.', self.registration.scope).href

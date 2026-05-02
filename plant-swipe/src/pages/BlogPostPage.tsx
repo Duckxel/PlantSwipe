@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
 import { Link } from '@/components/i18n/Link'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { articleSchemaForBlogPost, breadcrumbSchema } from '@/lib/seo/schemas'
 import type { BlogPost } from '@/types/blog'
 import { extractFirstImageFromHtml } from '@/types/blog'
 import { fetchBlogPost } from '@/lib/blogs'
@@ -31,7 +32,7 @@ const formatDateOnly = (value?: string | null) => {
 
 export default function BlogPostPage() {
   const { slug } = useParams<{ slug: string }>()
-  const { t } = useTranslation('common')
+  const { t, i18n } = useTranslation('common')
   const { profile } = useAuth()
   const [post, setPost] = React.useState<BlogPost | null>(null)
   const [loading, setLoading] = React.useState(true)
@@ -129,11 +130,37 @@ export default function BlogPostPage() {
       date: publishedLabel,
       defaultValue: 'Stories from Aphylia.',
     })
-  usePageMetadata({ 
-    title: seoTitle, 
+  const blogJsonLd = React.useMemo(() => {
+    if (!post || !slug) return undefined
+    const language: 'en' | 'fr' = i18n.language?.startsWith('fr') ? 'fr' : 'en'
+    const blogIndexPath = language === 'fr' ? '/fr/blog' : '/blog'
+    const postPath = language === 'fr' ? `/fr/blog/${slug}` : `/blog/${slug}`
+    return [
+      articleSchemaForBlogPost({
+        slug,
+        title: post.title,
+        excerpt: post.seoDescription || post.excerpt,
+        coverImageUrl: effectiveCoverImageUrl ?? undefined,
+        publishedAt: post.publishedAt,
+        updatedAt: post.updatedAt,
+        authorName: post.authorName ?? undefined,
+        language,
+      }),
+      breadcrumbSchema([
+        { name: 'Aphylia', url: language === 'fr' ? '/fr' : '/' },
+        { name: t('blogPage.title', { defaultValue: 'Blog' }), url: blogIndexPath },
+        { name: post.title, url: postPath },
+      ]),
+    ]
+  }, [post, slug, effectiveCoverImageUrl, i18n.language, t])
+
+  usePageMetadata({
+    title: seoTitle,
     description: seoDescription,
     image: effectiveCoverImageUrl ?? undefined,
     url: slug ? `/blog/${slug}` : '/blog',
+    type: 'article',
+    jsonLd: blogJsonLd,
   })
 
   // --- Impression tracking (page views) ---

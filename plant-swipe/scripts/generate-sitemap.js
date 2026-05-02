@@ -110,20 +110,12 @@ async function main() {
     return []
   })
 
-  const profileRoutes = await loadProfileRoutes().catch((error) => {
-    console.warn(`[sitemap] Failed to load dynamic profile routes: ${error.message || error}`)
-    return []
-  })
-
-  const gardenRoutes = await loadGardenRoutes().catch((error) => {
-    console.warn(`[sitemap] Failed to load dynamic garden routes: ${error.message || error}`)
-    return []
-  })
-
-  const bookmarkRoutes = await loadBookmarkRoutes().catch((error) => {
-    console.warn(`[sitemap] Failed to load dynamic bookmark routes: ${error.message || error}`)
-    return []
-  })
+  // User-generated routes (/u/, /garden/, /bookmarks/) are intentionally excluded
+  // from the sitemap. They remain shareable but emit noindex,follow at the page level
+  // so we don't waste crawl budget on user content that's typically thin or stale.
+  const profileRoutes = []
+  const gardenRoutes = []
+  const bookmarkRoutes = []
 
   const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes, ...bookmarkRoutes])
 
@@ -177,13 +169,14 @@ async function main() {
   })
 
   // Sister app: Aphydle (daily plant guessing game) on aphydle.<primary>.
-  // Top-priority cross-link so crawlers discover the second property.
+  // Cross-linked at lower priority — Aphydle should live in its own GSC property,
+  // not compete with aphylia.app's homepage for ranking signals.
   if (aphydleUrlBase) {
     const aphydleHref = `${aphydleUrlBase}/`
     urlEntries.unshift({
       loc: aphydleHref,
-      changefreq: 'daily',
-      priority: 1.0,
+      changefreq: 'weekly',
+      priority: 0.5,
       lastmod: nowIso,
       alternates: [{ hreflang: 'x-default', href: aphydleHref }],
       lang: defaultLanguage,
@@ -283,9 +276,15 @@ async function loadPlantRoutes() {
   while (results.length < maxPlants) {
     const limit = Math.min(batchSize, maxPlants - results.length)
     const to = offset + limit - 1
+    // Only emit approved plants. Drafts (in_progress/rework/review) are thin and
+    // disproportionately end up in GSC's "Crawled — currently not indexed" bucket,
+    // dragging the whole encyclopedia's perceived quality down. The SSR layer
+    // returns HTTP 410 Gone for any /plants/{uuid} that no longer exists, so
+    // hard-deleted plants drop out of Google's index quickly.
     const { data, error } = await client
       .from('plants')
       .select('id, updated_time, created_time, status')
+      .eq('status', 'approved')
       .order('updated_time', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
@@ -300,13 +299,10 @@ async function loadPlantRoutes() {
     for (const row of data) {
       if (!row?.id) continue
       const normalizedId = encodeURIComponent(String(row.id))
-      // Approved plants get higher priority (0.7), other statuses get lower priority (0.4)
-      const status = (row.status || '').toLowerCase().trim()
-      const isApproved = status === 'approved'
       const route = {
         path: `/plants/${normalizedId}`,
         changefreq: 'weekly',
-        priority: isApproved ? 0.7 : 0.4,
+        priority: 0.7,
         lastmod: pickLastmod(row),
       }
       results.push(route)

@@ -395,6 +395,7 @@ export default function CategoriesPage() {
   usePageMetadata({
     title: t("categories.title", { defaultValue: "Categories" }),
     description: t("categories.subtitle", { defaultValue: "Browse plants by category" }),
+    robots: 'noindex,follow',
   })
 
   const handleSearchSubmit = (e: React.FormEvent) => {

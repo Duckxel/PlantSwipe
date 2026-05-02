@@ -60,7 +60,8 @@ export const BookmarkPage = () => {
     title: bookmark ? `${bookmark.name} | ${t('bookmarks.title', { defaultValue: 'Bookmarks' })} | Aphylia` : 'Bookmark',
     description: bookmark
       ? `${bookmark.name} - ${metaPlantCount} ${t('bookmarks.plants', { defaultValue: 'plants' })} | ${t('bookmarks.collection', { defaultValue: 'Plant Collection on Aphylia' })}`
-      : `View plants in bookmark`
+      : `View plants in bookmark`,
+    robots: 'noindex,follow',
   })
 
   const handleDelete = async () => {
