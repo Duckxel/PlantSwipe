@@ -33128,7 +33128,18 @@ async function generateCrawlerHtml(req, pagePath) {
           family: plant?.family,
           plantType: plant?.plant_type,
           tags: plant?.plant_tags,
-          error: plantError?.message
+          error: plantError?.message,
+          // Extra fields used for FAQPage JSON-LD schema
+          careLevel: Array.isArray(plant?.care_level) ? plant?.care_level[0] : (plant?.care_level || null),
+          sunlight: Array.isArray(plant?.sunlight) ? plant?.sunlight[0] : (plant?.sunlight || null),
+          soilAdvice: plant?.soil_advice || null,
+          fertilizerAdvice: plant?.fertilizer_advice || null,
+          pruningAdvice: plant?.pruning_advice || null,
+          sowingAdvice: plant?.sowing_advice || null,
+          toxicityPets: plant?.toxicity_pets || null,
+          toxicityHuman: plant?.toxicity_human || null,
+          livingSpace: Array.isArray(plant?.living_space) ? plant?.living_space : null,
+          presentation: plant?.presentation || null,
         }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
@@ -35534,6 +35545,100 @@ async function generateCrawlerHtml(req, pagePath) {
       { name: crumbLabel('plants'), item: `${siteUrlNoTrailing}/search` },
       { name: plantData.name || 'Plant', item: canonicalUrl },
     ]))
+    // FAQPage schema — enables FAQ rich results in SERPs, significantly lifting CTR.
+    // Build questions from the care fields already fetched for the page.
+    const plantName = plantData.name || 'this plant'
+    const faqL = detectedLang === 'fr' ? {
+      qWhat: `Qu'est-ce que ${plantName} ?`,
+      qSunlight: `De combien de lumière ${plantName} a-t-il besoin ?`,
+      qCare: `${plantName} est-il facile à entretenir ?`,
+      qSoil: `Quel sol convient à ${plantName} ?`,
+      qFertilizer: `Comment fertiliser ${plantName} ?`,
+      qPruning: `Comment tailler ${plantName} ?`,
+      qSowing: `Comment semer ${plantName} ?`,
+      qToxicPets: `${plantName} est-il toxique pour les animaux ?`,
+      qToxicHuman: `${plantName} est-il toxique pour les humains ?`,
+      qIndoor: `${plantName} peut-il être cultivé en intérieur ?`,
+      aToxicSafe: 'Non, cette plante n\'est pas considérée comme toxique pour les animaux de compagnie.',
+      aToxicCaution: (lvl) => `Attention : niveau de toxicité ${lvl.replace(/_/g, ' ')}. Tenir hors de portée des animaux.`,
+      aToxicHumanSafe: 'Cette plante n\'est pas considérée comme toxique pour les humains.',
+      aToxicHumanCaution: (lvl) => `Attention : ${lvl.replace(/_/g, ' ')}. Déconseillé à la consommation directe.`,
+      aIndoorYes: 'Oui, cette plante peut être cultivée en intérieur.',
+      aIndoorOutdoor: 'Cette plante convient mieux à la culture en extérieur.',
+      aIndoorBoth: 'Cette plante peut se cultiver aussi bien en intérieur qu\'en extérieur.',
+    } : {
+      qWhat: `What is ${plantName}?`,
+      qSunlight: `How much sunlight does ${plantName} need?`,
+      qCare: `Is ${plantName} easy to care for?`,
+      qSoil: `What type of soil does ${plantName} need?`,
+      qFertilizer: `How should I fertilize ${plantName}?`,
+      qPruning: `How do I prune ${plantName}?`,
+      qSowing: `How do I sow ${plantName}?`,
+      qToxicPets: `Is ${plantName} toxic to pets?`,
+      qToxicHuman: `Is ${plantName} toxic to humans?`,
+      qIndoor: `Can ${plantName} be grown indoors?`,
+      aToxicSafe: 'No, this plant is not considered toxic to pets.',
+      aToxicCaution: (lvl) => `Caution: toxicity level is ${lvl.replace(/_/g, ' ')}. Keep away from pets and children.`,
+      aToxicHumanSafe: 'This plant is not considered toxic to humans.',
+      aToxicHumanCaution: (lvl) => `Caution: ${lvl.replace(/_/g, ' ')}. Not recommended for direct consumption without guidance.`,
+      aIndoorYes: 'Yes, this plant can be grown indoors.',
+      aIndoorOutdoor: 'This plant is best suited for outdoor growing.',
+      aIndoorBoth: 'This plant can be grown both indoors and outdoors.',
+    }
+    const faqPairs = []
+    if (plantData.presentation) {
+      faqPairs.push({ q: faqL.qWhat, a: plantData.presentation.slice(0, 500).trim() })
+    }
+    if (plantData.sunlight) {
+      const lightKey = (plantData.sunlight || '').replace(/_/g, ' ').toLowerCase()
+      const lightLabel = tr.light[lightKey]
+      faqPairs.push({ q: faqL.qSunlight, a: lightLabel ? lightLabel.replace(/^[^\w]+/, '') + '.' : `${plantName} needs ${lightKey}.` })
+    }
+    if (plantData.careLevel) {
+      const careKey = (plantData.careLevel || '').toLowerCase()
+      const careLabel = tr.difficulty[careKey]
+      faqPairs.push({ q: faqL.qCare, a: careLabel ? careLabel.replace(/^[^\w]+/, '') + '.' : `Care level: ${careKey}.` })
+    }
+    if (plantData.soilAdvice) {
+      faqPairs.push({ q: faqL.qSoil, a: plantData.soilAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.fertilizerAdvice) {
+      faqPairs.push({ q: faqL.qFertilizer, a: plantData.fertilizerAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.pruningAdvice) {
+      faqPairs.push({ q: faqL.qPruning, a: plantData.pruningAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.sowingAdvice) {
+      faqPairs.push({ q: faqL.qSowing, a: plantData.sowingAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.toxicityPets) {
+      const lvl = (plantData.toxicityPets || '').toLowerCase()
+      const safe = lvl === 'not toxic' || lvl === 'non toxic' || lvl === 'none' || lvl === 'safe'
+      faqPairs.push({ q: faqL.qToxicPets, a: safe ? faqL.aToxicSafe : faqL.aToxicCaution(plantData.toxicityPets) })
+    }
+    if (plantData.toxicityHuman) {
+      const lvl = (plantData.toxicityHuman || '').toLowerCase()
+      const safe = lvl === 'not toxic' || lvl === 'non toxic' || lvl === 'none' || lvl === 'safe'
+      faqPairs.push({ q: faqL.qToxicHuman, a: safe ? faqL.aToxicHumanSafe : faqL.aToxicHumanCaution(plantData.toxicityHuman) })
+    }
+    if (plantData.livingSpace && Array.isArray(plantData.livingSpace) && plantData.livingSpace.length > 0) {
+      const spaces = plantData.livingSpace.map(s => (s || '').toLowerCase())
+      const hasIndoor = spaces.some(s => s.includes('indoor') || s.includes('intérieur') || s === 'indoor')
+      const hasOutdoor = spaces.some(s => s.includes('outdoor') || s.includes('extérieur') || s === 'outdoor')
+      const a = (hasIndoor && hasOutdoor) ? faqL.aIndoorBoth : hasIndoor ? faqL.aIndoorYes : faqL.aIndoorOutdoor
+      faqPairs.push({ q: faqL.qIndoor, a })
+    }
+    if (faqPairs.length >= 2) {
+      jsonLdSchemas.push({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqPairs.map(({ q, a }) => ({
+          '@type': 'Question',
+          name: q,
+          acceptedAnswer: { '@type': 'Answer', text: a },
+        })),
+      })
+    }
   } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
     jsonLdSchemas.push({
       '@context': 'https://schema.org',
