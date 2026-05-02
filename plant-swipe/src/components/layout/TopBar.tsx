@@ -204,7 +204,7 @@ const TopBarComponent: React.FC<TopBarProps> = ({ openLogin, openSignup, user, d
                     )}
                   </button>
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/scan') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2 text-emerald-600 dark:text-emerald-400" role="menuitem">
-                    <ScanLine className="h-4 w-4" /> {t('scan.title', { defaultValue: 'Scan' })}
+                    <ScanLine className="h-4 w-4" /> {t('scan.menuLabel', { defaultValue: 'Scanner' })}
                   </button>
                   <button onMouseDown={(e) => { e.stopPropagation(); setMenuOpen(false); navigate('/friends') }} className="w-full text-left px-3 py-2 rounded-lg hover:bg-stone-50 dark:hover:bg-[#2d2d30] flex items-center gap-2" role="menuitem">
                     <HeartHandshake className="h-4 w-4" /> {t('common.friends')}
