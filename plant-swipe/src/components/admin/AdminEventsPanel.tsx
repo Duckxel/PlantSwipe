@@ -109,6 +109,21 @@ export const AdminEventsPanel: React.FC = () => {
   const [resetting, setResetting] = React.useState<string | null>(null)
   const [confirmReset, setConfirmReset] = React.useState<string | null>(null)
 
+  // ⚡ Bolt: Calculate aggregates in a single-pass loop instead of multiple filter/reduce calls
+  const eventStats = React.useMemo(() => {
+    let activeCount = 0;
+    let adminOnlyCount = 0;
+    let totalCompletions = 0;
+    for (let i = 0; i < events.length; i++) {
+      const e = events[i];
+      if (e.is_active && !e.admin_only) activeCount++;
+      if (e.is_active && e.admin_only) adminOnlyCount++;
+      totalCompletions += e.completion_count;
+    }
+    return { activeCount, adminOnlyCount, totalCompletions };
+  }, [events]);
+
+
   // Load events with stats
   const loadEvents = React.useCallback(async () => {
     setLoading(true)
@@ -676,15 +691,15 @@ export const AdminEventsPanel: React.FC = () => {
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Active</p>
-            <p className="text-lg font-bold text-emerald-600">{events.filter((e) => e.is_active && !e.admin_only).length}</p>
+            <p className="text-lg font-bold text-emerald-600">{eventStats.activeCount}</p>
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Admin Only</p>
-            <p className="text-lg font-bold text-purple-500">{events.filter((e) => e.is_active && e.admin_only).length}</p>
+            <p className="text-lg font-bold text-purple-500">{eventStats.adminOnlyCount}</p>
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Total Completions</p>
-            <p className="text-lg font-bold text-blue-500">{events.reduce((s, e) => s + e.completion_count, 0)}</p>
+            <p className="text-lg font-bold text-blue-500">{eventStats.totalCompletions}</p>
           </div>
         </div>
       </div>
