@@ -325,7 +325,7 @@
       "empty": "Le paquet s'échauffe..."
     },
     "tags": {
-      "plantOfMonth": "Plante du mois",
+      "plantOfMonth": "En vedette",
       "new": "Nouveau",
       "popular": "Populaire"
     },
@@ -793,6 +793,7 @@
     "pageTitle": "Scanner de Plantes",
     "pageDescription": "Identifiez n'importe quelle plante en prenant une photo ou en téléchargeant une image",
     "title": "Scanner de Plantes",
+    "menuLabel": "Scanner",
     "subtitle": "Prenez une photo ou téléchargez une image pour identifier n'importe quelle plante",
     "signInTitle": "Connectez-vous pour Scanner",
     "signInDescription": "Veuillez vous connecter pour identifier les plantes et sauvegarder votre historique de scans.",

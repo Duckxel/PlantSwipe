@@ -499,22 +499,54 @@ export function ServiceWorkerToast() {
     // Do NOT reset updateShownRef — a reload is pending; no reason to
     // allow the popup to re-appear if the reload takes a moment.
     pendingReloadRef.current = true
-    const wb = wbRef.current
-    const postSkipWaiting = () => {
-      if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
-      if (navigator.serviceWorker?.controller) {
-        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' })
+    setVisible(false)
+
+    // SKIP_WAITING must go to the *waiting* SW, not `navigator.serviceWorker.controller`
+    // (which is the currently-active old SW — telling it to skipWaiting is a no-op).
+    const postSkipWaitingToWaiting = async (): Promise<boolean> => {
+      if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return false
+      try {
+        const reg = await navigator.serviceWorker.getRegistration()
+        if (reg?.waiting) {
+          reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+          return true
+        }
+      } catch {
+        /* ignore */
       }
+      return false
     }
 
-    if (wb) {
-      wb.messageSW({ type: 'SKIP_WAITING' }).catch(() => {
-        postSkipWaiting()
-      })
-    } else {
-      postSkipWaiting()
-    }
-    setVisible(false)
+    const wb = wbRef.current
+    void (async () => {
+      let messaged = false
+      if (wb) {
+        try {
+          // messageSkipWaiting targets the waiting SW; messageSW targets the controller.
+          if (typeof (wb as unknown as { messageSkipWaiting?: () => void }).messageSkipWaiting === 'function') {
+            ;(wb as unknown as { messageSkipWaiting: () => void }).messageSkipWaiting()
+            messaged = true
+          } else {
+            await wb.messageSW({ type: 'SKIP_WAITING' })
+            messaged = true
+          }
+        } catch {
+          messaged = await postSkipWaitingToWaiting()
+        }
+      } else {
+        messaged = await postSkipWaitingToWaiting()
+      }
+
+      // Safety net: if controllerchange never fires (waiting SW absent, browser
+      // quirks, etc.), reload anyway after a short grace period. The new SW
+      // will activate on next load even without skipWaiting.
+      window.setTimeout(() => {
+        if (pendingReloadRef.current) {
+          pendingReloadRef.current = false
+          window.location.reload()
+        }
+      }, messaged ? 2500 : 250)
+    })()
   }
 
   const retryConnection = async () => {

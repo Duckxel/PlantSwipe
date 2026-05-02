@@ -325,7 +325,7 @@
       "empty": "Deck warming up..."
     },
     "tags": {
-      "plantOfMonth": "Plant of the Month",
+      "plantOfMonth": "Featured",
       "new": "New",
       "popular": "Popular"
     },
@@ -793,6 +793,7 @@
     "pageTitle": "Plant Scanner",
     "pageDescription": "Identify any plant by taking a photo or uploading an image",
     "title": "Plant Scanner",
+    "menuLabel": "Scanner",
     "subtitle": "Take a photo or upload an image to identify any plant",
     "signInTitle": "Sign in to Scan Plants",
     "signInDescription": "Please log in to identify plants and save your scan history.",
