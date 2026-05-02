@@ -4,6 +4,12 @@
   "version": "6.10.7",
   "type": "module",
   "scripts": {
+    "sync:brand-assets": "node scripts/sync-brand-assets.mjs",
+    "predev": "node scripts/sync-brand-assets.mjs",
+    "prebuild": "node scripts/sync-brand-assets.mjs",
+    "prebuild:web": "node scripts/sync-brand-assets.mjs",
+    "prebuild:web:native": "node scripts/sync-brand-assets.mjs",
+    "prebuild:low-mem": "node scripts/sync-brand-assets.mjs",
     "dev": "vite",
     "build": "tsc -b && vite build && node scripts/build-well-known.mjs --out=dist/.well-known",
     "build:web": "tsc -b && vite build && node scripts/build-well-known.mjs --out=dist/.well-known",
