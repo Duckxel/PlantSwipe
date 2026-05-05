@@ -79,7 +79,8 @@ export const AdminExportAphydleAutomation: React.FC = () => {
   })
   const [publishTime, setPublishTime] = React.useState("13:00")
   const [runTime, setRunTime] = React.useState("04:00")
-  const [timezone, setTimezone] = React.useState("UTC")
+  const [serverTimezone, setServerTimezone] = React.useState("UTC")
+  const [isAutomationRunner, setIsAutomationRunner] = React.useState<boolean>(false)
 
   const [organizations, setOrganizations] = React.useState<BufferOrganization[]>([])
   const [organizationId, setOrganizationId] = React.useState<string>("")
@@ -105,6 +106,8 @@ export const AdminExportAphydleAutomation: React.FC = () => {
       const data = await resp.json().catch(() => ({}))
       if (!resp.ok) throw new Error(data?.error || `Failed (${resp.status})`)
       setReservedMinutes(Array.isArray(data?.reservedMinutes) ? data.reservedMinutes : [])
+      setServerTimezone(typeof data?.serverTimezone === "string" ? data.serverTimezone : "UTC")
+      setIsAutomationRunner(data?.isAutomationRunner === true)
       const cfg: ScheduleConfig = data?.config || ({} as ScheduleConfig)
       setEnabled(!!cfg.enabled)
       const next: Record<DayKey, boolean> = { sun: false, mon: false, tue: false, wed: false, thu: false, fri: false, sat: false }
@@ -114,7 +117,6 @@ export const AdminExportAphydleAutomation: React.FC = () => {
       setDaysSelected(next)
       if (cfg.publish_time_local) setPublishTime(cfg.publish_time_local)
       if (cfg.run_time_local) setRunTime(cfg.run_time_local)
-      if (cfg.timezone) setTimezone(cfg.timezone)
       if (cfg.organization_id) setOrganizationId(cfg.organization_id)
       const chSel: Record<string, boolean> = {}
       for (const id of cfg.channel_ids || []) chSel[id] = true
@@ -220,7 +222,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
           days_of_week: selectedDayKeys,
           publish_time_local: publishTime,
           run_time_local: runTime,
-          timezone,
+          // Timezone is sourced from the runner box at runtime — not user input.
           organization_id: organizationId || null,
           channel_ids: selectedChannelIds,
         }),
@@ -360,11 +362,29 @@ export const AdminExportAphydleAutomation: React.FC = () => {
         </div>
       </div>
 
+      {/* Runner / timezone info */}
+      <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1d] px-3 py-2 text-xs">
+        <span className="font-semibold uppercase tracking-wide text-stone-500">Server</span>
+        <span className="rounded-full border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 px-2 py-0.5 font-mono">
+          {serverTimezone}
+        </span>
+        <span className="font-semibold uppercase tracking-wide text-stone-500">Runner</span>
+        {isAutomationRunner ? (
+          <span className="rounded-full border border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-emerald-700 dark:text-emerald-300">
+            this box is the recurring runner
+          </span>
+        ) : (
+          <span className="rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-amber-800 dark:text-amber-200">
+            recurring runner is OFF on this box (set APHYDLE_AUTOMATION_RUNNER=1 on main)
+          </span>
+        )}
+      </div>
+
       {/* Times */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2">
         <div>
           <Label htmlFor="aphydle-publish-time" className="mb-1 block text-xs uppercase tracking-wide text-stone-500">
-            Publish time
+            Publish time ({serverTimezone})
           </Label>
           <div className="flex items-center gap-2">
             <CalendarIcon className="h-4 w-4 text-stone-500" />
@@ -382,7 +402,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
         </div>
         <div>
           <Label htmlFor="aphydle-run-time" className="mb-1 block text-xs uppercase tracking-wide text-stone-500">
-            Run time
+            Run time ({serverTimezone})
           </Label>
           <div className="flex items-center gap-2">
             <CalendarIcon className="h-4 w-4 text-stone-500" />
@@ -403,18 +423,6 @@ export const AdminExportAphydleAutomation: React.FC = () => {
               When the runner fires (typically a few hours before publish). Reserved: {reservedMinutes.join(", ") || "—"}.
             </p>
           )}
-        </div>
-        <div>
-          <Label htmlFor="aphydle-tz" className="mb-1 block text-xs uppercase tracking-wide text-stone-500">
-            Timezone
-          </Label>
-          <Input
-            id="aphydle-tz"
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value.trim())}
-            placeholder="UTC"
-          />
-          <p className="mt-1 text-[11px] text-stone-500">IANA name (e.g. Europe/Paris). Both times above are local to this zone.</p>
         </div>
       </div>
 

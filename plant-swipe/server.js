@@ -5341,6 +5341,29 @@ async function ensureAphydleScheduleTable() {
   }
 }
 
+// Server-local IANA timezone (e.g. "Europe/Paris", "UTC"). Used for all
+// time-of-day comparisons in the Aphydle automation so the operator
+// doesn't have to think about UTC offsets and so dev + prod boxes
+// interpret the configured HH:MM identically when they share the same TZ.
+function aphydleServerTimezone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return (tz && typeof tz === 'string') ? tz : 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+// Whether THIS process should fire the recurring runner. Multiple boxes
+// (dev01, prod, …) all share the same Supabase row, so without a guard
+// every server would post the same Buffer payload every day. Set
+// APHYDLE_AUTOMATION_RUNNER=1 on the single box that should run the
+// recurring automation; manual "Run now" still works on every box.
+function isAphydleAutomationRunner() {
+  const v = String(process.env.APHYDLE_AUTOMATION_RUNNER || '').trim().toLowerCase()
+  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+}
+
 async function loadAphydleScheduleConfig() {
   if (!sql) return null
   try {
@@ -5375,7 +5398,9 @@ function validateAphydleScheduleInput(body) {
   }
   out.publish_time_local = publishTime
   out.run_time_local = runTime
-  out.timezone = String(body.timezone || 'UTC').trim() || 'UTC'
+  // Timezone is sourced from the runner box at runtime (not from user input).
+  // We still persist the snapshot of the saving box's TZ for audit purposes.
+  out.timezone = aphydleServerTimezone()
   out.organization_id = body.organization_id ? String(body.organization_id).trim() : null
   const channels = Array.isArray(body.channel_ids) ? body.channel_ids : []
   out.channel_ids = channels.map((c) => String(c || '').trim()).filter(Boolean)
@@ -5451,7 +5476,7 @@ async function fetchAphydleCardBuffer(card) {
 // instant has already passed (e.g. publish time is 09:00 but the runner fires
 // at 10:00), bump to addToQueue by returning null.
 function computeAphydleDueAt(cfg) {
-  const tz = cfg.timezone || 'UTC'
+  const tz = aphydleServerTimezone()
   const [hh, mm] = String(cfg.publish_time_local || '13:00').split(':').map((v) => Number.parseInt(v, 10))
   // Resolve today's date in the configured TZ, then build a UTC instant for
   // that local wall-clock time. We do this via the en-CA locale (yyyy-mm-dd).
@@ -5545,11 +5570,13 @@ async function recordAphydleRun(forDate, status, details) {
 }
 
 // 1-minute tick. Cheap: load config, compare wall clock, bail if no match.
+// Gated by APHYDLE_AUTOMATION_RUNNER so dev + prod boxes don't both fire.
 cron.schedule('* * * * *', async () => {
+  if (!isAphydleAutomationRunner()) return
   const cfg = await loadAphydleScheduleConfig()
   if (!cfg || !cfg.enabled) return
   if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) return
-  const tz = cfg.timezone || 'UTC'
+  const tz = aphydleServerTimezone()
   const now = new Date()
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone: tz, hour12: false,
@@ -5580,16 +5607,19 @@ app.get('/api/admin/aphydle-schedule', async (req, res) => {
     if (!adminId) return
     await ensureAphydleScheduleTable()
     const cfg = await loadAphydleScheduleConfig()
+    const serverTimezone = aphydleServerTimezone()
     res.json({
       ok: true,
       reservedMinutes: Array.from(APHYDLE_RESERVED_MINUTES),
+      serverTimezone,
+      isAutomationRunner: isAphydleAutomationRunner(),
       config: cfg || {
         id: APHYDLE_SCHEDULE_ID,
         enabled: false,
         days_of_week: [],
         publish_time_local: '13:00',
         run_time_local: '04:00',
-        timezone: 'UTC',
+        timezone: serverTimezone,
         organization_id: null,
         channel_ids: [],
       },
@@ -5652,7 +5682,7 @@ app.post('/api/admin/aphydle-schedule/run-now', express.json({ limit: '8kb' }), 
     const result = await runAphydleAutomation(cfg, { dryRun })
     if (!dryRun) {
       const today = new Intl.DateTimeFormat('en-CA', {
-        timeZone: cfg.timezone || 'UTC',
+        timeZone: aphydleServerTimezone(),
         year: 'numeric', month: '2-digit', day: '2-digit',
       }).format(new Date())
       await recordAphydleRun(today, result.ok ? 'ok' : 'partial', result)
