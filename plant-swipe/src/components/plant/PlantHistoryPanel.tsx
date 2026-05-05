@@ -75,9 +75,10 @@ interface EntryGroup {
 /**
  * Group consecutive entries with the same (author_id, calendar-hour).
  * Unknown authors (no author_id — profile deleted) are grouped together as 'anon'.
+ * Both groups and the entries inside each group are returned newest-first.
  */
 function groupEntries(entries: PlantHistoryEntry[]): EntryGroup[] {
-  // Iterate oldest-first so groups read chronologically inside a day.
+  // Iterate oldest-first to build groups; we reverse afterwards for display.
   const ascending = [...entries].sort((a, b) => a.createdAt.localeCompare(b.createdAt))
   const groups: EntryGroup[] = []
   const identity = (e: PlantHistoryEntry) => e.authorId || 'anon'
@@ -99,7 +100,9 @@ function groupEntries(entries: PlantHistoryEntry[]): EntryGroup[] {
       })
     }
   }
-  // Return newest-first for display.
+  // Reverse entries inside each group so the newest change appears at the top,
+  // matching the newest-first ordering of the groups themselves.
+  for (const g of groups) g.entries.reverse()
   return groups.reverse()
 }
 
