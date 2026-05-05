@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button"
 import {
   AdminExportBufferSchedule,
 } from "@/components/admin/AdminExportBufferSchedule"
+import { AdminExportAphydleAutomation } from "@/components/admin/AdminExportAphydleAutomation"
 
 // Reuse the same Aphydle URL resolver semantics as the landing page so this
 // panel works on aphylia.app, staging mirrors, and dev (where it falls back
@@ -299,6 +300,8 @@ export const AdminExportAphydlePanel: React.FC = () => {
           </pre>
         </div>
       )}
+
+      <AdminExportAphydleAutomation />
 
       {manifest && caption && (
         <AdminExportBufferSchedule
