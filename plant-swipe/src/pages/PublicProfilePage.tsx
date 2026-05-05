@@ -28,6 +28,7 @@ import { BlockUserDialog } from "@/components/moderation/BlockUserDialog"
 import { hasBlockedUser, unblockUser, isBlockedByUser } from "@/lib/moderation"
 import { getOrCreateConversation } from "@/lib/messaging"
 import { sendFriendRequestPushNotification, refreshAppBadge } from "@/lib/notifications"
+import { getProfileSeoMetrics } from "@/lib/gardens"
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic public profile API data */
 
 type PublicProfile = {
@@ -104,6 +105,12 @@ export default function PublicProfilePage() {
   const [stats, setStats] = React.useState<PublicStats | null>(null)
   const [monthDays, setMonthDays] = React.useState<DayAgg[]>([])
   const [canViewProfile, setCanViewProfile] = React.useState(true)
+  // SEO-only metrics: counts gardens the user *created* with privacy='public'
+  // and the total plants across those gardens. Kept separate from `stats`
+  // (which counts ALL gardens) so the page-level robots gate matches the
+  // sitemap loader exactly. Null while pending or when the viewer can't see
+  // the profile (gate fails closed in that case).
+  const [seoMetrics, setSeoMetrics] = React.useState<{ publicGardenCount: number; plantTotal: number } | null>(null)
   const [searchTerm, setSearchTerm] = React.useState('')
   const [searchOpen, setSearchOpen] = React.useState(false)
   const [searchResults, setSearchResults] = React.useState<ProfileSuggestion[]>([])
@@ -136,12 +143,35 @@ export default function PublicProfilePage() {
           defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
         })
       : fallbackProfileDescription)
+  // Quality gate (mirrors scripts/generate-sitemap.js — keep in sync):
+  // a public profile is indexable only if it has a non-empty bio, was active
+  // within the last 90 days, owns ≥1 garden, and has ≥3 plants total. Anything
+  // below the bar stays shareable but emits noindex,follow.
+  const PROFILE_ACTIVE_MS = 90 * 24 * 60 * 60 * 1000
+  const profileIsActive = (() => {
+    const iso = pp?.last_seen_at
+    if (!iso) return false
+    const ts = new Date(iso).getTime()
+    if (!Number.isFinite(ts)) return false
+    return Date.now() - ts <= PROFILE_ACTIVE_MS
+  })()
+  // Use seoMetrics (public-only) rather than stats (counts ALL gardens incl.
+  // friends_only/private). Null while pending → gate stays closed until the
+  // counts arrive, so we never flash an index,follow we'd have to retract.
+  const profileQualifiesForIndex =
+    !!pp &&
+    pp.is_private !== true &&
+    bioDescription.length > 0 &&
+    profileIsActive &&
+    !!seoMetrics &&
+    seoMetrics.publicGardenCount >= 1 &&
+    seoMetrics.plantTotal >= 3
   usePageMetadata({
     title: seoTitle,
     description: seoDescription,
     image: pp?.avatar_url ?? undefined,
     url: preferredDisplayName ? `/u/${encodeURIComponent(preferredDisplayName)}` : undefined,
-    robots: 'noindex,follow',
+    robots: profileQualifiesForIndex ? 'index,follow' : 'noindex,follow',
     type: 'profile',
   })
 
@@ -170,6 +200,7 @@ export default function PublicProfilePage() {
     const run = async () => {
       setLoading(true)
       setError(null)
+      setSeoMetrics(null)
       try {
         // Handle special case: if displayParam is "_me", look up by user ID
         let row: any = null
@@ -350,6 +381,12 @@ export default function PublicProfilePage() {
               bestStreak: Number(statRow.longest_streak || 0),
             })
           }
+
+          // SEO gating metrics — public gardens owned + plants in them.
+          // Fired in parallel; we don't await so it doesn't slow first paint.
+          getProfileSeoMetrics(userId)
+            .then((m) => { if (!cancelled) setSeoMetrics(m) })
+            .catch(() => { if (!cancelled) setSeoMetrics({ publicGardenCount: 0, plantTotal: 0 }) })
 
           // Friend count
           const { data: friendCount, error: ferr } = await supabase.rpc('get_friend_count', { _user_id: userId })

@@ -3519,6 +3519,39 @@ export async function getUserPublicGardens(userId: string): Promise<PublicGarden
 }
 
 /**
+ * Lightweight SEO-gating metrics for a user's profile. Mirrors the threshold
+ * computation in scripts/generate-sitemap.js so the page-level <meta robots>
+ * directive matches whether the URL is sitemapped. Counts gardens the user
+ * *created* with privacy='public', and the total plants across those gardens.
+ *
+ * Two cheap queries — no joins, no preview data. Returns zeros on any error
+ * so the gate fails closed (noindex,follow) on flaky network.
+ */
+export async function getProfileSeoMetrics(
+  userId: string,
+): Promise<{ publicGardenCount: number; plantTotal: number }> {
+  const empty = { publicGardenCount: 0, plantTotal: 0 }
+  if (!userId) return empty
+
+  const { data: gardens, error: gErr } = await supabase
+    .from('gardens')
+    .select('id')
+    .eq('created_by', userId)
+    .eq('privacy', 'public')
+
+  if (gErr || !gardens || gardens.length === 0) return empty
+
+  const gardenIds = gardens.map((g: { id: string }) => String(g.id))
+  const { data: plants, error: pErr } = await supabase
+    .from('garden_plants')
+    .select('garden_id')
+    .in('garden_id', gardenIds)
+
+  if (pErr) return { publicGardenCount: gardens.length, plantTotal: 0 }
+  return { publicGardenCount: gardens.length, plantTotal: plants?.length || 0 }
+}
+
+/**
  * Get all public gardens (for admin selection)
  * Returns a list of public gardens with basic info
  */
