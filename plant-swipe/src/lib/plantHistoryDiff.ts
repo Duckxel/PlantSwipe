@@ -207,3 +207,61 @@ export function buildPlantFieldDiff(
   }
   return result
 }
+
+// Fields that live in plant_translations (per-language). Mirrors the upsert
+// payload in CreatePlantPage so non-English saves can report which translated
+// fields actually changed.
+const TRANSLATABLE_FIELDS: readonly string[] = [
+  'name',
+  'variety',
+  'commonNames',
+  'presentation',
+  'origin',
+  'allergens',
+  'poisoningSymptoms',
+  'soilAdvice',
+  'mulchAdvice',
+  'fertilizerAdvice',
+  'stakingAdvice',
+  'sowingAdvice',
+  'transplantingTime',
+  'outdoorPlantingTime',
+  'pruningAdvice',
+  'pests',
+  'diseases',
+  'nutritionalValue',
+  'recipesIdeas',
+  'infusionBenefits',
+  'infusionRecipeIdeas',
+  'medicinalBenefits',
+  'medicinalUsage',
+  'medicinalWarning',
+  'medicinalHistory',
+  'aromatherapyBenefits',
+  'essentialOilBlends',
+  'beneficialRoles',
+  'harmfulRoles',
+  'symbiosis',
+  'symbiosisNotes',
+  'plantTags',
+  'biodiversityTags',
+  'spiceMixes',
+]
+
+/**
+ * Return the human labels of translatable fields whose values differ between
+ * oldPlant and newPlant. Used to annotate "Updated FR translation" history
+ * entries with the specific fields that changed.
+ */
+export function changedTranslationFieldLabels(
+  oldPlant: Plant | null | undefined,
+  newPlant: Plant,
+): string[] {
+  const labels: string[] = []
+  for (const key of TRANSLATABLE_FIELDS) {
+    const before = (oldPlant as any)?.[key]
+    const after = (newPlant as any)?.[key]
+    if (!equal(before, after)) labels.push(labelForField(key))
+  }
+  return labels
+}

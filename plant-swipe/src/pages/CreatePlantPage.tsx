@@ -20,7 +20,7 @@ import { useNavigationHistory } from "@/hooks/useNavigationHistory"
 import { applyAiFieldToPlant, getCategoryForField } from "@/lib/applyAiField"
 import { translateArray, translateBatch, translateText } from "@/lib/deepl"
 import { logPlantHistory, logPlantHistoryBatch } from "@/lib/plantHistory"
-import { buildPlantFieldDiff } from "@/lib/plantHistoryDiff"
+import { buildPlantFieldDiff, changedTranslationFieldLabels } from "@/lib/plantHistoryDiff"
 import { buildCategoryProgress, createEmptyCategoryProgress, plantFormCategoryOrder, isFieldGatedOff, BOOLEAN_GATE_DEPS, UTILITY_GATE_DEPS, type CategoryProgress, type PlantFormCategory } from "@/lib/plantFormCategories"
 import { useParams, useSearchParams } from "react-router-dom"
 import { plantSchema } from "@/lib/plantSchema"
@@ -1331,6 +1331,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     const previousLanguageRef = React.useRef<SupportedLanguage>(urlLanguage)
     // Baseline for history diffing — set on load and after each successful save.
     const lastSavedPlantRef = React.useRef<Plant | null>(null)
+    // Per-language baseline used to diff translation field changes on non-English saves.
+    const lastSavedByLanguageRef = React.useRef<Partial<Record<SupportedLanguage, Plant>>>({})
     // Bump this to force the HistoryPanel / Notes thread to re-fetch.
     const [historyVersion, setHistoryVersion] = React.useState(0)
     const bumpHistoryVersion = React.useCallback(() => setHistoryVersion((v) => v + 1), [])
@@ -1392,8 +1394,13 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             setExistingLoaded(true)
             initialLoadCompleteRef.current = true
             // Establish the diff baseline from the freshly-loaded DB state.
+            const loadedClone = JSON.parse(JSON.stringify(loaded)) as Plant
             if (requestedLanguage === 'en') {
-              lastSavedPlantRef.current = JSON.parse(JSON.stringify(loaded)) as Plant
+              lastSavedPlantRef.current = loadedClone
+            }
+            lastSavedByLanguageRef.current = {
+              ...lastSavedByLanguageRef.current,
+              [requestedLanguage]: loadedClone,
             }
           }
         } catch (e: any) {
@@ -2086,8 +2093,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
         const wasCreate = isEnglish && !existingLoaded
         if (wasCreate) setExistingLoaded(true)
 
-        // Plant history: log create or per-field diff (English saves only — other
-        // languages just update translations and are noisy to diff against the EN baseline).
+        // Plant history: log create, per-field diff for English saves, or
+        // per-language translation diff (limited to translatable fields) for others.
         try {
           const historyActor = { authorId: profile?.id || null }
           if (wasCreate) {
@@ -2104,15 +2111,27 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             const diff = buildPlantFieldDiff(savedId, baseline, plantToSave, historyActor)
             if (diff.length) await logPlantHistoryBatch(diff)
           } else {
+            const translationBaseline =
+              lastSavedByLanguageRef.current[saveLanguage] ?? lastSavedPlantRef.current
+            const changedLabels = changedTranslationFieldLabels(translationBaseline, plantToSave)
+            const langCode = saveLanguage.toUpperCase()
+            const summary = changedLabels.length
+              ? `Updated ${langCode} translation – ${changedLabels.join(', ')}`
+              : `Updated ${langCode} translation`
             await logPlantHistory({
               plantId: savedId,
               authorId: historyActor.authorId,
               action: 'field_change',
               field: `translation:${saveLanguage}`,
-              summary: `Updated ${saveLanguage.toUpperCase()} translation`,
+              summary,
             })
           }
-          lastSavedPlantRef.current = JSON.parse(JSON.stringify(savedPlant)) as Plant
+          const savedClone = JSON.parse(JSON.stringify(savedPlant)) as Plant
+          lastSavedPlantRef.current = savedClone
+          lastSavedByLanguageRef.current = {
+            ...lastSavedByLanguageRef.current,
+            [saveLanguage]: savedClone,
+          }
           bumpHistoryVersion()
         } catch (historyErr) {
           console.warn('[savePlant] history logging failed', historyErr)
