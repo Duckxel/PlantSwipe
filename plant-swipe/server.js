@@ -5356,12 +5356,25 @@ function aphydleServerTimezone() {
 
 // Whether THIS process should fire the recurring runner. Multiple boxes
 // (dev01, prod, …) all share the same Supabase row, so without a guard
-// every server would post the same Buffer payload every day. Set
-// APHYDLE_AUTOMATION_RUNNER=1 on the single box that should run the
-// recurring automation; manual "Run now" still works on every box.
+// every server would post the same Buffer payload every day. The gate
+// uses VITE_SERVER_NAME — set to MAIN on the production box and DEV (or
+// anything else) on dev mirrors. APHYDLE_AUTOMATION_RUNNER=1 still
+// works as an explicit override if you want to flip the runner without
+// touching the server name.
+function aphydleServerName() {
+  return String(
+    process.env.VITE_SERVER_NAME ||
+    process.env.PLANTSWIPE_SERVER_NAME ||
+    process.env.SERVER_NAME ||
+    '',
+  ).trim().toUpperCase() || 'UNKNOWN'
+}
+
 function isAphydleAutomationRunner() {
-  const v = String(process.env.APHYDLE_AUTOMATION_RUNNER || '').trim().toLowerCase()
-  return v === '1' || v === 'true' || v === 'yes' || v === 'on'
+  const explicit = String(process.env.APHYDLE_AUTOMATION_RUNNER || '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(explicit)) return true
+  if (['0', 'false', 'no', 'off'].includes(explicit)) return false
+  return aphydleServerName() === 'MAIN'
 }
 
 async function loadAphydleScheduleConfig() {
@@ -5612,6 +5625,7 @@ app.get('/api/admin/aphydle-schedule', async (req, res) => {
       ok: true,
       reservedMinutes: Array.from(APHYDLE_RESERVED_MINUTES),
       serverTimezone,
+      serverName: aphydleServerName(),
       isAutomationRunner: isAphydleAutomationRunner(),
       config: cfg || {
         id: APHYDLE_SCHEDULE_ID,

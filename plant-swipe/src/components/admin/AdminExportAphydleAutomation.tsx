@@ -80,6 +80,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
   const [publishTime, setPublishTime] = React.useState("13:00")
   const [runTime, setRunTime] = React.useState("04:00")
   const [serverTimezone, setServerTimezone] = React.useState("UTC")
+  const [serverName, setServerName] = React.useState<string>("UNKNOWN")
   const [isAutomationRunner, setIsAutomationRunner] = React.useState<boolean>(false)
 
   const [organizations, setOrganizations] = React.useState<BufferOrganization[]>([])
@@ -107,6 +108,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
       if (!resp.ok) throw new Error(data?.error || `Failed (${resp.status})`)
       setReservedMinutes(Array.isArray(data?.reservedMinutes) ? data.reservedMinutes : [])
       setServerTimezone(typeof data?.serverTimezone === "string" ? data.serverTimezone : "UTC")
+      setServerName(typeof data?.serverName === "string" ? data.serverName : "UNKNOWN")
       setIsAutomationRunner(data?.isAutomationRunner === true)
       const cfg: ScheduleConfig = data?.config || ({} as ScheduleConfig)
       setEnabled(!!cfg.enabled)
@@ -366,6 +368,9 @@ export const AdminExportAphydleAutomation: React.FC = () => {
       <div className="flex flex-wrap items-center gap-2 rounded-lg border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1a1a1d] px-3 py-2 text-xs">
         <span className="font-semibold uppercase tracking-wide text-stone-500">Server</span>
         <span className="rounded-full border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 px-2 py-0.5 font-mono">
+          {serverName}
+        </span>
+        <span className="rounded-full border border-stone-300 dark:border-stone-700 bg-stone-50 dark:bg-stone-800/60 px-2 py-0.5 font-mono">
           {serverTimezone}
         </span>
         <span className="font-semibold uppercase tracking-wide text-stone-500">Runner</span>
@@ -375,7 +380,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
           </span>
         ) : (
           <span className="rounded-full border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 text-amber-800 dark:text-amber-200">
-            recurring runner is OFF on this box (set APHYDLE_AUTOMATION_RUNNER=1 on main)
+            recurring runner is OFF here (only fires when VITE_SERVER_NAME=MAIN)
           </span>
         )}
       </div>
