@@ -5191,25 +5191,23 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
         return
       }
     }
-    const media = mediaUrls.map((url) => ({ url, type: 'image' }))
-
-    // Build the createPost mutation as a literal — Buffer's GraphQL uses
-    // custom scalar types (OrganizationId, ChannelId, …) so declaring JS
-    // variables as String! fails validation. JSON.stringify yields a
-    // properly-escaped GraphQL string literal for any value.
+    // Build the createPost mutation as a GraphQL literal — Buffer uses custom
+    // scalar types (OrganizationId, ChannelId, ImageAssetInput, …) so passing
+    // values via JS variables would require declaring those types from JS.
+    // JSON.stringify yields properly-escaped GraphQL string literals.
     const gqlString = (v) => JSON.stringify(String(v ?? ''))
+    const assetsPart = mediaUrls.length
+      ? `, assets: { images: [${mediaUrls.map((url) => `{ url: ${gqlString(url)} }`).join(', ')}] }`
+      : ''
     const buildMutation = (channelId) => {
       const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
-      const mediaPart = media.length
-        ? `, media: [${media.map((m) => `{ url: ${gqlString(m.url)}, type: image }`).join(', ')}]`
-        : ''
       return `
         mutation CreatePost {
           createPost(input: {
             text: ${gqlString(text)},
             channelId: ${gqlString(channelId)},
             schedulingType: automatic,
-            mode: ${mode}${dueAtPart}${mediaPart}
+            mode: ${mode}${dueAtPart}${assetsPart}
           }) {
             ... on PostActionSuccess {
               post { id text dueAt }
