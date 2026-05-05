@@ -5196,9 +5196,13 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
     // values via JS variables would require declaring those types from JS.
     // JSON.stringify yields properly-escaped GraphQL string literals.
     const gqlString = (v) => JSON.stringify(String(v ?? ''))
-    const assetsPart = mediaUrls.length
-      ? `, assets: { images: [${mediaUrls.map((url) => `{ url: ${gqlString(url)} }`).join(', ')}] }`
-      : ''
+    // Twitter caps image attachments at 4. Other services accept all of our
+    // generated cards (Instagram carousel: up to 10, Facebook: up to 10).
+    const assetsPartFor = (service) => {
+      const urls = service === 'twitter' ? mediaUrls.slice(0, 4) : mediaUrls
+      if (!urls.length) return ''
+      return `, assets: { images: [${urls.map((url) => `{ url: ${gqlString(url)} }`).join(', ')}] }`
+    }
 
     // Pull each selected channel's service so we can build per-platform
     // metadata (Instagram + Facebook require type, Twitter has a 280-char
@@ -5252,7 +5256,7 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
             text: ${gqlString(postText)},
             channelId: ${gqlString(channelId)},
             schedulingType: automatic,
-            mode: ${mode}${dueAtPart}${assetsPart}${metadataFor(service)}
+            mode: ${mode}${dueAtPart}${assetsPartFor(service)}${metadataFor(service)}
           }) {
             ... on PostActionSuccess {
               post { id text dueAt }
