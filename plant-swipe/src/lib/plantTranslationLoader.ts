@@ -218,19 +218,25 @@ function mapDbRowToPlant(
     // Translatable
     nutritionalValue: (translation.nutritional_value as string) || undefined,
     recipesIdeas: (translation.recipes_ideas as string[]) || [],
-    recipes: recipes.map((r) => {
-      const localizedName = language !== 'en' && r[`name_${language}`]
-        ? r[`name_${language}`] as string
-        : r.name as string
-      return {
-        id: r.id as string,
-        name: localizedName || (r.name as string) || '',
-        name_fr: (r.name_fr as string) || undefined,
-        category: (r.category as string) || 'other',
-        time: (r.time as string) || 'undefined',
-        link: (r.link as string) || undefined,
+    recipes: (() => {
+      // ⚡ Bolt: Use single-pass for loop with pre-allocated array instead of .map() to reduce GC overhead
+      const result = new Array(recipes.length)
+      for (let i = 0; i < recipes.length; i++) {
+        const r = recipes[i]
+        const localizedName = language !== 'en' && r[`name_${language}`]
+          ? r[`name_${language}`] as string
+          : r.name as string
+        result[i] = {
+          id: r.id as string,
+          name: localizedName || (r.name as string) || '',
+          name_fr: (r.name_fr as string) || undefined,
+          category: (r.category as string) || 'other',
+          time: (r.time as string) || 'undefined',
+          link: (r.link as string) || undefined,
+        }
       }
-    }) as Plant['recipes'],
+      return result as Plant['recipes']
+    })(),
     infusionBenefits: (translation.infusion_benefits as string) || undefined,
     infusionRecipeIdeas: (translation.infusion_recipe_ideas as string) || undefined,
     medicinalBenefits: (translation.medicinal_benefits as string) || undefined,
@@ -263,14 +269,29 @@ function mapDbRowToPlant(
 
     // Display
     images,
-    photos: images.map((img) => ({
-      url: img.link || '',
-      isPrimary: img.use === 'primary',
-      isVertical: false,
-    })),
+    photos: (() => {
+      // ⚡ Bolt: Use single-pass for loop with pre-allocated array instead of .map() to reduce GC overhead
+      const result = new Array(images.length)
+      for (let i = 0; i < images.length; i++) {
+        const img = images[i]
+        result[i] = {
+          url: img.link || '',
+          isPrimary: img.use === 'primary',
+          isVertical: false,
+        }
+      }
+      return result
+    })(),
     image: primaryImage,
     colors: colorObjects,
-    colorNames: colorObjects.map(c => c.name),
+    colorNames: (() => {
+      // ⚡ Bolt: Use single-pass for loop with pre-allocated array instead of .map() to reduce GC overhead
+      const result = new Array(colorObjects.length)
+      for (let i = 0; i < colorObjects.length; i++) {
+        result[i] = colorObjects[i].name
+      }
+      return result
+    })(),
     popularity,
 
     // Legacy aliases for backward compatibility
@@ -356,10 +377,16 @@ export async function loadPlantsWithTranslations(language: SupportedLanguage): P
         }
       }
 
-      const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
-        link: img?.link as string,
-        use: img?.use as PlantImage['use'],
-      }))
+      // ⚡ Bolt: Use single-pass for loop with pre-allocated array instead of .map() to reduce GC overhead
+      const rawImages = (basePlant.plant_images as Record<string, unknown>[]) || []
+      const images: PlantImage[] = new Array(rawImages.length)
+      for (let i = 0; i < rawImages.length; i++) {
+        const img = rawImages[i]
+        images[i] = {
+          link: img?.link as string,
+          use: img?.use as PlantImage['use'],
+        }
+      }
 
       const schedules: Array<{ season?: string; quantity?: number; timePeriod?: string }> = []
       const waterSchedules = (basePlant.plant_watering_schedules as Record<string, unknown>[]) || []
@@ -539,10 +566,16 @@ export async function loadPlantPreviews(language: SupportedLanguage): Promise<Pl
         }
       }
 
-      const images: PlantImage[] = ((basePlant.plant_images as Record<string, unknown>[]) || []).map((img) => ({
-        link: img?.link as string,
-        use: img?.use as PlantImage['use'],
-      }))
+      // ⚡ Bolt: Use single-pass for loop with pre-allocated array instead of .map() to reduce GC overhead
+      const rawImages = (basePlant.plant_images as Record<string, unknown>[]) || []
+      const images: PlantImage[] = new Array(rawImages.length)
+      for (let i = 0; i < rawImages.length; i++) {
+        const img = rawImages[i]
+        images[i] = {
+          link: img?.link as string,
+          use: img?.use as PlantImage['use'],
+        }
+      }
 
       const toTitleCase = (val: string | null | undefined): string | undefined => {
         if (!val) return undefined

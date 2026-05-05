@@ -535,11 +535,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handlePass() }}
-                      className="text-white/70 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-white/80 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full bg-black/20 backdrop-blur-sm"
                       aria-label={t("plant.next")}
                       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <ChevronUp className="h-7 w-7" />
+                      <ChevronUp className="h-6 w-6" />
                     </button>
                   </div>
 

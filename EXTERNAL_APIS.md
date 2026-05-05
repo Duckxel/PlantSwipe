@@ -1,7 +1,7 @@
 # External APIs Used in Aphylia
 
 > **Comprehensive list of all third-party services and APIs**  
-> Last updated: April 27, 2026
+> Last updated: May 4, 2026
 
 ---
 
@@ -690,4 +690,4 @@ For API-related questions:
 
 ---
 
-*Last updated: April 27, 2026*
+*Last updated: May 4, 2026*

@@ -990,8 +990,14 @@ export default function PlantSwipe() {
       // Eagerly compute usage labels for both prepared plant and options
       // This replaces lazy calculation since we need it for filter options anyway
       const rawUsageLabels = getPlantUsageLabels(p)
-      rawUsageLabels.forEach(label => usageLabelsSet.add(label))
-      const usageLabelsLower = rawUsageLabels.map(l => (typeof l === 'string' ? l : String(l || '')).toLowerCase())
+      // ⚡ Bolt: Calculate usageLabelsSet and usageLabelsLower in a single-pass loop instead of .forEach() and .map()
+      // to eliminate intermediate array allocations in this hot path
+      const usageLabelsLower = new Array(rawUsageLabels.length)
+      for (let i = 0; i < rawUsageLabels.length; i++) {
+        const label = rawUsageLabels[i]
+        usageLabelsSet.add(label)
+        usageLabelsLower[i] = (typeof label === 'string' ? label : String(label || '')).toLowerCase()
+      }
 
       // Maintenance — new flat: careLevel (array), legacy: identity/care nested
       const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
@@ -1061,7 +1067,13 @@ export default function PlantSwipe() {
 
       const getNormalizedColors = () => {
         if (_cachedNormalizedColors) return _cachedNormalizedColors
-        _cachedNormalizedColors = getColors().map(c => c.toLowerCase().trim())
+        const colors = getColors()
+        // ⚡ Bolt: Calculate normalized colors in a single-pass loop instead of .map()
+        // to eliminate intermediate array allocations in this hot path
+        _cachedNormalizedColors = new Array(colors.length)
+        for (let i = 0; i < colors.length; i++) {
+          _cachedNormalizedColors[i] = colors[i].toLowerCase().trim()
+        }
         return _cachedNormalizedColors
       }
 
@@ -1114,12 +1126,15 @@ export default function PlantSwipe() {
           if (_cachedColorTokens) return _cachedColorTokens
 
           const colorTokens = new Set<string>()
-          getNormalizedColors().forEach(color => {
-            const cachedTokens = getTokensForColor(color)
+          const normalizedColors = getNormalizedColors()
+          // ⚡ Bolt: Populate color tokens using a single-pass loop instead of .forEach()
+          // to eliminate intermediate array allocations in this hot path
+          for (let i = 0; i < normalizedColors.length; i++) {
+            const cachedTokens = getTokensForColor(normalizedColors[i])
             for (const t of cachedTokens) {
               colorTokens.add(t)
             }
-          })
+          }
 
           _cachedColorTokens = colorTokens
           return _cachedColorTokens

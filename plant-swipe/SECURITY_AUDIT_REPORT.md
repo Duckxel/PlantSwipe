@@ -221,6 +221,11 @@ Key dependencies are up-to-date:
 #### ✅ Command Injection Remediation (April 2026)
 - Admin **`/api/admin/system-health`** endpoint previously used `child_process.exec()` for disk stats, which was vulnerable to shell injection via crafted input. Replaced with `child_process.execFile()` which bypasses shell interpolation entirely.
 
+#### ✅ Cryptographic Randomness Hardening (April–May 2026)
+- **Verification codes** (`generateVerificationCode`) migrated from `Math.random()` to `crypto.randomInt` (PR #1464 — Critical)
+- **Email campaign tracking IDs/nonces** in both Node.js backend and Supabase Edge Functions replaced with `crypto.randomInt` / Web Crypto `getRandomValues` respectively (PR #1479 — Medium)
+- **File ID generation** migrated from `Math.random()` to `crypto.getRandomValues` (PR #1491 — Medium)
+
 #### ✅ Admin Escalation Prevention (April 2026)
 - **`prevent_self_admin_escalation` trigger** on `profiles` blocks non-admin callers from setting `is_admin = true` or adding `'admin'` to `roles`. Service-role connections pass through.
 - Trigger extended to also protect `threat_level` (non-admins may only increase, preventing shadow-ban escape), `bug_points`, `shadow_ban_backup`, `last_active_at`, and all non-admin `roles` changes.
