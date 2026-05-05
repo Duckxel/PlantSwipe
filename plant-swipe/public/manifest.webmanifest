@@ -15,7 +15,7 @@
   "categories": ["lifestyle", "education", "utilities"],
   "icons": [
     {
-      "src": "/icons/plant-swipe-icon-outline.svg",
+      "src": "/icons/plant-swipe-icon.svg",
       "type": "image/svg+xml",
       "sizes": "any",
       "purpose": "any"

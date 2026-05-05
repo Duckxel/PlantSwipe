@@ -81,7 +81,6 @@ export default defineConfig({
       includeAssets: [
         'env-loader.js',
         'icons/plant-swipe-icon.svg',
-        'icons/plant-swipe-icon-outline.svg',
         'icons/icon-192x192.png',
         'icons/icon-512x512.png',
         'icons/icon-maskable-512.png',

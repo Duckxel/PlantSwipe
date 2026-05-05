@@ -4699,7 +4699,6 @@ app.get('/api/manifest.webmanifest', async (_req, res) => {
         { src: '/icons/icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
         { src: '/icons/icon-maskable-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable any' },
         { src: '/icons/plant-swipe-icon.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
-        { src: '/icons/plant-swipe-icon-outline.svg', sizes: '512x512', type: 'image/svg+xml', purpose: 'any' },
       ],
       shortcuts: useFrench
         ? [
@@ -36783,7 +36782,7 @@ async function generateCrawlerHtml(req, pagePath) {
   <meta name="application-name" content="Aphylia">
   
   <!-- Icons - Google requires 48x48+ favicon for search results -->
-  <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon-outline.svg">
+  <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon.svg">
   <link rel="icon" type="image/png" href="${siteUrl}/icons/icon.png">
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon.png">
   

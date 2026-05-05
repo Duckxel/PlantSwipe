@@ -1462,8 +1462,9 @@ fi
 # We treat assets/ as the source of truth for shared brand artwork (favicon, brand
 # icon in SVG + PNG). The build never reads assets/ directly — it reads public/ —
 # so we copy on every setup run to keep them in sync. Mappings:
-#   assets/icon.svg     -> public/icons/plant-swipe-icon-outline.svg  (referenced from
-#                                                                     index.html, manifest, SSR HTML)
+#   assets/icon.svg     -> public/icons/plant-swipe-icon.svg          (referenced from
+#                                                                     index.html, manifest, SSR HTML,
+#                                                                     and React components)
 #   assets/icon.png     -> public/icons/icon.png                      (canonical PNG;
 #                                                                     existing icon-192/512 PNGs are
 #                                                                     left alone because they advertise
@@ -1514,7 +1515,7 @@ if [[ -d "$ASSETS_DIR" ]]; then
       log "  unchanged $rel"
     fi
   }
-  copy_brand_asset "$ASSETS_DIR/icon.svg"      "$PUBLIC_DIR/icons/plant-swipe-icon-outline.svg"
+  copy_brand_asset "$ASSETS_DIR/icon.svg"      "$PUBLIC_DIR/icons/plant-swipe-icon.svg"
   copy_brand_asset "$ASSETS_DIR/icon.png"      "$PUBLIC_DIR/icons/icon.png"
   copy_brand_asset "$ASSETS_DIR/favicon.ico"   "$PUBLIC_DIR/favicon.ico"
   # Push-notification badge: must be a white silhouette on transparent background.
