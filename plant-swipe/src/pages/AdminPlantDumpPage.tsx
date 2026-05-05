@@ -102,6 +102,7 @@ export function AdminPlantDumpPage() {
   // Upload tab state
   const [queue, setQueue] = React.useState<FileUploadStatus[]>([])
   const uploadingCount = React.useRef(0)
+  const uploadingIds = React.useRef(new Set<string>())
   const MAX_CONCURRENT = 5
 
   // Manage tab state
@@ -180,14 +181,15 @@ export function AdminPlantDumpPage() {
      Upload logic
   ----------------------------------------------------------------------- */
   const processNextInQueue = React.useCallback(async (queueSnapshot: FileUploadStatus[]) => {
-    const pending = queueSnapshot.filter(f => f.status === "pending")
+    const pending = queueSnapshot.filter(f => f.status === "pending" && !uploadingIds.current.has(f.id))
     const available = MAX_CONCURRENT - uploadingCount.current
     if (available <= 0 || pending.length === 0) return
 
     const toStart = pending.slice(0, available)
-    uploadingCount.current += toStart.length
 
     for (const item of toStart) {
+      uploadingIds.current.add(item.id)
+      uploadingCount.current += 1
       setQueue(prev => prev.map(f => f.id === item.id ? { ...f, status: "uploading" } : f))
 
       // Upload
@@ -218,6 +220,7 @@ export function AdminPlantDumpPage() {
               : f
           ))
         } finally {
+          uploadingIds.current.delete(item.id)
           uploadingCount.current = Math.max(0, uploadingCount.current - 1)
           // Trigger next batch from current queue state
           setQueue(current => {
