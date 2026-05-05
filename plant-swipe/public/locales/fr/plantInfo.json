@@ -486,6 +486,65 @@
       "december": "Décembre"
     }
   },
+  "lifeCycleCard": {
+    "title": "Cycle de vie & Feuillage",
+    "lifeCycle": "Cycle de vie de la plante",
+    "averageLifespan": "Durée de vie moyenne",
+    "foliagePersistence": "Persistance du feuillage",
+    "stages": {
+      "seed": "Graine",
+      "grow": "Pousse",
+      "bloom": "Floraison",
+      "rest": "Repos",
+      "regrow": "Repousse",
+      "year_1": "An 1",
+      "year_2": "An 2",
+      "die": "Mort",
+      "store": "Réserve",
+      "appear": "Apparaît",
+      "gone": "Disparu",
+      "∞": "∞"
+    },
+    "seasons": {
+      "spr": "Pri",
+      "sum": "Été",
+      "fall": "Aut",
+      "win": "Hiv",
+      "wet": "Hum",
+      "dry": "Sec"
+    },
+    "legend": {
+      "leaves": "Feuilles",
+      "partial": "Partiel",
+      "bare": "Nu"
+    },
+    "desc": {
+      "annual": "Complète son cycle de vie complet en une seule saison de croissance, puis meurt.",
+      "biennial": "Pousse un feuillage la première année, hiverne, puis fleurit et produit des graines la deuxième année avant de mourir.",
+      "perennial": "Vit plus de deux ans, dépérissant en hiver et repoussant chaque saison à partir de son système racinaire.",
+      "succulent_perennial": "Succulente longévive stockant l'eau dans ses feuilles ou tiges épaisses, persistant de nombreuses années.",
+      "monocarpic": "Peut pousser pendant des années, mais fleurit une seule fois dans sa vie — puis meurt après avoir produit des graines.",
+      "short_cycle": "Germe, fleurit et produit des graines en très peu de temps.",
+      "ephemeral": "Apparaît après des conditions favorables, fleurit rapidement, puis disparaît.",
+      "lifespan_less_than_1_year": "À courte durée de vie — complète sa vie en moins de 12 mois.",
+      "lifespan_2_years": "Vit environ deux saisons de croissance.",
+      "lifespan_3_to_10_years": "Durée de vie moyenne — s'établit bien et persiste plusieurs années.",
+      "lifespan_10_to_50_years": "Longue durée de vie — devient une part durable du paysage.",
+      "lifespan_over_50_years": "Très longue durée de vie — peut survivre à plusieurs générations.",
+      "foliage_deciduous": "Perd toutes ses feuilles de façon saisonnière, généralement en automne, et les repousse au printemps.",
+      "foliage_evergreen": "Conserve son feuillage vert toute l'année — jamais complètement nu.",
+      "foliage_semi_evergreen": "Garde quelques feuilles toute l'année mais en perd partiellement lors du stress hivernal ou de sécheresse.",
+      "foliage_marcescent": "Les feuilles mortes restent accrochées à la branche tout l'hiver jusqu'à ce que la nouvelle croissance printanière les fasse tomber.",
+      "foliage_winter_dormant": "Entre en dormance pendant l'hiver — le feuillage disparaît mais la plante survit souterraine.",
+      "foliage_dry_season_deciduous": "Perd ses feuilles pendant la saison sèche pour conserver l'eau, repousse quand les pluies reviennent."
+    }
+  },
+  "climateCard": {
+    "title": "Climat"
+  },
+  "originCard": {
+    "title": "Origine"
+  },
   "admin": {
     "categories": {
       "base": "1. Base",

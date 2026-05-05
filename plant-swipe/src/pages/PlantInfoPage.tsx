@@ -1417,7 +1417,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   const enumCache = React.useMemo(() => new Map<string, string>(), [t])
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
     if (!value) return ''
-    const raw = value.toLowerCase().trim()
+    const raw = value.toLowerCase().trim().replace(/[\s-]+/g, '_')
 
     const cached = enumCache.get(raw)
     if (cached !== undefined) return cached
@@ -2574,7 +2574,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
-                        {lifeCycleEnum.toUi(cycle) || cycle}
+                        {t(`plantInfo:enums.lifeCycle.${lifeCycleEnum.toDb(cycle) || cycle.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: lifeCycleEnum.toUi(cycle) || cycle })}
                       </span>
                       <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </div>
@@ -2583,7 +2583,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                       {data.stages.map((stage, i) => (
                         <div key={i} className={`${stage.color} relative group/stage`} style={{ flex: stage.flex }}>
                           <span className="absolute inset-0 flex items-center justify-center text-[6px] sm:text-[7px] font-semibold text-white/90 leading-none truncate px-0.5">
-                            {stage.label}
+                            {t(`plantInfo:lifeCycleCard.stages.${stage.label.toLowerCase().replace(/\s+/g, '_')}`, { defaultValue: stage.label })}
                           </span>
                         </div>
                       ))}
@@ -2618,7 +2618,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
               <div className={`rounded-xl border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/40 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/40 dark:bg-stone-800/20 hover:bg-stone-50/70 dark:hover:bg-stone-800/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className={`text-xs sm:text-sm font-bold ${data.color}`}>
-                    {averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0]}
+                    {t(`plantInfo:enums.averageLifespan.${resolveLifespanKey(averageLifespan[0]) || averageLifespan[0]}`, { defaultValue: averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0] })}
                   </span>
                   <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                 </div>
@@ -2668,7 +2668,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
-                        {foliagePersistenceEnum.toUi(foliage) || foliage}
+                        {t(`plantInfo:enums.foliagePersistence.${foliagePersistenceEnum.toDb(foliage) || foliage.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: foliagePersistenceEnum.toUi(foliage) || foliage })}
                       </span>
                       <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </div>
@@ -2677,7 +2677,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                       {data.seasons.map((s, i) => (
                         <div key={i} className="flex flex-col items-center gap-0.5">
                           <div className={`w-full h-1.5 sm:h-2 rounded-full ${seasonStateColors[s.state]}`} />
-                          <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-500">{s.label}</span>
+                          <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-500">{t(`plantInfo:lifeCycleCard.seasons.${s.label.toLowerCase()}`, { defaultValue: s.label })}</span>
                         </div>
                       ))}
                     </div>
@@ -2685,15 +2685,15 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                     <div className="flex gap-2 mt-1">
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-emerald-400 dark:bg-emerald-500" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Leaves</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.leaves', { defaultValue: 'Leaves' })}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-amber-300 dark:bg-amber-500" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Partial</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.partial', { defaultValue: 'Partial' })}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-stone-200 dark:bg-stone-700" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Bare</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.bare', { defaultValue: 'Bare' })}</span>
                       </div>
                     </div>
                     {isOpen && (
@@ -2756,7 +2756,7 @@ const ClimateCard: React.FC<{ climate: string[] | undefined; t: (key: string, op
                   {icon || <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </div>
                 <span className="text-[10px] sm:text-xs font-semibold text-sky-800 dark:text-sky-200 leading-tight">
-                  {climateEnum.toUi(c) || c}
+                  {t(`plantInfo:enums.climate.${climateEnum.toDb(c) || c.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: climateEnum.toUi(c) || c })}
                 </span>
               </div>
             )
