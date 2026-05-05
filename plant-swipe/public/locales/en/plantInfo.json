@@ -486,6 +486,20 @@
       "december": "December"
     }
   },
+  "share": {
+    "copied": "Copied!",
+    "shared": "Shared!",
+    "error": "Error"
+  },
+  "contributors": {
+    "title": "Contributors",
+    "thanks": "Thank you to all plant lovers that participated:",
+    "unknown": "Unknown"
+  },
+  "carousel": {
+    "scrollLeft": "Scroll left",
+    "scrollRight": "Scroll right"
+  },
   "lifeCycleCard": {
     "title": "Life Cycle & Foliage",
     "lifeCycle": "Plant Life Cycle",
@@ -543,7 +557,8 @@
     "title": "Climate"
   },
   "originCard": {
-    "title": "Origin"
+    "title": "Origin",
+    "mapAriaLabel": "World map showing plant origins"
   },
   "admin": {
     "categories": {

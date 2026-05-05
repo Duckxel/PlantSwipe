@@ -1066,7 +1066,7 @@ const PlantInfoPage: React.FC = () => {
             </Button>
             {shareStatus !== 'idle' && (
               <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                {shareStatus === 'copied' ? 'Copied!' : shareStatus === 'shared' ? 'Shared!' : 'Error'}
+                {shareStatus === 'copied' ? t('plantInfo:share.copied') : shareStatus === 'shared' ? t('plantInfo:share.shared') : t('plantInfo:share.error')}
               </span>
             )}
           </div>
@@ -1631,7 +1631,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
         { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
-        { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('yes', 'Yes') : t('no', 'No')) : null },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('plantInfo:enums.edibleOil.yes') : t('plantInfo:enums.edibleOil.no')) : null },
         { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
       const consumptionMedicinalItems = filterInfoItems([
@@ -2015,13 +2015,13 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           {contributorsList.length > 0 && (
             <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
               <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
-                {t('plantInfo:contributors.title', 'Contributors')}
+                {t('plantInfo:contributors.title')}
               </summary>
               <div className="mt-3 space-y-2 text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                <p>{t('plantInfo:contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
+                <p>{t('plantInfo:contributors.thanks')}</p>
                 <div className="flex flex-wrap gap-2">
                   {contributorsList.map((c, idx) => {
-                    const displayName = c.name || 'Unknown'
+                    const displayName = c.name || t('plantInfo:contributors.unknown')
                     return (
                       <Badge key={c.id || `legacy-${idx}`} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                         {displayName}
@@ -2801,7 +2801,7 @@ const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: strin
               viewBox={ORIGIN_MAP_VIEWBOX}
               preserveAspectRatio="xMidYMid meet"
               role="img"
-              aria-label="World map showing plant origins"
+              aria-label={t('plantInfo:originCard.mapAriaLabel', { defaultValue: 'World map showing plant origins' })}
             >
               <image
                 href={ORIGIN_MAP_URL}
@@ -3580,6 +3580,7 @@ type CompanionPlantsCarouselProps = {
 }
 
 const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ companions, onPlantClick, loading }) => {
+  const { t } = useTranslation('plantInfo')
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
@@ -3645,7 +3646,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
           type="button"
           onClick={() => scroll('left')}
           className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-          aria-label="Scroll left"
+          aria-label={t('carousel.scrollLeft')}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -3671,7 +3672,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
           type="button"
           onClick={() => scroll('right')}
           className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-          aria-label="Scroll right"
+          aria-label={t('carousel.scrollRight')}
         >
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -3681,6 +3682,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
 }
 
 const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }> = ({ images, plantName }) => {
+  const { t } = useTranslation('plantInfo')
   const validImages = images.filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
@@ -3741,7 +3743,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
             type="button"
             onClick={() => scroll('left')}
             className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-            aria-label="Scroll left"
+            aria-label={t('carousel.scrollLeft')}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -3778,7 +3780,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
             type="button"
             onClick={() => scroll('right')}
             className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-            aria-label="Scroll right"
+            aria-label={t('carousel.scrollRight')}
           >
             <ChevronRight className="h-5 w-5" />
           </button>
