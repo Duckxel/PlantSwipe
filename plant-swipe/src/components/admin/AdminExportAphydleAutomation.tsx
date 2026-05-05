@@ -18,14 +18,14 @@ import { Switch } from "@/components/ui/switch"
 import { buildAdminRequestHeaders } from "@/lib/adminAuth"
 
 type DayKey = "sun" | "mon" | "tue" | "wed" | "thu" | "fri" | "sat"
-const DAY_LIST: Array<{ key: DayKey; label: string; full: string }> = [
-  { key: "mon", label: "Mo", full: "Monday" },
-  { key: "tue", label: "Tu", full: "Tuesday" },
-  { key: "wed", label: "We", full: "Wednesday" },
-  { key: "thu", label: "Th", full: "Thursday" },
-  { key: "fri", label: "Fr", full: "Friday" },
-  { key: "sat", label: "Sa", full: "Saturday" },
-  { key: "sun", label: "Su", full: "Sunday" },
+const DAY_LIST: Array<{ key: DayKey; short: string; medium: string; full: string }> = [
+  { key: "mon", short: "Mon", medium: "Mon", full: "Monday" },
+  { key: "tue", short: "Tue", medium: "Tue", full: "Tuesday" },
+  { key: "wed", short: "Wed", medium: "Wed", full: "Wednesday" },
+  { key: "thu", short: "Thu", medium: "Thu", full: "Thursday" },
+  { key: "fri", short: "Fri", medium: "Fri", full: "Friday" },
+  { key: "sat", short: "Sat", medium: "Sat", full: "Saturday" },
+  { key: "sun", short: "Sun", medium: "Sun", full: "Sunday" },
 ]
 
 type BufferOrganization = { id: string; name: string }
@@ -341,7 +341,7 @@ export const AdminExportAphydleAutomation: React.FC = () => {
         <Label className="mb-2 block text-xs uppercase tracking-wide text-stone-500">
           Days to publish
         </Label>
-        <div className="flex flex-wrap gap-2">
+        <div className="grid grid-cols-7 gap-1.5 sm:gap-2 w-full">
           {DAY_LIST.map((d) => {
             const active = !!daysSelected[d.key]
             return (
@@ -351,13 +351,15 @@ export const AdminExportAphydleAutomation: React.FC = () => {
                 title={d.full}
                 aria-pressed={active}
                 onClick={() => toggleDay(d.key)}
-                className={`h-10 w-10 rounded-full border text-sm font-semibold transition-colors ${
+                className={`h-10 w-full rounded-xl border text-sm font-semibold transition-colors px-1 ${
                   active
                     ? "bg-emerald-600 text-white border-emerald-600 shadow"
                     : "bg-white dark:bg-[#1a1a1d] border-stone-300 dark:border-stone-700 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800"
                 }`}
               >
-                {d.label}
+                <span className="hidden md:inline">{d.full}</span>
+                <span className="hidden sm:inline md:hidden">{d.medium}</span>
+                <span className="sm:hidden">{d.short}</span>
               </button>
             )
           })}
