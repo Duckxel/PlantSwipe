@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { AdminExportBufferSchedule } from "@/components/admin/AdminExportBufferSchedule";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import {
   ImageViewer,
@@ -2785,6 +2786,15 @@ export function AdminExportPanel() {
             </pre>
           </div>
         </div>
+      )}
+
+      {bundle && (
+        <AdminExportBufferSchedule
+          caption={fullCaption}
+          previewRefs={previewRefs}
+          plantName={String(bundle.plant.name || "")}
+          disabled={loading || exporting}
+        />
       )}
 
       <ImageViewer

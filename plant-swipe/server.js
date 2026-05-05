@@ -5067,16 +5067,62 @@ app.get('/api/admin/buffer/channels', async (req, res) => {
   }
 })
 
-// Create a scheduled (or queued) Buffer post on one or more channels
-app.post('/api/admin/buffer/post', async (req, res) => {
+// Multer for Buffer card images: up to 10 files, 8MB each
+const bufferCardsMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 10 },
+})
+
+// Upload a card image to Supabase storage and return the public URL.
+// Buffer needs a publicly fetchable URL to attach as media on a post.
+async function uploadCardToStorage(file) {
+  if (!supabaseServiceClient) {
+    throw new Error('Supabase service role key not configured')
+  }
+  const ext = (file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg')
+    ? 'jpg'
+    : (file.mimetype === 'image/webp' ? 'webp' : 'png')
+  const unique = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(10).toString('hex')
+  const objectPath = `buffer-posts/${unique}.${ext}`
+  const { error: uploadError } = await supabaseServiceClient.storage
+    .from(adminUploadBucket)
+    .upload(objectPath, file.buffer, {
+      cacheControl: '3600',
+      contentType: file.mimetype || 'image/png',
+      upsert: false,
+    })
+  if (uploadError) throw new Error(uploadError.message || 'Storage upload failed')
+  const { data: publicData } = supabaseServiceClient.storage
+    .from(adminUploadBucket)
+    .getPublicUrl(objectPath)
+  const url = publicData?.publicUrl || ''
+  if (!url) throw new Error('Failed to resolve public URL for card image')
+  return url
+}
+
+// Create a scheduled (or queued) Buffer post on one or more channels.
+// Accepts multipart/form-data with optional image attachments ("cards" field,
+// repeated). The same images are attached to every selected channel.
+app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (req, res) => {
   try {
     const adminId = await ensureAdmin(req, res)
     if (!adminId) return
     const body = req.body || {}
     const text = String(body.text || '').trim()
-    const channelIdsRaw = Array.isArray(body.channelIds)
-      ? body.channelIds
-      : (body.channelId ? [body.channelId] : [])
+
+    // channelIds: accept JSON array string, repeated form fields, or single value
+    let channelIdsRaw = []
+    if (typeof body.channelIds === 'string' && body.channelIds.trim().startsWith('[')) {
+      try { channelIdsRaw = JSON.parse(body.channelIds) } catch { channelIdsRaw = [] }
+    } else if (Array.isArray(body.channelIds)) {
+      channelIdsRaw = body.channelIds
+    } else if (body.channelIds) {
+      channelIdsRaw = [body.channelIds]
+    } else if (body.channelId) {
+      channelIdsRaw = [body.channelId]
+    }
     const channelIds = channelIdsRaw.map((id) => String(id || '').trim()).filter(Boolean)
     const dueAt = body.dueAt ? String(body.dueAt).trim() : ''
     const mode = dueAt ? 'customScheduled' : 'addToQueue'
@@ -5101,19 +5147,38 @@ app.post('/api/admin/buffer/post', async (req, res) => {
       }
     }
 
+    // Upload card images (if any) to Supabase storage and collect public URLs
+    const files = Array.isArray(req.files) ? req.files : []
+    const mediaUrls = []
+    for (const f of files) {
+      if (!f || !f.buffer) continue
+      const mime = String(f.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) continue
+      try {
+        const url = await uploadCardToStorage(f)
+        mediaUrls.push(url)
+      } catch (e) {
+        res.status(500).json({ error: `Failed to host card image: ${e?.message || 'upload failed'}` })
+        return
+      }
+    }
+    const media = mediaUrls.map((url) => ({ url, type: 'image' }))
+
     const mutation = `
       mutation CreatePost(
         $text: String!
         $channelId: String!
         $mode: PostMode!
         $dueAt: DateTime
+        $media: [PostMediaInput!]
       ) {
         createPost(input: {
           text: $text,
           channelId: $channelId,
           schedulingType: automatic,
           mode: $mode,
-          dueAt: $dueAt
+          dueAt: $dueAt,
+          media: $media
         }) {
           ... on PostActionSuccess {
             post { id text dueAt }
@@ -5130,6 +5195,7 @@ app.post('/api/admin/buffer/post', async (req, res) => {
       try {
         const variables = { text, channelId, mode }
         if (dueAt) variables.dueAt = dueAt
+        if (media.length) variables.media = media
         const data = await callBufferGraphQL(mutation, variables)
         const cp = data?.createPost
         if (cp?.post) {
@@ -5146,7 +5212,7 @@ app.post('/api/admin/buffer/post', async (req, res) => {
 
     const allOk = results.every((r) => r.ok)
     const anyOk = results.some((r) => r.ok)
-    res.status(allOk ? 200 : (anyOk ? 207 : 502)).json({ ok: allOk, results })
+    res.status(allOk ? 200 : (anyOk ? 207 : 502)).json({ ok: allOk, results, mediaUrls })
   } catch (e) {
     const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
     res.status(status).json({ error: e?.message || 'Failed to create Buffer post' })
