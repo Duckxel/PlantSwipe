@@ -3,7 +3,7 @@ import {
   UploadCloud, Loader2, Check, X, Trash2, Layers, Leaf, Scan,
   ArrowLeft, RefreshCw, ChevronRight, CheckSquare, Square,
   ImageIcon, AlertCircle, ExternalLink, FolderPlus, Unlink,
-  CheckCircle2, Info, Eye,
+  CheckCircle2, Eye,
 } from "lucide-react"
 import { Link } from "react-router-dom"
 import { cn } from "@/lib/utils"
@@ -532,20 +532,6 @@ export function AdminPlantDumpPage() {
   const doneCount = queue.filter(f => f.status === "done").length
   const uploadingCountDisplay = queue.filter(f => f.status === "uploading").length
   const errorCount = queue.filter(f => f.status === "error").length
-
-  const detailPlant = React.useMemo(() => {
-    if (detailImage) {
-      const img = images.find(i => i.id === detailImage.id)
-      if (img?.plants) return img.plants
-      if (img?.plant_id) return { id: img.plant_id, name: "Unknown" }
-    }
-    if (detailGroup) {
-      const grp = groups.find(g => g.id === detailGroup.id)
-      if (grp?.plants) return grp.plants
-      if (grp?.plant_id) return { id: grp.plant_id, name: "Unknown" }
-    }
-    return null
-  }, [detailImage, detailGroup, images, groups])
 
   /* -----------------------------------------------------------------------
      Render helpers
