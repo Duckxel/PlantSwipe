@@ -4745,6 +4745,192 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
   res.status(204).end()
 })
 
+// =====================================================================
+// Buffer API integration: schedule social posts from /admin/export
+// =====================================================================
+// The Buffer API key is read from the BUFFER environment variable and
+// used to call the Buffer GraphQL endpoint (https://graphql.buffer.com).
+// Endpoints below proxy three operations: list organizations, list
+// channels for an org, and create a scheduled post on a channel.
+
+const BUFFER_GRAPHQL_URL = 'https://graphql.buffer.com'
+
+async function callBufferGraphQL(query, variables) {
+  const apiKey = process.env.BUFFER || ''
+  if (!apiKey) {
+    const err = new Error('BUFFER environment variable is not configured')
+    err.statusCode = 500
+    throw err
+  }
+  const resp = await fetch(BUFFER_GRAPHQL_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({ query, variables: variables || {} }),
+  })
+  const text = await resp.text()
+  let json = null
+  try { json = text ? JSON.parse(text) : null } catch { json = null }
+  if (!resp.ok) {
+    const err = new Error(`Buffer API error (${resp.status}): ${text?.slice(0, 500) || resp.statusText}`)
+    err.statusCode = resp.status
+    throw err
+  }
+  if (json?.errors?.length) {
+    const msg = json.errors.map((e) => e?.message || 'Unknown error').join('; ')
+    const err = new Error(`Buffer API error: ${msg}`)
+    err.statusCode = 502
+    throw err
+  }
+  return json?.data || {}
+}
+
+// List Buffer organizations connected to the authenticated account
+app.get('/api/admin/buffer/organizations', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const data = await callBufferGraphQL(`
+      query GetOrganizations {
+        account {
+          organizations { id name }
+        }
+      }
+    `)
+    const organizations = Array.isArray(data?.account?.organizations) ? data.account.organizations : []
+    res.json({ ok: true, organizations })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    res.status(status).json({ error: e?.message || 'Failed to fetch Buffer organizations' })
+  }
+})
+
+// List Buffer channels for an organization
+app.get('/api/admin/buffer/channels', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const organizationId = String(req.query?.organizationId || '').trim()
+    if (!organizationId) {
+      res.status(400).json({ error: 'organizationId is required' })
+      return
+    }
+    const data = await callBufferGraphQL(`
+      query GetChannels($organizationId: String!) {
+        channels(input: { organizationId: $organizationId }) {
+          id name service
+        }
+      }
+    `, { organizationId })
+    const channels = Array.isArray(data?.channels) ? data.channels : []
+    res.json({ ok: true, channels })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    res.status(status).json({ error: e?.message || 'Failed to fetch Buffer channels' })
+  }
+})
+
+// Create a scheduled (or queued) Buffer post on one or more channels
+app.post('/api/admin/buffer/post', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const body = req.body || {}
+    const text = String(body.text || '').trim()
+    const channelIdsRaw = Array.isArray(body.channelIds)
+      ? body.channelIds
+      : (body.channelId ? [body.channelId] : [])
+    const channelIds = channelIdsRaw.map((id) => String(id || '').trim()).filter(Boolean)
+    const dueAt = body.dueAt ? String(body.dueAt).trim() : ''
+    const mode = dueAt ? 'customScheduled' : 'addToQueue'
+
+    if (!text) {
+      res.status(400).json({ error: 'text is required' })
+      return
+    }
+    if (!channelIds.length) {
+      res.status(400).json({ error: 'At least one channelId is required' })
+      return
+    }
+    if (dueAt) {
+      const t = Date.parse(dueAt)
+      if (Number.isNaN(t)) {
+        res.status(400).json({ error: 'dueAt must be an ISO 8601 datetime' })
+        return
+      }
+      if (t <= Date.now()) {
+        res.status(400).json({ error: 'dueAt must be in the future' })
+        return
+      }
+    }
+
+    const mutation = `
+      mutation CreatePost(
+        $text: String!
+        $channelId: String!
+        $mode: PostMode!
+        $dueAt: DateTime
+      ) {
+        createPost(input: {
+          text: $text,
+          channelId: $channelId,
+          schedulingType: automatic,
+          mode: $mode,
+          dueAt: $dueAt
+        }) {
+          ... on PostActionSuccess {
+            post { id text dueAt }
+          }
+          ... on MutationError {
+            message
+          }
+        }
+      }
+    `
+
+    const results = []
+    for (const channelId of channelIds) {
+      try {
+        const variables = { text, channelId, mode }
+        if (dueAt) variables.dueAt = dueAt
+        const data = await callBufferGraphQL(mutation, variables)
+        const cp = data?.createPost
+        if (cp?.post) {
+          results.push({ channelId, ok: true, post: cp.post })
+        } else if (cp?.message) {
+          results.push({ channelId, ok: false, error: cp.message })
+        } else {
+          results.push({ channelId, ok: false, error: 'Unknown Buffer response' })
+        }
+      } catch (e) {
+        results.push({ channelId, ok: false, error: e?.message || 'Buffer request failed' })
+      }
+    }
+
+    const allOk = results.every((r) => r.ok)
+    const anyOk = results.some((r) => r.ok)
+    res.status(allOk ? 200 : (anyOk ? 207 : 502)).json({ ok: allOk, results })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    res.status(status).json({ error: e?.message || 'Failed to create Buffer post' })
+  }
+})
+
+app.options('/api/admin/buffer/organizations', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/buffer/channels', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/buffer/post', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {

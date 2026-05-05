@@ -59,6 +59,7 @@ import type { ColorOption } from "@/types/plant"
 // Lazy load heavy pages for code splitting
 const AdminPage = lazy(() => import("@/pages/AdminPage").then(module => ({ default: module.AdminPage })))
 const AdminEmailTemplatePageLazy = lazy(() => import("@/pages/AdminEmailTemplatePage").then(module => ({ default: module.AdminEmailTemplatePage })))
+const AdminExportPageLazy = lazy(() => import("@/pages/AdminExportPage").then(module => ({ default: module.AdminExportPage })))
 const GardenDashboardPage = lazy(() => import("@/pages/GardenDashboardPage").then(module => ({ default: module.GardenDashboardPage })))
 const GardenListPage = lazy(() => import("@/pages/GardenListPage").then(module => ({ default: module.GardenListPage })))
 // SwipePage is main view, loaded eagerly inside PlantSwipe chunk
@@ -2865,6 +2866,16 @@ export default function PlantSwipe() {
                 <RequireEditor>
                   <Suspense fallback={routeLoadingFallback}>
                     <AdminEmailTemplatePageLazy />
+                  </Suspense>
+                </RequireEditor>
+              }
+            />
+            <Route
+              path="/admin/export"
+              element={
+                <RequireEditor>
+                  <Suspense fallback={routeLoadingFallback}>
+                    <AdminExportPageLazy />
                   </Suspense>
                 </RequireEditor>
               }
