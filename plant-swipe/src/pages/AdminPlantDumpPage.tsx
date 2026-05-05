@@ -548,14 +548,10 @@ export function AdminPlantDumpPage() {
         key={img.id}
         draggable
         onDragStart={e => onDragStart(e, img.id)}
-        onClick={e => {
-          if (inGroup) {
-            setDetailImage(img)
-            setDetailGroup(null)
-            setScanResults(null)
-          } else {
-            toggleSelect(img.id, e.shiftKey)
-          }
+        onClick={() => {
+          setDetailImage(img)
+          setDetailGroup(null)
+          setScanResults(null)
         }}
         className={cn(
           "group relative rounded-xl overflow-hidden cursor-pointer border-2 transition-all",
@@ -604,9 +600,7 @@ export function AdminPlantDumpPage() {
         </div>
 
         {/* Footer */}
-        <div className="px-2 py-1.5 bg-white dark:bg-stone-900 text-xs space-y-0.5"
-          onClick={e => { e.stopPropagation(); setDetailImage(img); setDetailGroup(null); setScanResults(null) }}
-        >
+        <div className="px-2 py-1.5 bg-white dark:bg-stone-900 text-xs space-y-0.5">
           <p className="truncate text-stone-600 dark:text-stone-400 font-mono">{img.original_name || "untitled"}</p>
           {plant && (
             <div className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
@@ -1287,13 +1281,12 @@ export function AdminPlantDumpPage() {
                 )}
               </div>
 
-              {/* Detail panel */}
-              <div className={cn(
-                "w-80 flex-shrink-0 rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 overflow-hidden transition-all",
-                (detailImage || detailGroup) ? "opacity-100" : "opacity-60",
-              )}>
-                {renderDetailPanel()}
-              </div>
+              {/* Detail panel — only shown when an image or group is selected */}
+              {(detailImage || detailGroup) && (
+                <div className="w-80 flex-shrink-0 rounded-2xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 overflow-hidden">
+                  {renderDetailPanel()}
+                </div>
+              )}
             </div>
           )}
         </div>
