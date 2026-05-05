@@ -5071,14 +5071,23 @@ app.get('/api/admin/buffer/channels', async (req, res) => {
       res.status(400).json({ error: 'organizationId is required' })
       return
     }
+    // Buffer's GraphQL exposes channels nested under each organization on the
+    // account. Pulling them via the account query avoids having to declare
+    // Buffer's custom scalars (OrganizationId, ChannelId, …) as variable
+    // types from JS. We then filter by the requested organizationId.
     const data = await callBufferGraphQL(`
-      query GetChannels($organizationId: String!) {
-        channels(input: { organizationId: $organizationId }) {
-          id name service
+      query GetChannels {
+        account {
+          organizations {
+            id
+            channels { id name service }
+          }
         }
       }
-    `, { organizationId })
-    const channels = Array.isArray(data?.channels) ? data.channels : []
+    `)
+    const orgs = Array.isArray(data?.account?.organizations) ? data.account.organizations : []
+    const match = orgs.find((o) => String(o?.id || '') === organizationId) || null
+    const channels = Array.isArray(match?.channels) ? match.channels : []
     res.json({ ok: true, channels })
   } catch (e) {
     const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
@@ -5184,39 +5193,39 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
     }
     const media = mediaUrls.map((url) => ({ url, type: 'image' }))
 
-    const mutation = `
-      mutation CreatePost(
-        $text: String!
-        $channelId: String!
-        $mode: PostMode!
-        $dueAt: DateTime
-        $media: [PostMediaInput!]
-      ) {
-        createPost(input: {
-          text: $text,
-          channelId: $channelId,
-          schedulingType: automatic,
-          mode: $mode,
-          dueAt: $dueAt,
-          media: $media
-        }) {
-          ... on PostActionSuccess {
-            post { id text dueAt }
-          }
-          ... on MutationError {
-            message
+    // Build the createPost mutation as a literal — Buffer's GraphQL uses
+    // custom scalar types (OrganizationId, ChannelId, …) so declaring JS
+    // variables as String! fails validation. JSON.stringify yields a
+    // properly-escaped GraphQL string literal for any value.
+    const gqlString = (v) => JSON.stringify(String(v ?? ''))
+    const buildMutation = (channelId) => {
+      const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
+      const mediaPart = media.length
+        ? `, media: [${media.map((m) => `{ url: ${gqlString(m.url)}, type: image }`).join(', ')}]`
+        : ''
+      return `
+        mutation CreatePost {
+          createPost(input: {
+            text: ${gqlString(text)},
+            channelId: ${gqlString(channelId)},
+            schedulingType: automatic,
+            mode: ${mode}${dueAtPart}${mediaPart}
+          }) {
+            ... on PostActionSuccess {
+              post { id text dueAt }
+            }
+            ... on MutationError {
+              message
+            }
           }
         }
-      }
-    `
+      `
+    }
 
     const results = []
     for (const channelId of channelIds) {
       try {
-        const variables = { text, channelId, mode }
-        if (dueAt) variables.dueAt = dueAt
-        if (media.length) variables.media = media
-        const data = await callBufferGraphQL(mutation, variables)
+        const data = await callBufferGraphQL(buildMutation(channelId))
         const cp = data?.createPost
         if (cp?.post) {
           results.push({ channelId, ok: true, post: cp.post })
