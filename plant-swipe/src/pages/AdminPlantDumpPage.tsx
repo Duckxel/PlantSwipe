@@ -361,11 +361,27 @@ export function AdminPlantDumpPage() {
         .select("id, name, scientific_name_species")
         .or(`name.ilike.%${query}%,scientific_name_species.ilike.%${query}%`)
         .limit(20)
-      return (data || []).map(p => ({
-        id: p.id,
-        label: p.name,
-        description: p.scientific_name_species || undefined,
-      }))
+      if (!data?.length) return []
+
+      const ids = data.map(p => p.id)
+      const { data: trans } = await supabase
+        .from("plant_translations")
+        .select("plant_id, variety")
+        .in("plant_id", ids)
+        .eq("language", "en")
+
+      const varMap = new Map((trans || []).map(t => [t.plant_id, (t.variety || "").trim()]))
+
+      return data.map(p => {
+        const variety = varMap.get(p.id) || ""
+        const sci = p.scientific_name_species || ""
+        const parts = [variety && `'${variety}'`, sci].filter(Boolean)
+        return {
+          id: p.id,
+          label: p.name,
+          description: parts.join(" · ") || undefined,
+        }
+      })
     } catch {
       return []
     }
@@ -573,15 +589,12 @@ export function AdminPlantDumpPage() {
           {/* Selection checkbox (ungrouped only) */}
           {!inGroup && (
             <div
-              className={cn(
-                "absolute top-2 left-2 transition-opacity",
-                isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100",
-              )}
+              className="absolute top-2 left-2"
               onClick={e => { e.stopPropagation(); toggleSelect(img.id, e.shiftKey) }}
             >
               {isSelected
                 ? <CheckSquare className="h-5 w-5 text-emerald-500 bg-white rounded drop-shadow" />
-                : <Square className="h-5 w-5 text-white drop-shadow" />
+                : <Square className="h-5 w-5 text-white/70 drop-shadow hover:text-white transition-colors" />
               }
             </div>
           )}
