@@ -5199,15 +5199,60 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
     const assetsPart = mediaUrls.length
       ? `, assets: { images: [${mediaUrls.map((url) => `{ url: ${gqlString(url)} }`).join(', ')}] }`
       : ''
-    const buildMutation = (channelId) => {
+
+    // Pull each selected channel's service so we can build per-platform
+    // metadata (Instagram + Facebook require type, Twitter has a 280-char
+    // limit). Falls back to an empty service map; per-channel calls then
+    // surface Buffer's validation message in `results`.
+    const channelServices = {}
+    try {
+      const svcData = await callBufferGraphQL(`
+        query GetChannelServices {
+          account { organizations { channels { id service } } }
+        }
+      `)
+      const orgs = Array.isArray(svcData?.account?.organizations) ? svcData.account.organizations : []
+      for (const org of orgs) {
+        for (const ch of (org?.channels || [])) {
+          if (ch?.id) channelServices[String(ch.id)] = String(ch.service || '').toLowerCase()
+        }
+      }
+    } catch (e) {
+      console.warn('[buffer/post] channel-service lookup failed:', e?.message || e)
+    }
+
+    // Twitter cap: 280 chars. Trim and append an ellipsis so the post fits
+    // and the truncation is visible.
+    const truncateForTwitter = (s) => {
+      if (!s || s.length <= 280) return s
+      return s.slice(0, 277).trimEnd() + '…'
+    }
+
+    // Per-service metadata. Instagram requires `type` + `shouldShareToFeed`;
+    // we pick `carousel` when there are 2+ images and `post` for a single
+    // image. Facebook only needs `type: post`. Twitter has no required
+    // metadata fields. Other services inherit Buffer's defaults.
+    const metadataFor = (service) => {
+      if (service === 'instagram') {
+        const igType = mediaUrls.length > 1 ? 'carousel' : 'post'
+        return `, metadata: { instagram: { type: ${igType}, shouldShareToFeed: true } }`
+      }
+      if (service === 'facebook') {
+        return `, metadata: { facebook: { type: post } }`
+      }
+      return ''
+    }
+
+    const buildMutation = (channelId, service) => {
       const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
+      const postText = service === 'twitter' ? truncateForTwitter(text) : text
       return `
         mutation CreatePost {
           createPost(input: {
-            text: ${gqlString(text)},
+            text: ${gqlString(postText)},
             channelId: ${gqlString(channelId)},
             schedulingType: automatic,
-            mode: ${mode}${dueAtPart}${assetsPart}
+            mode: ${mode}${dueAtPart}${assetsPart}${metadataFor(service)}
           }) {
             ... on PostActionSuccess {
               post { id text dueAt }
@@ -5222,18 +5267,19 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
 
     const results = []
     for (const channelId of channelIds) {
+      const service = channelServices[channelId] || ''
       try {
-        const data = await callBufferGraphQL(buildMutation(channelId))
+        const data = await callBufferGraphQL(buildMutation(channelId, service))
         const cp = data?.createPost
         if (cp?.post) {
-          results.push({ channelId, ok: true, post: cp.post })
+          results.push({ channelId, service, ok: true, post: cp.post })
         } else if (cp?.message) {
-          results.push({ channelId, ok: false, error: cp.message })
+          results.push({ channelId, service, ok: false, error: cp.message })
         } else {
-          results.push({ channelId, ok: false, error: 'Unknown Buffer response' })
+          results.push({ channelId, service, ok: false, error: 'Unknown Buffer response' })
         }
       } catch (e) {
-        results.push({ channelId, ok: false, error: e?.message || 'Buffer request failed' })
+        results.push({ channelId, service, ok: false, error: e?.message || 'Buffer request failed' })
       }
     }
 
