@@ -39,7 +39,7 @@
 
 ## 📖 Overview
 
-Aphylia is a modern Progressive Web Application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features with real-time messaging, AI-powered plant scanning, content moderation tools, and multi-language support.
+Aphylia is a modern Progressive Web Application built with **React 19**, **TypeScript**, **Vite 7**, and **Express.js**, connecting to a **PostgreSQL** database via **Supabase**. It features a swipe-first UI for plant discovery, comprehensive garden management, social features with real-time messaging, AI-powered plant scanning, content moderation tools, multi-language support, and an embedded Aphydle daily plant guessing game served as a sister sub-app.
 
 ### Key Technologies
 
@@ -643,6 +643,8 @@ Weekly task breakdowns.
 | `GET` | `/api/admin/member` | Search member by email |
 | `POST` | `/api/admin/log-action` | Log admin action |
 | `POST` | `/api/admin/upload` | Upload media file |
+| `POST` | `/api/admin/refresh-aphydle` | Pull and rebuild Aphydle sub-app |
+| `GET` | `/api/image-proxy` | Proxy third-party plant images to bypass CORS |
 
 </details>
 

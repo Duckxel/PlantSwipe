@@ -134,6 +134,8 @@ Made with care by **FIVE**, **Neolite** & **Lau**
 - **Camera Capture**: Take a photo of a plant directly from the app
 - **AI Identification**: Powered by OpenAI vision models
 - **Instant Results**: Get plant name, care tips, and matching database entries
+- **Suggestion Thumbnails**: Visual thumbnails for alternative plant matches
+- **Database Deep-Linking**: Tap a suggestion to jump directly to its plant info page
 
 </details>
 
@@ -178,14 +180,15 @@ Made with care by **FIVE**, **Neolite** & **Lau**
 <summary><strong>⚙️ Admin Console</strong> — Powerful management tools</summary>
 
 - **Git Integration**: View branches, pull latest changes
-- **Service Management**: Restart API and services
+- **Service Management**: Restart API and services, refresh Aphydle sub-app
 - **Schema Sync**: Safe database migration tools
 - **Member Management**: Search users, view profiles, manage roles
 - **Email Campaigns**: Create and send templated email campaigns
 - **Media Management**: Upload and organize media files with UTILITY bucket explorer
 - **Events Management**: Create and manage time-limited interactive events (egg hunts, campaigns)
 - **Badge Management**: Create and manage badges with multilingual support
-- **Analytics Dashboard**: Charts and statistics with Recharts
+- **Analytics Dashboard**: Charts and statistics with Recharts, including Aphydle player stats
+- **Social Card Export Studio**: Generate Instagram-grade plant cards (cover, science, gardener tip, identity) and download as ZIP
 - **Action Logging**: Track admin actions with audit trail
 - **Security**: Token-based authentication with role-based access
 
@@ -503,6 +506,8 @@ sudo systemctl reload nginx
 | ✅ | Event system with badges (Easter Egg Hunt) | Complete |
 | ✅ | Native mobile apps (Capacitor — Android & iOS) | Complete |
 | ✅ | User onboarding tutorial system | Complete |
+| ✅ | Aphydle daily plant guessing game (sister app) | Complete |
+| ✅ | Social card export studio for plant promotion | Complete |
 | ⏳ | Collaborative collections and sharing | Planned |
 | 🔬 | Plant disease identification | Future |
 | 🔬 | Advanced plant care AI assistant | Future |
@@ -628,7 +633,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | **sitemap.xml** | Dynamically generated at `/sitemap.xml` |
 
 Aphylia provides comprehensive SEO and crawler support:
-- **Structured Data**: JSON-LD schemas for plants, blog posts, and pages
+- **Structured Data**: JSON-LD schemas including FAQPage, BreadcrumbList, CollectionPage, TechArticle, Blog, and AboutPage
 - **Open Graph**: Rich social media previews for Discord, Twitter, LinkedIn
 - **Multi-language**: Language-specific content with proper hreflang tags
 
