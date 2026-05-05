@@ -49,7 +49,7 @@ pg_net        -- HTTP requests from database (edge functions)
 
 ## Schema Files Structure
 
-The schema is split into 21 files in `supabase/sync_parts/` for easier management:
+The schema is split into 22 files in `supabase/sync_parts/` for easier management:
 
 | File | Description |
 |------|-------------|
@@ -74,6 +74,7 @@ The schema is split into 21 files in `supabase/sync_parts/` for easier managemen
 | `19_badges.sql` | Badge catalog, translations, and user badge awards |
 | `20_events.sql` | Event system: events, items, translations, registrations, user progress |
 | `21_ai_and_scan_usage.sql` | AI (OpenAI) token usage and plant-scan usage monitoring |
+| `22_aphydle_buffer_schedule.sql` | Singleton config row for the recurring Aphydle → Buffer scheduler |
 
 ---
 
