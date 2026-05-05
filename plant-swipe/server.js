@@ -32318,13 +32318,12 @@ app.use(
 )
 
 // /favicon.ico — many browsers and link-preview services request this path directly
-// without parsing HTML. We don't ship a real .ico (the PNG icons in /icons/ already
-// cover Google SERPs and PWA via <link rel="icon">), so alias to the 192px PNG so
-// the URL stops 404'ing.
+// without parsing HTML. If static serving doesn't catch the real .ico (synced from
+// assets/favicon.ico), fall back to the transparent PNG so the URL stops 404'ing.
 app.get('/favicon.ico', (req, res) => {
   res.set('Cache-Control', `public, max-age=${ONE_DAY_SECONDS}, stale-while-revalidate=${DEFAULT_STALE_WHILE_REVALIDATE}`)
   res.type('image/png')
-  res.sendFile(path.join(distDir, 'icons', 'icon-192x192.png'), (err) => {
+  res.sendFile(path.join(distDir, 'icons', 'icon.png'), (err) => {
     if (err) res.status(404).end()
   })
 })
@@ -36048,9 +36047,8 @@ async function generateCrawlerHtml(req, pagePath) {
   
   <!-- Icons - Google requires 48x48+ favicon for search results -->
   <link rel="icon" type="image/svg+xml" href="${siteUrl}/icons/plant-swipe-icon-outline.svg">
-  <link rel="icon" type="image/png" sizes="192x192" href="${siteUrl}/icons/icon-192x192.png">
-  <link rel="icon" type="image/png" sizes="512x512" href="${siteUrl}/icons/icon-512x512.png">
-  <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" href="${siteUrl}/icons/icon.png">
+  <link rel="apple-touch-icon" href="${siteUrl}/icons/icon.png">
   
   <!-- JSON-LD Structured Data -->
   ${jsonLdSchemas.map(schema => `<script type="application/ld+json">
