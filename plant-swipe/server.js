@@ -6913,7 +6913,7 @@ app.post('/api/admin/plant-dump/upload', async (req, res) => {
 
   let adminId = null, adminName = null
   try {
-    const userId = typeof caller === 'string' && caller.length > 10 ? caller : null
+    const userId = await getUserIdFromRequest(req)
     if (userId && supabaseServiceClient) {
       adminId = userId
       const { data: profile } = await supabaseServiceClient
@@ -6972,9 +6972,15 @@ app.post('/api/admin/plant-dump/upload', async (req, res) => {
         })
         .select('*')
         .single()
-      if (dbErr) console.error('[plant-dump] Failed to insert plant_dump_images row:', dbErr)
+      if (dbErr) {
+        console.error('[plant-dump] Failed to insert plant_dump_images row:', dbErr)
+        // Delete the orphaned storage file before returning error
+        await supabaseServiceClient.storage.from(plantImageUploadBucket).remove([objectPath]).catch(() => {})
+        res.status(500).json({ error: 'DB insert failed: ' + (dbErr.message || 'unknown error') })
+        return
+      }
 
-      res.json({ ok: true, image: dumpRow || { bucket: plantImageUploadBucket, path: objectPath, url: proxyUrl } })
+      res.json({ ok: true, image: dumpRow })
     } catch (err) {
       console.error('[plant-dump] upload failed:', err)
       if (!res.headersSent) res.status(500).json({ error: err?.message || 'Upload failed' })
@@ -7050,7 +7056,7 @@ app.post('/api/admin/plant-dump/groups', express.json({ limit: '32kb' }), async 
     const caller = await ensureEditor(req, res)
     if (!caller) return
 
-    const userId = typeof caller === 'string' && caller.length > 10 ? caller : null
+    const userId = await getUserIdFromRequest(req)
     const body = req.body || {}
     const name = typeof body.name === 'string' ? body.name.trim() : null
     const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
@@ -7173,7 +7179,7 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
     const caller = await ensureEditor(req, res)
     if (!caller) return
 
-    const adminId = typeof caller === 'string' && caller.length > 10 ? caller : null
+    const adminId = await getUserIdFromRequest(req)
     const body = req.body || {}
     const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
     const plantId = typeof body.plantId === 'string' ? body.plantId.trim() : ''
