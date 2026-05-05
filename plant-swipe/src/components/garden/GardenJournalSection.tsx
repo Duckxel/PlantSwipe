@@ -2,6 +2,7 @@ import React from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { ErrorBanner } from "@/components/ui/error-banner";
 import { PillTabs } from "@/components/ui/pill-tabs";
 import { useImageViewer, ImageViewer } from "@/components/ui/image-viewer";
@@ -802,7 +803,7 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
           {t("gardenDashboard.journalSection.title", "Garden Journal")}
         </h2>
         <Button
-          onClick={() => { resetForm(); setShowNewEntry(true); }}
+          onClick={() => { setActiveView("journal"); resetForm(); setShowNewEntry(true); }}
           className="rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white shadow-lg shadow-emerald-500/20 gap-2"
         >
           <Plus className="w-4 h-4" />
@@ -983,7 +984,13 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               className="w-full h-9 pl-9 pr-8 rounded-xl border border-stone-200 dark:border-stone-700 bg-white dark:bg-[#1f1f1f] text-sm placeholder:text-stone-400 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 focus:border-emerald-400"
             />
             {searchQuery && (
-              <button type="button" onClick={() => setSearchQuery("")} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600">
+              <button
+                type="button"
+                onClick={() => setSearchQuery("")}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none rounded-sm"
+                aria-label={t("common.clear", { defaultValue: "Clear" })}
+                title={t("common.clear", { defaultValue: "Clear" })}
+              >
                 <X className="w-3.5 h-3.5" />
               </button>
             )}
@@ -1140,16 +1147,15 @@ export const GardenJournalSection: React.FC<GardenJournalSectionProps> = ({
               <div className="flex items-center justify-between mt-4">
                 <div className="flex items-center gap-2 text-white/70">
                   <span className="text-xs">{t("gardenDashboard.journalSection.speed", "Speed")}:</span>
-                  <select
+                  <Select
                     value={timelapseSpeed}
                     onChange={(e) => setTimelapseSpeed(Number(e.target.value))}
-                    className="bg-white/10 border border-white/20 rounded-lg px-2 py-1 text-xs text-white"
                   >
                     <option value={3000}>0.5x</option>
                     <option value={2000}>1x</option>
                     <option value={1000}>2x</option>
                     <option value={500}>4x</option>
-                  </select>
+                  </Select>
                 </div>
 
                 <div className="relative">

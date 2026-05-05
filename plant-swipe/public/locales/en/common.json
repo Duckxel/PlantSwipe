@@ -325,7 +325,7 @@
       "empty": "Deck warming up..."
     },
     "tags": {
-      "plantOfMonth": "Plant of the Month",
+      "plantOfMonth": "Featured",
       "new": "New",
       "popular": "Popular"
     },
@@ -793,6 +793,7 @@
     "pageTitle": "Plant Scanner",
     "pageDescription": "Identify any plant by taking a photo or uploading an image",
     "title": "Plant Scanner",
+    "menuLabel": "Scanner",
     "subtitle": "Take a photo or upload an image to identify any plant",
     "signInTitle": "Sign in to Scan Plants",
     "signInDescription": "Please log in to identify plants and save your scan history.",
@@ -818,6 +819,7 @@
     "searchForPlant": "Search for this plant in our encyclopedia",
     "otherSuggestions": "Other Possibilities",
     "similarImages": "Similar Images",
+    "viewFullscreen": "View image fullscreen",
     "scanAnother": "Scan Another",
     "deleteTitle": "Delete Scan?",
     "deleteDescription": "This will permanently remove this scan from your history. This action cannot be undone.",
@@ -1201,6 +1203,10 @@
       "zoomIn": "Zoom in",
       "zoomOut": "Zoom out",
       "reset": "Reset"
+    },
+    "overview": {
+      "readMore": "Read more",
+      "readLess": "Read less"
     },
     "plantType": {
       "plant": "Plant",
@@ -2262,6 +2268,7 @@
       "searchForPlant": "Search for this plant in our encyclopedia",
       "otherSuggestions": "Other Possibilities",
       "similarImages": "Similar Images",
+      "viewFullscreen": "View image fullscreen",
       "scanAnother": "Scan Another",
       "deleteTitle": "Delete Scan?",
       "deleteDescription": "This will permanently remove this scan from your history. This action cannot be undone.",

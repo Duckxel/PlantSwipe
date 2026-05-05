@@ -433,6 +433,21 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       ? Math.round(((thisMonthTasks - lastMonthTasks) / lastMonthTasks) * 100)
       : 0;
 
+    // ⚡ Bolt: Single-pass iteration to calculate plant stats without intermediate array allocations
+    const speciesSet = new Set<string>();
+    let needingAttention = 0;
+    let healthy = 0;
+    for (let i = 0; i < plants.length; i++) {
+      const p = plants[i];
+      const id = p.plantId || p.plant?.id;
+      if (id) speciesSet.add(id);
+      if ((p.plantsOnHand || 0) < 1) {
+        needingAttention++;
+      } else {
+        healthy++;
+      }
+    }
+
     return {
       dailyStats: dailyStats,
       weeklyStats: {
@@ -455,9 +470,9 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       })),
       plantStats: {
         total: plants.length,
-        species: new Set(plants.map((p) => p.plantId || p.plant?.id)).size,
-        needingAttention: plants.filter((p) => (p.plantsOnHand || 0) < 1).length,
-        healthy: plants.filter((p) => (p.plantsOnHand || 0) >= 1).length,
+        species: speciesSet.size,
+        needingAttention,
+        healthy,
       },
       streakInfo: {
         current: streak,
@@ -596,7 +611,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
           }
           setAdviceError((retryResult.data?.error as string) || t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
         } catch (retryErr: unknown) {
-          if (retryErr instanceof DOMException && retryErr.name === "AbortError") return;
+          if ((retryErr as { name?: string } | null)?.name === "AbortError") return;
           console.warn("[Analytics] Advice retry failed:", retryErr);
           setAdviceError(t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
         } finally {
@@ -608,7 +623,7 @@ export const GardenAnalyticsSection: React.FC<GardenAnalyticsSectionProps> = ({
       // Other non-OK status
       setAdviceError((result.data?.error as string) || t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." }));
     } catch (err: unknown) {
-      if (err instanceof DOMException && err.name === "AbortError") return; // unmounted or superseded
+      if ((err as { name?: string } | null)?.name === "AbortError") return; // unmounted or superseded
       console.warn("[Analytics] Failed to fetch advice:", err);
       const errMsg = err instanceof Error ? err.message : t("gardenDashboard.analyticsSection.adviceError", { defaultValue: "Unable to load advice. Please try again later." });
       setAdviceError(errMsg);

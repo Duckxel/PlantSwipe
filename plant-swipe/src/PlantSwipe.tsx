@@ -991,8 +991,14 @@ export default function PlantSwipe() {
       // Eagerly compute usage labels for both prepared plant and options
       // This replaces lazy calculation since we need it for filter options anyway
       const rawUsageLabels = getPlantUsageLabels(p)
-      rawUsageLabels.forEach(label => usageLabelsSet.add(label))
-      const usageLabelsLower = rawUsageLabels.map(l => (typeof l === 'string' ? l : String(l || '')).toLowerCase())
+      // ⚡ Bolt: Calculate usageLabelsSet and usageLabelsLower in a single-pass loop instead of .forEach() and .map()
+      // to eliminate intermediate array allocations in this hot path
+      const usageLabelsLower = new Array(rawUsageLabels.length)
+      for (let i = 0; i < rawUsageLabels.length; i++) {
+        const label = rawUsageLabels[i]
+        usageLabelsSet.add(label)
+        usageLabelsLower[i] = (typeof label === 'string' ? label : String(label || '')).toLowerCase()
+      }
 
       // Maintenance — new flat: careLevel (array), legacy: identity/care nested
       const careLevelArr = Array.isArray(p.careLevel) ? p.careLevel : []
@@ -1062,7 +1068,13 @@ export default function PlantSwipe() {
 
       const getNormalizedColors = () => {
         if (_cachedNormalizedColors) return _cachedNormalizedColors
-        _cachedNormalizedColors = getColors().map(c => c.toLowerCase().trim())
+        const colors = getColors()
+        // ⚡ Bolt: Calculate normalized colors in a single-pass loop instead of .map()
+        // to eliminate intermediate array allocations in this hot path
+        _cachedNormalizedColors = new Array(colors.length)
+        for (let i = 0; i < colors.length; i++) {
+          _cachedNormalizedColors[i] = colors[i].toLowerCase().trim()
+        }
         return _cachedNormalizedColors
       }
 
@@ -1115,12 +1127,15 @@ export default function PlantSwipe() {
           if (_cachedColorTokens) return _cachedColorTokens
 
           const colorTokens = new Set<string>()
-          getNormalizedColors().forEach(color => {
-            const cachedTokens = getTokensForColor(color)
+          const normalizedColors = getNormalizedColors()
+          // ⚡ Bolt: Populate color tokens using a single-pass loop instead of .forEach()
+          // to eliminate intermediate array allocations in this hot path
+          for (let i = 0; i < normalizedColors.length; i++) {
+            const cachedTokens = getTokensForColor(normalizedColors[i])
             for (const t of cachedTokens) {
               colorTokens.add(t)
             }
-          })
+          }
 
           _cachedColorTokens = colorTokens
           return _cachedColorTokens
@@ -1684,7 +1699,6 @@ export default function PlantSwipe() {
 
   const handlePass = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(10)
     // Seen tracking is handled by the display effect — just advance the index
     setIndex((i) => {
       const next = i + 1
@@ -1699,7 +1713,6 @@ export default function PlantSwipe() {
 
   const handlePrevious = React.useCallback(() => {
     if (swipeList.length === 0) return
-    platformHapticTap(8)
     setIndex((i) => {
       const prev = i - 1
       // Wrap around to the end if going back from the start
@@ -1708,7 +1721,6 @@ export default function PlantSwipe() {
   }, [swipeList.length])
 
   const handleInfo = React.useCallback(() => {
-    platformHapticTap(12)
     if (current) navigate(`/plants/${current.id}`)
   }, [current, navigate])
 
@@ -2419,7 +2431,7 @@ export default function PlantSwipe() {
     return (
         <AuthActionsProvider openLogin={openLogin} openSignup={openSignup}>
           <div
-            className={`min-h-screen w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1e1e1e] px-4 pt-2 md:px-8 md:pt-4 ${
+            className={`w-full bg-gradient-to-b from-stone-100 to-stone-200 dark:from-[#252526] dark:to-[#1f1f1f] px-4 pt-2 md:px-8 md:pt-4 min-h-[calc(100dvh-5.5rem-env(safe-area-inset-top,0px)-env(safe-area-inset-bottom,0px)-var(--window-controls-overlay-height,0px))] lg:min-h-screen ${
               isDiscoveryView
                 ? "pb-0 lg:pb-8 max-lg:overflow-hidden"
                 : "pb-4 max-lg:pb-6 lg:pb-8 overflow-y-visible"
@@ -2517,7 +2529,7 @@ export default function PlantSwipe() {
                         }
                       : undefined
                   }
-                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100/95 dark:bg-[#1e1e1e]/95 backdrop-blur-sm shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-all duration-300 ${
+                  className={`sticky z-30 -mx-4 -mt-4 lg:mt-0 px-4 py-3 mb-4 bg-stone-100 dark:bg-[#1e1e1e] shadow-sm lg:-mx-0 lg:px-4 lg:rounded-2xl lg:!top-0 transition-opacity duration-150 ${
                     searchBarVisible ? 'opacity-100' : '-top-32 opacity-0 md:top-0 md:opacity-100'
                   }`}
                 >
@@ -3178,7 +3190,11 @@ export default function PlantSwipe() {
 
       <Footer />
       <BroadcastToast />
-      <RequestPlantDialog open={requestPlantDialogOpen} onOpenChange={setRequestPlantDialogOpen} />
+      <RequestPlantDialog
+        open={requestPlantDialogOpen}
+        onOpenChange={setRequestPlantDialogOpen}
+        initialPlantName={query.trim() || undefined}
+      />
       
       {/* Message notification toast - shows when new messages arrive */}
       <MessageNotificationToast

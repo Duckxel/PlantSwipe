@@ -31,7 +31,6 @@ import { useTranslation } from "react-i18next"
 import { checkEditorAccess, checkBugCatcherAccess } from "@/constants/userRoles"
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { MobileNotificationSheet } from "@/components/layout/MobileNotificationSheet"
-import { platformHapticTap } from "@/platform/haptics"
 
 interface MobileNavBarProps {
   canCreate?: boolean
@@ -451,7 +450,6 @@ function NavItem({
     <Link
       to={to}
       data-tutorial={dataTutorial}
-      onClick={() => platformHapticTap(10)}
       className={`
         flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl no-underline
         transition-colors duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500
@@ -505,7 +503,7 @@ function NavItemButton({
   return (
     <button
       type="button"
-      onClick={() => { platformHapticTap(10); onClick() }}
+      onClick={onClick}
       className={`
         flex flex-col items-center justify-center gap-0.5 px-2 py-2 min-w-[56px] rounded-xl
         transition-colors duration-150 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500

@@ -699,7 +699,7 @@ async function processEmailCampaigns() {
           const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
           let randomStr = ''
           for (let i = 0; i < 10; i++) {
-            randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+            randomStr += chars.charAt(crypto.randomInt(0, chars.length))
           }
 
           const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
@@ -1798,6 +1798,58 @@ function supabaseStorageToMediaProxy(url) {
   } catch {
     return url
   }
+}
+
+// =============================================================================
+// External image proxy helpers
+// =============================================================================
+// Plant image URLs in `plant_images.link` and `plants.photos[].url` may point at
+// arbitrary third-party hosts (e.g. img.passeportsante.net) that don't serve
+// `Access-Control-Allow-Origin`. Cross-origin consumers like Aphydle
+// (aphydle.<domain>, separate origin from aphylia.app) hit CORS errors when
+// they load those URLs into a <canvas> or with `crossorigin="anonymous"`.
+// `/api/image-proxy?url=…` re-serves the bytes with permissive CORS headers,
+// and `wrapExternalImageUrl` rewrites third-party URLs through it before they
+// leave our API. URLs already on aphylia.app / supabase.co / media.aphylia.app
+// pass through untouched — they already serve correct CORS headers.
+const imageProxyPublicBase = (() => {
+  const fromEnv = (process.env.IMAGE_PROXY_PUBLIC_BASE || process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').trim()
+  return fromEnv.replace(/\/+$/, '')
+})()
+const imageProxyEndpointPath = '/api/image-proxy'
+
+function isTrustedImageOrigin(urlString) {
+  try {
+    const u = new URL(urlString)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return true
+    const host = u.hostname.toLowerCase()
+    if (host === 'aphylia.app' || host.endsWith('.aphylia.app')) return true
+    if (host.endsWith('.supabase.co')) return true
+    if (host === 'localhost' || host === '127.0.0.1') return true
+    return false
+  } catch {
+    return true
+  }
+}
+
+function wrapExternalImageUrl(urlString) {
+  if (!urlString || typeof urlString !== 'string') return urlString
+  const trimmed = urlString.trim()
+  if (!trimmed) return urlString
+  if (!/^https?:\/\//i.test(trimmed)) return urlString
+  if (isTrustedImageOrigin(trimmed)) return urlString
+  return `${imageProxyPublicBase}${imageProxyEndpointPath}?url=${encodeURIComponent(trimmed)}`
+}
+
+function wrapPhotosArrayExternalUrls(photos) {
+  if (!Array.isArray(photos)) return photos
+  return photos.map((entry) => {
+    if (!entry || typeof entry !== 'object') return entry
+    if (typeof entry.url !== 'string') return entry
+    const wrapped = wrapExternalImageUrl(entry.url)
+    if (wrapped === entry.url) return entry
+    return { ...entry, url: wrapped }
+  })
 }
 
 const gardenCoverUploadBucket = (() => {
@@ -3545,6 +3597,7 @@ async function generateFieldData(options) {
     },
     { timeout }
   )
+  logAiUsage({ feature: 'admin_plant_fill_field', model: openaiModel, response, metadata: { fieldKey } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3607,6 +3660,7 @@ async function verifyPlantNameCandidate(plantName) {
     },
     { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
   )
+  logAiUsage({ feature: 'admin_plant_verify', model: openaiModelNano, response, metadata: { plantName } })
 
   const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
   if (!outputText) {
@@ -3764,6 +3818,50 @@ postgresOptions.idle_timeout = parseInt(process.env.PG_IDLE_TIMEOUT || '20', 10)
 postgresOptions.connect_timeout = parseInt(process.env.PG_CONNECT_TIMEOUT || '10', 10) // seconds to wait for new conn
 
 const sql = connectionString ? postgres(connectionString, postgresOptions) : null
+
+// Usage monitoring helpers. These are best-effort: any failure is logged and
+// swallowed so that instrumentation never breaks a user request. No limits
+// are enforced yet — these writes feed admin/analytics queries.
+function isUuid(value) {
+  return typeof value === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)
+}
+
+async function logAiUsage({ userId = null, feature, model = null, provider = 'openai', response = null, metadata = null } = {}) {
+  if (!sql || !feature) return
+  try {
+    const usage = response?.usage || {}
+    // OpenAI Responses API returns input_tokens/output_tokens; Chat Completions
+    // returns prompt_tokens/completion_tokens. Accept either shape.
+    const promptTokens = Number(usage.prompt_tokens ?? usage.input_tokens ?? 0) || 0
+    const completionTokens = Number(usage.completion_tokens ?? usage.output_tokens ?? 0) || 0
+    const totalTokens = Number(usage.total_tokens ?? (promptTokens + completionTokens)) || 0
+    const requestId = typeof response?.id === 'string' ? response.id : null
+    const safeUserId = isUuid(userId) ? userId : null
+    await sql`
+      insert into public.ai_usage_events
+        (user_id, feature, provider, model, prompt_tokens, completion_tokens, total_tokens, request_id, metadata)
+      values
+        (${safeUserId}, ${feature}, ${provider}, ${model}, ${promptTokens}, ${completionTokens}, ${totalTokens}, ${requestId}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[ai-usage] failed to record event', feature, err?.message || err)
+  }
+}
+
+async function logScanUsage({ userId, scanId = null, provider = 'kindwise', tokens = 1, classificationLevel = null, success = true, metadata = null } = {}) {
+  if (!sql) return
+  if (!isUuid(userId)) return
+  try {
+    await sql`
+      insert into public.scan_usage_events
+        (user_id, scan_id, provider, tokens, classification_level, success, metadata)
+      values
+        (${userId}, ${isUuid(scanId) ? scanId : null}, ${provider}, ${tokens}, ${classificationLevel}, ${success}, ${sql.json(metadata || {})})
+    `
+  } catch (err) {
+    console.error('[scan-usage] failed to record event', err?.message || err)
+  }
+}
 
 let adminMediaUploadsEnsured = false
 async function ensureAdminMediaUploadsTable() {
@@ -4364,6 +4462,143 @@ function getDbHealth() {
 app.get('/api/health', async (_req, res) => {
   const db = await getDbHealth()
   res.status(200).json({ ok: true, db })
+})
+
+// =============================================================================
+// Image Proxy - CORS-enabled passthrough for third-party plant images
+// =============================================================================
+// Many `plant_images.link` rows (and historical `plants.photos[].url`) point at
+// external hosts that don't send `Access-Control-Allow-Origin`. Cross-origin
+// consumers (Aphydle on aphydle.<domain>, native Capacitor shells, anything
+// else outside aphylia.app) can't load those into <canvas> / `crossorigin`.
+// This endpoint streams the upstream bytes back with permissive CORS headers,
+// using the same SSRF guard (`validateImageUrl`) that protects our admin
+// upload-from-URL flow.
+const IMAGE_PROXY_MAX_BYTES = 25 * 1024 * 1024 // 25MB hard cap per response
+const IMAGE_PROXY_TIMEOUT_MS = 15000 // 15s upstream timeout
+const IMAGE_PROXY_MAX_REDIRECTS = 5
+
+// Fetch with manual redirect handling so we can re-run the SSRF guard against
+// each redirect target. `validateImageUrl` only inspects the URL passed in;
+// `redirect: 'follow'` would let a malicious upstream 302 us into 169.254.x.x
+// (cloud metadata) or 10.0.0.0/8.
+async function imageProxyFetch(initialUrl, signal) {
+  let currentUrl = initialUrl
+  for (let hop = 0; hop <= IMAGE_PROXY_MAX_REDIRECTS; hop++) {
+    await validateImageUrl(currentUrl)
+    const resp = await fetch(currentUrl, {
+      signal,
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Aphylia-ImageProxy/1.0 (+https://aphylia.app)',
+        'Accept': 'image/*,*/*;q=0.8',
+      },
+    })
+    if (resp.status >= 300 && resp.status < 400) {
+      const location = resp.headers.get('location')
+      if (!location) return resp
+      try {
+        currentUrl = new URL(location, currentUrl).toString()
+      } catch {
+        throw new Error('Invalid redirect target')
+      }
+      try { await resp.body?.cancel?.() } catch {}
+      continue
+    }
+    return resp
+  }
+  throw new Error(`Too many redirects (>${IMAGE_PROXY_MAX_REDIRECTS})`)
+}
+
+app.get(imageProxyEndpointPath, async (req, res) => {
+  const target = typeof req.query.url === 'string' ? req.query.url.trim() : ''
+  if (!target) {
+    res.status(400).json({ error: 'Missing url query parameter' })
+    return
+  }
+
+  const controller = new AbortController()
+  const abortTimer = setTimeout(() => controller.abort(), IMAGE_PROXY_TIMEOUT_MS)
+  let upstream
+  try {
+    upstream = await imageProxyFetch(target, controller.signal)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    const msg = err?.message || 'unknown'
+    const status = msg.startsWith('Invalid or restricted URL') || msg.startsWith('Invalid redirect') ? 400 : 502
+    res.status(status).json({ error: msg })
+    return
+  }
+
+  if (!upstream.ok) {
+    clearTimeout(abortTimer)
+    res.status(upstream.status === 404 ? 404 : 502).json({ error: `Upstream HTTP ${upstream.status}` })
+    return
+  }
+
+  const rawContentType = (upstream.headers.get('content-type') || '').split(';')[0].trim().toLowerCase()
+  if (rawContentType && !rawContentType.startsWith('image/') && rawContentType !== 'application/octet-stream') {
+    clearTimeout(abortTimer)
+    res.status(415).json({ error: `Unsupported content-type: ${rawContentType}` })
+    return
+  }
+  const contentType = rawContentType.startsWith('image/') ? rawContentType : 'application/octet-stream'
+
+  const declaredLength = parseInt(upstream.headers.get('content-length') || '0', 10)
+  if (Number.isFinite(declaredLength) && declaredLength > IMAGE_PROXY_MAX_BYTES) {
+    clearTimeout(abortTimer)
+    res.status(413).json({ error: 'Upstream image exceeds size limit' })
+    return
+  }
+
+  res.setHeader('Content-Type', contentType)
+  // Cache aggressively at the edge: third-party plant photos rarely change at
+  // their stable URL, and a cache miss can be slow (we hit a foreign host).
+  res.setHeader('Cache-Control', 'public, max-age=86400, s-maxage=604800')
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin')
+  res.setHeader('Timing-Allow-Origin', '*')
+  res.setHeader('X-Content-Type-Options', 'nosniff')
+  res.setHeader('Vary', 'Accept-Encoding')
+  if (declaredLength > 0) res.setHeader('Content-Length', String(declaredLength))
+
+  try {
+    const { Readable } = await import('stream')
+    const nodeStream = Readable.fromWeb(upstream.body)
+    let received = 0
+    nodeStream.on('data', (chunk) => {
+      received += chunk.length
+      if (received > IMAGE_PROXY_MAX_BYTES) {
+        nodeStream.destroy(new Error('Upstream image exceeded size limit during streaming'))
+      }
+    })
+    nodeStream.on('error', (err) => {
+      console.warn('[image-proxy] stream error:', err?.message || err)
+      if (!res.headersSent) {
+        try { res.status(502).end() } catch {}
+      } else {
+        try { res.destroy(err) } catch {}
+      }
+    })
+    res.on('close', () => {
+      try { nodeStream.destroy() } catch {}
+      clearTimeout(abortTimer)
+    })
+    nodeStream.pipe(res)
+  } catch (err) {
+    clearTimeout(abortTimer)
+    if (!res.headersSent) {
+      res.status(502).json({ error: 'Stream failed: ' + (err?.message || 'unknown') })
+    }
+  }
+})
+
+app.options(imageProxyEndpointPath, (_req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+  res.setHeader('Access-Control-Max-Age', '86400')
+  res.status(204).end()
 })
 
 // =============================================================================
@@ -5111,6 +5346,7 @@ Examples:
       instructions,
       input: prompt,
     })
+    logAiUsage({ userId: caller, feature: 'admin_plant_fill_name', model: openaiModelNano, response, metadata: { plantName } })
 
     const outputText = (response.output_text || '').trim()
 
@@ -5155,6 +5391,275 @@ Examples:
   }
 })
 app.options('/api/admin/ai/plant-fill/english-name', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Admin/Editor: Generate a verified, story-worthy historical fact about a
+// plant for the social-export "Deep Knowledge" card. The card surfaces a
+// strange use case, discovery story, or macabre/folklore note — the kind of
+// thing that makes a reader want to share or learn more — capped to a
+// ~280-char tweet-sized snippet so it fits on the IG card without wrapping
+// past three lines. Refuses to fabricate when nothing verifiable exists.
+app.post('/api/admin/ai/plant-historical-fact', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const scientificName = typeof body.scientificName === 'string' ? body.scientificName.trim() : ''
+    const family = typeof body.family === 'string' ? body.family.trim() : ''
+    const maxChars = Math.max(120, Math.min(360, Number(body.maxChars) || 280))
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const instructions = `You are a botanical historian writing a single, verified, share-worthy fact for an Instagram card. The reader should finish the sentence and think "I never knew that".
+
+PRIORITIZE these angles, in order:
+1. A documented strange or unexpected historical use (folk medicine, ritual, dye, weapon, poison, embalming, perfumery — anything genuinely odd that's in the historical record)
+2. A discovery / naming / explorer story (botanist who found it, era it reached Europe, why it was so prized it triggered a craze, a smuggling story, etc.)
+3. A macabre or dark folklore association that's actually attested (witch trials, funeral rites, executions, gallows plants, graveyard symbolism)
+4. A surprising fact about its biology only if it has a story attached (e.g. "the seeds were so toxic Victorian poisoners favored them")
+
+HARD RULES:
+- ONLY include facts you are confident are TRUE and historically attested. If you don't know a verified strange fact, return a single empty string.
+- Never invent dates, names, or events.
+- Never use hedging like "some say", "it is rumored", "legend has it" — only state attested history.
+- One self-contained sentence (max two short sentences).
+- Hard cap: ${maxChars} characters total. Aim for ~80% of that.
+- Plain prose, no markdown, no quotes around the whole thing, no leading "Did you know" or similar filler.
+- Return ONLY a JSON object: {"fact": "...", "confidence": "high"|"medium"|"low"}.
+- Set confidence "low" if you had to reach for the fact; the caller may discard low-confidence outputs.`
+
+    const promptParts = [`Plant: ${plantName}`]
+    if (scientificName) promptParts.push(`Scientific name: ${scientificName}`)
+    if (family) promptParts.push(`Family: ${family}`)
+    promptParts.push(`Return one verified historical fact as JSON: {"fact": "...", "confidence": "high"|"medium"|"low"}.`)
+    const prompt = promptParts.join('\n')
+
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'medium' },
+      instructions,
+      input: prompt,
+    })
+    logAiUsage({
+      userId: caller,
+      feature: 'admin_plant_historical_fact',
+      model: openaiModel,
+      response,
+      metadata: { plantName, scientificName },
+    })
+
+    const raw = (response.output_text || '').trim()
+    let fact = ''
+    let confidence = 'low'
+    try {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (m) {
+        const parsed = JSON.parse(m[0])
+        if (typeof parsed.fact === 'string') fact = parsed.fact.trim()
+        if (typeof parsed.confidence === 'string') confidence = parsed.confidence.trim().toLowerCase()
+      } else if (raw && !raw.includes('{')) {
+        // Fallback: model returned bare prose.
+        fact = raw.replace(/^["']|["']$/g, '').trim()
+        confidence = 'medium'
+      }
+    } catch {
+      fact = raw.replace(/^["']|["']$/g, '').trim()
+      confidence = 'low'
+    }
+
+    if (fact.length > maxChars) {
+      // Hard-truncate at a word boundary so a single-line ellipsis lands cleanly.
+      const cut = fact.slice(0, maxChars)
+      const lastSpace = cut.lastIndexOf(' ')
+      fact = (lastSpace > maxChars * 0.7 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
+    }
+
+    res.json({ success: true, fact, confidence })
+  } catch (err) {
+    console.error('[server] AI historical fact failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to generate fact' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-historical-fact', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// Single combined endpoint that returns every AI-generated piece the export
+// panel needs in one round-trip. Avoids three sequential OpenAI calls per
+// plant (one for fact, one for tip, one for caption) — they cost the same
+// tokens collectively but a combined call reduces wall-clock latency.
+//
+// Returned fields:
+//   historicalFact    — verified strange/discovery/macabre history (~280 chars)
+//   gardenerTip       — 1-2 sentence beginner-facing care insight (~200 chars)
+//   postDescription   — Instagram caption body, no URLs (~600 chars). The
+//                       client appends plant + Aphylia links after.
+//   confidence        — overall confidence in the historical fact only.
+app.post('/api/admin/ai/plant-export-content', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+    if (!openaiClient) {
+      res.status(503).json({ error: 'AI is not configured' })
+      return
+    }
+
+    const body = req.body || {}
+    const plantName = typeof body.plantName === 'string' ? body.plantName.trim() : ''
+    const scientificName = typeof body.scientificName === 'string' ? body.scientificName.trim() : ''
+    const family = typeof body.family === 'string' ? body.family.trim() : ''
+    const variety = typeof body.variety === 'string' ? body.variety.trim() : ''
+    if (!plantName) {
+      res.status(400).json({ error: 'Plant name is required' })
+      return
+    }
+
+    const factMax = 280
+    const tipMax = 200
+    const captionMax = 600
+
+    const instructions = `You are writing the AI content for an Instagram-style plant card carousel. Return EXACTLY one JSON object with these keys:
+
+{
+  "historicalFact": "...",
+  "factConfidence": "high" | "medium" | "low",
+  "gardenerTip": "...",
+  "postDescription": "..."
+}
+
+historicalFact (max ${factMax} chars):
+- ONE verified, share-worthy fact. Walk down this priority ladder and pick the first tier with a real, attested story for THIS plant. Do NOT skip ahead — exhaust each tier before falling back.
+
+  TIER 1 — Documented historical use or event:
+    a. strange / unexpected use in history (folk medicine, ritual, dye, weapon, poison, embalming, perfumery, currency, food preservation)
+    b. discovery / explorer / craze / smuggling / botanical-trade story
+    c. attested macabre or dark folklore (witch trials, funeral rites, gallows associations, graveyard symbolism)
+    d. surprising biology only if it has a documented historical story attached
+
+  TIER 2 — Belief, mythology, symbolism (use only if Tier 1 has nothing):
+    a. role in a documented mythology (Greek, Roman, Norse, Hindu, Buddhist, Indigenous, etc.) — name the source
+    b. attested cultural symbolism / "language of flowers" / heraldry / national or regional emblem
+    c. astrology, zodiac, planetary correspondence, moon-cycle gardening tradition (only if it appears in a recognised tradition or text — name it)
+    d. religious or ceremonial significance recorded in literature
+
+  TIER 3 — Etymology + naming (last resort, only if Tiers 1 & 2 have nothing):
+    a. origin of the common name — what language, what it literally translates to, who named it and why
+    b. origin of the genus / species epithet — Latin / Greek root, which botanist coined it, what it commemorates
+    c. interesting nomenclatural story (renaming, mistaken identity, dispute, dedication to a person)
+
+- ONLY attested content with a real source basis. NEVER hedge ("some say", "legend has it" without a tradition named). NEVER invent dates, names, persons, or events.
+- One self-contained sentence (max two short sentences).
+- Plain prose, no markdown, no leading filler ("Did you know"), no quotes around the whole thing.
+- If even Tier 3 has nothing verifiable, return an empty string and set factConfidence to "low".
+
+factConfidence:
+- "high" if the fact is widely attested in mainstream botanical / historical / mythological sources.
+- "medium" if it's documented but less mainstream, OR if you fell back to Tier 2 / Tier 3.
+- "low" only if you genuinely reached for something unverified — caller will discard.
+
+gardenerTip (HARD MAX ${tipMax} characters, including spaces and punctuation):
+- LENGTH IS A HARD LIMIT. Count characters before returning. If your tip is over ${tipMax} characters, rewrite it shorter — do NOT exceed the budget. Truncated tips will be discarded.
+- Aim for ONE sentence (two only if both fit comfortably under ${tipMax} chars).
+- Specific to THIS plant's documented quirk — a behaviour, structure, or sensitivity tied to this species or genus (rot pattern, dormancy, light/temperature window, toxicity hazard, root habit, propagation gotcha, etc.).
+- Concrete and actionable: name the pitfall + how to avoid it (e.g. "Caladium tubers rot in cold, wet soil — keep them above 16°C and let the topsoil dry between waterings").
+- Use second-person or imperative voice. NEVER first person — no "I", "my", "mine", "I find", "I keep", or any personal anecdote / story / "this happened to me" framing. The reader doesn't care about anyone else's plant; they want the rule.
+- No platitudes ("water regularly", "give it bright light"). No leading filler ("Tip:", "Pro tip:", "Remember:"). No markdown.
+- If the plant is genuinely unfussy, name the ONE thing that still trips beginners up.
+- Stay under ${tipMax} chars. Re-read your draft and shorten before returning.
+
+postDescription (max ${captionMax} chars):
+- The body of the Instagram caption that goes BELOW the carousel.
+- Open with a hook sentence about the plant (avoid the literal phrase "did you know").
+- Mention 2-3 concrete care tips or interesting traits.
+- Friendly, conversational tone. Use line breaks (\\n) for rhythm.
+- Do NOT include any URLs, hashtags, or @-mentions — the client appends links and hashtags after.
+- Do NOT mention "Instagram" or "swipe" — let the carousel do that work.
+- Plain prose only, no markdown.
+
+Return ONLY the JSON object. No commentary before or after.`
+
+    // The variety / cultivar disambiguates same-named plants (Tomato vs
+    // Tomato 'Cherry' vs Tomato 'San Marzano'); the AI needs it so the
+    // historical fact and gardener tip target the actual subject of the
+    // card — without it, generic content for the species sneaks through.
+    const promptParts = [`Plant common name: ${plantName}`]
+    if (variety) promptParts.push(`Variety / cultivar: ${variety}`)
+    if (scientificName) promptParts.push(`Scientific name: ${scientificName}`)
+    if (family) promptParts.push(`Family: ${family}`)
+    if (variety) {
+      promptParts.push(
+        `IMPORTANT: this card is about "${plantName} '${variety}'" specifically. Where the variety has its own documented history, mythology, or naming origin distinct from the species, write about THE VARIETY. Where it doesn't, write about the species.`,
+      )
+    }
+    promptParts.push('Generate the JSON object now.')
+    const prompt = promptParts.join('\n')
+
+    const response = await openaiClient.responses.create({
+      model: openaiModel,
+      reasoning: { effort: 'medium' },
+      instructions,
+      input: prompt,
+    })
+    logAiUsage({
+      userId: caller,
+      feature: 'admin_plant_export_content',
+      model: openaiModel,
+      response,
+      metadata: { plantName, scientificName },
+    })
+
+    const raw = (response.output_text || '').trim()
+    let parsed = null
+    try {
+      const m = raw.match(/\{[\s\S]*\}/)
+      if (m) parsed = JSON.parse(m[0])
+    } catch {
+      parsed = null
+    }
+
+    const truncate = (s, max) => {
+      if (typeof s !== 'string') return ''
+      const trimmed = s.trim()
+      if (trimmed.length <= max) return trimmed
+      const cut = trimmed.slice(0, max)
+      const lastSpace = cut.lastIndexOf(' ')
+      return (lastSpace > max * 0.7 ? cut.slice(0, lastSpace) : cut).trimEnd() + '…'
+    }
+
+    const factConfidenceRaw =
+      typeof parsed?.factConfidence === 'string' ? parsed.factConfidence.trim().toLowerCase() : 'low'
+    const factConfidence = ['high', 'medium', 'low'].includes(factConfidenceRaw) ? factConfidenceRaw : 'low'
+
+    res.json({
+      success: true,
+      historicalFact: truncate(parsed?.historicalFact, factMax),
+      factConfidence,
+      gardenerTip: truncate(parsed?.gardenerTip, tipMax),
+      postDescription: truncate(parsed?.postDescription, captionMax),
+    })
+  } catch (err) {
+    console.error('[server] AI export-content failed:', err)
+    if (!res.headersSent) {
+      res.status(500).json({ error: err?.message || 'Failed to generate export content' })
+    }
+  }
+})
+app.options('/api/admin/ai/plant-export-content', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
@@ -8787,6 +9292,7 @@ app.post('/api/blog/summarize', async (req, res) => {
         },
         { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 600000) },
       )
+      logAiUsage({ userId: adminPrincipal, feature: 'blog_metadata', model: openaiModel, response, metadata: { title } })
       const rawOutput = typeof response?.output_text === 'string' ? response.output_text.trim() : '{}'
       // Parse the JSON response, handling potential markdown code blocks
       let parsed = {}
@@ -8833,6 +9339,7 @@ app.post('/api/blog/summarize', async (req, res) => {
       },
       { timeout: Number(process.env.OPENAI_TIMEOUT_MS || 300000) },
     )
+    logAiUsage({ userId: adminPrincipal, feature: 'blog_summary', model: openaiModel, response, metadata: { title } })
     const summary = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     res.json({ summary })
   } catch (err) {
@@ -12084,7 +12591,7 @@ async function sendAutomaticEmail(triggerType, { userId, userEmail, userDisplayN
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
-      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      randomStr += chars.charAt(crypto.randomInt(0, chars.length))
     }
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
@@ -12256,7 +12763,7 @@ async function sendSecurityEmail(triggerType, { recipientEmail, userId, userDisp
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
     let randomStr = ''
     for (let i = 0; i < 10; i++) {
-      randomStr += chars.charAt(Math.floor(Math.random() * chars.length))
+      randomStr += chars.charAt(crypto.randomInt(0, chars.length))
     }
 
     const websiteUrl = process.env.WEBSITE_URL || 'https://aphylia.app'
@@ -12770,7 +13277,7 @@ function generateVerificationCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789' // Exclude confusing chars: I, O, 0, 1
   let code = ''
   for (let i = 0; i < 6; i++) {
-    code += chars.charAt(Math.floor(Math.random() * chars.length))
+    code += chars.charAt(crypto.randomInt(0, chars.length))
   }
   return code
 }
@@ -13413,6 +13920,269 @@ app.get('/api/admin/stats', async (req, res) => {
     res.json({ ok: true, profilesCount, authUsersCount, plantsCount })
   } catch (e) {
     res.status(200).json({ ok: true, profilesCount: 0, authUsersCount: null, plantsCount: null, error: e?.message || 'Failed to load stats', errorCode: 'ADMIN_STATS_ERROR' })
+  }
+})
+
+// Admin: Aphydle stats — count of players who finished today's puzzle and
+// page visits today. Reads aphydle.puzzle_results / aphydle.page_visits /
+// aphydle.daily_log directly via the postgres-js client; page_visits has
+// no SELECT RLS policy for anon, so REST can't be used as a fallback here.
+app.get('/api/admin/aphydle-stats', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  try {
+    let playersToday = null
+    let visitsToday = null
+    let puzzleNo = null
+    let puzzleDate = null
+
+    if (sql) {
+      // Today's puzzle_no: prefer daily_log (matches what the runtime served),
+      // fall back to date-math against the rotation epoch (2026-04-27, mirrors
+      // PUZZLE_EPOCH_UTC in Aphydle's src/engine/game.js) if no row has been
+      // stamped yet.
+      try {
+        const pnRows = await sql`
+          select coalesce(
+            (select puzzle_no from aphydle.daily_log where puzzle_date = (now() at time zone 'utc')::date),
+            ((now() at time zone 'utc')::date - date '2026-04-27') + 1
+          )::int as puzzle_no,
+          to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as puzzle_date
+        `
+        if (Array.isArray(pnRows) && pnRows[0]) {
+          puzzleNo = Number(pnRows[0].puzzle_no)
+          puzzleDate = pnRows[0].puzzle_date || null
+        }
+      } catch (e) {
+        console.warn('[aphydle-stats] puzzle_no lookup failed:', e?.message)
+      }
+
+      if (puzzleNo != null) {
+        // Source from aphydle.puzzle_results — one row per finalised game
+        // (submitResult upserts on (puzzle_no, player_id) at end of game).
+        // This is the authoritative table for outcomes.
+        try {
+          const rows = await sql`
+            select count(*)::int as count
+            from aphydle.puzzle_results
+            where puzzle_no = ${puzzleNo}
+          `
+          if (Array.isArray(rows) && rows[0]) playersToday = Number(rows[0].count)
+        } catch (e) {
+          console.warn('[aphydle-stats] players query failed:', e?.message)
+        }
+      }
+
+      try {
+        const rows = await sql`
+          select count(*)::int as count
+          from aphydle.page_visits
+          where visited_at >= (now() at time zone 'utc')::date
+        `
+        if (Array.isArray(rows) && rows[0]) visitsToday = Number(rows[0].count)
+      } catch (e) {
+        console.warn('[aphydle-stats] visits query failed:', e?.message)
+      }
+    }
+
+    res.json({ ok: true, playersToday, visitsToday, puzzleNo, puzzleDate })
+  } catch (e) {
+    res.status(200).json({
+      ok: true,
+      playersToday: null,
+      visitsToday: null,
+      puzzleNo: null,
+      puzzleDate: null,
+      error: e?.message || 'Failed to load aphydle stats',
+      errorCode: 'ADMIN_APHYDLE_STATS_ERROR',
+    })
+  }
+})
+
+// Admin: Aphydle analytics — time series (visits / players / guesses / wins
+// per day) and details for the most recent puzzles, used by the admin
+// dashboard's "Aphydle" tab. Reads aphydle.* directly via the postgres-js
+// client because page_visits has no SELECT RLS policy for anon.
+//
+// Source-of-truth for outcomes is aphydle.puzzle_results — submitResult
+// writes one row per finalised game with the real outcome + guess_count.
+// puzzle_no → puzzle_date is derived from the rotation epoch (mirrors
+// PUZZLE_EPOCH_UTC = 2026-04-27 in Aphydle's src/engine/game.js).
+app.get('/api/admin/aphydle-analytics', async (req, res) => {
+  const uid = await ensureAdmin(req, res)
+  if (!uid) return
+  const days = Math.max(1, Math.min(90, Number.parseInt(req.query.days, 10) || 30))
+  if (!sql) {
+    return res.json({
+      ok: false,
+      error: 'Database connection not available',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
+  }
+
+  // Compute the window in JS so SQL never has to do parameterised date
+  // arithmetic (postgres-js mishandles "${n}::int - 1" in some setups).
+  const APHYDLE_EPOCH_UTC_MS = Date.UTC(2026, 3, 27) // April 27 2026, month is 0-indexed
+  const DAY_MS = 24 * 3600 * 1000
+  const todayUtcMs = Math.floor(Date.now() / DAY_MS) * DAY_MS
+  const todayPuzzleNo = Math.floor((todayUtcMs - APHYDLE_EPOCH_UTC_MS) / DAY_MS) + 1
+  const cutoffPuzzleNo = todayPuzzleNo - (days - 1)
+  const cutoffUtcMs = todayUtcMs - (days - 1) * DAY_MS
+  const cutoffISO = new Date(cutoffUtcMs).toISOString() // "YYYY-MM-DDT00:00:00.000Z"
+  const epochISODate = '2026-04-27' // mirrors APHYDLE_EPOCH_UTC_MS, used as a Postgres date literal
+
+  // Helper: puzzle_no → "YYYY-MM-DD" in UTC, used to densify the time series
+  // and to label the lastPuzzles cards on the client.
+  const puzzleDateOf = (n) => new Date(APHYDLE_EPOCH_UTC_MS + (n - 1) * DAY_MS).toISOString().slice(0, 10)
+
+  try {
+    // Visits per UTC day. No daily_log dependency.
+    const visitsRows = await sql`
+      select to_char(date_trunc('day', visited_at at time zone 'utc'), 'YYYY-MM-DD') as date,
+             count(*)::int as visits
+      from aphydle.page_visits
+      where visited_at >= ${cutoffISO}::timestamptz
+      group by 1
+      order by 1
+    `
+
+    // Players + total guesses + wins per puzzle, sourced from
+    // aphydle.puzzle_results. Each row is one finalised game so count(*) is
+    // the number of players and sum(guess_count) is the total guesses.
+    const playsRows = await sql`
+      select pr.puzzle_no::int as puzzle_no,
+             count(*)::int as players,
+             coalesce(sum(pr.guess_count), 0)::int as attempts,
+             sum(case when pr.outcome = 'won' then 1 else 0 end)::int as wins
+      from aphydle.puzzle_results pr
+      where pr.puzzle_no >= ${cutoffPuzzleNo} and pr.puzzle_no <= ${todayPuzzleNo}
+      group by pr.puzzle_no
+      order by pr.puzzle_no
+    `
+
+    // Last 5 puzzles by completion activity (puzzle_results). The bucket
+    // histogram is computed inline from outcome + guess_count.
+    // plant_id is a best-effort join to daily_log.
+    const lastPuzzleRows = await sql`
+      with recent_puzzles as (
+        select distinct puzzle_no
+        from aphydle.puzzle_results
+        order by puzzle_no desc
+        limit 5
+      )
+      select rp.puzzle_no::int as puzzle_no,
+             dl.plant_id,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 1  then 1 else 0 end)::int as bucket_1,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 2  then 1 else 0 end)::int as bucket_2,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 3  then 1 else 0 end)::int as bucket_3,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 4  then 1 else 0 end)::int as bucket_4,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 5  then 1 else 0 end)::int as bucket_5,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 6  then 1 else 0 end)::int as bucket_6,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 7  then 1 else 0 end)::int as bucket_7,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 8  then 1 else 0 end)::int as bucket_8,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 9  then 1 else 0 end)::int as bucket_9,
+             sum(case when pr.outcome = 'won' and pr.guess_count = 10 then 1 else 0 end)::int as bucket_10,
+             sum(case when pr.outcome = 'lost' then 1 else 0 end)::int as bucket_lost,
+             count(pr.id)::int as total_played,
+             count(pr.id)::int as players
+      from recent_puzzles rp
+      left join aphydle.daily_log dl on dl.puzzle_no = rp.puzzle_no
+      left join aphydle.puzzle_results pr on pr.puzzle_no = rp.puzzle_no
+      group by rp.puzzle_no, dl.plant_id
+      order by rp.puzzle_no desc
+    `
+
+    // Resolve plant common names (best-effort; ignored on failure).
+    const plantIds = Array.from(new Set(lastPuzzleRows.map(r => r.plant_id).filter(Boolean).map(String)))
+    const plantNamesById = {}
+    if (plantIds.length) {
+      try {
+        const plantRows = await sql`select id::text as id, name from public.plants where id::text = any(${plantIds})`
+        for (const p of plantRows) plantNamesById[p.id] = p.name
+      } catch { /* swallow — names are nice-to-have */ }
+    }
+
+    // Totals over the window. Plays/guesses/wins from puzzle_results so
+    // they reflect finalised outcomes rather than the racy attempts state.
+    const totalsRows = await sql`
+      select
+        coalesce((select count(*)::int from aphydle.page_visits
+                  where visited_at >= ${cutoffISO}::timestamptz), 0) as visits_total,
+        coalesce((select count(*)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as plays_total,
+        coalesce((select sum(guess_count)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}), 0) as guesses_total,
+        coalesce((select count(*)::int from aphydle.puzzle_results
+                  where puzzle_no >= ${cutoffPuzzleNo} and puzzle_no <= ${todayPuzzleNo}
+                    and outcome = 'won'), 0) as wins_total
+    `
+    const tot = totalsRows[0] || {}
+
+    // Densify the time series so every UTC day in the window has a row.
+    const seriesByDate = {}
+    for (let i = 0; i < days; i++) {
+      const d = new Date(cutoffUtcMs + i * DAY_MS)
+      const key = d.toISOString().slice(0, 10)
+      seriesByDate[key] = { date: key, visits: 0, players: 0, attempts: 0, wins: 0 }
+    }
+    for (const r of visitsRows) {
+      if (seriesByDate[r.date]) seriesByDate[r.date].visits = Number(r.visits) || 0
+    }
+    for (const r of playsRows) {
+      const key = puzzleDateOf(Number(r.puzzle_no))
+      if (seriesByDate[key]) {
+        seriesByDate[key].players = Number(r.players) || 0
+        seriesByDate[key].attempts = Number(r.attempts) || 0
+        seriesByDate[key].wins = Number(r.wins) || 0
+      }
+    }
+    const timeSeries = Object.values(seriesByDate).sort((a, b) => a.date.localeCompare(b.date))
+
+    res.json({
+      ok: true,
+      days,
+      epoch: epochISODate,
+      todayPuzzleNo,
+      totals: {
+        visits: Number(tot.visits_total) || 0,
+        plays: Number(tot.plays_total) || 0,
+        guesses: Number(tot.guesses_total) || 0,
+        wins: Number(tot.wins_total) || 0,
+      },
+      timeSeries,
+      lastPuzzles: lastPuzzleRows.map(r => ({
+        puzzleNo: Number(r.puzzle_no),
+        puzzleDate: puzzleDateOf(Number(r.puzzle_no)),
+        plantId: r.plant_id || null,
+        plantName: r.plant_id ? (plantNamesById[String(r.plant_id)] || null) : null,
+        players: Number(r.players) || 0,
+        wins: Number(r.bucket_1) + Number(r.bucket_2) + Number(r.bucket_3) + Number(r.bucket_4) +
+              Number(r.bucket_5) + Number(r.bucket_6) + Number(r.bucket_7) + Number(r.bucket_8) +
+              Number(r.bucket_9) + Number(r.bucket_10),
+        losses: Number(r.bucket_lost) || 0,
+        totalPlayed: Number(r.total_played) || 0,
+        buckets: [
+          Number(r.bucket_1) || 0, Number(r.bucket_2) || 0, Number(r.bucket_3) || 0,
+          Number(r.bucket_4) || 0, Number(r.bucket_5) || 0, Number(r.bucket_6) || 0,
+          Number(r.bucket_7) || 0, Number(r.bucket_8) || 0, Number(r.bucket_9) || 0,
+          Number(r.bucket_10) || 0,
+        ],
+      })),
+    })
+  } catch (e) {
+    console.error('[aphydle-analytics] failed:', e?.message)
+    res.status(200).json({
+      ok: false,
+      error: e?.message || 'Failed to load aphydle analytics',
+      errorCode: 'ADMIN_APHYDLE_ANALYTICS_ERROR',
+      days,
+      totals: { visits: 0, plays: 0, guesses: 0, wins: 0 },
+      timeSeries: [],
+      lastPuzzles: [],
+    })
   }
 })
 
@@ -17356,8 +18126,8 @@ async function loadPlantsViaSupabase() {
         rarity: r.rarity,
         meaning: r.meaning ?? '',
         description: r.description ?? '',
-        photos,
-        image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+        photos: wrapPhotosArrayExternalUrls(photos),
+        image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
         care: {
           sunlight: r.level_sun || null,
           water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
@@ -17702,8 +18472,8 @@ app.get('/api/plants', async (_req, res) => {
             rarity: r.rarity,
             meaning: r.meaning ?? '',
             description: r.description ?? '',
-            photos,
-            image: pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? ''),
+            photos: wrapPhotosArrayExternalUrls(photos),
+            image: wrapExternalImageUrl(pickPrimaryPhotoUrlFromArray(photos, r.image_url ?? '')),
             care: {
               sunlight: r.level_sun || null,
               water: Array.isArray(r.watering_type) ? r.watering_type.join(', ') : null,
@@ -18135,6 +18905,99 @@ app.get('/api/admin/pull-code/stream', async (req, res) => {
   }
 })
 
+// Admin: stream Aphydle refresh logs via Server-Sent Events (SSE)
+app.get('/api/admin/refresh-aphydle/stream', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+
+    res.setHeader('Content-Type', 'text/event-stream; charset=utf-8')
+    res.setHeader('Cache-Control', 'no-cache, no-transform')
+    res.setHeader('Connection', 'keep-alive')
+    res.setHeader('X-Accel-Buffering', 'no')
+    res.flushHeaders?.()
+
+    const send = (event, data) => {
+      try {
+        if (event) res.write(`event: ${event}\n`)
+        const payload = typeof data === 'string' ? data : JSON.stringify(data)
+        const lines = String(payload).split(/\r?\n/) || []
+        for (const line of lines) res.write(`data: ${line}\n`)
+        res.write('\n')
+      } catch { }
+    }
+
+    send('open', { ok: true, message: 'Starting Aphydle refresh…' })
+
+    const repoRoot = await getRepoRoot()
+
+    try {
+      const caller = await getUserFromRequest(req)
+      const callerId = caller?.id || null
+      let adminName = null
+      if (sql && callerId) {
+        try {
+          const rows = await sql`select coalesce(display_name, '') as name from public.profiles where id = ${callerId} limit 1`
+          adminName = (rows?.[0]?.name || '').trim() || null
+        } catch { }
+      }
+      let logged = false
+      if (sql) {
+        try { await sql`insert into public.admin_activity_logs (admin_id, admin_name, action, target, detail) values (${callerId}, ${adminName}, 'refresh_aphydle', ${null}, ${sql.json({ source: 'stream' })})`; logged = true } catch { }
+      }
+      if (!logged) {
+        try { await insertAdminActivityViaRest(req, { admin_id: callerId, admin_name: adminName, action: 'refresh_aphydle', target: null, detail: { source: 'stream' } }) } catch { }
+      }
+    } catch { }
+
+    const scriptPath = path.resolve(repoRoot, 'scripts', 'refresh-aphydle.sh')
+    try { await fs.access(scriptPath) } catch {
+      send('error', { error: `Aphydle refresh script not found at ${scriptPath}` })
+      res.end()
+      return
+    }
+    try { await fs.chmod(scriptPath, 0o755) } catch { }
+
+    const childEnv = { ...process.env, CI: process.env.CI || 'true', PLANTSWIPE_REPO_DIR: repoRoot }
+
+    const child = spawnChild(scriptPath, [], {
+      cwd: repoRoot,
+      env: childEnv,
+      shell: false,
+    })
+
+    const heartbeatId = setInterval(() => { try { res.write(': ping\n\n') } catch { } }, 15000)
+    let streamClosedGracefully = false
+
+    child.stdout?.on('data', (buf) => { send('log', buf.toString()) })
+    child.stderr?.on('data', (buf) => { send('log', buf.toString()) })
+    child.on('error', (err) => { send('error', { error: err?.message || 'spawn failed' }) })
+    child.on('close', (code) => {
+      const ok = code === 0
+      if (!streamClosedGracefully) {
+        send('done', { ok, code })
+      }
+      streamClosedGracefully = true
+      try { clearInterval(heartbeatId) } catch { }
+      try { res.end() } catch { }
+    })
+
+    req.on('close', () => {
+      if (streamClosedGracefully) return
+      try { clearInterval(heartbeatId) } catch { }
+      console.warn('[refresh-aphydle] SSE client disconnected; refresh continues in background.')
+    })
+  } catch (e) {
+    try { res.status(500).json({ error: e?.message || 'stream failed' }) } catch { }
+  }
+})
+
+app.options('/api/admin/refresh-aphydle/stream', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+  res.status(204).end()
+})
+
 // Admin: list remote branches and current branch
 app.get('/api/admin/branches', async (req, res) => {
   try {
@@ -18561,7 +19424,9 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
       bugActionResponsesDeleted: 0,
       bugPointsHistoryDeleted: 0,
       gardenPlantImagesDeleted: 0,
-      mediaUploadsAnonymized: 0
+      mediaUploadsAnonymized: 0,
+      plantHistoryAnonymized: 0,
+      plantAdminNotesAnonymized: 0
     }
 
     try {
@@ -18967,6 +19832,48 @@ app.post('/api/account/delete-gdpr', async (req, res) => {
         stats.mediaUploadsAnonymized = count || 0
       }
     } catch (err) { console.warn('[gdpr] admin_media_uploads anonymisation partial:', err?.message) }
+
+    try {
+      // 14o. Anonymise plant_history rows authored by this user.
+      // The FK author_id → profiles(id) is ON DELETE SET NULL, so the cascade
+      // already nulls author_id when the profile is deleted at step 15. We
+      // count the affected rows here so the audit log records what was
+      // anonymised. summary text is auto-generated from field labels (see
+      // plantHistoryDiff.ts) and never embeds user-identifying information,
+      // so the body itself does not need to be rewritten.
+      if (sql) {
+        const rows = await sql`SELECT COUNT(*)::int AS n FROM public.plant_history WHERE author_id = ${userId}`
+        stats.plantHistoryAnonymized = rows?.[0]?.n || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('plant_history')
+          .select('id', { count: 'exact', head: true })
+          .eq('author_id', userId)
+        stats.plantHistoryAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] plant_history anonymisation count partial:', err?.message) }
+
+    try {
+      // 14p. Anonymise plant_admin_notes authored by this user.
+      // The FK ON DELETE SET NULL severs the authorship link via cascade, but
+      // the free-text `body` would persist. To satisfy GDPR while preserving
+      // thread structure (other admins reference these notes editorially), we
+      // explicitly null author_id and replace body with a placeholder.
+      if (sql) {
+        const result = await sql`
+          UPDATE public.plant_admin_notes
+          SET body = '[deleted]', author_id = NULL
+          WHERE author_id = ${userId}
+        `
+        stats.plantAdminNotesAnonymized = result?.count || 0
+      } else {
+        const { count } = await supabaseServiceClient
+          .from('plant_admin_notes')
+          .update({ body: '[deleted]', author_id: null })
+          .eq('author_id', userId)
+        stats.plantAdminNotesAnonymized = count || 0
+      }
+    } catch (err) { console.warn('[gdpr] plant_admin_notes anonymisation partial:', err?.message) }
 
     try {
       // 15. Delete avatar image and profile
@@ -19659,10 +20566,42 @@ app.get('/api/account/export', async (req, res) => {
           return data || []
         }
       })(),
+      // 29. Plant history entries authored by user
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, plant_id, action, field, summary, created_at
+            FROM public.plant_history WHERE author_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('plant_history')
+            .select('id, plant_id, action, field, summary, created_at')
+            .eq('author_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
+      // 30. Plant admin notes authored by user
+      (async () => {
+        if (sql) {
+          return await sql`
+            SELECT id, plant_id, body, created_at, updated_at
+            FROM public.plant_admin_notes WHERE author_id = ${userId}
+            ORDER BY created_at DESC
+          `
+        } else {
+          const { data } = await supabaseServiceClient
+            .from('plant_admin_notes')
+            .select('id, plant_id, body, created_at, updated_at')
+            .eq('author_id', userId).order('created_at', { ascending: false })
+          return data || []
+        }
+      })(),
     ])
 
-    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs', 'gardenPlantImages', 'mediaUploads']
-    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs', 'Garden plant images', 'Media uploads']
+    const gdprKeys = ['journal', 'messages', 'conversations', 'friends', 'friendRequests', 'bookmarks', 'scans', 'notifications', 'bugReports', 'badges', 'eventRegistrations', 'eventProgress', 'actionStatus', 'gardenInvites', 'gardenUserActivity', 'taskCompletions', 'requestedPlants', 'bugActionResponses', 'bugPointsHistory', 'messageReactions', 'discoverySeen', 'pushSubscriptions', 'activityLogs', 'gardenPlantImages', 'mediaUploads', 'plantHistoryAuthored', 'plantAdminNotesAuthored']
+    const gdprLabels = ['Journal', 'Messages', 'Conversations', 'Friends', 'Friend requests', 'Bookmarks', 'Scans', 'Notifications', 'Bug reports', 'Badges', 'Event registrations', 'Event progress', 'Action status', 'Garden invites', 'Garden user activity', 'Task completions', 'Requested plants', 'Bug action responses', 'Bug points history', 'Message reactions', 'Discovery seen', 'Push subscriptions', 'Activity logs', 'Garden plant images', 'Media uploads', 'Plant history authored', 'Plant admin notes authored']
     for (let i = 0; i < gdprParallelResults.length; i++) {
       const r = gdprParallelResults[i]
       if (r.status === 'fulfilled') {
@@ -21546,6 +22485,16 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
 
         identificationResult = await apiResponse.json()
         console.log('[scan] Kindwise API success, status:', identificationResult.status)
+        logScanUsage({
+          userId: user.id,
+          classificationLevel: sanitizedClassificationLevel,
+          success: true,
+          metadata: {
+            status: identificationResult?.status || null,
+            hasLocation: latitude !== undefined && longitude !== undefined,
+            accessToken: identificationResult?.access_token || null,
+          },
+        })
       } catch (apiErr) {
         console.error('[scan] Error calling Kindwise API:', apiErr?.message || apiErr)
         res.status(500).json({ error: 'Failed to identify plant', details: apiErr?.message })
@@ -21555,7 +22504,7 @@ app.post('/api/scan/upload-and-identify', async (req, res) => {
       // Upload optimized image to storage
       const baseName = sanitizeUploadBaseName(file.originalname)
       const timestamp = Date.now()
-      const randomId = Math.random().toString(36).substring(2, 10)
+      const randomId = crypto.randomBytes(4).toString('hex')
       const ext = finalMimeType === 'image/gif' ? 'gif' : 'webp'
       const objectPath = `${scanImageUploadPrefix}/${user.id}/${timestamp}-${baseName}-${randomId}.${ext}`
 
@@ -24126,6 +25075,7 @@ Include specific observations from the photos in your advice.`
           },
           { timeout: 300000 }
         )
+        logAiUsage({ userId: user?.id, feature: 'garden_advice', model: openaiModel, response, metadata: { gardenId } })
 
         aiResponse = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
         tokensUsed = response.usage?.total_tokens || 0
@@ -25568,15 +26518,17 @@ Be specific and reference what you actually see in the images. If you notice any
     }
 
     // Use Responses API for both text and vision
+    const journalModel = photos.length > 0 ? openaiModel : openaiModelNano
     const response = await openaiClient.responses.create(
       {
-        model: photos.length > 0 ? openaiModel : openaiModelNano, // Use larger model for vision
+        model: journalModel, // Use larger model for vision
         reasoning: { effort: photos.length > 0 ? 'medium' : 'low' },
         instructions: journalInstructions,
         input: [{ role: 'user', content: inputContent }],
       },
       { timeout: photos.length > 0 ? 120000 : 60000 }
     )
+    logAiUsage({ userId: user?.id, feature: 'garden_journal_feedback', model: journalModel, response, metadata: { gardenId, entryId, hasPhotos: photos.length > 0 } })
 
     feedback = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
     tokensUsed = response.usage?.total_tokens || 0
@@ -25884,7 +26836,7 @@ app.post('/api/garden/:id/upload', async (req, res) => {
       }
 
       // Generate unique filename
-      const uniqueName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${finalExt}`
+      const uniqueName = `${Date.now()}-${crypto.randomBytes(6).toString('hex')}.${finalExt}`
       const storagePath = `gardens/${gardenId}/${folder}/${uniqueName}`
 
       // Upload to Supabase Storage (PHOTOS bucket)
@@ -29183,7 +30135,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
             },
             { timeout: 60000 }
           )
-          
+          logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'stream' } })
+
           // Check if response contains tool calls
           if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
             const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
@@ -29223,7 +30176,9 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         
         let fullContent = ''
         let totalTokens = 0
-        
+        let streamUsage = null
+        let streamResponseId = null
+
         for await (const event of streamResponse) {
           // Handle different event types from the Responses API stream
           if (event.type === 'response.output_text.delta') {
@@ -29235,9 +30190,18 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           } else if (event.type === 'response.completed' || event.type === 'response.done') {
             if (event.response?.usage) {
               totalTokens = event.response.usage.total_tokens || 0
+              streamUsage = event.response.usage
+              streamResponseId = event.response.id || null
             }
           }
         }
+        logAiUsage({
+          userId: user?.id,
+          feature: 'garden_chat_stream',
+          model: openaiModelNano,
+          response: { usage: streamUsage, id: streamResponseId },
+          metadata: { gardenId: gardenIdForTools || null, mode: 'stream' },
+        })
         
         // Send done event with complete message
         const messageId = crypto.randomUUID()
@@ -29278,14 +30242,15 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           },
           { timeout: 60000 }
         )
-        
+        logAiUsage({ userId: user?.id, feature: 'garden_chat_tools', model: openaiModelNano, response: toolCheckResponse, metadata: { gardenId: gardenIdForTools, mode: 'sync' } })
+
         // Check if response contains tool calls
         if (toolCheckResponse.output && Array.isArray(toolCheckResponse.output)) {
           const toolUseOutputs = toolCheckResponse.output.filter(o => o.type === 'tool_use')
           if (toolUseOutputs.length > 0) {
             const { toolCallsExecuted: executed, toolResultItems } = await executeToolsIfNeeded(toolUseOutputs)
             toolCallsExecuted = executed
-            
+
             // Pass tool calls and results as structured Responses API input items.
             // See streaming path comment for full rationale on why we avoid plain
             // text concatenation of tool results (prompt injection prevention).
@@ -29297,7 +30262,7 @@ app.post('/api/ai/garden-chat', async (req, res) => {
           }
         }
       }
-      
+
       // Final response using Responses API
       const response = await openaiClient.responses.create(
         {
@@ -29308,7 +30273,8 @@ app.post('/api/ai/garden-chat', async (req, res) => {
         },
         { timeout: 120000 }
       )
-      
+      logAiUsage({ userId: user?.id, feature: 'garden_chat', model: openaiModelNano, response, metadata: { gardenId: gardenIdForTools || null, mode: 'sync' } })
+
       const outputText = typeof response?.output_text === 'string' ? response.output_text.trim() : ''
       const messageId = crypto.randomUUID()
       
@@ -30573,10 +31539,9 @@ async function processDueAutomations() {
             console.warn('[automations] Failed to ensure task occurrences (continuing with existing data):', occErr?.message)
           }
 
-          // Use a bounded 2-hour window (preferred hour + 1) instead of unbounded >=.
-          // This handles brief worker downtime without sending 8 AM notifications at 11 PM.
-          // BETWEEN is inclusive, and extract(hour ...) returns 0-23, so BETWEEN 23 AND 24
-          // only matches hour 23 (acceptable single-hour window for the last hour of day).
+          // Match only the user's preferred local hour. BETWEEN hour AND hour+1 was
+          // inclusive on both ends, giving a 2-hour delivery window that let reminders
+          // land up to ~2 hours after the user's configured time.
           recipientQuery = sql`
             select distinct p.id as user_id, p.display_name, p.language, p.timezone
             from public.profiles p
@@ -30588,8 +31553,7 @@ async function processDueAutomations() {
               and (occ.due_at at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date = (now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))::date
               and coalesce(occ.completed_count, 0) < coalesce(occ.required_count, 1)
               and extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                    and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
               and not exists (
                 select 1 from public.user_notifications un
                 where un.automation_id = ${automation.id}
@@ -30643,8 +31607,7 @@ async function processDueAutomations() {
                   select count(distinct p.id)::bigint as total_with_tasks,
                          count(distinct case
                           when extract(hour from now() at time zone coalesce(p.timezone, ${DEFAULT_USER_TIMEZONE}))
-                               between coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
-                                   and coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR}) + 1
+                               = coalesce(nullif(regexp_replace(p.notification_time, '[^0-9]', '', 'g'), '')::int, ${DEFAULT_NOTIFICATION_HOUR})
                            then p.id
                          end)::bigint as at_preferred_hour
                   from public.profiles p
@@ -30814,6 +31777,25 @@ function scheduleNotificationWorker() {
   notificationWorkerTimer = setTimeout(tick, 2000)
 }
 
+// Derive the Aphydle (sister daily plant guessing game) origin from the primary
+// site URL. Aphydle is served on `aphydle.<primary>` per plant-swipe.conf /
+// setup.sh. PLANTSWIPE_APHYDLE_URL or APHYDLE_URL can override the default.
+function deriveAphydleOrigin(siteUrl) {
+  const override = (process.env.PLANTSWIPE_APHYDLE_URL || process.env.APHYDLE_URL || '').trim()
+  if (override) {
+    try { return new URL(override).origin } catch { /* fall through */ }
+  }
+  try {
+    const parsed = new URL(siteUrl)
+    let host = parsed.hostname
+    if (host.startsWith('www.')) host = host.slice(4)
+    if (!host.startsWith('aphydle.')) host = `aphydle.${host}`
+    return `${parsed.protocol}//${host}`
+  } catch {
+    return null
+  }
+}
+
 // Dynamic sitemap.xml generator
 // Static pages: NO lastmod (tells Google these are evergreen, don't show dates)
 // Dynamic pages: WITH lastmod (blog posts, plants get proper date indexing)
@@ -30855,6 +31837,20 @@ app.get('/sitemap.xml', async (req, res) => {
 
   // Build sitemap XML - generate URLs for each language
   let urls = ''
+
+  // Sister app: Aphydle (daily plant guessing game) hosted on aphydle.<primary>.
+  // Top priority cross-link so crawlers discover the second property.
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
+  if (aphydleOrigin) {
+    const aphydleHref = `${aphydleOrigin}/`
+    urls += `  <url>
+    <loc>${aphydleHref}</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <xhtml:link rel="alternate" hreflang="x-default" href="${aphydleHref}" />
+  </url>\n`
+  }
+
   for (const lang of languages) {
     urls += staticPages.map(page => `  <url>
     <loc>${langUrl(page.loc, lang)}</loc>
@@ -31113,6 +32109,7 @@ ${urls}
 // Analogous to sitemap.xml but optimized for LLM consumption.
 app.get('/llms-full.txt', async (req, res) => {
   const siteUrl = (process.env.PLANTSWIPE_SITE_URL || process.env.SITE_URL || 'https://aphylia.app').replace(/\/+$/, '')
+  const aphydleOrigin = deriveAphydleOrigin(siteUrl)
   const now = new Date().toISOString()
   const db = supabaseServiceClient || supabaseServer
 
@@ -31122,6 +32119,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`# Website: ${siteUrl}`)
   lines.push(`# Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`# LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`# Sister app — Aphydle (daily plant guessing game): ${aphydleOrigin}/`)
+  }
   lines.push('')
   lines.push('> This file is dynamically generated from the Aphylia database.')
   lines.push('> It lists every plant with key care data, all blog posts, public gardens, public profiles, and public bookmark collections.')
@@ -31419,6 +32419,9 @@ app.get('/llms-full.txt', async (req, res) => {
   lines.push(`Website: ${siteUrl}`)
   lines.push(`Sitemap: ${siteUrl}/sitemap.xml`)
   lines.push(`LLM instructions: ${siteUrl}/llms.txt`)
+  if (aphydleOrigin) {
+    lines.push(`Sister app — Aphydle: ${aphydleOrigin}/`)
+  }
   lines.push(`Contact: ${siteUrl}/contact`)
 
   res.setHeader('Content-Type', 'text/plain; charset=utf-8')
@@ -32311,7 +33314,18 @@ async function generateCrawlerHtml(req, pagePath) {
           family: plant?.family,
           plantType: plant?.plant_type,
           tags: plant?.plant_tags,
-          error: plantError?.message
+          error: plantError?.message,
+          // Extra fields used for FAQPage JSON-LD schema
+          careLevel: Array.isArray(plant?.care_level) ? plant?.care_level[0] : (plant?.care_level || null),
+          sunlight: Array.isArray(plant?.sunlight) ? plant?.sunlight[0] : (plant?.sunlight || null),
+          soilAdvice: plant?.soil_advice || null,
+          fertilizerAdvice: plant?.fertilizer_advice || null,
+          pruningAdvice: plant?.pruning_advice || null,
+          sowingAdvice: plant?.sowing_advice || null,
+          toxicityPets: plant?.toxicity_pets || null,
+          toxicityHuman: plant?.toxicity_human || null,
+          livingSpace: Array.isArray(plant?.living_space) ? plant?.living_space : null,
+          presentation: plant?.presentation || null,
         }
         console.log(`[ssr] Plant query result: data=${plant ? 'found' : 'null'}, error=${plantError ? plantError.message || 'unknown error' : 'none'}`)
         if (plantError) {
@@ -33531,6 +34545,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Static pages with enhanced previews
     else if (effectivePath[0] === 'about' || pagePath === '/about') {
+      req._ssrDebug.matchedRoute = 'about'
       title = `🌱 ${tr.aboutTitle}`
       description = tr.aboutDesc
       pageContent = `
@@ -33561,6 +34576,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     else if (effectivePath[0] === 'search' && effectivePath[1] === 'categories') {
       // Categories page — distinct from the search page
+      req._ssrDebug.matchedRoute = 'categories'
       title = `📚 ${tr.categoriesTitle} | Aphylia`
       description = tr.categoriesDesc
 
@@ -33581,6 +34597,9 @@ async function generateCrawlerHtml(req, pagePath) {
         { name: tr.catFern, desc: tr.catFernDesc, params: '?type=fern', icon: '🌿' },
         { name: tr.catAquatic, desc: tr.catAquaticDesc, params: '?habitat=aquatic', icon: '💧' },
       ]
+
+      // Stash category items for ItemList JSON-LD rich-results in the schema builder
+      req._ssrDebug.routeData = { categoryItems }
 
       pageContent = `
         <article>
@@ -33625,7 +34644,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plants) searchPopularPlants = plants
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'search'
+      req._ssrDebug.routeData = { popularPlants: searchPopularPlants }
+
       title = `🔍 ${tr.searchTitle} | Aphylia`
       description = tr.searchDesc
       pageContent = `
@@ -33659,6 +34681,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
 
     else if (effectivePath[0] === 'blog' && !effectivePath[1]) {
+      req._ssrDebug.matchedRoute = 'blog_listing'
       title = `📚 ${tr.blogTitle} - ${tr.blogTagline}`
       description = tr.blogDesc
 
@@ -33673,6 +34696,9 @@ async function generateCrawlerHtml(req, pagePath) {
             .limit(10),
           'blog_listing'
         )
+
+        // Stash recent posts for Blog/ItemList JSON-LD rich-results
+        req._ssrDebug.routeData = { posts: posts || [] }
 
         if (posts?.length) {
           // Use the most recent post's cover image if available
@@ -33742,7 +34768,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (gardens) listGardens = gardens
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'gardens_listing'
+      req._ssrDebug.routeData = { gardens: listGardens }
+
       title = `🏡 ${tr.gardensTitle} | Aphylia`
       description = tr.gardensDesc
       pageContent = `
@@ -33789,7 +34818,10 @@ async function generateCrawlerHtml(req, pagePath) {
           if (plants) discoveryPlants = plants
         }
       } catch { }
-      
+
+      req._ssrDebug.matchedRoute = 'discovery'
+      req._ssrDebug.routeData = { discoveryPlants }
+
       title = `🎴 ${tr.discoveryTitle}`
       description = tr.discoveryDesc
       pageContent = `
@@ -33824,6 +34856,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Pricing page
     else if (effectivePath[0] === 'pricing') {
+      req._ssrDebug.matchedRoute = 'pricing'
       title = `💎 ${tr.pricingTitle}`
       description = tr.pricingDesc
       pageContent = `
@@ -33859,6 +34892,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Download page
     else if (effectivePath[0] === 'download') {
+      req._ssrDebug.matchedRoute = 'download'
       title = `📲 ${tr.downloadTitle}`
       description = tr.downloadDesc
       pageContent = `
@@ -33889,6 +34923,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Terms page
     else if (effectivePath[0] === 'terms') {
+      req._ssrDebug.matchedRoute = 'terms'
       const dateLocales = { en: 'en-US', fr: 'fr-FR', es: 'es-ES', de: 'de-DE', it: 'it-IT', pt: 'pt-BR', nl: 'nl-NL', pl: 'pl-PL', ru: 'ru-RU', ja: 'ja-JP', ko: 'ko-KR', zh: 'zh-CN' }
       title = `📜 ${tr.termsTitle} | Aphylia`
       description = tr.termsDesc
@@ -33917,6 +34952,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Contact page
     else if (effectivePath[0] === 'contact' && effectivePath[1] === 'business') {
+      req._ssrDebug.matchedRoute = 'contact_business'
       title = `🤝 ${tr.businessTitle} | Aphylia`
       description = tr.businessDesc
       pageContent = `
@@ -33942,6 +34978,7 @@ async function generateCrawlerHtml(req, pagePath) {
     }
 
     else if (effectivePath[0] === 'contact') {
+      req._ssrDebug.matchedRoute = 'contact'
       title = `💬 ${tr.contactTitle}`
       description = tr.contactDesc
       pageContent = `
@@ -33971,6 +35008,7 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Privacy page
     else if (effectivePath[0] === 'privacy') {
+      req._ssrDebug.matchedRoute = 'privacy'
       title = `🔒 ${tr.privacyTitle}`
       description = tr.privacyDesc
       pageContent = `
@@ -34630,99 +35668,493 @@ async function generateCrawlerHtml(req, pagePath) {
     keywords = 'aphylia, plant collection, bookmarks, saved plants, plant list'
   }
 
-  // Build JSON-LD structured data for search engines
-  let jsonLdSchema = null
+  // Build JSON-LD structured data for search engines.
+  // We emit an array of schemas: a route-specific primary schema plus a
+  // BreadcrumbList where the route has a meaningful navigation hierarchy.
+  // BreadcrumbList enables breadcrumb rich-results in SERPs (CTR uplift).
+  const jsonLdSchemas = []
+  const siteUrlNoTrailing = siteUrl.replace(/\/+$/, '')
+  const buildBreadcrumb = (items) => ({
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: items.map((it, idx) => ({
+      '@type': 'ListItem',
+      position: idx + 1,
+      name: it.name,
+      item: it.item,
+    })),
+  })
+  // Localised section labels used in breadcrumbs
+  const crumbLabel = (key) => {
+    const labels = {
+      home: { en: 'Home', fr: 'Accueil' },
+      plants: { en: 'Plants', fr: 'Plantes' },
+      blog: { en: 'Blog', fr: 'Blog' },
+      gardens: { en: 'Gardens', fr: 'Jardins' },
+      community: { en: 'Community', fr: 'Communauté' },
+      collections: { en: 'Collections', fr: 'Collections' },
+    }
+    return labels[key]?.[detectedLang] || labels[key]?.en || key
+  }
+
   if (req._ssrDebug?.matchedRoute === 'plant' && req._ssrDebug?.queryResults?.plant?.found) {
     const plantData = req._ssrDebug.queryResults.plant
-    jsonLdSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'Product',
+    // Plant pages are care guides, not commerce listings. Use Article (TechArticle)
+    // with the plant as the `about` Thing/Taxon. Avoids the misleading Product+Offer
+    // markup that Google flags as structured-data spam when no real offer exists.
+    const plantThing = {
+      '@type': 'Thing',
+      additionalType: 'https://schema.org/Taxon',
       name: plantData.name || 'Plant',
-      description: description,
-      image: image || undefined,
-      brand: {
-        '@type': 'Brand',
-        name: 'Aphylia'
-      },
-      offers: {
-        '@type': 'Offer',
-        price: '0',
-        priceCurrency: 'USD',
-        availability: 'https://schema.org/InStock'
-      }
+      ...(plantData.scientificName ? { alternateName: plantData.scientificName } : {}),
+      ...(image ? { image } : {}),
+      url: canonicalUrl,
     }
-    if (plantData.scientificName) {
-      jsonLdSchema.alternateName = plantData.scientificName
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'TechArticle',
+      headline: title,
+      description: description,
+      ...(image ? { image } : {}),
+      inLanguage: detectedLang,
+      about: plantThing,
+      author: { '@type': 'Organization', name: 'Aphylia', url: siteUrl },
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: { '@type': 'ImageObject', url: `${siteUrl}/icons/icon-512x512.png` },
+      },
+      mainEntityOfPage: { '@type': 'WebPage', '@id': canonicalUrl },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: `${siteUrlNoTrailing}/search` },
+      { name: plantData.name || 'Plant', item: canonicalUrl },
+    ]))
+    // FAQPage schema — enables FAQ rich results in SERPs, significantly lifting CTR.
+    // Build questions from the care fields already fetched for the page.
+    const plantName = plantData.name || 'this plant'
+    const faqL = detectedLang === 'fr' ? {
+      qWhat: `Qu'est-ce que ${plantName} ?`,
+      qSunlight: `De combien de lumière ${plantName} a-t-il besoin ?`,
+      qCare: `${plantName} est-il facile à entretenir ?`,
+      qSoil: `Quel sol convient à ${plantName} ?`,
+      qFertilizer: `Comment fertiliser ${plantName} ?`,
+      qPruning: `Comment tailler ${plantName} ?`,
+      qSowing: `Comment semer ${plantName} ?`,
+      qToxicPets: `${plantName} est-il toxique pour les animaux ?`,
+      qToxicHuman: `${plantName} est-il toxique pour les humains ?`,
+      qIndoor: `${plantName} peut-il être cultivé en intérieur ?`,
+      aToxicSafe: 'Non, cette plante n\'est pas considérée comme toxique pour les animaux de compagnie.',
+      aToxicCaution: (lvl) => `Attention : niveau de toxicité ${lvl.replace(/_/g, ' ')}. Tenir hors de portée des animaux.`,
+      aToxicHumanSafe: 'Cette plante n\'est pas considérée comme toxique pour les humains.',
+      aToxicHumanCaution: (lvl) => `Attention : ${lvl.replace(/_/g, ' ')}. Déconseillé à la consommation directe.`,
+      aIndoorYes: 'Oui, cette plante peut être cultivée en intérieur.',
+      aIndoorOutdoor: 'Cette plante convient mieux à la culture en extérieur.',
+      aIndoorBoth: 'Cette plante peut se cultiver aussi bien en intérieur qu\'en extérieur.',
+    } : {
+      qWhat: `What is ${plantName}?`,
+      qSunlight: `How much sunlight does ${plantName} need?`,
+      qCare: `Is ${plantName} easy to care for?`,
+      qSoil: `What type of soil does ${plantName} need?`,
+      qFertilizer: `How should I fertilize ${plantName}?`,
+      qPruning: `How do I prune ${plantName}?`,
+      qSowing: `How do I sow ${plantName}?`,
+      qToxicPets: `Is ${plantName} toxic to pets?`,
+      qToxicHuman: `Is ${plantName} toxic to humans?`,
+      qIndoor: `Can ${plantName} be grown indoors?`,
+      aToxicSafe: 'No, this plant is not considered toxic to pets.',
+      aToxicCaution: (lvl) => `Caution: toxicity level is ${lvl.replace(/_/g, ' ')}. Keep away from pets and children.`,
+      aToxicHumanSafe: 'This plant is not considered toxic to humans.',
+      aToxicHumanCaution: (lvl) => `Caution: ${lvl.replace(/_/g, ' ')}. Not recommended for direct consumption without guidance.`,
+      aIndoorYes: 'Yes, this plant can be grown indoors.',
+      aIndoorOutdoor: 'This plant is best suited for outdoor growing.',
+      aIndoorBoth: 'This plant can be grown both indoors and outdoors.',
+    }
+    const faqPairs = []
+    if (plantData.presentation) {
+      faqPairs.push({ q: faqL.qWhat, a: plantData.presentation.slice(0, 500).trim() })
+    }
+    if (plantData.sunlight) {
+      const lightKey = (plantData.sunlight || '').replace(/_/g, ' ').toLowerCase()
+      const lightLabel = tr.light[lightKey]
+      faqPairs.push({ q: faqL.qSunlight, a: lightLabel ? lightLabel.replace(/^[^\w]+/, '') + '.' : `${plantName} needs ${lightKey}.` })
+    }
+    if (plantData.careLevel) {
+      const careKey = (plantData.careLevel || '').toLowerCase()
+      const careLabel = tr.difficulty[careKey]
+      faqPairs.push({ q: faqL.qCare, a: careLabel ? careLabel.replace(/^[^\w]+/, '') + '.' : `Care level: ${careKey}.` })
+    }
+    if (plantData.soilAdvice) {
+      faqPairs.push({ q: faqL.qSoil, a: plantData.soilAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.fertilizerAdvice) {
+      faqPairs.push({ q: faqL.qFertilizer, a: plantData.fertilizerAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.pruningAdvice) {
+      faqPairs.push({ q: faqL.qPruning, a: plantData.pruningAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.sowingAdvice) {
+      faqPairs.push({ q: faqL.qSowing, a: plantData.sowingAdvice.slice(0, 500).trim() })
+    }
+    if (plantData.toxicityPets) {
+      const lvl = (plantData.toxicityPets || '').toLowerCase()
+      const safe = lvl === 'not toxic' || lvl === 'non toxic' || lvl === 'none' || lvl === 'safe'
+      faqPairs.push({ q: faqL.qToxicPets, a: safe ? faqL.aToxicSafe : faqL.aToxicCaution(plantData.toxicityPets) })
+    }
+    if (plantData.toxicityHuman) {
+      const lvl = (plantData.toxicityHuman || '').toLowerCase()
+      const safe = lvl === 'not toxic' || lvl === 'non toxic' || lvl === 'none' || lvl === 'safe'
+      faqPairs.push({ q: faqL.qToxicHuman, a: safe ? faqL.aToxicHumanSafe : faqL.aToxicHumanCaution(plantData.toxicityHuman) })
+    }
+    if (plantData.livingSpace && Array.isArray(plantData.livingSpace) && plantData.livingSpace.length > 0) {
+      const spaces = plantData.livingSpace.map(s => (s || '').toLowerCase())
+      const hasIndoor = spaces.some(s => s.includes('indoor') || s.includes('intérieur') || s === 'indoor')
+      const hasOutdoor = spaces.some(s => s.includes('outdoor') || s.includes('extérieur') || s === 'outdoor')
+      const a = (hasIndoor && hasOutdoor) ? faqL.aIndoorBoth : hasIndoor ? faqL.aIndoorYes : faqL.aIndoorOutdoor
+      faqPairs.push({ q: faqL.qIndoor, a })
+    }
+    if (faqPairs.length >= 2) {
+      jsonLdSchemas.push({
+        '@context': 'https://schema.org',
+        '@type': 'FAQPage',
+        mainEntity: faqPairs.map(({ q, a }) => ({
+          '@type': 'Question',
+          name: q,
+          acceptedAnswer: { '@type': 'Answer', text: a },
+        })),
+      })
     }
   } else if (req._ssrDebug?.matchedRoute === 'blog_post') {
-    jsonLdSchema = {
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'BlogPosting',
       headline: title,
       description: description,
       image: image || undefined,
+      inLanguage: detectedLang,
       author: {
         '@type': 'Organization',
-        name: 'Aphylia'
+        name: 'Aphylia',
       },
       publisher: {
         '@type': 'Organization',
         name: 'Aphylia',
         logo: {
           '@type': 'ImageObject',
-          url: `${siteUrl}/icons/icon-512x512.png`
-        }
+          url: `${siteUrl}/icons/icon-512x512.png`,
+        },
       },
       mainEntityOfPage: {
         '@type': 'WebPage',
-        '@id': canonicalUrl
-      }
-    }
+        '@id': canonicalUrl,
+      },
+    })
+    const blogTitle = title.split('|')[0].replace(/[📖]/g, '').trim() || 'Post'
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('blog'), item: `${siteUrlNoTrailing}/blog` },
+      { name: blogTitle, item: canonicalUrl },
+    ]))
   } else if (req._ssrDebug?.matchedRoute === 'profile') {
-    jsonLdSchema = {
+    const personName = title.replace(/🌱\s*/, '').split('|')[0].trim()
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'ProfilePage',
+      inLanguage: detectedLang,
       mainEntity: {
         '@type': 'Person',
-        name: title.replace(/🌱\s*/, '').split('|')[0].trim(),
+        name: personName,
         description: description,
         image: image || undefined,
-        url: canonicalUrl
-      }
-    }
+        url: canonicalUrl,
+      },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('community'), item: `${siteUrlNoTrailing}/` },
+      { name: personName, item: canonicalUrl },
+    ]))
   } else if (req._ssrDebug?.matchedRoute === 'garden') {
-    jsonLdSchema = {
-      '@context': 'https://schema.org',
-      '@type': 'Place',
-      name: title.replace(/[🌳🌿🌱🏡]\s*/, '').split('-')[0].trim(),
-      description: description,
-      image: image || undefined,
-      url: canonicalUrl
-    }
-  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
-    jsonLdSchema = {
+    const gardenName = title.replace(/[🌳🌿🌱🏡]\s*/g, '').split('-')[0].trim()
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'CollectionPage',
-      name: title.replace(/🔖\s*/, '').split('-')[0].trim(),
+      name: gardenName,
       description: description,
       image: image || undefined,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('gardens'), item: `${siteUrlNoTrailing}/gardens` },
+      { name: gardenName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'bookmark') {
+    const bookmarkName = title.replace(/🔖\s*/, '').split('-')[0].trim()
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: bookmarkName,
+      description: description,
+      image: image || undefined,
+      inLanguage: detectedLang,
       url: canonicalUrl,
       ...(req._ssrDebug?.bookmarkOwnerName ? {
         author: {
           '@type': 'Person',
-          name: req._ssrDebug.bookmarkOwnerName
-        }
+          name: req._ssrDebug.bookmarkOwnerName,
+        },
       } : {}),
       ...(req._ssrDebug?.bookmarkCreatedAt ? {
-        dateCreated: new Date(req._ssrDebug.bookmarkCreatedAt).toISOString()
+        dateCreated: new Date(req._ssrDebug.bookmarkCreatedAt).toISOString(),
       } : {}),
       ...(req._ssrDebug?.bookmarkPlantCount != null ? {
-        numberOfItems: req._ssrDebug.bookmarkPlantCount
-      } : {})
+        numberOfItems: req._ssrDebug.bookmarkPlantCount,
+      } : {}),
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('collections'), item: `${siteUrlNoTrailing}/` },
+      { name: bookmarkName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'categories') {
+    // Plant categories landing page → CollectionPage with an ItemList of
+    // category links. ItemList is eligible for list-style rich results in
+    // SERPs and gives Google an explicit map of the encyclopedia's facets.
+    const items = Array.isArray(req._ssrDebug?.routeData?.categoryItems)
+      ? req._ssrDebug.routeData.categoryItems
+      : []
+    const categoriesName = (detectedLang === 'fr') ? 'Catégories de plantes' : 'Plant Categories'
+    const itemList = {
+      '@type': 'ItemList',
+      name: categoriesName,
+      numberOfItems: items.length,
+      itemListElement: items.map((cat, idx) => ({
+        '@type': 'ListItem',
+        position: idx + 1,
+        name: cat.name,
+        url: `${siteUrlNoTrailing}/search${cat.params || ''}`,
+        ...(cat.desc ? { description: cat.desc } : {}),
+      })),
     }
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: categoriesName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+      mainEntity: itemList,
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: `${siteUrlNoTrailing}/search` },
+      { name: categoriesName, item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'search') {
+    // Encyclopedia search landing → CollectionPage with sitelinks SearchAction.
+    // Surfacing popular plants as an ItemList builds internal-link equity for
+    // detail pages and helps Google understand the page's intent.
+    const popular = Array.isArray(req._ssrDebug?.routeData?.popularPlants)
+      ? req._ssrDebug.routeData.popularPlants
+      : []
+    const searchName = (detectedLang === 'fr') ? 'Encyclopédie des plantes' : 'Plant Encyclopedia'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: searchName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: `${siteUrlNoTrailing}/search?q={search_term_string}`,
+        'query-input': 'required name=search_term_string',
+      },
+    }
+    if (popular.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: (detectedLang === 'fr') ? 'Plantes populaires' : 'Popular Plants',
+        numberOfItems: popular.length,
+        itemListElement: popular.map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: p.name,
+          url: `${siteUrlNoTrailing}/plants/${encodeURIComponent(p.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'blog_listing') {
+    // Blog index → Blog schema with embedded BlogPosting items. Helps Google
+    // recognise this as a content hub and surface fresh posts as sitelinks.
+    const posts = Array.isArray(req._ssrDebug?.routeData?.posts)
+      ? req._ssrDebug.routeData.posts
+      : []
+    const blogName = (detectedLang === 'fr') ? 'Blog Aphylia' : 'Aphylia Blog'
+    const blogSchema = {
+      '@context': 'https://schema.org',
+      '@type': 'Blog',
+      name: blogName,
+      description: description,
+      url: canonicalUrl,
+      inLanguage: detectedLang,
+      publisher: {
+        '@type': 'Organization',
+        name: 'Aphylia',
+        logo: { '@type': 'ImageObject', url: `${siteUrl}/icons/icon-512x512.png` },
+      },
+    }
+    if (posts.length) {
+      blogSchema.blogPost = posts.map((p) => {
+        const postUrl = `${siteUrlNoTrailing}/blog/${encodeURIComponent(p.id)}`
+        const datePublished = p.published_at ? new Date(p.published_at).toISOString() : undefined
+        return {
+          '@type': 'BlogPosting',
+          headline: p.title,
+          ...(p.excerpt ? { description: p.excerpt } : {}),
+          ...(p.cover_image_url ? { image: ensureAbsoluteUrl(p.cover_image_url) } : {}),
+          ...(datePublished ? { datePublished } : {}),
+          url: postUrl,
+          mainEntityOfPage: { '@type': 'WebPage', '@id': postUrl },
+          author: { '@type': 'Organization', name: 'Aphylia' },
+        }
+      })
+    }
+    jsonLdSchemas.push(blogSchema)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('blog'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'gardens_listing') {
+    const gardens = Array.isArray(req._ssrDebug?.routeData?.gardens)
+      ? req._ssrDebug.routeData.gardens
+      : []
+    const gardensName = (detectedLang === 'fr') ? 'Jardins de la communauté' : 'Community Gardens'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: gardensName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    }
+    if (gardens.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: gardensName,
+        numberOfItems: gardens.length,
+        itemListElement: gardens.map((g, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: g.name || 'Garden',
+          url: `${siteUrlNoTrailing}/garden/${encodeURIComponent(g.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('gardens'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'discovery') {
+    const discoveryPlants = Array.isArray(req._ssrDebug?.routeData?.discoveryPlants)
+      ? req._ssrDebug.routeData.discoveryPlants
+      : []
+    const discoveryName = (detectedLang === 'fr') ? 'Découverte de plantes' : 'Plant Discovery'
+    const collectionPage = {
+      '@context': 'https://schema.org',
+      '@type': 'CollectionPage',
+      name: discoveryName,
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    }
+    if (discoveryPlants.length) {
+      collectionPage.mainEntity = {
+        '@type': 'ItemList',
+        name: discoveryName,
+        numberOfItems: discoveryPlants.length,
+        itemListElement: discoveryPlants.map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          name: p.name,
+          url: `${siteUrlNoTrailing}/plants/${encodeURIComponent(p.id)}`,
+        })),
+      }
+    }
+    jsonLdSchemas.push(collectionPage)
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: crumbLabel('plants'), item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'about') {
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'AboutPage',
+      name: title.replace(/^[^\w]+/u, '').trim() || 'About Aphylia',
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    })
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'À Propos' : 'About', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'contact' || req._ssrDebug?.matchedRoute === 'contact_business') {
+    const isBusiness = req._ssrDebug.matchedRoute === 'contact_business'
+    const contactLabel = (detectedLang === 'fr') ? 'Contact' : 'Contact'
+    const businessLabel = (detectedLang === 'fr') ? 'Partenariats' : 'Business'
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'ContactPage',
+      name: title.replace(/^[^\w]+/u, '').trim() || (isBusiness ? 'Business Contact' : 'Contact'),
+      description: description,
+      inLanguage: detectedLang,
+      url: canonicalUrl,
+      isPartOf: { '@type': 'WebSite', name: 'Aphylia', url: siteUrl },
+    })
+    const crumbs = [
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: contactLabel, item: isBusiness ? `${siteUrlNoTrailing}/contact` : canonicalUrl },
+    ]
+    if (isBusiness) crumbs.push({ name: businessLabel, item: canonicalUrl })
+    jsonLdSchemas.push(buildBreadcrumb(crumbs))
+  } else if (req._ssrDebug?.matchedRoute === 'pricing') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Tarifs' : 'Pricing', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'download') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Télécharger' : 'Download', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'terms') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Conditions' : 'Terms', item: canonicalUrl },
+    ]))
+  } else if (req._ssrDebug?.matchedRoute === 'privacy') {
+    jsonLdSchemas.push(buildBreadcrumb([
+      { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
+      { name: (detectedLang === 'fr') ? 'Confidentialité' : 'Privacy', item: canonicalUrl },
+    ]))
   } else {
-    // Generic website schema
-    jsonLdSchema = {
+    // Generic website schema (homepage / unmatched routes) - sitelinks searchbox
+    jsonLdSchemas.push({
       '@context': 'https://schema.org',
       '@type': 'WebSite',
       name: 'Aphylia',
@@ -34731,9 +36163,9 @@ async function generateCrawlerHtml(req, pagePath) {
       potentialAction: {
         '@type': 'SearchAction',
         target: `${siteUrl}/search?q={search_term_string}`,
-        'query-input': 'required name=search_term_string'
-      }
-    }
+        'query-input': 'required name=search_term_string',
+      },
+    })
   }
 
   // Build the full HTML page - completely self-contained, no external JS/CSS dependencies
@@ -34791,9 +36223,9 @@ async function generateCrawlerHtml(req, pagePath) {
   <link rel="apple-touch-icon" href="${siteUrl}/icons/icon-192x192.png">
   
   <!-- JSON-LD Structured Data -->
-  ${jsonLdSchema ? `<script type="application/ld+json">
-${safeJsonStringify(jsonLdSchema)}
-  </script>` : ''}
+  ${jsonLdSchemas.map(schema => `<script type="application/ld+json">
+${safeJsonStringify(schema)}
+  </script>`).join('\n  ')}
   
   <style>
     * { box-sizing: border-box; }

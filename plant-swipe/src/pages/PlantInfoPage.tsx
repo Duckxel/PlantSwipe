@@ -105,6 +105,15 @@ import {
 } from '@/lib/composition'
 import worldMapLight from '@/assets/world-map-light.svg'
 import worldMapDark from '@/assets/world-map-dark.svg'
+import {
+  ORIGIN_MAP_URL,
+  ORIGIN_MAP_VIEWBOX,
+  ORIGIN_MAP_VIEW_X,
+  ORIGIN_MAP_VIEW_Y,
+  ORIGIN_MAP_VIEW_W,
+  ORIGIN_MAP_VIEW_H,
+  resolveOriginPins,
+} from '@/lib/originCoords'
 /* eslint-disable @typescript-eslint/no-explicit-any -- dynamic plant info API responses */
 
 type WaterSchedules = PlantWateringSchedule[]
@@ -983,11 +992,11 @@ const PlantInfoPage: React.FC = () => {
           <ChevronLeft className="h-5 w-5" />
         </Button>
         <div className="flex flex-wrap items-center justify-end gap-1.5 sm:gap-2">
-          {/* Admin stats badge — next to Share */}
+          {/* Admin stats — inline next to the Report button on sm+, rendered as a floating pill over the hero on mobile */}
           {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
             <Badge
               variant="secondary"
-              className="rounded-full px-3 py-1.5 text-xs font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-3"
+              className="hidden sm:flex rounded-full px-3 py-1 text-[11px] font-medium bg-stone-100 text-stone-600 dark:bg-[#2a2a2e] dark:text-stone-300 border border-stone-200 dark:border-[#3e3e42] items-center gap-3 h-10"
             >
               {impressionCount !== null && (
                 <span className="flex items-center gap-1">
@@ -1092,6 +1101,7 @@ const PlantInfoPage: React.FC = () => {
           )}
         </div>
       </div>
+
       {/* Check if plant is "In Progress" - show construction message for regular users, full page with disclaimer for privileged users */}
       {(() => {
         const isInConstruction = plant.status === 'in_progress'
@@ -1191,13 +1201,35 @@ const PlantInfoPage: React.FC = () => {
                 </Badge>
               </div>
             )}
-            <PlantDetails
-              plant={plant}
-              liked={likedIds.includes(plant.id)}
-              onToggleLike={toggleLiked}
-              onBookmark={handleBookmark}
-              isBookmarked={isBookmarked}
-            />
+            <div className="relative">
+              <PlantDetails
+                plant={plant}
+                liked={likedIds.includes(plant.id)}
+                onToggleLike={toggleLiked}
+                onBookmark={handleBookmark}
+                isBookmarked={isBookmarked}
+              />
+              {/* Mobile-only: admin stats overlay pinned to the hero card top-right */}
+              {profile?.is_admin && (impressionCount !== null || likesCount !== null) && (
+                <Badge
+                  variant="secondary"
+                  className="sm:hidden absolute top-3 right-3 z-20 rounded-full px-2.5 py-1 text-[11px] font-medium bg-white/90 dark:bg-[#1a1a1d]/90 backdrop-blur text-stone-700 dark:text-stone-200 border border-stone-200 dark:border-[#3e3e42] flex items-center gap-2.5 shadow-sm"
+                >
+                  {impressionCount !== null && (
+                    <span className="flex items-center gap-1">
+                      <ChartNoAxesColumn className="h-3 w-3" />
+                      {formatCount(impressionCount)}
+                    </span>
+                  )}
+                  {likesCount !== null && (
+                    <span className="flex items-center gap-1">
+                      <Heart className="h-3 w-3" />
+                      {formatCount(likesCount)}
+                    </span>
+                  )}
+                </Badge>
+              )}
+            </div>
             {Boolean(profile?.parent) && (
               <ToxicityWarningBanner
                 toxicityHuman={plant.toxicityHuman}
@@ -2708,102 +2740,20 @@ const ClimateCard: React.FC<{ climate: string[] | undefined; t: (key: string, op
   )
 }
 
-// ── Origin Card (SVG world map with pins — same approach as admin dashboard) ──
-const originCountryCoords: Record<string, [number, number]> = {
-  "United States": [215.6, 272.1], "United Kingdom": [472.2, 241.3], France: [482.6, 264.6],
-  Germany: [502.1, 249.1], Netherlands: [490.4, 249.1], Canada: [259.8, 225.5], Australia: [828.6, 491.3],
-  Brazil: [334.6, 444.6], India: [686.5, 336.7], China: [738.3, 296.1], Japan: [825.1, 291.9],
-  "South Korea": [801.7, 295.8], Russia: [686.2, 221.3], Italy: [508.5, 272.4], Spain: [473.3, 283.3],
-  Mexico: [207.4, 334.4], Argentina: [313.7, 519.8], Sweden: [513.7, 216.2], Norway: [502.1, 215.4],
-  Denmark: [498.2, 233.5], Finland: [534.0, 210.2], Poland: [521.5, 245.2], Switzerland: [498.2, 264.6],
-  Austria: [513.7, 264.6], Belgium: [490.4, 249.1], Portugal: [459.2, 284.1], Ireland: [459.2, 241.3],
-  "Czech Republic": [513.7, 256.9], Czechia: [513.7, 256.9], Romania: [537.1, 266.6], Greece: [537.1, 280.2],
-  Turkey: [564.7, 288.0], "South Africa": [542.7, 499.9], Nigeria: [499.0, 379.7], Egypt: [553.4, 326.2],
-  Kenya: [579.9, 408.6], Morocco: [461.2, 311.4], Israel: [568.2, 311.4], "Saudi Arabia": [594.2, 333.6],
-  "United Arab Emirates": [618.8, 334.7], Thailand: [747.2, 364.3], Vietnam: [758.9, 356.1],
-  Indonesia: [801.4, 417.6], Philippines: [801.7, 361.9], Malaysia: [776.4, 400.9],
-  Singapore: [776.4, 400.9], "New Zealand": [908.1, 534.5], Colombia: [280.8, 398.6],
-  Chile: [298.2, 523.3], Peru: [276.3, 439.8], Ukraine: [550.9, 255.1], Hungary: [521.5, 264.6],
-  Croatia: [513.7, 264.6], Bulgaria: [544.9, 272.4], Serbia: [529.3, 272.4], Slovakia: [525.4, 256.9],
-  Lithuania: [533.2, 233.5], Latvia: [533.2, 233.5], Estonia: [537.1, 225.7], Iceland: [439.8, 210.2],
-  Luxembourg: [490.4, 249.1], Taiwan: [794.0, 334.7], Pakistan: [653.8, 315.2], Bangladesh: [716.1, 334.7],
-  "Sri Lanka": [692.8, 381.4], Nepal: [692.8, 319.1], Algeria: [483.9, 321.6], Tunisia: [498.2, 299.7],
-  Ghana: [474.8, 385.3], Senegal: [439.8, 365.8], Ethiopia: [583.8, 381.4], Tanzania: [570.3, 430.9],
-  "Côte d'Ivoire": [464.0, 385.3], Cameroon: [504.0, 391.0], "Democratic Republic of the Congo": [542.0, 415.0],
-  Angola: [524.0, 446.0], Mozambique: [570.0, 470.0], Zimbabwe: [553.0, 468.0], Uganda: [570.3, 408.6],
-  Rwanda: [565.0, 415.0], "Ivory Coast": [464.0, 385.3], Mali: [475.0, 355.0], "Burkina Faso": [478.0, 368.0],
-  Niger: [500.0, 355.0], Chad: [520.0, 360.0], Sudan: [560.0, 355.0], Libya: [520.0, 320.0],
-  Venezuela: [298.0, 381.0], Ecuador: [265.0, 415.0], Bolivia: [304.0, 465.0], Paraguay: [318.0, 480.0],
-  Uruguay: [326.0, 508.0], "Costa Rica": [237.0, 370.0], Panama: [250.0, 375.0], Guatemala: [220.0, 350.0],
-  Honduras: [230.0, 354.0], "El Salvador": [223.0, 358.0], Nicaragua: [235.0, 362.0], Cuba: [252.0, 330.0],
-  "Dominican Republic": [278.0, 338.0], Jamaica: [261.0, 340.0], "Puerto Rico": [286.0, 338.0],
-  "Trinidad and Tobago": [298.0, 368.0], Haiti: [273.0, 338.0],
-  Iraq: [590.0, 305.0], Iran: [618.0, 308.0], Afghanistan: [644.0, 305.0], Myanmar: [733.0, 348.0],
-  Cambodia: [756.0, 370.0], Laos: [750.0, 348.0], "North Korea": [801.0, 280.0], Mongolia: [740.0, 264.0],
-  Kazakhstan: [645.0, 260.0], Uzbekistan: [635.0, 275.0], Turkmenistan: [625.0, 285.0],
-  Kyrgyzstan: [658.0, 275.0], Tajikistan: [650.0, 285.0], Georgia: [568.0, 275.0], Armenia: [575.0, 280.0],
-  Azerbaijan: [580.0, 278.0], Jordan: [568.0, 318.0], Lebanon: [565.0, 305.0], Syria: [573.0, 298.0],
-  Kuwait: [600.0, 320.0], Bahrain: [607.0, 325.0], Qatar: [610.0, 328.0], Oman: [620.0, 345.0],
-  Yemen: [600.0, 350.0], "Papua New Guinea": [868.0, 430.0], Fiji: [920.0, 465.0],
-  Madagascar: [585.0, 470.0], Mauritius: [605.0, 468.0], Réunion: [600.0, 472.0],
-  "Bosnia and Herzegovina": [521.0, 272.0], Slovenia: [513.0, 264.0], "North Macedonia": [533.0, 275.0],
-  Albania: [529.0, 278.0], Montenegro: [525.0, 274.0], Kosovo: [530.0, 273.0], Moldova: [545.0, 258.0],
-  Belarus: [540.0, 240.0], "Hong Kong": [778.0, 332.0], Macau: [775.0, 335.0],
-}
-
-// Normalize a string for fuzzy country matching: lowercase, strip diacritics, remove extra punctuation
-const normalizeCountryName = (name: string): string =>
-  name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '') // strip diacritics (é→e, ô→o, etc.)
-    .toLowerCase()
-    .replace(/[_-]/g, ' ')           // underscores/hyphens → spaces
-    .replace(/\s+/g, ' ')            // collapse whitespace
-    .trim()
-
-// Pre-build a normalized lookup from the coordinates map
-const normalizedCoordsMap: Array<{ normalized: string; coords: [number, number] }> =
-  Object.entries(originCountryCoords).map(([country, coords]) => ({
-    normalized: normalizeCountryName(country),
-    coords,
-  }))
-
-// Try to match origin strings to country coords — handles formatting differences
-const matchOriginToCoords = (origin: string): [number, number] | null => {
-  const trimmed = origin.trim()
-  // 1. Direct match (fast path)
-  if (originCountryCoords[trimmed]) return originCountryCoords[trimmed]
-  // 2. Remove parenthetical region info: "China (northwest)" → "China"
-  const base = trimmed.replace(/\s*\(.*?\)\s*$/, '').trim()
-  if (originCountryCoords[base]) return originCountryCoords[base]
-  // 3. Normalized match (handles case, diacritics, hyphens, underscores)
-  const norm = normalizeCountryName(base)
-  for (const entry of normalizedCoordsMap) {
-    if (entry.normalized === norm) return entry.coords
-  }
-  // 4. Partial/contains match (e.g. "south africa" in "republic of south africa")
-  for (const entry of normalizedCoordsMap) {
-    if (entry.normalized.includes(norm) || norm.includes(entry.normalized)) {
-      return entry.coords
-    }
-  }
-  return null
-}
-
-const ORIGIN_MAP_URL = 'https://media.aphylia.app/UTILITY/admin/uploads/svg/worldlow-pixels-46c63cb3-22eb-45ec-be41-55843a3b1093.svg'
 
 const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: string[] | undefined; t: (key: string, options?: Record<string, string>) => string }> = ({ origin, originEnglish, t }) => {
   if (!origin || origin.length === 0) return null
 
-  // Always use English names for map coordinate matching
+  // Always use English names for map coordinate matching.
   const mapOrigins = originEnglish && originEnglish.length > 0 ? originEnglish : origin
+  const pins = resolveOriginPins(mapOrigins)
+  const hasPins = pins.length > 0
   const pinColor = '#10b981' // emerald-500
 
   return (
     <section className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-2.5 sm:p-3 relative overflow-hidden flex flex-col h-full">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(16,_185,129,_0.12),_transparent_55%)]" />
       <div className="relative flex flex-col h-full gap-2">
-        {/* Header */}
         <div className="flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
           <span className="relative flex items-center justify-center">
             <Globe2 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
@@ -2814,57 +2764,61 @@ const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: strin
           </span>
         </div>
 
-        {/* SVG World Map with origin pins */}
-        <div
-          className="relative w-full flex-1 min-h-[120px] rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-900/50 border border-stone-200/50 dark:border-stone-700/30"
-          style={{ aspectRatio: '820.44 / 501.3' }}
-        >
-          <svg
-            className="absolute inset-0 w-full h-full"
-            viewBox="103.51 165.78 820.44 501.3"
-            preserveAspectRatio="xMidYMid meet"
-            role="img"
-            aria-label="World map showing plant origins"
+        {hasPins ? (
+          <div
+            className="relative w-full flex-1 min-h-[120px] rounded-xl overflow-hidden bg-stone-50 dark:bg-stone-900/50 border border-stone-200/50 dark:border-stone-700/30"
+            style={{ aspectRatio: `${ORIGIN_MAP_VIEW_W} / ${ORIGIN_MAP_VIEW_H}` }}
           >
-            {/* World map background — light mode */}
-            <image
-              href={ORIGIN_MAP_URL}
-              x="103.51" y="165.78" width="820.44" height="501.3"
-              opacity={0.15}
+            <svg
+              className="absolute inset-0 w-full h-full"
+              viewBox={ORIGIN_MAP_VIEWBOX}
               preserveAspectRatio="xMidYMid meet"
-              className="dark:opacity-0"
-            />
-            {/* World map background — dark mode (inverted) */}
-            <image
-              href={ORIGIN_MAP_URL}
-              x="103.51" y="165.78" width="820.44" height="501.3"
-              opacity={0}
-              preserveAspectRatio="xMidYMid meet"
-              className="dark:opacity-30"
-              style={{ filter: 'invert(1) brightness(0.6)' }}
-            />
-            {/* Origin pins — always use English names for coordinate matching */}
-            {mapOrigins.map((o, i) => {
-              const label = typeof o === 'string' ? o.trim() : ''
-              if (!label) return null
-              const coords = matchOriginToCoords(label)
-              if (!coords) return null
-              return (
-                <g key={`${label}-${i}`}>
-                  {/* Pulse ring */}
-                  <circle cx={coords[0]} cy={coords[1]} r={12} fill={pinColor} opacity={0.15}>
+              role="img"
+              aria-label="World map showing plant origins"
+            >
+              <image
+                href={ORIGIN_MAP_URL}
+                x={ORIGIN_MAP_VIEW_X} y={ORIGIN_MAP_VIEW_Y}
+                width={ORIGIN_MAP_VIEW_W} height={ORIGIN_MAP_VIEW_H}
+                opacity={0.15}
+                preserveAspectRatio="xMidYMid meet"
+                className="dark:opacity-0"
+              />
+              <image
+                href={ORIGIN_MAP_URL}
+                x={ORIGIN_MAP_VIEW_X} y={ORIGIN_MAP_VIEW_Y}
+                width={ORIGIN_MAP_VIEW_W} height={ORIGIN_MAP_VIEW_H}
+                opacity={0}
+                preserveAspectRatio="xMidYMid meet"
+                className="dark:opacity-30"
+                style={{ filter: 'invert(1) brightness(0.6)' }}
+              />
+              {pins.map((pin, i) => (
+                <g key={`${pin.label}-${i}`}>
+                  <circle cx={pin.coords[0]} cy={pin.coords[1]} r={12} fill={pinColor} opacity={0.15}>
                     <animate attributeName="r" values="8;14;8" dur="3s" repeatCount="indefinite" />
                     <animate attributeName="opacity" values="0.2;0.05;0.2" dur="3s" repeatCount="indefinite" />
                   </circle>
-                  {/* Glow */}
-                  <circle cx={coords[0]} cy={coords[1]} r={7} fill={pinColor} opacity={0.25} />
-                  {/* Pin dot */}
-                  <circle cx={coords[0]} cy={coords[1]} r={4} fill={pinColor} opacity={0.95} stroke="white" strokeWidth={1.5} />
+                  <circle cx={pin.coords[0]} cy={pin.coords[1]} r={7} fill={pinColor} opacity={0.25} />
+                  <circle cx={pin.coords[0]} cy={pin.coords[1]} r={4} fill={pinColor} opacity={0.95} stroke="white" strokeWidth={1.5} />
                 </g>
-              )
-            })}
-          </svg>
-        </div>
+              ))}
+            </svg>
+          </div>
+        ) : (
+          /* No origin string resolves to a pin — show a badge instead of an empty world map. */
+          <div className="relative w-full flex-1 min-h-[120px] rounded-xl overflow-hidden bg-emerald-50/60 dark:bg-emerald-500/5 border border-emerald-200/60 dark:border-emerald-500/20 flex items-center justify-center text-center px-3 py-4">
+            <div>
+              <Globe2 className="mx-auto h-7 w-7 text-emerald-500/60 dark:text-emerald-400/60" />
+              <div className="mt-2 text-[10px] sm:text-[11px] uppercase tracking-widest text-emerald-700 dark:text-emerald-300 font-semibold">
+                {t('plantInfo:originCard.unmappedTitle', { defaultValue: 'Origin uncharted' })}
+              </div>
+              <div className="mt-1 text-[10px] sm:text-xs text-emerald-700/70 dark:text-emerald-200/70 leading-snug">
+                {t('plantInfo:originCard.unmappedHint', { defaultValue: 'Listed by region, not a specific country we can pin.' })}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Origin tags below map */}
         <div className="flex flex-wrap gap-1.5">

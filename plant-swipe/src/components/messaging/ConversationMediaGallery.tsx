@@ -134,9 +134,7 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
       
       // Show success feedback
       setDownloadSuccess(image.id)
-      
-      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(50))
-      
+
       setTimeout(() => setDownloadSuccess(null), 2000)
     } catch (err) {
       console.error('[media-gallery] Failed to download image:', err)
@@ -160,13 +158,9 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
       const blob = await response.blob()
       const file = new File([blob], 'shared-image.jpg', { type: blob.type || 'image/jpeg' })
       const title = image.caption || t('messages.sharedImage', { defaultValue: 'Shared image' })
-      let result = await platformShare({ files: [file], title })
+      const result = await platformShare({ files: [file], title })
       if (result === 'error' || result === 'unavailable') {
-        result = await platformShare({ url: image.imageUrl, title })
-      }
-      if (result === 'shared') {
-        const { platformHapticTap } = await import('@/platform/haptics')
-        void platformHapticTap(50)
+        await platformShare({ url: image.imageUrl, title })
       }
     } catch {
       /* ignore */
@@ -220,9 +214,8 @@ export const ConversationMediaGallery: React.FC<ConversationMediaGalleryProps> =
         goToNext()
       }
       
-      void import('@/platform/haptics').then(({ platformHapticTap }) => platformHapticTap(10))
     }
-    
+
     touchStartRef.current = null
   }
   

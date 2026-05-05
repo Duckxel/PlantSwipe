@@ -325,7 +325,7 @@
       "empty": "Le paquet s'échauffe..."
     },
     "tags": {
-      "plantOfMonth": "Plante du mois",
+      "plantOfMonth": "En vedette",
       "new": "Nouveau",
       "popular": "Populaire"
     },
@@ -793,6 +793,7 @@
     "pageTitle": "Scanner de Plantes",
     "pageDescription": "Identifiez n'importe quelle plante en prenant une photo ou en téléchargeant une image",
     "title": "Scanner de Plantes",
+    "menuLabel": "Scanner",
     "subtitle": "Prenez une photo ou téléchargez une image pour identifier n'importe quelle plante",
     "signInTitle": "Connectez-vous pour Scanner",
     "signInDescription": "Veuillez vous connecter pour identifier les plantes et sauvegarder votre historique de scans.",
@@ -818,6 +819,7 @@
     "searchForPlant": "Rechercher cette plante dans notre encyclopédie",
     "otherSuggestions": "Autres Possibilités",
     "similarImages": "Images Similaires",
+    "viewFullscreen": "Voir l'image en plein écran",
     "scanAnother": "Scanner une Autre",
     "deleteTitle": "Supprimer le Scan ?",
     "deleteDescription": "Cela supprimera définitivement ce scan de votre historique. Cette action est irréversible.",
@@ -1201,6 +1203,10 @@
       "zoomIn": "Agrandir",
       "zoomOut": "Réduire",
       "reset": "Réinitialiser"
+    },
+    "overview": {
+      "readMore": "Lire la suite",
+      "readLess": "Réduire"
     },
     "plantType": {
       "plant": "Plante",
@@ -2262,6 +2268,7 @@
       "searchForPlant": "Rechercher cette plante dans notre encyclopédie",
       "otherSuggestions": "Autres Possibilités",
       "similarImages": "Images Similaires",
+      "viewFullscreen": "Voir l'image en plein écran",
       "scanAnother": "Scanner une Autre",
       "deleteTitle": "Supprimer le Scan ?",
       "deleteDescription": "Cela supprimera définitivement ce scan de votre historique. Cette action est irréversible.",

@@ -1,7 +1,7 @@
 # External APIs Used in Aphylia
 
 > **Comprehensive list of all third-party services and APIs**  
-> Last updated: April 20, 2026
+> Last updated: May 4, 2026
 
 ---
 
@@ -452,9 +452,30 @@ wss://*.supabase.co (WebSocket)
 
 ---
 
+## Push Notifications
+
+### 12. Firebase Cloud Messaging (FCM HTTP v1)
+
+**API Endpoint:** `https://fcm.googleapis.com/v1/projects/{project_id}/messages:send`
+
+**Authentication:** OAuth2 service-account token from `fcm_keyfile.json` (placed at the repo root, next to `server.js`). Override the path with `FCM_SERVICE_ACCOUNT_FILE`. The legacy `FCM_LEGACY_SERVER_KEY` endpoint was turned down by Google on 2024-06-20 and is no longer supported.
+
+**Files:**
+- `plant-swipe/server.js` (push delivery)
+- `plant-swipe/src/platform/nativePushRegistration.ts` (client token upload)
+
+**Features:**
+- Native push notifications on Android (FCM) and iOS (APNs via FCM)
+- Device token stored in `user_fcm_tokens` table
+- Foreground notifications bridged to in-app toasts via `@capacitor/push-notifications`
+
+**CI note:** The `capacitor-mobile` workflow materialises `google-services.json` from the `GOOGLE_SERVICES_JSON` secret so Gradle can apply the Google Services plugin at build time.
+
+---
+
 ## Fonts & Assets
 
-### 12. Google Fonts
+### 13. Google Fonts
 
 **URLs:**
 - `https://fonts.googleapis.com` (CSS)
@@ -527,6 +548,7 @@ https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap
 | Sentry | Monitoring | ✅ Yes | Freemium | ✅ Yes | Error tracking |
 | Resend | Email | ✅ Yes | Paid | ✅ Yes | Transactional email |
 | Supabase | Backend | ✅ Yes | Freemium | ✅ Yes | Full stack |
+| FCM HTTP v1 | Push | ✅ Yes | Free | ✅ Yes | Native push (Android/iOS) |
 | Google Fonts | Assets | ❌ No | Free | ✅ Yes | Typography |
 
 ---
@@ -642,7 +664,7 @@ Potential future additions:
 - **Cloudinary:** Image optimization and CDN
 - **Algolia:** Advanced plant search
 - **Mapbox:** Enhanced map features
-- **Firebase Cloud Messaging:** Push notifications
+- ~~**Firebase Cloud Messaging**~~ — Now active (see FCM HTTP v1 section below)
 
 ---
 
@@ -668,4 +690,4 @@ For API-related questions:
 
 ---
 
-*Last updated: April 20, 2026*
+*Last updated: May 4, 2026*

@@ -1,6 +1,7 @@
 import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Select } from "@/components/ui/select"
 import { cn } from "@/lib/utils"
 import { useLocation } from "react-router-dom"
 import { Link } from "@/components/i18n/Link"
@@ -700,20 +701,18 @@ const SitemapTab: React.FC = () => {
                 className="h-8 px-3 text-sm rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 min-w-[180px] flex-1 sm:flex-none"
               />
               
-              <select
+              <Select
                 value={langFilter}
                 onChange={(e) => setLangFilter(e.target.value)}
-                className="h-8 px-2 text-sm rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="all">All Languages</option>
                 <option value="en">🇺🇸 English</option>
                 <option value="fr">🇫🇷 French</option>
-              </select>
-              
-              <select
+              </Select>
+
+              <Select
                 value={typeFilter}
                 onChange={(e) => setTypeFilter(e.target.value)}
-                className="h-8 px-2 text-sm rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="all">All Types</option>
                 {availableTypes.map((type) => {
@@ -738,18 +737,17 @@ const SitemapTab: React.FC = () => {
                     </option>
                   )
                 })}
-              </select>
-              
-              <select
+              </Select>
+
+              <Select
                 value={priorityFilter}
                 onChange={(e) => setPriorityFilter(e.target.value)}
-                className="h-8 px-2 text-sm rounded-lg border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1a1a1d] focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
                 <option value="all">All Priorities</option>
                 <option value="high">🔥 High (≥0.7)</option>
                 <option value="medium">⚡ Medium (0.5-0.6)</option>
                 <option value="low">📉 Low (&lt;0.5)</option>
-              </select>
+              </Select>
 
               {(filter || typeFilter !== "all" || langFilter !== "all" || priorityFilter !== "all") && (
                 <Button

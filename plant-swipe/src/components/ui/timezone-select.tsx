@@ -1,5 +1,5 @@
 import * as React from "react"
-import { cn } from "@/lib/utils"
+import { AppSelect } from "@/components/ui/app-select"
 
 export type TimezoneOption = {
   value: string
@@ -80,21 +80,13 @@ export const TimezoneSelect: React.FC<TimezoneSelectProps> = ({
   const timezones = React.useMemo(() => buildTimezoneList(), [])
 
   return (
-    <select
+    <AppSelect
       id={id}
       value={value}
-      onChange={(e) => onChange(e.target.value)}
+      onChange={onChange}
       disabled={disabled}
-      className={cn(
-        "flex h-10 w-full rounded-xl border border-input bg-white px-4 py-2 text-sm text-foreground shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#2d2d30] dark:text-white",
-        className
-      )}
-    >
-      {timezones.map((tz) => (
-        <option key={tz.value} value={tz.value}>
-          {tz.label}
-        </option>
-      ))}
-    </select>
+      className={className}
+      options={timezones.map((tz) => ({ value: tz.value, label: tz.label }))}
+    />
   )
 }

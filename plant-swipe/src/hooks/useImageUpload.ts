@@ -216,7 +216,10 @@ export function useImageUpload(options?: ImageUploadOptions) {
       setUploading(false);
 
       if (failed.length > 0) {
-        setError(`Failed to upload: ${failed.join(", ")}`);
+        const msg = `Failed to upload: ${failed.join(", ")}`;
+        setError(msg);
+        // Throw so callers can't silently proceed with missing images.
+        throw new Error(msg);
       }
 
       // Revoke preview URLs for successfully uploaded images

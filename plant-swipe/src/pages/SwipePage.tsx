@@ -431,10 +431,10 @@ export const SwipePage = React.memo<SwipePageProps>(({
           style={{
             // TopBar is hidden on mobile (`hidden lg:flex`), so the only top
             // chrome is the outer container's pt-2 (8px) + the grid wrapper's
-            // mt-2 (8px) = 16px. Body handles the status-bar safe area via
-            // padding-top, so we subtract env(safe-area-inset-top) here as
-            // well. The fixed MobileNavBar takes 5.5rem + safe-area-inset-bottom.
-            height: 'calc(100dvh - 16px - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
+            // mt-2 (8px) = 16px. We also reserve 16px below the card so the
+            // rounded bottom corners aren't clipped by the fixed nav bar.
+            // Body handles the status-bar safe area via padding-top.
+            height: 'calc(100dvh - 32px - 5.5rem - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px))',
             minHeight: '380px',
           }}
         >
@@ -535,11 +535,11 @@ export const SwipePage = React.memo<SwipePageProps>(({
                     <button
                       type="button"
                       onClick={(e) => { e.stopPropagation(); handlePass() }}
-                      className="text-white/70 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full"
+                      className="min-h-[44px] min-w-[44px] flex items-center justify-center text-white/80 active:scale-90 transition-all drop-shadow-[0_2px_3px_rgba(0,0,0,0.5)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500 rounded-full bg-black/20 backdrop-blur-sm"
                       aria-label={t("plant.next")}
                       style={{ touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}
                     >
-                      <ChevronUp className="h-7 w-7" />
+                      <ChevronUp className="h-6 w-6" />
                     </button>
                   </div>
 

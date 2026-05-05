@@ -423,12 +423,20 @@ export async function createPlantScan(
   }
   
   const { isPlant, isPlantProbability, topMatch, suggestions } = transformApiResponse(apiResponse)
-  
-  // Try to match with our database using multiple strategies
-  const matchedPlantId = await findMatchingPlant(topMatch)
-  
+
+  // Match every suggestion (not just top) so "Other Possibilities" rows can deep-link to the plant info page.
+  const matchResults = await Promise.all(
+    suggestions.map(s => findMatchingPlant(s).catch(() => undefined))
+  )
+  const matchedPlantId = matchResults[0]
+  for (let i = 0; i < suggestions.length; i++) {
+    suggestions[i].matchedPlantId = matchResults[i]
+  }
+
   // Log the matching result for debugging
   console.log('[plantScan] Database match result:', matchedPlantId ? `Found plant ID: ${matchedPlantId}` : 'No match found')
+  const matchedSuggestionCount = matchResults.filter(Boolean).length
+  console.log(`[plantScan] Matched ${matchedSuggestionCount}/${suggestions.length} suggestions to database plants`)
   
   const { data, error } = await supabase
     .from('plant_scans')

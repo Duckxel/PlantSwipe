@@ -414,6 +414,10 @@ def _refresh_script_path(repo_root: str) -> str:
     return str(Path(repo_root) / "scripts" / "refresh-plant-swipe.sh")
 
 
+def _aphydle_refresh_script_path(repo_root: str) -> str:
+    return str(Path(repo_root) / "scripts" / "refresh-aphydle.sh")
+
+
 def _supabase_script_path(repo_root: str) -> str:
     return str(Path(repo_root) / "scripts" / "deploy-supabase-functions.sh")
 
@@ -701,6 +705,76 @@ def admin_refresh():
     except Exception:
         pass
     return _run_refresh(branch, stream=False)
+
+
+def _run_aphydle_refresh(stream: bool):
+    repo_root = _get_repo_root()
+    script_path = _aphydle_refresh_script_path(repo_root)
+    if not os.path.isfile(script_path):
+        abort(500, description=f"Aphydle refresh script not found at {script_path}")
+    _ensure_executable(script_path)
+    env = os.environ.copy()
+    env.setdefault("CI", os.environ.get("CI", "true"))
+    env["PLANTSWIPE_REPO_DIR"] = repo_root
+    if stream:
+        def generate():
+            yield "event: open\ndata: {\"ok\": true, \"message\": \"Starting Aphydle refresh...\"}\n\n"
+            try:
+                p = subprocess.Popen(
+                    [script_path],
+                    cwd=repo_root,
+                    env=env,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.STDOUT,
+                    bufsize=1,
+                    universal_newlines=True,
+                )
+            except Exception as e:
+                yield f"event: error\ndata: {str(e)}\n\n"
+                return
+            try:
+                assert p.stdout is not None
+                for line in p.stdout:
+                    txt = line.rstrip("\n\r")
+                    if not txt:
+                        continue
+                    if len(txt) > 4000:
+                        txt = txt[:4000] + "..."
+                    yield f"data: {txt}\n\n"
+            finally:
+                code = p.wait()
+                if code == 0:
+                    yield "event: done\ndata: {\"ok\": true}\n\n"
+                else:
+                    yield f"event: done\ndata: {{\"ok\": false, \"code\": {code} }}\n\n"
+        return Response(generate(), mimetype="text/event-stream")
+    else:
+        try:
+            subprocess.Popen([script_path], cwd=repo_root, env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return jsonify({"ok": True, "started": True})
+        except Exception as e:
+            return jsonify({"ok": False, "error": str(e) or "failed to start"}), 500
+
+
+@app.get("/admin/refresh-aphydle/stream")
+def admin_refresh_aphydle_stream():
+    _verify_request()
+    try:
+        _log_admin_action("refresh_aphydle", "stream")
+    except Exception:
+        pass
+    return _run_aphydle_refresh(stream=True)
+
+
+@app.get("/admin/refresh-aphydle")
+@app.post("/admin/refresh-aphydle")
+def admin_refresh_aphydle():
+    _verify_request()
+    try:
+        _log_admin_action("refresh_aphydle", "")
+    except Exception:
+        pass
+    return _run_aphydle_refresh(stream=False)
 
 
 @app.get("/admin/deploy-edge-functions")

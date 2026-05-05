@@ -41,3 +41,16 @@
 ## 2026-04-03 - Prevent array allocation from Object.values() in recursive functions
 **Learning:** Using `Object.values(obj).some(...)` in recursive functions (like `hasMeaningfulContent`) or heavily accessed components creates significant GC pressure by allocating intermediate arrays of values for every object node traversed.
 **Action:** Replace `Object.values(obj).some(...)` with `for...in` loops in recursive checkers and hot path validations to prevent intermediate array allocation and allow for fast early returns.
+## 2026-04-18 - Avoid unnecessary loop optimization for split/map/filter chains in composition parsing
+**Learning:** Optimizing a `.split().map().filter()` chain into a single-pass `for` loop in a utility function (`toArrayInput`) that parses short comma-separated strings represents a classic micro-optimization. The overhead of iterating a 2-3 item array is negligible compared to the readability cost. The user explicitly requested to avoid optimizations that sacrifice readability for zero measurable impact.
+**Action:** Do not blindly convert all array chains to `for` loops. Reserve imperative loop structures for true hot paths iterating over large datasets (like rendering loops or global data processing).
+## 2026-04-25 - Precomputed lookup dictionaries for static forms
+**Learning:** React form components rendering many fields using `O(N)` array lookups (like `.find()`) on every render can cause performance drops during keystroke re-renders.
+**Action:** Always precompute `O(1)` lookup maps (using `.reduce` or `for` loops) at the module scope for static form configurations instead of searching inline.
+## 2024-05-19 - Combine multiple aggregations in single-pass loops
+**Learning:** Performing multiple \`.reduce()\` or chained \`.filter().length\` operations over the same array to calculate related metrics (e.g., total required tasks and total completed tasks) increases time complexity to O(2N) and adds unnecessary function call overhead.
+**Action:** Replace multiple \`.reduce()\` calls or \`.filter().length\` chains on the same array with a single-pass \`for\` loop that computes all required aggregates simultaneously, avoiding intermediate array allocations and reducing loop overhead.
+## 2026-05-03 - Array Initialization in Hot Paths
+**Learning:** Using `.map()` and `forEach` in hot paths (like processing thousands of plants) causes unnecessary intermediate array allocations, resulting in significant garbage collection pressure.
+**Action:** Replace functional array methods like `.map()` and `.forEach()` with single-pass `for` loops and pre-allocated arrays (`new Array(length)`) in performance-critical sections to reduce CPU overhead and memory footprint.
+## 2026-05-18 - Replacing .map calls with single-pass for loops in data loading hot paths\n**Learning:** In data loading functions that process arrays containing thousands of items from database responses (e.g., `plantTranslationLoader.ts`), using `.map()` to construct new objects creates significant garbage collection overhead. Since this data loading logic is executed before rendering, minimizing array allocations improves responsiveness.\n**Action:** Use a single-pass `for` loop and pre-allocate arrays (e.g. `new Array(length)`) instead of `.map()` for array manipulation on large datasets in hot data fetching paths.

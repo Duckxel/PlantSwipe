@@ -76,6 +76,15 @@ SERVICE_NODE="plant-swipe-node"
 SERVICE_ADMIN="admin-api"
 SERVICE_NGINX="nginx"
 SERVICE_SITEMAP="plant-swipe-sitemap"
+SERVICE_APHYDLE="plant-swipe-aphydle"
+
+# Aphydle (daily plant guessing game) - embedded sub-app served at aphydle.<primary>
+APHYDLE_REPO_URL="${APHYDLE_REPO_URL:-https://github.com/Duckxel/Aphydle.git}"
+APHYDLE_DIR="${APHYDLE_DIR:-$REPO_DIR/aphydle}"
+APHYDLE_WEB_ROOT_LINK="${APHYDLE_WEB_ROOT_LINK:-/var/www/Aphydle}"
+APHYDLE_HOST="${APHYDLE_HOST:-127.0.0.1}"
+APHYDLE_PORT="${APHYDLE_PORT:-4173}"
+APHYDLE_SETUP_RAW="${SETUP_APHYDLE:-1}"
 # Service account that runs Node/Admin services (and git operations)
 SERVICE_USER="${SERVICE_USER:-www-data}"
 SERVICE_USER_HOME="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || true)"
@@ -99,6 +108,20 @@ SITEMAP_TIMER_SCHEDULE="${PLANTSWIPE_SITEMAP_SCHEDULE:-*-*-* 03:05:00}"
 SITEMAP_TIMER_RANDOM_DELAY="${PLANTSWIPE_SITEMAP_JITTER:-900}"
 if ! [[ "$SITEMAP_TIMER_RANDOM_DELAY" =~ ^[0-9]+$ ]]; then
   SITEMAP_TIMER_RANDOM_DELAY="900"
+fi
+
+# Aphydle nightly rebuild — re-runs `vite build` so yesterday's puzzle gets
+# picked up by Aphydle's seoArtifactsPlugin (emits dist/sitemap.xml + per-puzzle
+# pages from aphydle.daily_log rows where puzzle_date < today UTC). Staggered
+# 25 min after the PlantSwipe sitemap to avoid concurrent Supabase egress.
+SERVICE_APHYDLE_REBUILD="plant-swipe-aphydle-rebuild"
+APHYDLE_REBUILD_BIN="/usr/local/bin/plantswipe-aphydle-rebuild"
+APHYDLE_REBUILD_SERVICE_FILE="/etc/systemd/system/$SERVICE_APHYDLE_REBUILD.service"
+APHYDLE_REBUILD_TIMER_FILE="/etc/systemd/system/$SERVICE_APHYDLE_REBUILD.timer"
+APHYDLE_REBUILD_SCHEDULE="${PLANTSWIPE_APHYDLE_REBUILD_SCHEDULE:-*-*-* 03:30:00}"
+APHYDLE_REBUILD_RANDOM_DELAY="${PLANTSWIPE_APHYDLE_REBUILD_JITTER:-1800}"
+if ! [[ "$APHYDLE_REBUILD_RANDOM_DELAY" =~ ^[0-9]+$ ]]; then
+  APHYDLE_REBUILD_RANDOM_DELAY="1800"
 fi
 SYSTEMCTL_BIN="$(command -v systemctl || echo /usr/bin/systemctl)"
 NGINX_BIN="$(command -v nginx || echo /usr/sbin/nginx)"
@@ -608,6 +631,175 @@ render_service_env() {
 
 log "Rendering service environment from $NODE_DIR/.env(.server)…"
 render_service_env "$SERVICE_ENV_FILE"
+
+# --- Configure Unix passwords from PSSWORD_KEY (one-way: system follows .env) ---
+# PSSWORD_KEY in plant-swipe/.env is the single source of truth. We sync:
+#   1. The service user (www-data) — locked by default, must match the askpass
+#      helper used by refresh-*.sh and admin-api spawned sudo calls.
+#   2. The invoking user (`$SUDO_USER`) — so future `sudo ./setup.sh` and any
+#      askpass-driven sudo elsewhere uses the same key the operator stores in .env.
+# Root is NOT synced by default — silently changing root's password can lock
+# operators out of recovery shells. Opt in with PLANTSWIPE_SYNC_ROOT_PASSWORD=1.
+#
+# Per-user opt-outs:
+#   PLANTSWIPE_SKIP_WWWDATA_PASSWORD=1   leave www-data's password alone
+#   PLANTSWIPE_SKIP_INVOKER_PASSWORD=1   leave $SUDO_USER's password alone
+read_pssword_key_value() {
+  local pw=""
+  local f
+  for f in "$NODE_DIR/.env" "$NODE_DIR/.env.server" "$REPO_DIR/.env"; do
+    if [[ -z "$pw" ]]; then pw="$(read_env_kv "$f" PSSWORD_KEY)"; fi
+  done
+  printf '%s' "$pw"
+}
+
+is_pssword_key_placeholder() {
+  case "$1" in
+    change-me|CHANGE_ME|placeholder|"") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+# Install an askpass helper backed by PSSWORD_KEY so any descendant `sudo -A`
+# call (refresh-plant-swipe.sh, refresh-aphydle.sh, ad-hoc sudo from this
+# script, …) can authenticate without a TTY. The helper is a temp file with
+# 0700 perms; it gets cleaned up on exit.
+PLANTSWIPE_ASKPASS_HELPER=""
+install_askpass_helper() {
+  local pw="$1"
+  [[ -z "$pw" ]] && return 0
+  if is_pssword_key_placeholder "$pw"; then return 0; fi
+  PLANTSWIPE_ASKPASS_HELPER="$(mktemp -t plantswipe-setup-askpass.XXXXXX)"
+  chmod 0700 "$PLANTSWIPE_ASKPASS_HELPER"
+  # Write the password as a single-quoted bash literal, escaping any single
+  # quotes inside via the standard `'\''` trick. Safe for arbitrary values.
+  local escaped="${pw//\'/\'\\\'\'}"
+  cat > "$PLANTSWIPE_ASKPASS_HELPER" <<EOF
+#!/usr/bin/env bash
+exec printf '%s' '${escaped}'
+EOF
+  chmod 0700 "$PLANTSWIPE_ASKPASS_HELPER"
+  export SUDO_ASKPASS="$PLANTSWIPE_ASKPASS_HELPER"
+  trap '[[ -n "${PLANTSWIPE_ASKPASS_HELPER:-}" ]] && rm -f "$PLANTSWIPE_ASKPASS_HELPER"' EXIT
+  log "Installed PSSWORD_KEY-backed askpass helper for descendant sudo calls."
+}
+
+# Sync a single user's Unix password to PSSWORD_KEY. Skips placeholder values,
+# missing users, or absent chpasswd. Reports outcome via stdout log lines.
+sync_user_password_from_pssword_key() {
+  local user="$1"
+  local pw="$2"
+  local label="$3"   # "$SERVICE_USER" or "invoker $SUDO_USER", purely for logs
+  if [[ -z "$user" ]]; then return 0; fi
+  if ! id -u "$user" >/dev/null 2>&1; then
+    log "[WARN] User '$user' does not exist; skipping $label password sync."
+    return 0
+  fi
+  if [[ -z "$pw" ]]; then
+    log "PSSWORD_KEY not set — leaving '$user' password unchanged."
+    return 0
+  fi
+  if is_pssword_key_placeholder "$pw"; then
+    log "PSSWORD_KEY looks like a placeholder ('$pw') — leaving '$user' password unchanged."
+    return 0
+  fi
+  if ! command -v chpasswd >/dev/null 2>&1; then
+    log "[WARN] chpasswd not available; cannot sync '$user' password from PSSWORD_KEY."
+    return 0
+  fi
+  local chpasswd_args=()
+  if chpasswd --help 2>&1 | grep -q -- '--crypt-method'; then
+    chpasswd_args+=("--crypt-method" "SHA512")
+  fi
+  if printf '%s:%s\n' "$user" "$pw" | $SUDO chpasswd "${chpasswd_args[@]}" >/dev/null 2>&1; then
+    log "Synced Unix password for '$user' from PSSWORD_KEY ($label)."
+    # Unlock the account if it was locked (`!`/`*` in /etc/shadow) so PAM accepts
+    # the new password. Login shell is left untouched.
+    $SUDO passwd -u "$user" >/dev/null 2>&1 || true
+  else
+    log "[WARN] chpasswd failed for '$user'; askpass-based sudo will not work for them."
+  fi
+}
+
+# Render /etc/sudoers.d/plantswipe-admin-api with the canonical NOPASSWD allow
+# list. This function is defined here so we can call it BEFORE delegating to
+# refresh-plant-swipe.sh / refresh-aphydle.sh — those scripts run as www-data
+# and call `sudo ln`, `sudo systemctl restart`, etc. If the sudoers file on
+# disk is from an older setup.sh that didn't include `ln`/`rm`/etc., the
+# refresh blows up. Writing it early closes that timing hole.
+SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
+install_plantswipe_sudoers() {
+  log "Configuring sudoers at $SUDOERS_FILE…"
+  $SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
+Defaults:$SERVICE_USER !requiretty
+$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NGINX
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_APHYDLE
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-active *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN is-enabled *
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN status *
+# Allow website Pull & Build to sync service env and reload units without password
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
+$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/cp
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/ln
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/rm
+$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
+$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
+EOF
+"
+  $SUDO chmod 0440 "$SUDOERS_FILE"
+  if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
+    echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
+    $SUDO rm -f "$SUDOERS_FILE" || true
+  fi
+}
+
+PSSWORD_KEY_VALUE="$(read_pssword_key_value)"
+install_askpass_helper "$PSSWORD_KEY_VALUE"
+
+# 1) Service user (www-data) — required for askpass-driven sudo from refresh scripts.
+case "${PLANTSWIPE_SKIP_WWWDATA_PASSWORD:-0}" in
+  1|true|TRUE|yes|YES) log "Skipping $SERVICE_USER password setup (PLANTSWIPE_SKIP_WWWDATA_PASSWORD set)." ;;
+  *) sync_user_password_from_pssword_key "$SERVICE_USER" "$PSSWORD_KEY_VALUE" "service user" ;;
+esac
+
+# 2) Invoking user — sync only when invoked via `sudo` from a non-root account
+# (i.e., $SUDO_USER is set and != root). Lets the operator type PSSWORD_KEY
+# the next time sudo prompts, instead of guessing their old shell password.
+INVOKER_USER="${SUDO_USER:-}"
+case "${PLANTSWIPE_SKIP_INVOKER_PASSWORD:-0}" in
+  1|true|TRUE|yes|YES)
+    log "Skipping invoker password setup (PLANTSWIPE_SKIP_INVOKER_PASSWORD set)."
+    ;;
+  *)
+    if [[ -n "$INVOKER_USER" && "$INVOKER_USER" != "root" ]]; then
+      sync_user_password_from_pssword_key "$INVOKER_USER" "$PSSWORD_KEY_VALUE" "invoker"
+    elif [[ "$INVOKER_USER" == "root" || -z "$INVOKER_USER" ]]; then
+      case "${PLANTSWIPE_SYNC_ROOT_PASSWORD:-0}" in
+        1|true|TRUE|yes|YES)
+          sync_user_password_from_pssword_key "root" "$PSSWORD_KEY_VALUE" "root (opted in)"
+          ;;
+        *)
+          log "Skipping root password sync (set PLANTSWIPE_SYNC_ROOT_PASSWORD=1 to enable)."
+          ;;
+      esac
+    fi
+    ;;
+esac
+
+# Install sudoers NOW (before refresh delegation below). The refresh scripts
+# run as www-data and rely on this NOPASSWD allow list; rendering it later
+# would let one stale-sudoers run break (the prior /usr/bin/ln denial).
+install_plantswipe_sudoers
 
 # Install/upgrade Bun (preferred runtime) and Node.js (for compatibility).
 # Both installers are re-run on every setup.sh pass so minor/patch security
@@ -1237,6 +1429,11 @@ else
   log "Building PlantSwipe web client + API bundle with Bun (base ${PWA_BASE_PATH})…"
   NODE_BUILD_MEMORY="${NODE_BUILD_MEMORY:-1536}"
   sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$BUN_PATH:\$PATH' && export NODE_OPTIONS='--max-old-space-size=$NODE_BUILD_MEMORY' && cd '$NODE_DIR' && VITE_APP_BASE_PATH='${PWA_BASE_PATH}' CI=${CI:-true} bun run build"
+  # Discard local edits to lock files / package.json that bun update may have caused
+  if (cd "$REPO_DIR" && git rev-parse --git-dir >/dev/null 2>&1); then
+    log "Discarding local lock file changes (if any)…"
+    (cd "$REPO_DIR" && git checkout -- "$NODE_DIR/bun.lock" "$NODE_DIR/package.json" 2>/dev/null) || true
+  fi
 fi
 fi
 
@@ -1296,21 +1493,6 @@ fi
 $SUDO mkdir -p "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$NODE_DIR/supabase/functions/_shared" 2>/dev/null || true
 
-# Ask about SSL setup BEFORE installing nginx config
-WANT_SSL=""
-if [[ ! -f "$REPO_DIR/domain.json" ]]; then
-  echo ""
-  read -p "Do you want to set up SSL certificates? (y/n): " WANT_SSL
-  WANT_SSL="${WANT_SSL// /}"  # trim whitespace
-else
-  # If domain.json exists, assume user wants SSL
-  WANT_SSL="y"
-fi
-
-# Install nginx site and admin snippet
-log "Installing nginx config…"
-
-# Helper utilities for SSL/Let's Encrypt reconciliation
 get_primary_domain_from_domain_json() {
   local domain_json="$1"
   [[ -f "$domain_json" ]] || { echo ""; return 0; }
@@ -1334,7 +1516,6 @@ except Exception:
 PY
 }
 
-# Check if a domain exists in domain.json
 domain_exists_in_domain_json() {
   local domain_json="$1"
   local check_domain="$2"
@@ -1361,6 +1542,261 @@ except Exception:
     print("false")
 PY
 }
+
+# Returns "true" if domain.json contains any entry ending in `.<suffix>` (e.g. "fr").
+# Used to decide whether to wire the French aphylia server_name/CSP block — both
+# the bare aphylia.fr and any subdomain like dev01.aphylia.fr should opt-in.
+any_domain_with_suffix_in_json() {
+  local domain_json="$1"
+  local suffix="$2"
+  [[ -f "$domain_json" ]] || { echo "false"; return 0; }
+  [[ -z "$suffix" ]] && { echo "false"; return 0; }
+  python3 - "$domain_json" "$suffix" <<'PY' 2>/dev/null
+import json
+import sys
+path, suffix = sys.argv[1], sys.argv[2].lstrip(".").lower()
+needle = "." + suffix
+try:
+    with open(path, "r") as f:
+        data = json.load(f)
+    domains = []
+    if isinstance(data, dict) and isinstance(data.get("domains"), list):
+        domains = data["domains"]
+    elif isinstance(data, list):
+        domains = data
+    for d in domains:
+        if not isinstance(d, str):
+            continue
+        d = d.strip().lower()
+        if d == suffix or d.endswith(needle):
+            print("true")
+            sys.exit(0)
+    print("false")
+except Exception:
+    print("false")
+PY
+}
+
+# Aphydle helper: append a domain to domain.json if absent (idempotent)
+aphydle_register_domain_in_json() {
+  local domain_json="$1"
+  local new_domain="$2"
+  [[ -f "$domain_json" ]] || return 1
+  [[ -n "$new_domain" ]] || return 1
+  python3 - "$domain_json" "$new_domain" <<'PY'
+import json, os, sys
+path, new = sys.argv[1], sys.argv[2]
+try:
+    with open(path) as f:
+        data = json.load(f)
+except Exception as e:
+    print(f"ERROR: {e}", file=sys.stderr)
+    sys.exit(1)
+if not isinstance(data, dict) or not isinstance(data.get("domains"), list):
+    print("ERROR: domain.json missing 'domains' array", file=sys.stderr)
+    sys.exit(2)
+if new in data["domains"]:
+    print("PRESENT")
+    sys.exit(0)
+data["domains"].append(new)
+with open(path, "w") as f:
+    json.dump(data, f, indent=2)
+os.chmod(path, 0o644)
+print("ADDED")
+PY
+}
+
+# Aphydle: clone repo, share env with PlantSwipe, build, web-root symlink, register domain
+setup_aphydle() {
+  case "$APHYDLE_SETUP_RAW" in
+    0|n|no|false|off|"") log "SETUP_APHYDLE disabled — skipping Aphydle setup"; return 0 ;;
+  esac
+
+  log "Setting up Aphydle (daily plant guessing game)…"
+
+  # Clone or update Aphydle repo. Use fetch + reset --hard (not pull --ff-only)
+  # because scripts/refresh-aphydle.sh's image-proxy patcher dirties tracked
+  # files (src/lib/data.js); pull --ff-only would abort with "local changes
+  # would be overwritten by merge" and silently leave the build stale.
+  if [[ -d "$APHYDLE_DIR/.git" ]]; then
+    log "Aphydle repo present at $APHYDLE_DIR — fetching latest…"
+    local aphydle_branch
+    aphydle_branch="$(sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" symbolic-ref --short HEAD 2>/dev/null || true)"
+    [[ -n "$aphydle_branch" && "$aphydle_branch" != "HEAD" ]] || aphydle_branch="main"
+    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" fetch origin "$aphydle_branch" 2>&1; then
+      log "[ERROR] git fetch failed for Aphydle (branch $aphydle_branch); aborting Aphydle setup to avoid shipping a stale build."
+      return 1
+    fi
+    if ! sudo -u "$SERVICE_USER" -H git -C "$APHYDLE_DIR" reset --hard "origin/$aphydle_branch" 2>&1; then
+      log "[ERROR] git reset --hard origin/$aphydle_branch failed for Aphydle; aborting Aphydle setup to avoid shipping a stale build."
+      return 1
+    fi
+  else
+    log "Cloning Aphydle from $APHYDLE_REPO_URL → $APHYDLE_DIR"
+    $SUDO mkdir -p "$(dirname "$APHYDLE_DIR")"
+    $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$(dirname "$APHYDLE_DIR")" 2>/dev/null || true
+    if ! sudo -u "$SERVICE_USER" -H git clone --depth 1 "$APHYDLE_REPO_URL" "$APHYDLE_DIR" 2>&1; then
+      log "[ERROR] Failed to clone Aphydle repo; skipping Aphydle setup."
+      return 1
+    fi
+  fi
+
+  # Ownership + perms
+  $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$APHYDLE_DIR" || true
+  $SUDO find "$APHYDLE_DIR" -type d -exec chmod 755 {} + 2>/dev/null || true
+
+  # Share .env with PlantSwipe so Aphydle uses the same Supabase credentials.
+  # Aphydle reads VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY; extras are harmless
+  # because Vite only embeds VITE_-prefixed values in the client bundle.
+  local plant_env="$NODE_DIR/.env"
+  local aphydle_env="$APHYDLE_DIR/.env"
+  if [[ -f "$plant_env" ]]; then
+    log "Copying $plant_env → $aphydle_env (shared Supabase credentials)"
+    $SUDO install -m 0640 -o "$SERVICE_USER" -g "$SERVICE_USER" "$plant_env" "$aphydle_env"
+  elif [[ -f "$APHYDLE_DIR/.env.example" && ! -f "$aphydle_env" ]]; then
+    log "[WARN] $plant_env not found — bootstrapping $aphydle_env from .env.example (placeholders only)"
+    $SUDO install -m 0640 -o "$SERVICE_USER" -g "$SERVICE_USER" "$APHYDLE_DIR/.env.example" "$aphydle_env"
+  fi
+
+  # Inject Aphylia host metadata so Aphydle's "← BACK TO APHYLIA" / "Powered by"
+  # chips render. Both gate on VITE_APHYLIA_HOST_URL being set; absent it the app
+  # behaves as a standalone deploy. Derived from domain.json's primary entry.
+  if [[ -f "$aphydle_env" && -f "$REPO_DIR/domain.json" ]]; then
+    local _primary_for_env
+    _primary_for_env="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -n "$_primary_for_env" && "$_primary_for_env" != "__PRIMARY_DOMAIN__" ]]; then
+      local _host_url="https://$_primary_for_env"
+      local _aphydle_site_url="https://aphydle.$_primary_for_env"
+      # VITE_APP_SITE_URL is read by Aphydle's vite.config.js seoArtifactsPlugin
+      # at build time. Without it Vite falls back to the hardcoded
+      # https://aphydle.aphylia.com default, which produces a sitemap.xml,
+      # robots.txt, canonical <link>, OG/Twitter tags, and JSON-LD that all
+      # point at the wrong host on every non-canonical deploy. Derive it
+      # from domain.json's primary so dev01/staging/prod each get a
+      # self-consistent SEO bundle.
+      log "Injecting VITE_APHYLIA_HOST_URL=$_host_url and VITE_APP_SITE_URL=$_aphydle_site_url into Aphydle .env"
+      $SUDO sed -i '/^VITE_APHYLIA_HOST_URL=/d; /^VITE_APHYLIA_API_URL=/d; /^VITE_APP_SITE_URL=/d' "$aphydle_env"
+      $SUDO bash -c "printf 'VITE_APHYLIA_HOST_URL=%s\nVITE_APHYLIA_API_URL=%s\nVITE_APP_SITE_URL=%s\n' '$_host_url' '$_host_url' '$_aphydle_site_url' >> '$aphydle_env'"
+      $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$aphydle_env"
+    fi
+  fi
+
+  # Patch Aphydle source for image-proxy CORS wrapping. Mirrors the same step
+  # in scripts/refresh-aphydle.sh so a fresh `setup.sh` run produces an
+  # already-patched build — without this, the build embedded the unmodified
+  # upstream src/lib/data.js and operators had to re-run refresh-aphydle.sh
+  # afterward to get a working image proxy. The patcher is idempotent and
+  # fails loudly if the upstream function shape changes.
+  local aphydle_patcher="$REPO_DIR/scripts/aphydle-patch-image-proxy.mjs"
+  if [[ -f "$aphydle_patcher" && -f "$APHYDLE_DIR/src/lib/data.js" ]]; then
+    log "Patching Aphydle source for image-proxy CORS wrapping…"
+    if ! sudo -u "$SERVICE_USER" -H node "$aphydle_patcher" "$APHYDLE_DIR" 2>&1; then
+      log "[ERROR] Aphydle image-proxy patcher failed; aborting Aphydle setup to avoid shipping a broken build."
+      return 1
+    fi
+  fi
+
+  # Locate Bun for the service user (matches plant-swipe convention)
+  local owner_home owner_bun_dir owner_bun_bin
+  owner_home="$(getent passwd "$SERVICE_USER" | cut -d: -f6 2>/dev/null || echo /var/www)"
+  owner_bun_dir="$owner_home/.bun/bin"
+  owner_bun_bin="$owner_bun_dir/bun"
+  if [[ ! -x "$owner_bun_bin" ]]; then
+    if command -v bun >/dev/null 2>&1; then
+      log "Copying system Bun to $SERVICE_USER home for Aphydle build…"
+      $SUDO -u "$SERVICE_USER" -H mkdir -p "$owner_bun_dir"
+      $SUDO cp "$(command -v bun)" "$owner_bun_bin"
+      $SUDO chown -R "$SERVICE_USER:$SERVICE_USER" "$owner_home/.bun"
+      $SUDO chmod +x "$owner_bun_bin"
+    fi
+  fi
+
+  if [[ ! -x "$owner_bun_bin" ]]; then
+    log "[ERROR] Bun not available for $SERVICE_USER; cannot build Aphydle."
+    return 1
+  fi
+
+  log "Installing Aphydle dependencies with Bun…"
+  if ! sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$owner_bun_dir:\$PATH' && cd '$APHYDLE_DIR' && bun install" 2>&1; then
+    log "[ERROR] bun install failed for Aphydle."
+    return 1
+  fi
+
+  log "Building Aphydle production bundle…"
+  if ! sudo -u "$SERVICE_USER" -H bash -lc "export PATH='$owner_bun_dir:\$PATH' && cd '$APHYDLE_DIR' && VITE_APP_BASE_PATH=/ bun run build" 2>&1; then
+    log "[ERROR] Aphydle vite build failed."
+    return 1
+  fi
+
+  if [[ ! -d "$APHYDLE_DIR/dist" ]]; then
+    log "[ERROR] Aphydle build did not produce $APHYDLE_DIR/dist"
+    return 1
+  fi
+
+  # Web root symlink: /var/www/Aphydle -> $APHYDLE_DIR
+  $SUDO mkdir -p "$(dirname "$APHYDLE_WEB_ROOT_LINK")"
+  if [[ -e "$APHYDLE_WEB_ROOT_LINK" && ! -L "$APHYDLE_WEB_ROOT_LINK" ]]; then
+    log "Removing existing non-symlink at $APHYDLE_WEB_ROOT_LINK"
+    $SUDO rm -rf "$APHYDLE_WEB_ROOT_LINK"
+  fi
+  $SUDO ln -sfn "$APHYDLE_DIR" "$APHYDLE_WEB_ROOT_LINK"
+  log "Linked $APHYDLE_WEB_ROOT_LINK -> $APHYDLE_DIR"
+
+  # Register aphydle.<primary> in domain.json so certbot covers it and nginx
+  # block gets included. Only acts if domain.json already has a primary set.
+  if [[ -f "$REPO_DIR/domain.json" ]]; then
+    local primary
+    primary="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
+    if [[ -n "$primary" && "$primary" != "__PRIMARY_DOMAIN__" ]]; then
+      local aphydle_dom="aphydle.$primary"
+      local result
+      result="$(aphydle_register_domain_in_json "$REPO_DIR/domain.json" "$aphydle_dom" 2>&1 || true)"
+      case "$result" in
+        ADDED)   log "Added $aphydle_dom to domain.json (cert will be expanded)" ;;
+        PRESENT) log "$aphydle_dom already present in domain.json" ;;
+        *)       log "[WARN] Could not update domain.json with $aphydle_dom: $result" ;;
+      esac
+    else
+      log "domain.json has no usable primary yet — Aphydle entry will be added during SSL setup."
+    fi
+  else
+    log "domain.json missing — Aphydle entry will be added during SSL setup."
+  fi
+
+  # Surface the supabase migration step. Aphydle ships its own SQL under the
+  # `aphydle` schema (no collisions with PlantSwipe tables). It needs a one-time
+  # `supabase db push` against the shared Supabase project. We don't run it
+  # automatically because it writes to shared DB infra.
+  if [[ -d "$APHYDLE_DIR/supabase/migrations" ]] && \
+     compgen -G "$APHYDLE_DIR/supabase/migrations/*.sql" >/dev/null 2>&1; then
+    log "------------------------------------------------------------------"
+    log "Aphydle ships Supabase migrations under the 'aphydle' schema."
+    log "Apply them once against your project with:"
+    log "  cd $APHYDLE_DIR && supabase link --project-ref <ref> && supabase db push"
+    log "See $APHYDLE_DIR/supabase/README.md for details."
+    log "------------------------------------------------------------------"
+  fi
+
+  APHYDLE_SETUP_DONE=1
+  log "Aphydle app prepared (systemd unit + nginx wiring installed later in setup)."
+}
+
+APHYDLE_SETUP_DONE=0
+setup_aphydle || log "[WARN] Aphydle setup encountered errors; continuing with main setup."
+
+# Ask about SSL setup BEFORE installing nginx config
+WANT_SSL=""
+if [[ ! -f "$REPO_DIR/domain.json" ]]; then
+  echo ""
+  read -p "Do you want to set up SSL certificates? (y/n): " WANT_SSL
+  WANT_SSL="${WANT_SSL// /}"  # trim whitespace
+else
+  # If domain.json exists, assume user wants SSL
+  WANT_SSL="y"
+fi
+
+# Install nginx site and admin snippet
+log "Installing nginx config…"
 
 ensure_nginx_ssl_directives() {
   local cert_domain="$1"
@@ -1414,7 +1850,8 @@ prepare_nginx_config() {
   local primary_domain=""
   local has_media_domain="false"
   local has_french_domain="false"
-  
+  local aphydle_domain=""
+
   # Get primary domain from domain.json if it exists
   if [[ -f "$REPO_DIR/domain.json" ]]; then
     primary_domain="$(get_primary_domain_from_domain_json "$REPO_DIR/domain.json")"
@@ -1426,7 +1863,7 @@ prepare_nginx_config() {
         break
       done
     fi
-    
+
     # Check if media.aphylia.app is in domain.json
     if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "media.aphylia.app")" == "true" ]]; then
       has_media_domain="true"
@@ -1435,12 +1872,25 @@ prepare_nginx_config() {
       log "media.aphylia.app not found in domain.json - excluding media server block"
     fi
 
-    # Check if aphylia.fr is in domain.json (French domain support)
-    if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "aphylia.fr")" == "true" ]]; then
+    # Check if any *.fr domain is in domain.json (French domain support).
+    # Match both bare aphylia.fr and subdomains (dev01.aphylia.fr, etc.) so the
+    # main app block accepts them via server_name `aphylia.fr *.aphylia.fr`.
+    if [[ "$(any_domain_with_suffix_in_json "$REPO_DIR/domain.json" "fr")" == "true" ]]; then
       has_french_domain="true"
-      log "aphylia.fr found in domain.json - including French domain in nginx config"
+      log "Found .fr domain(s) in domain.json - including French domain in nginx config"
     else
-      log "aphylia.fr not found in domain.json - excluding French domain from nginx config"
+      log "No .fr domains in domain.json - excluding French domain from nginx config"
+    fi
+
+    # Check if aphydle.<primary> is in domain.json (Aphydle daily-game support)
+    if [[ -n "$primary_domain" ]]; then
+      local candidate="aphydle.$primary_domain"
+      if [[ "$(domain_exists_in_domain_json "$REPO_DIR/domain.json" "$candidate")" == "true" ]]; then
+        aphydle_domain="$candidate"
+        log "$candidate found in domain.json - including Aphydle server block"
+      else
+        log "$candidate not found in domain.json - excluding Aphydle server block"
+      fi
     fi
   else
     # No domain.json - try to find existing certificate
@@ -1487,11 +1937,23 @@ prepare_nginx_config() {
     sed -i '/# __MEDIA_SERVER_BLOCK_START__/d' "$tmp_config"
     sed -i '/# __MEDIA_SERVER_BLOCK_END__/d' "$tmp_config"
   fi
+
+  # Conditionally include/exclude Aphydle server block
+  if [[ -z "$aphydle_domain" ]]; then
+    log "Removing Aphydle server block (aphydle.<primary> not in domain.json)"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_START__/,/# __APHYDLE_SERVER_BLOCK_END__/d' "$tmp_config"
+  else
+    log "Aphydle server block enabled for $aphydle_domain"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_START__/d' "$tmp_config"
+    sed -i '/# __APHYDLE_SERVER_BLOCK_END__/d' "$tmp_config"
+    sed -i "s|__APHYDLE_DOMAIN__|$aphydle_domain|g" "$tmp_config"
+  fi
   
-  # Remove SSL listeners if user doesn't want SSL
+  # Remove SSL listeners if user doesn't want SSL.
+  # Match `listen 443 ssl;` and `listen 443 ssl default_server;` (and IPv6).
   if [[ ! "$WANT_SSL" =~ ^[Yy]$ ]]; then
     log "Removing SSL listeners (user declined SSL setup)"
-    sed -i -e '/listen 443 ssl;/d' -e '/listen \[::\]:443 ssl;/d' "$tmp_config"
+    sed -i -e '/listen 443 ssl/d' -e '/listen \[::\]:443 ssl/d' "$tmp_config"
   fi
   
   # Install the processed config
@@ -1560,8 +2022,8 @@ if ! $SUDO nginx -t 2>&1 | tee /tmp/nginx-test.log; then
         $SUDO cp "$NGINX_SITE_AVAIL" "$NGINX_SITE_AVAIL.bak"
         # Strip ALL SSL directives
         $SUDO sed -i \
-          -e '/listen 443 ssl;/d' \
-          -e '/listen \[::\]:443 ssl;/d' \
+          -e '/listen 443 ssl/d' \
+          -e '/listen \[::\]:443 ssl/d' \
           -e '/ssl_certificate /d' \
           -e '/ssl_certificate_key /d' \
           -e '/ssl_protocols /d' \
@@ -1800,7 +2262,24 @@ PY
     log "[ERROR] domain.json exists but is not readable: $domain_json"
     return 1
   fi
-  
+
+  # Auto-add aphydle.<primary> to domain.json if Aphydle was prepared by setup_aphydle.
+  # This guarantees the SAN gets included in the certificate request below.
+  if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" ]]; then
+    local _aphydle_primary
+    _aphydle_primary="$(get_primary_domain_from_domain_json "$domain_json")"
+    if [[ -n "$_aphydle_primary" && "$_aphydle_primary" != "__PRIMARY_DOMAIN__" ]]; then
+      local _aphydle_dom="aphydle.$_aphydle_primary"
+      local _aphydle_res
+      _aphydle_res="$(aphydle_register_domain_in_json "$domain_json" "$_aphydle_dom" 2>&1 || true)"
+      case "$_aphydle_res" in
+        ADDED)   log "Auto-added $_aphydle_dom to domain.json (cert SAN)" ;;
+        PRESENT) : ;;
+        *)       log "[WARN] Could not auto-add $_aphydle_dom to domain.json: $_aphydle_res" ;;
+      esac
+    fi
+  fi
+
   # Parse domain.json - only supports new format with "domains" array
     local domain_info
     local domain_info_err
@@ -2312,6 +2791,20 @@ else
   log "Skipping SSL certificate setup (user declined SSL)."
 fi
 
+# Re-render nginx config so any conditional blocks (Aphydle, media, French) added
+# to domain.json during SSL setup get included now. Idempotent.
+if [[ -f "$REPO_DIR/domain.json" ]]; then
+  log "Re-rendering nginx config to pick up domain.json changes…"
+  prepare_nginx_config "$REPO_DIR/plant-swipe.conf" "$NGINX_SITE_AVAIL"
+  if $SUDO nginx -t 2>&1 | tee /tmp/nginx-test-postssl.log; then
+    if $SUDO systemctl is-active --quiet nginx; then
+      $SUDO systemctl reload nginx || log "[WARN] nginx reload after re-render failed."
+    fi
+  else
+    log "[WARN] nginx -t failed after re-render; leaving previous config in place."
+  fi
+fi
+
 # Admin API: install to /opt/admin with venv
 log "Setting up Admin API venv…"
 $SUDO mkdir -p "$ADMIN_DIR"
@@ -2442,6 +2935,50 @@ WantedBy=multi-user.target
 EOF
 "
 
+# Aphydle front-server unit (only installed when Aphydle was set up).
+# Aphydle ships its own server.mjs which static-serves dist/ and renders SSR
+# HTML for crawlers on /puzzle/<n>/ and /puzzle/. EnvironmentFile pulls the
+# Supabase credentials and VITE_APP_SITE_URL / VITE_APP_OG_IMAGE the SSR path
+# needs at request time (Vite only injected those at build time).
+APHYDLE_SERVICE_FILE="/etc/systemd/system/$SERVICE_APHYDLE.service"
+APHYDLE_SERVE_SCRIPT="$APHYDLE_DIR/server.mjs"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_SERVE_SCRIPT" ]]; then
+  log "Installing Aphydle systemd unit ($SERVICE_APHYDLE)…"
+  $SUDO bash -c "cat > '$APHYDLE_SERVICE_FILE' <<EOF
+[Unit]
+Description=Aphydle daily plant guessing game (SSR front-server)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User=www-data
+Group=www-data
+EnvironmentFile=-$APHYDLE_DIR/.env
+Environment=APHYDLE_HOST=$APHYDLE_HOST
+Environment=APHYDLE_PORT=$APHYDLE_PORT
+WorkingDirectory=$APHYDLE_DIR
+ExecStart=/usr/bin/node $APHYDLE_SERVE_SCRIPT
+Restart=always
+RestartSec=3s
+StartLimitIntervalSec=60
+StartLimitBurst=10
+TimeoutStopSec=15s
+KillMode=mixed
+
+[Install]
+WantedBy=multi-user.target
+EOF
+"
+else
+  log "Aphydle systemd unit not installed (Aphydle setup skipped or server.mjs missing)."
+  # Clean up stale unit if Aphydle was disabled after a previous install
+  if [[ -f "$APHYDLE_SERVICE_FILE" && "${APHYDLE_SETUP_DONE:-0}" != "1" ]]; then
+    log "Removing stale Aphydle unit at $APHYDLE_SERVICE_FILE"
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE" 2>/dev/null || true
+    $SUDO rm -f "$APHYDLE_SERVICE_FILE"
+  fi
+fi
+
 # Sitemap generator helper + unit files
 if [[ -f "$REPO_DIR/scripts/generate-sitemap-daily.sh" ]]; then
   log "Installing sitemap generator helper to $SITEMAP_GENERATOR_BIN…"
@@ -2487,6 +3024,60 @@ WantedBy=timers.target
 EOF
 "
 
+# Aphydle nightly rebuild helper + unit files. The wrapper delegates to
+# scripts/refresh-aphydle.sh, which already runs as $SERVICE_USER under the
+# same NOPASSWD sudoers entries used by manual refreshes. Skipped (and any
+# stale unit removed) when Aphydle setup was disabled.
+APHYDLE_REBUILD_HELPER_SRC="$REPO_DIR/scripts/aphydle-nightly-rebuild.sh"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_HELPER_SRC" ]]; then
+  log "Installing Aphydle nightly rebuild helper to $APHYDLE_REBUILD_BIN…"
+  $SUDO install -D -m 0755 "$APHYDLE_REBUILD_HELPER_SRC" "$APHYDLE_REBUILD_BIN"
+
+  log "Installing Aphydle nightly rebuild systemd unit…"
+  $SUDO bash -c "cat > '$APHYDLE_REBUILD_SERVICE_FILE' <<EOF
+[Unit]
+Description=Aphydle nightly rebuild (refresh puzzle archive sitemap)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=$SERVICE_USER
+Group=$SERVICE_USER
+EnvironmentFile=$SERVICE_ENV_FILE
+WorkingDirectory=$REPO_DIR
+ExecStart=$APHYDLE_REBUILD_BIN
+SuccessExitStatus=0
+Restart=on-failure
+RestartSec=60
+TimeoutStartSec=1800
+EOF
+"
+
+  log "Installing Aphydle nightly rebuild timer unit…"
+  $SUDO bash -c "cat > '$APHYDLE_REBUILD_TIMER_FILE' <<EOF
+[Unit]
+Description=Daily Aphydle bundle rebuild for puzzle-archive indexing
+
+[Timer]
+OnCalendar=$APHYDLE_REBUILD_SCHEDULE
+Persistent=true
+RandomizedDelaySec=$APHYDLE_REBUILD_RANDOM_DELAY
+Unit=$SERVICE_APHYDLE_REBUILD.service
+
+[Install]
+WantedBy=timers.target
+EOF
+"
+else
+  if [[ -f "$APHYDLE_REBUILD_TIMER_FILE" || -f "$APHYDLE_REBUILD_SERVICE_FILE" ]]; then
+    log "Removing stale Aphydle rebuild units (Aphydle setup is disabled)"
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE_REBUILD.timer" 2>/dev/null || true
+    $SUDO systemctl disable --now "$SERVICE_APHYDLE_REBUILD.service" 2>/dev/null || true
+    $SUDO rm -f "$APHYDLE_REBUILD_TIMER_FILE" "$APHYDLE_REBUILD_SERVICE_FILE"
+  fi
+fi
+
 # CA certificates auto-update timer (weekly)
 # This ensures the system CA certificates stay up-to-date for SSL connections
 # (e.g., connecting to Supabase database which requires valid CA certs)
@@ -2530,43 +3121,34 @@ EOF
 # Ensure ownership for admin dir (www-data runs the service)
 $SUDO chown -R www-data:www-data "$ADMIN_DIR" || true
 
-# Sudoers for Admin API to manage limited systemctl commands without password
-SUDOERS_FILE="/etc/sudoers.d/plantswipe-admin-api"
-log "Configuring sudoers at $SUDOERS_FILE…"
-$SUDO bash -c "cat > '$SUDOERS_FILE' <<EOF
-Defaults:$SERVICE_USER !requiretty
-$SERVICE_USER ALL=(root) NOPASSWD: $NGINX_BIN -t
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN reload $SERVICE_NGINX
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_NODE
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN restart $SERVICE_ADMIN
-# Allow website Pull & Build to sync service env and reload units without password
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/mkdir
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/install
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/sed
-$SERVICE_USER ALL=(root) NOPASSWD: /usr/bin/tee
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chown
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/chmod
-$SERVICE_USER ALL=(root) NOPASSWD: /bin/bash
-$SERVICE_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN daemon-reload
-EOF
-"
-$SUDO chmod 0440 "$SUDOERS_FILE"
-# Validate sudoers syntax
-if ! $SUDO visudo -cf "$SUDOERS_FILE" >/dev/null; then
-  echo "[WARN] sudoers validation failed for $SUDOERS_FILE — removing for safety" >&2
-  $SUDO rm -f "$SUDOERS_FILE" || true
-fi
+# Re-render sudoers at end-of-setup as well — defensive in case anything below
+# changed values that flow into the file. The same function ran earlier (right
+# after the password sync) so refresh-plant-swipe.sh / refresh-aphydle.sh saw
+# the up-to-date NOPASSWD entries during the build phase.
+install_plantswipe_sudoers
 
 # Enable and restart services to pick up updated unit files
 log "Enabling and restarting services…"
 $SUDO systemctl daemon-reload
 $SUDO systemctl enable "$SERVICE_ADMIN" "$SERVICE_NODE" "$SERVICE_NGINX" "$SERVICE_SITEMAP.timer" "$SERVICE_CA_UPDATE.timer"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  $SUDO systemctl enable "$SERVICE_APHYDLE" || log "[WARN] Failed to enable $SERVICE_APHYDLE"
+fi
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_TIMER_FILE" ]]; then
+  $SUDO systemctl enable "$SERVICE_APHYDLE_REBUILD.timer" || log "[WARN] Failed to enable $SERVICE_APHYDLE_REBUILD.timer"
+fi
 $SUDO systemctl start "$SERVICE_SITEMAP.timer" || log "[WARN] Failed to start $SERVICE_SITEMAP.timer"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.timer" || log "[WARN] Failed to start $SERVICE_CA_UPDATE.timer"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "$APHYDLE_REBUILD_TIMER_FILE" ]]; then
+  $SUDO systemctl start "$SERVICE_APHYDLE_REBUILD.timer" || log "[WARN] Failed to start $SERVICE_APHYDLE_REBUILD.timer"
+fi
 # Run CA update immediately to fix any current SSL issues
 log "Running initial CA certificates update…"
 $SUDO systemctl start "$SERVICE_CA_UPDATE.service" || log "[WARN] CA certificates update failed (will retry on timer)"
 $SUDO systemctl restart "$SERVICE_ADMIN" "$SERVICE_NODE"
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  $SUDO systemctl restart "$SERVICE_APHYDLE" || log "[WARN] Failed to restart $SERVICE_APHYDLE"
+fi
 if [[ -x "$SITEMAP_GENERATOR_BIN" ]]; then
   if ! $SUDO systemctl start "$SERVICE_SITEMAP.service"; then
     log "[WARN] Initial sitemap generation failed. Inspect: $SYSTEMCTL_BIN status $SERVICE_SITEMAP.service"
@@ -2633,11 +3215,15 @@ deploy_supabase_contact_function
 
 # Verify
 log "Verifying services are active…"
-if $SUDO systemctl is-active "$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX" >/dev/null; then
-  log "All services active."
+verify_services=("$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX")
+if [[ "${APHYDLE_SETUP_DONE:-0}" == "1" && -f "/etc/systemd/system/$SERVICE_APHYDLE.service" ]]; then
+  verify_services+=("$SERVICE_APHYDLE")
+fi
+if $SUDO systemctl is-active "${verify_services[@]}" >/dev/null; then
+  log "All services active: ${verify_services[*]}"
 else
   echo "[WARN] One or more services not active" >&2
-  $SUDO systemctl status "$SERVICE_NODE" "$SERVICE_ADMIN" "$SERVICE_NGINX" --no-pager || true
+  $SUDO systemctl status "${verify_services[@]}" --no-pager || true
 fi
 
 # --- Environment & credential file checks ---

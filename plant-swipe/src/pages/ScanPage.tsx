@@ -13,14 +13,14 @@ import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog'
-import { 
-  Camera, 
-  Upload, 
-  Plus, 
-  Loader2, 
-  Leaf, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  Camera,
+  Upload,
+  Plus,
+  Loader2,
+  Leaf,
+  AlertCircle,
+  CheckCircle2,
   ExternalLink,
   Trash2,
   ScanLine,
@@ -29,7 +29,8 @@ import {
   Image as ImageIcon,
   Search,
   FlaskConical,
-  ZoomIn
+  ZoomIn,
+  Sprout
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useImageViewer, ImageViewer } from '@/components/ui/image-viewer'
@@ -37,6 +38,7 @@ import { CameraCapture } from '@/components/messaging/CameraCapture'
 import { ImageSourcePicker } from '@/components/ui/image-source-picker'
 import { FileDropZone } from '@/components/ui/file-drop-zone'
 import { RequestPlantDialog } from '@/components/plant/RequestPlantDialog'
+import { AddToGardenDialog } from '@/components/plant/AddToGardenDialog'
 import { 
   uploadAndIdentifyPlant, 
   createPlantScan,
@@ -92,6 +94,10 @@ export const ScanPage: React.FC = () => {
   // Request plant dialog
   const [showRequestDialog, setShowRequestDialog] = React.useState(false)
   const [requestPlantName, setRequestPlantName] = React.useState<string>('')
+
+  // Add to garden dialog (shown when scanned plant is in our DB)
+  const [showGardenDialog, setShowGardenDialog] = React.useState(false)
+  const [gardenTargetPlant, setGardenTargetPlant] = React.useState<{ id: string; name: string } | null>(null)
   
   // Fullscreen image viewer
   const imageViewer = useImageViewer()
@@ -699,16 +705,16 @@ export const ScanPage: React.FC = () => {
               {t('scan.resultDescription', { defaultValue: 'Here\'s what we found based on your image.' })}
             </DialogDescription>
           </DialogHeader>
-          
+
           {currentResult && (
             <div className="space-y-6 mt-2">
               {/* Scanned image - clickable to view fullscreen */}
               {currentResult.imageUrl && (
-                <div 
+                <div
                   className="relative rounded-2xl overflow-hidden bg-stone-100 dark:bg-stone-800 cursor-pointer group"
                   onClick={() => imageViewer.open(currentResult.imageUrl!)}
                 >
-                  <img 
+                  <img
                     src={currentResult.imageUrl}
                     alt="Scanned plant"
                     className="w-full h-48 object-cover"
@@ -823,45 +829,58 @@ export const ScanPage: React.FC = () => {
                   
                   {/* Action buttons */}
                   <div className="mt-4 space-y-2">
-                    {/* Link to database plant (if exact match found) */}
                     {currentResult.matchedPlant ? (
-                      <Button 
-                        onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
-                        className="w-full rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
-                      >
-                        <ExternalLink className="h-4 w-4" />
-                        {t('scan.viewInDatabase', { defaultValue: 'View in Our Database' })}
-                      </Button>
+                      <>
+                        {/* Primary: Add to Garden — the most useful action after a successful scan */}
+                        {user?.id && (
+                          <Button
+                            onClick={() => {
+                              setGardenTargetPlant({
+                                id: currentResult.matchedPlant!.id,
+                                name: currentResult.matchedPlant!.name || currentResult.topMatchName!,
+                              })
+                              setShowGardenDialog(true)
+                            }}
+                            className="w-full rounded-full bg-emerald-600 hover:bg-emerald-700 text-white gap-2"
+                          >
+                            <Sprout className="h-4 w-4" />
+                            {t('scan.addToGarden', { defaultValue: 'Add to My Garden' })}
+                          </Button>
+                        )}
+                        {/* Secondary: View plant details */}
+                        <Button
+                          onClick={() => goToPlantInfo(currentResult.matchedPlant!.id)}
+                          variant="outline"
+                          className="w-full rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          {t('scan.viewPlantDetails', { defaultValue: 'View Plant Details' })}
+                        </Button>
+                      </>
                     ) : (
-                      <div className="rounded-2xl border border-stone-200 bg-stone-50/80 dark:border-stone-700 dark:bg-stone-900/40 p-3 space-y-3">
-                        <div>
-                          <p className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                            {t('scan.notInDatabaseYet', { defaultValue: 'This plant is not in our database yet' })}
-                          </p>
-                          <p className="text-xs text-stone-600 dark:text-stone-300/90 mt-1">
-                            {t('scan.notInDatabaseHint', { defaultValue: 'Tap the button below to request this plant and we will review adding it.' })}
-                          </p>
-                        </div>
+                      <>
+                        {/* Primary: Request plant be added to the database */}
                         <Button
                           onClick={() => handleRequestPlant(currentResult.topMatchName!)}
-                          variant="outline"
-                          className="w-full rounded-full border border-amber-500/70 bg-transparent text-amber-700 dark:text-amber-300 hover:bg-amber-50/50 dark:hover:bg-amber-900/15 gap-2 font-semibold ring-1 ring-amber-500/20 shadow-[0_0_20px_-12px_rgba(245,158,11,0.95)]"
+                          className="w-full rounded-full bg-amber-500 hover:bg-amber-600 text-white gap-2 font-semibold"
                         >
                           <Plus className="h-4 w-4" />
                           {t('scan.requestPlant', { defaultValue: 'Request This Plant' })}
                         </Button>
-                      </div>
+                        <p className="text-xs text-stone-600 dark:text-stone-300/90 text-center px-2">
+                          {t('scan.notInDatabaseHint', { defaultValue: 'This plant isn\'t in our database yet — tap above and we\'ll review adding it.' })}
+                        </p>
+                        {/* Secondary: Search in encyclopedia */}
+                        <Button
+                          onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
+                          variant="outline"
+                          className="w-full rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
+                        >
+                          <Search className="h-4 w-4" />
+                          {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
+                        </Button>
+                      </>
                     )}
-                    
-                    {/* Search in encyclopedia */}
-                    <Button 
-                      onClick={() => navigate(`/search?q=${encodeURIComponent(currentResult.topMatchName!)}`)}
-                      variant="outline"
-                      className="w-full rounded-full gap-2 border-emerald-300 dark:border-emerald-700 hover:bg-emerald-100 dark:hover:bg-emerald-900/30"
-                    >
-                      <Search className="h-4 w-4" />
-                      {t('scan.searchInEncyclopedia', { defaultValue: 'Search in Encyclopedia' })}
-                    </Button>
                   </div>
                 </div>
               )}
@@ -873,45 +892,97 @@ export const ScanPage: React.FC = () => {
                     {t('scan.otherSuggestions', { defaultValue: 'Other Possibilities' })}
                   </h4>
                   <div className="space-y-2">
-                    {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => (
-                      <button 
-                        key={suggestion.id || idx}
-                        onClick={() => navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)}
-                        className="flex items-start justify-between p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
-                        title={t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
-                      >
-                        <div className="flex-1 min-w-0">
-                          <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
-                            {suggestion.name}
-                          </span>
-                          {/* Show infraspecies/cultivar if available */}
-                          {suggestion.infraspecies && (() => {
-                            const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
-                            if (!infraInfo) return null
-                            return (
-                              <div className="flex items-center gap-1 mt-1">
-                                <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
-                                  <FlaskConical className="h-2.5 w-2.5 mr-1" />
-                                  {infraInfo.value}
-                                </Badge>
+                    {currentResult.suggestions.slice(1, 5).map((suggestion, idx) => {
+                      const thumb = suggestion.similarImages?.[0]
+                      const inDatabase = Boolean(suggestion.matchedPlantId)
+                      return (
+                        <button
+                          key={suggestion.id || idx}
+                          onClick={() => {
+                            if (suggestion.matchedPlantId) {
+                              goToPlantInfo(suggestion.matchedPlantId)
+                            } else {
+                              navigate(`/search?q=${encodeURIComponent(suggestion.name)}`)
+                            }
+                          }}
+                          className="flex items-center gap-3 p-3 rounded-xl bg-stone-50 dark:bg-stone-800/50 w-full text-left hover:bg-stone-100 dark:hover:bg-stone-700/50 transition-colors cursor-pointer group"
+                          title={inDatabase
+                            ? t('scan.viewPlantDetails', { defaultValue: 'View Plant Details' })
+                            : t('scan.searchForPlant', { defaultValue: 'Search for this plant in our encyclopedia' })}
+                        >
+                          {/* Thumbnail — same Kindwise call, no extra API cost. Click opens fullscreen. */}
+                          <div
+                            onClick={(e) => {
+                              if (!thumb) return
+                              e.stopPropagation()
+                              imageViewer.open(thumb.url)
+                            }}
+                            className={cn(
+                              "flex-shrink-0 w-14 h-14 rounded-lg overflow-hidden bg-stone-100 dark:bg-stone-800 relative",
+                              thumb && "cursor-zoom-in group/img"
+                            )}
+                            aria-label={thumb ? t('scan.viewFullscreen', { defaultValue: 'View image fullscreen' }) : undefined}
+                          >
+                            {thumb ? (
+                              <>
+                                <img
+                                  src={thumb.urlSmall || thumb.url}
+                                  alt={suggestion.name}
+                                  className="w-full h-full object-cover"
+                                  loading="lazy"
+                                />
+                                <div className="absolute inset-0 bg-black/0 group-hover/img:bg-black/30 transition-colors flex items-center justify-center">
+                                  <ZoomIn className="h-4 w-4 text-white opacity-0 group-hover/img:opacity-100 transition-opacity drop-shadow-lg" />
+                                </div>
+                              </>
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center">
+                                <Leaf className="h-5 w-5 text-stone-400" />
                               </div>
-                            )
-                          })()}
-                          {/* Show common names if available */}
-                          {suggestion.commonNames && suggestion.commonNames.length > 0 && (
-                            <p className="text-xs text-stone-400 mt-0.5 truncate">
-                              {suggestion.commonNames.slice(0, 2).join(', ')}
-                            </p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
-                          <Badge variant="outline" className="rounded-full text-xs">
-                            {formatProbability(suggestion.probability)}
-                          </Badge>
-                          <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      </button>
-                    ))}
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-sm font-medium text-stone-700 dark:text-stone-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">
+                              {suggestion.name}
+                            </span>
+                            <div className="flex flex-wrap items-center gap-1 mt-1">
+                              {inDatabase && (
+                                <Badge className="rounded-full bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400 text-xs">
+                                  <CheckCircle2 className="h-2.5 w-2.5 mr-1" />
+                                  {t('scan.inDatabase', { defaultValue: 'In Database' })}
+                                </Badge>
+                              )}
+                              {suggestion.infraspecies && (() => {
+                                const infraInfo = getInfraspeciesInfo(suggestion.infraspecies)
+                                if (!infraInfo) return null
+                                return (
+                                  <Badge variant="outline" className="rounded-full text-xs bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800">
+                                    <FlaskConical className="h-2.5 w-2.5 mr-1" />
+                                    {infraInfo.value}
+                                  </Badge>
+                                )
+                              })()}
+                            </div>
+                            {/* Show common names if available */}
+                            {suggestion.commonNames && suggestion.commonNames.length > 0 && (
+                              <p className="text-xs text-stone-400 mt-0.5 truncate">
+                                {suggestion.commonNames.slice(0, 2).join(', ')}
+                              </p>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                            <Badge variant="outline" className="rounded-full text-xs">
+                              {formatProbability(suggestion.probability)}
+                            </Badge>
+                            {inDatabase ? (
+                              <ExternalLink className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            ) : (
+                              <Search className="h-3.5 w-3.5 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            )}
+                          </div>
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -942,27 +1013,6 @@ export const ScanPage: React.FC = () => {
                   </div>
                 </div>
               )}
-              
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t border-stone-200 dark:border-stone-700">
-                <Button
-                  onClick={() => {
-                    setShowResultDialog(false)
-                    resetScanFlow()
-                  }}
-                  className="flex-1 rounded-full"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  {t('scan.scanAnother', { defaultValue: 'Scan Another' })}
-                </Button>
-                <Button
-                  onClick={() => setShowResultDialog(false)}
-                  variant="outline"
-                  className="rounded-full"
-                >
-                  {t('common.close', { defaultValue: 'Close' })}
-                </Button>
-              </div>
             </div>
           )}
         </DialogContent>
@@ -1012,6 +1062,17 @@ export const ScanPage: React.FC = () => {
         onOpenChange={setShowRequestDialog}
         initialPlantName={requestPlantName}
       />
+
+      {/* Add to Garden Dialog — opens from the scan result when plant is in the DB */}
+      {user?.id && gardenTargetPlant && (
+        <AddToGardenDialog
+          open={showGardenDialog}
+          onOpenChange={setShowGardenDialog}
+          plantId={gardenTargetPlant.id}
+          plantName={gardenTargetPlant.name}
+          userId={user.id}
+        />
+      )}
       
       {/* Fullscreen Image Viewer */}
       <ImageViewer

@@ -6,6 +6,8 @@ module.exports = {
   	extend: {
     		fontFamily: {
     			brand: ['"Lavonte"', 'ui-serif', 'Georgia', 'serif'],
+    			sans: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+    			mono: ['"Fira Code"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
     		},
     		animation: {
     			'pulse-subtle': 'pulse-subtle 2s ease-in-out infinite',

@@ -83,6 +83,21 @@ export const AdminBadgesPanel: React.FC = () => {
   const [formData, setFormData] = React.useState<BadgeFormData>(emptyForm)
   const [showTranslations, setShowTranslations] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
+
+  // ⚡ Bolt: Calculate aggregates in a single-pass loop instead of multiple filter/reduce calls
+  const badgeStats = React.useMemo(() => {
+    let activeCount = 0;
+    let eventCount = 0;
+    let totalEarned = 0;
+    for (let i = 0; i < badges.length; i++) {
+      const b = badges[i];
+      if (b.is_active) activeCount++;
+      if (b.category === 'event') eventCount++;
+      totalEarned += b.earned_count;
+    }
+    return { activeCount, eventCount, totalEarned };
+  }, [badges]);
+
   const [expandedBadge, setExpandedBadge] = React.useState<string | null>(null)
   const [confirmDelete, setConfirmDelete] = React.useState<string | null>(null)
 
@@ -545,7 +560,9 @@ export const AdminBadgesPanel: React.FC = () => {
           </h3>
           <button
             onClick={handleCancel}
-            className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors"
+            className="p-1 rounded-lg hover:bg-stone-100 dark:hover:bg-stone-800 transition-colors focus-visible:ring-2 focus-visible:ring-emerald-500/50 focus-visible:outline-none"
+            aria-label="Cancel edit"
+            title="Cancel edit"
           >
             <X className="h-4 w-4 text-stone-500" />
           </button>
@@ -770,15 +787,15 @@ export const AdminBadgesPanel: React.FC = () => {
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Active</p>
-            <p className="text-lg font-bold text-emerald-600">{badges.filter((b) => b.is_active).length}</p>
+            <p className="text-lg font-bold text-emerald-600">{badgeStats.activeCount}</p>
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Event</p>
-            <p className="text-lg font-bold text-amber-500">{badges.filter((b) => b.category === 'event').length}</p>
+            <p className="text-lg font-bold text-amber-500">{badgeStats.eventCount}</p>
           </div>
           <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e1e] p-3">
             <p className="text-xs text-stone-500">Total Earned</p>
-            <p className="text-lg font-bold text-blue-500">{badges.reduce((sum, b) => sum + b.earned_count, 0)}</p>
+            <p className="text-lg font-bold text-blue-500">{badgeStats.totalEarned}</p>
           </div>
         </div>
       </div>

@@ -44,7 +44,8 @@ Aphylia is a plant care application serving users in the European Union. All con
 - `plant-swipe/android/`, `plant-swipe/ios/` — native Capacitor projects (committed for CI)
 - `plant-swipe/supabase/` — database schema, migrations, and Edge Functions
 - `admin_api/` — Flask admin API and service config
-- `scripts/` — operational scripts for deployment, sitemap generation, and service restarts
+- `aphydle/` — cloned Aphydle daily-game sub-app (gitignored; managed by `scripts/refresh-aphydle.sh`)
+- `scripts/` — operational scripts for deployment, sitemap generation, service restarts, and Aphydle management
 - `.github/workflows/` — CI pipelines (auto-version, translation checks, legal version updates, Capacitor mobile builds)
 
 ---
