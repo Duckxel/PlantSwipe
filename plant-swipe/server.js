@@ -4984,32 +4984,52 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
 // Buffer API integration: schedule social posts from /admin/export
 // =====================================================================
 // The Buffer API key is read from the BUFFER environment variable and
-// used to call the Buffer GraphQL endpoint (https://graphql.buffer.com).
-// Endpoints below proxy three operations: list organizations, list
-// channels for an org, and create a scheduled post on a channel.
+// used to call the Buffer GraphQL endpoint. The endpoint URL can be
+// overridden with BUFFER_GRAPHQL_URL (Buffer ships GraphQL at both
+// https://graphql.buffer.com and https://api.buffer.com/graphql at
+// various points in their rollout).
 
-const BUFFER_GRAPHQL_URL = 'https://graphql.buffer.com'
+const BUFFER_GRAPHQL_URL = (process.env.BUFFER_GRAPHQL_URL || 'https://graphql.buffer.com').trim()
+
+// Surface whether BUFFER is loaded once at startup so operators can confirm
+// the .env value reached this process. We only log presence + length, never
+// the key itself.
+{
+  const k = process.env.BUFFER || ''
+  if (k) {
+    console.log(`[buffer] API key loaded (length=${k.length}). GraphQL endpoint: ${BUFFER_GRAPHQL_URL}`)
+  } else {
+    console.warn('[buffer] BUFFER env var is NOT set on this process. Check that .env was edited and the service restarted.')
+  }
+}
 
 async function callBufferGraphQL(query, variables) {
   const apiKey = process.env.BUFFER || ''
   if (!apiKey) {
-    const err = new Error('BUFFER environment variable is not configured')
+    const err = new Error('BUFFER environment variable is not configured (the node process did not pick it up — restart the service after editing .env)')
     err.statusCode = 500
     throw err
   }
-  const resp = await fetch(BUFFER_GRAPHQL_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({ query, variables: variables || {} }),
-  })
+  let resp
+  try {
+    resp = await fetch(BUFFER_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, variables: variables || {} }),
+    })
+  } catch (netErr) {
+    const err = new Error(`Buffer network error reaching ${BUFFER_GRAPHQL_URL}: ${netErr?.message || netErr}`)
+    err.statusCode = 502
+    throw err
+  }
   const text = await resp.text()
   let json = null
   try { json = text ? JSON.parse(text) : null } catch { json = null }
   if (!resp.ok) {
-    const err = new Error(`Buffer API error (${resp.status}): ${text?.slice(0, 500) || resp.statusText}`)
+    const err = new Error(`Buffer API error (${resp.status} from ${BUFFER_GRAPHQL_URL}): ${text?.slice(0, 500) || resp.statusText}`)
     err.statusCode = resp.status
     throw err
   }
@@ -5038,6 +5058,7 @@ app.get('/api/admin/buffer/organizations', async (req, res) => {
     res.json({ ok: true, organizations })
   } catch (e) {
     const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/organizations] failed:', e?.message || e)
     res.status(status).json({ error: e?.message || 'Failed to fetch Buffer organizations' })
   }
 })
@@ -5063,6 +5084,7 @@ app.get('/api/admin/buffer/channels', async (req, res) => {
     res.json({ ok: true, channels })
   } catch (e) {
     const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/channels] failed:', e?.message || e)
     res.status(status).json({ error: e?.message || 'Failed to fetch Buffer channels' })
   }
 })
@@ -5215,6 +5237,7 @@ app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (
     res.status(allOk ? 200 : (anyOk ? 207 : 502)).json({ ok: allOk, results, mediaUrls })
   } catch (e) {
     const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/post] failed:', e?.message || e)
     res.status(status).json({ error: e?.message || 'Failed to create Buffer post' })
   }
 })
