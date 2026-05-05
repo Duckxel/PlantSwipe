@@ -159,7 +159,7 @@ export function AppSelect<T extends string = string>({
               listRef.current?.focus()
             }}
             className={cn(
-              "z-50 w-[var(--radix-popover-trigger-width)] max-w-[min(var(--radix-popover-trigger-width),calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-stone-200 bg-white p-1 shadow-xl outline-none",
+              "z-50 w-max min-w-[var(--radix-popover-trigger-width)] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-2xl border border-stone-200 bg-white p-1 shadow-xl outline-none",
               "dark:border-[#3e3e42] dark:bg-[#1f1f1f]",
               "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
               contentClassName,
