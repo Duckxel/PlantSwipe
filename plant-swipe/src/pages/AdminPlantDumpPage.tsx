@@ -600,11 +600,11 @@ export function AdminPlantDumpPage() {
           )}
 
           {/* View button overlay */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
+          <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20 pointer-events-none">
             <button
               type="button"
               onClick={e => { e.stopPropagation(); setViewerUrl(img.url); setViewerOpen(true) }}
-              className="bg-white/90 dark:bg-stone-900/90 rounded-full p-1.5 text-stone-700 dark:text-stone-200 hover:scale-110 transition-transform"
+              className="bg-white/90 dark:bg-stone-900/90 rounded-full p-1.5 text-stone-700 dark:text-stone-200 hover:scale-110 transition-transform pointer-events-auto"
               title="View full size"
             >
               <Eye className="h-4 w-4" />
