@@ -136,12 +136,31 @@ export default function PublicProfilePage() {
           defaultValue: `See shared gardens, stats, and activity from ${preferredDisplayName}.`,
         })
       : fallbackProfileDescription)
+  // Quality gate (mirrors scripts/generate-sitemap.js — keep in sync):
+  // a public profile is indexable only if it has a non-empty bio, was active
+  // within the last 90 days, owns ≥1 garden, and has ≥3 plants total. Anything
+  // below the bar stays shareable but emits noindex,follow.
+  const PROFILE_ACTIVE_MS = 90 * 24 * 60 * 60 * 1000
+  const profileIsActive = (() => {
+    const iso = pp?.last_seen_at
+    if (!iso) return false
+    const ts = new Date(iso).getTime()
+    if (!Number.isFinite(ts)) return false
+    return Date.now() - ts <= PROFILE_ACTIVE_MS
+  })()
+  const profileQualifiesForIndex =
+    !!pp &&
+    pp.is_private !== true &&
+    bioDescription.length > 0 &&
+    profileIsActive &&
+    (stats?.gardensCount ?? 0) >= 1 &&
+    (stats?.plantsTotal ?? 0) >= 3
   usePageMetadata({
     title: seoTitle,
     description: seoDescription,
     image: pp?.avatar_url ?? undefined,
     url: preferredDisplayName ? `/u/${encodeURIComponent(preferredDisplayName)}` : undefined,
-    robots: 'noindex,follow',
+    robots: profileQualifiesForIndex ? 'index,follow' : 'noindex,follow',
     type: 'profile',
   })
 

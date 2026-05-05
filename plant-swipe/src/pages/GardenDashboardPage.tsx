@@ -154,9 +154,6 @@ export const GardenDashboardPage: React.FC = () => {
   const location = useLocation();
   const { user, profile } = useAuth();
   const { t } = useTranslation("common");
-  // User-generated, often thin, frequently private — keep these out of search
-  // results while still letting Google follow internal links to indexable pages.
-  usePageMetadata({ robots: 'noindex,follow' });
   const { active: _tutorialActive } = useTutorial();
   const isDemoGarden = !!(id && id.startsWith('demo-'));
   // Stable demo data — generated once, never changes across re-renders
@@ -190,6 +187,15 @@ export const GardenDashboardPage: React.FC = () => {
   }, [location.pathname, id]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- plants come from API + getGardenPlants with varying shapes
   const [plants, setPlants] = React.useState<Array<any>>([]);
+  // Quality gate (mirrors scripts/generate-sitemap.js — keep in sync):
+  // a garden is indexable only if it's public, has a cover image, and contains
+  // ≥3 plants. Anything below the bar stays shareable but emits noindex,follow.
+  const gardenQualifiesForIndex =
+    !!garden &&
+    garden.privacy === 'public' &&
+    !!(garden.coverImageUrl && garden.coverImageUrl.trim()) &&
+    plants.length >= 3;
+  usePageMetadata({ robots: gardenQualifiesForIndex ? 'index,follow' : 'noindex,follow' });
   const [members, setMembers] = React.useState<
     Array<{
       userId: string;

@@ -110,12 +110,26 @@ async function main() {
     return []
   })
 
-  // User-generated routes (/u/, /garden/, /bookmarks/) are intentionally excluded
-  // from the sitemap. They remain shareable but emit noindex,follow at the page level
-  // so we don't waste crawl budget on user content that's typically thin or stale.
-  const profileRoutes = []
-  const gardenRoutes = []
-  const bookmarkRoutes = []
+  // User-generated routes (/u/, /garden/, /bookmarks/) are quality-gated rather
+  // than blanket-excluded. Only entries that meet a minimum content bar (see each
+  // loader for thresholds) get sitemapped and indexed. Thin/empty/stale entries
+  // still 200 OK at runtime but emit noindex,follow at the page level, so we get
+  // the vanity-search and long-tail wins on substantive UGC without dragging the
+  // domain down with empty profiles.
+  const profileRoutes = await loadProfileRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load profile routes: ${error.message || error}`)
+    return []
+  })
+
+  const gardenRoutes = await loadGardenRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load garden routes: ${error.message || error}`)
+    return []
+  })
+
+  const bookmarkRoutes = await loadBookmarkRoutes().catch((error) => {
+    console.warn(`[sitemap] Failed to load bookmark routes: ${error.message || error}`)
+    return []
+  })
 
   const normalizedRoutes = mergeAndNormalizeRoutes([...STATIC_ROUTES, ...dynamicRoutes, ...blogRoutes, ...profileRoutes, ...gardenRoutes, ...bookmarkRoutes])
 
@@ -515,6 +529,16 @@ async function loadBlogRoutes() {
   }).filter(Boolean)
 }
 
+// Quality thresholds for sitemap inclusion. Tuned conservatively — we'd rather
+// under-index a borderline profile than drag domain quality down with thin pages.
+// Override via env vars if these need tuning per environment.
+const PROFILE_MIN_BIO_CHARS = positiveInteger(process.env.SITEMAP_PROFILE_MIN_BIO_CHARS, 1)
+const PROFILE_MIN_PUBLIC_GARDENS = positiveInteger(process.env.SITEMAP_PROFILE_MIN_GARDENS, 1)
+const PROFILE_MIN_PLANTS = positiveInteger(process.env.SITEMAP_PROFILE_MIN_PLANTS, 3)
+const PROFILE_ACTIVE_DAYS = positiveInteger(process.env.SITEMAP_PROFILE_ACTIVE_DAYS, 90)
+const GARDEN_MIN_PLANTS = positiveInteger(process.env.SITEMAP_GARDEN_MIN_PLANTS, 3)
+const BOOKMARK_MIN_PLANTS = positiveInteger(process.env.SITEMAP_BOOKMARK_MIN_PLANTS, 5)
+
 async function loadProfileRoutes() {
   const client = getSupabaseClient()
   if (!client) {
@@ -522,52 +546,127 @@ async function loadProfileRoutes() {
     return []
   }
 
-  // Increased defaults to ensure all profiles are included
+  // Quality gate: a profile is sitemapped only if it has
+  //   1. is_private = false                       (visible to crawlers)
+  //   2. a non-empty bio                          (substantive content)
+  //   3. last_active_at within PROFILE_ACTIVE_DAYS days (not abandoned)
+  //   4. >= PROFILE_MIN_PUBLIC_GARDENS public gardens
+  //   5. >= PROFILE_MIN_PLANTS plants across those public gardens
+  // We over-fetch candidates with the cheap filters in SQL, then enrich with
+  // garden+plant counts in JS so we don't need a custom RPC.
   const maxProfiles = positiveInteger(process.env.SITEMAP_MAX_PROFILE_URLS, 10000)
   const batchSize = positiveInteger(process.env.SITEMAP_PROFILE_BATCH_SIZE, 1000)
 
-  const results = []
+  const activeSince = new Date(Date.now() - PROFILE_ACTIVE_DAYS * 24 * 60 * 60 * 1000).toISOString()
+
+  const candidates = []
   let offset = 0
 
-  while (results.length < maxProfiles) {
-    const limit = Math.min(batchSize, maxProfiles - results.length)
+  while (candidates.length < maxProfiles * 4) {
+    const limit = Math.min(batchSize, maxProfiles * 4 - candidates.length)
     const to = offset + limit - 1
-    // Only fetch PUBLIC profiles - private profiles should NOT be in sitemap
-    // as they return 404 to crawlers and shouldn't be indexed
     const { data, error } = await client
       .from('profiles')
-      .select('display_name')
+      .select('id, display_name, bio, last_active_at')
       .not('display_name', 'is', null)
-      .eq('is_private', false) // Only public profiles
-      .order('display_name', { ascending: true })
+      .eq('is_private', false)
+      .not('bio', 'is', null)
+      .gte('last_active_at', activeSince)
+      .order('last_active_at', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
     if (error) {
       throw new Error(error.message || 'Supabase query failed for profiles')
     }
-
-    if (!data || data.length === 0) {
-      break
-    }
+    if (!data || data.length === 0) break
 
     for (const row of data) {
       if (!row?.display_name) continue
-      const normalizedName = encodeURIComponent(String(row.display_name).trim())
-      if (!normalizedName) continue
-      const route = {
-        path: `/u/${normalizedName}`,
-        changefreq: 'weekly',
-        priority: 0.5,
-      }
-      results.push(route)
-      if (results.length >= maxProfiles) break
+      const bio = typeof row.bio === 'string' ? row.bio.trim() : ''
+      if (bio.length < PROFILE_MIN_BIO_CHARS) continue
+      candidates.push(row)
     }
-
     if (data.length < limit) break
     offset += limit
   }
 
+  if (candidates.length === 0) return []
+
+  // For each candidate, count public gardens and total plants in those gardens.
+  // We chunk the lookups to avoid massive single queries.
+  const userIds = candidates.map((c) => c.id)
+  const publicGardensByUser = new Map() // user_id -> [garden_id, ...]
+  const chunkSize = 200
+
+  for (let i = 0; i < userIds.length; i += chunkSize) {
+    const chunk = userIds.slice(i, i + chunkSize)
+    const { data, error } = await client
+      .from('gardens')
+      .select('id, created_by')
+      .in('created_by', chunk)
+      .eq('privacy', 'public')
+
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for gardens (profile gate)')
+    }
+    if (!data) continue
+    for (const g of data) {
+      if (!g?.created_by || !g?.id) continue
+      const list = publicGardensByUser.get(g.created_by) || []
+      list.push(g.id)
+      publicGardensByUser.set(g.created_by, list)
+    }
+  }
+
+  // Tally plant counts per public garden, then aggregate per user.
+  const allPublicGardenIds = []
+  for (const list of publicGardensByUser.values()) {
+    for (const id of list) allPublicGardenIds.push(id)
+  }
+  const plantCountByGarden = await countGardenPlants(client, allPublicGardenIds)
+
+  const results = []
+  for (const row of candidates) {
+    const gardenIds = publicGardensByUser.get(row.id) || []
+    if (gardenIds.length < PROFILE_MIN_PUBLIC_GARDENS) continue
+    let plantTotal = 0
+    for (const gid of gardenIds) plantTotal += plantCountByGarden.get(gid) || 0
+    if (plantTotal < PROFILE_MIN_PLANTS) continue
+
+    const normalizedName = encodeURIComponent(String(row.display_name).trim())
+    if (!normalizedName) continue
+    results.push({
+      path: `/u/${normalizedName}`,
+      changefreq: 'weekly',
+      priority: 0.5,
+      lastmod: toIsoString(row.last_active_at),
+    })
+    if (results.length >= maxProfiles) break
+  }
+
   return results
+}
+
+async function countGardenPlants(client, gardenIds) {
+  const counts = new Map()
+  if (!gardenIds || gardenIds.length === 0) return counts
+  const chunkSize = 500
+  for (let i = 0; i < gardenIds.length; i += chunkSize) {
+    const chunk = gardenIds.slice(i, i + chunkSize)
+    const { data, error } = await client
+      .from('garden_plants')
+      .select('garden_id')
+      .in('garden_id', chunk)
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for garden_plants count')
+    }
+    if (!data) continue
+    for (const row of data) {
+      if (!row?.garden_id) continue
+      counts.set(row.garden_id, (counts.get(row.garden_id) || 0) + 1)
+    }
+  }
+  return counts
 }
 
 async function loadGardenRoutes() {
@@ -577,49 +676,57 @@ async function loadGardenRoutes() {
     return []
   }
 
-  // Increased defaults to ensure all gardens are included
+  // Quality gate: a garden is sitemapped only if it has
+  //   1. privacy = 'public'                  (visible to crawlers)
+  //   2. cover_image_url present             (a useful preview / og:image)
+  //   3. >= GARDEN_MIN_PLANTS plants in it   (substantive content)
   const maxGardens = positiveInteger(process.env.SITEMAP_MAX_GARDEN_URLS, 10000)
   const batchSize = positiveInteger(process.env.SITEMAP_GARDEN_BATCH_SIZE, 1000)
 
-  const results = []
+  const candidates = []
   let offset = 0
 
-  while (results.length < maxGardens) {
-    const limit = Math.min(batchSize, maxGardens - results.length)
+  while (candidates.length < maxGardens * 2) {
+    const limit = Math.min(batchSize, maxGardens * 2 - candidates.length)
     const to = offset + limit - 1
-    // Only fetch PUBLIC gardens - private gardens should NOT be in sitemap
-    // as they return 404 to crawlers and shouldn't be indexed
-    // Include gardens where privacy is 'public' or null (default to public)
     const { data, error } = await client
       .from('gardens')
-      .select('id, created_at')
-      .or('privacy.eq.public,privacy.is.null')
+      .select('id, created_at, cover_image_url')
+      .eq('privacy', 'public')
+      .not('cover_image_url', 'is', null)
       .order('created_at', { ascending: false })
       .range(offset, to)
 
     if (error) {
       throw new Error(error.message || 'Supabase query failed for gardens')
     }
-
-    if (!data || data.length === 0) {
-      break
-    }
+    if (!data || data.length === 0) break
 
     for (const row of data) {
       if (!row?.id) continue
-      const normalizedId = encodeURIComponent(String(row.id))
-      const route = {
-        path: `/garden/${normalizedId}`,
-        changefreq: 'weekly',
-        priority: 0.6,
-        lastmod: toIsoString(row.created_at),
-      }
-      results.push(route)
-      if (results.length >= maxGardens) break
+      const cover = typeof row.cover_image_url === 'string' ? row.cover_image_url.trim() : ''
+      if (!cover) continue
+      candidates.push(row)
     }
-
     if (data.length < limit) break
     offset += limit
+  }
+
+  if (candidates.length === 0) return []
+
+  const plantCountByGarden = await countGardenPlants(client, candidates.map((c) => c.id))
+
+  const results = []
+  for (const row of candidates) {
+    if ((plantCountByGarden.get(row.id) || 0) < GARDEN_MIN_PLANTS) continue
+    const normalizedId = encodeURIComponent(String(row.id))
+    results.push({
+      path: `/garden/${normalizedId}`,
+      changefreq: 'weekly',
+      priority: 0.6,
+      lastmod: toIsoString(row.created_at),
+    })
+    if (results.length >= maxGardens) break
   }
 
   return results
@@ -632,48 +739,74 @@ async function loadBookmarkRoutes() {
     return []
   }
 
-  // Increased defaults to ensure all bookmarks are included
+  // Quality gate: a bookmark collection is sitemapped only if it has
+  //   1. visibility = 'public'                 (visible to crawlers)
+  //   2. is_like = false                       (auto-created "Likes" buckets are noise)
+  //   3. >= BOOKMARK_MIN_PLANTS items          (a curated list, not a single save)
   const maxBookmarks = positiveInteger(process.env.SITEMAP_MAX_BOOKMARK_URLS, 10000)
   const batchSize = positiveInteger(process.env.SITEMAP_BOOKMARK_BATCH_SIZE, 1000)
 
-  const results = []
+  const candidates = []
   let offset = 0
 
-  while (results.length < maxBookmarks) {
-    const limit = Math.min(batchSize, maxBookmarks - results.length)
+  while (candidates.length < maxBookmarks * 2) {
+    const limit = Math.min(batchSize, maxBookmarks * 2 - candidates.length)
     const to = offset + limit - 1
-    // Only fetch PUBLIC bookmarks - private bookmarks should NOT be in sitemap
-    // as they return 404 to crawlers and shouldn't be indexed
     const { data, error } = await client
       .from('bookmarks')
-      .select('id, created_at')
+      .select('id, created_at, updated_at, is_like')
       .eq('visibility', 'public')
-      .order('created_at', { ascending: false })
+      .or('is_like.is.null,is_like.eq.false')
+      .order('updated_at', { ascending: false, nullsFirst: false })
       .range(offset, to)
 
     if (error) {
       throw new Error(error.message || 'Supabase query failed for bookmarks')
     }
-
-    if (!data || data.length === 0) {
-      break
-    }
+    if (!data || data.length === 0) break
 
     for (const row of data) {
       if (!row?.id) continue
-      const normalizedId = encodeURIComponent(String(row.id))
-      const route = {
-        path: `/bookmarks/${normalizedId}`,
-        changefreq: 'weekly',
-        priority: 0.5,
-        lastmod: toIsoString(row.created_at),
-      }
-      results.push(route)
-      if (results.length >= maxBookmarks) break
+      if (row.is_like === true) continue
+      candidates.push(row)
     }
-
     if (data.length < limit) break
     offset += limit
+  }
+
+  if (candidates.length === 0) return []
+
+  // Tally plant counts per bookmark via bookmark_items.
+  const itemCountByBookmark = new Map()
+  const ids = candidates.map((c) => c.id)
+  const chunkSize = 500
+  for (let i = 0; i < ids.length; i += chunkSize) {
+    const chunk = ids.slice(i, i + chunkSize)
+    const { data, error } = await client
+      .from('bookmark_items')
+      .select('bookmark_id')
+      .in('bookmark_id', chunk)
+    if (error) {
+      throw new Error(error.message || 'Supabase query failed for bookmark_items count')
+    }
+    if (!data) continue
+    for (const row of data) {
+      if (!row?.bookmark_id) continue
+      itemCountByBookmark.set(row.bookmark_id, (itemCountByBookmark.get(row.bookmark_id) || 0) + 1)
+    }
+  }
+
+  const results = []
+  for (const row of candidates) {
+    if ((itemCountByBookmark.get(row.id) || 0) < BOOKMARK_MIN_PLANTS) continue
+    const normalizedId = encodeURIComponent(String(row.id))
+    results.push({
+      path: `/bookmarks/${normalizedId}`,
+      changefreq: 'weekly',
+      priority: 0.5,
+      lastmod: toIsoString(row.updated_at || row.created_at),
+    })
+    if (results.length >= maxBookmarks) break
   }
 
   return results
