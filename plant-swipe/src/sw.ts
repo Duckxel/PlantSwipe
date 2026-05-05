@@ -63,9 +63,16 @@ const resolveScopedPath = (pathname: string) => {
 const offlinePagePath = new URL('offline.html', self.registration.scope).pathname
 const offlineImagePath = new URL('icons/icon-192x192.png', self.registration.scope).pathname
 const scopeBasePath = new URL('.', self.registration.scope).pathname
-const notificationBadgeUrl = new URL('icons/icon-192x192.png', self.registration.scope).href
-// 1x1 transparent PNG as data URI - prevents system-generated placeholder letters while showing nothing
-const transparentIconDataUri = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+// Status-bar badge for push notifications. MUST be a white silhouette on a transparent
+// background — Android and iOS tint this icon and replace anything non-monochrome with a
+// generic white circle (which is why the colored icon-192x192.png produced the white
+// circle bug). notification-badge.png is deployed by setup.sh from assets/logo-dark.png.
+const notificationBadgeUrl = new URL('icons/notification-badge.png', self.registration.scope).href
+// Body icon for push notifications — the LARGE icon shown inside the notification
+// (not the status bar). This one *should* be the full-color brand mark; an empty/
+// transparent value here causes Chrome to fall back to a generic bell. icon.png
+// is deployed by setup.sh / scripts/sync-brand-assets.mjs from assets/icon.png.
+const notificationIconUrl = new URL('icons/icon.png', self.registration.scope).href
 const defaultNotificationTarget = new URL('.', self.registration.scope).href
 
 /**
@@ -365,9 +372,10 @@ self.addEventListener('push', (event) => {
     data,
     // Small icon for status bar (monochrome on most devices)
     badge: typeof payload.badge === 'string' && payload.badge.length ? payload.badge : notificationBadgeUrl,
-    // Use transparent icon to prevent system-generated placeholder letters (like "D")
-    // while showing no visible icon in the notification
-    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : transparentIconDataUri,
+    // Large icon shown inside the notification body. Falling back to a transparent
+    // 1x1 PNG used to make Chrome render its default bell — point at the full-color
+    // brand icon instead.
+    icon: typeof payload.icon === 'string' && payload.icon.length ? payload.icon : notificationIconUrl,
   }
   
   // Add actions for notifications (skip for messages - just tap to open conversation)

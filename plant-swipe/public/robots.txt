@@ -45,6 +45,17 @@ Disallow: /*/edit
 # Block error pages
 Disallow: /error
 
+# User-generated content (/u/, /garden/, /bookmarks/) is quality-gated rather
+# than blanket-blocked: substantive entries are listed in sitemap.xml and
+# emit indexable meta, while thin/empty/stale entries emit noindex,follow at
+# the page level. We allow crawling here so Google can pick up the gated meta
+# and follow internal links; the page-level robots tag does the heavy lifting.
+
+# Block faceted/query-string variants of search to avoid duplicate-content waste.
+# The clean /search and /search/categories pages stay crawlable but emit noindex meta.
+Disallow: /search?
+Disallow: /search/categories?
+
 # Block query parameters that don't change content
 Disallow: /*?_ssr=*
 Disallow: /*?utm_*

@@ -20,6 +20,7 @@ import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark 
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
+import { articleSchemaForPlant, breadcrumbSchema } from '@/lib/seo/schemas'
 import { EasterEgg } from '@events/2026_EASTER'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -592,11 +593,37 @@ const PlantInfoPage: React.FC = () => {
     return primary?.link || discovery?.link || plant.images[0]?.link
   }, [plant?.images])
   
-  usePageMetadata({ 
-    title: resolvedTitle, 
+  const plantJsonLd = React.useMemo(() => {
+    if (!plant?.id) return undefined
+    const language: 'en' | 'fr' = currentLang === 'fr' ? 'fr' : 'en'
+    const encyclopediaPath = language === 'fr' ? '/fr/search' : '/search'
+    const plantPath = language === 'fr' ? `/fr/plants/${plant.id}` : `/plants/${plant.id}`
+    return [
+      articleSchemaForPlant({
+        id: plant.id,
+        name: plant.name || 'Plant',
+        scientificName: plant.scientificNameSpecies ?? null,
+        description: plantDescription ?? null,
+        imageUrl: primaryImage ?? null,
+        createdAt: plant.createdTime ?? null,
+        updatedAt: plant.updatedTime ?? null,
+        language,
+      }),
+      breadcrumbSchema([
+        { name: 'Aphylia', url: language === 'fr' ? '/fr' : '/' },
+        { name: t('seo.search.breadcrumb', { defaultValue: 'Encyclopedia' }), url: encyclopediaPath },
+        { name: plant.name || 'Plant', url: plantPath },
+      ]),
+    ]
+  }, [plant, primaryImage, plantDescription, currentLang, t])
+
+  usePageMetadata({
+    title: resolvedTitle,
     description: resolvedDescription,
     image: primaryImage,
     url: id ? `/plants/${id}` : undefined,
+    type: 'article',
+    jsonLd: plantJsonLd,
   })
 
   React.useEffect(() => {

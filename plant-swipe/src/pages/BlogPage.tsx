@@ -7,6 +7,7 @@ import { SearchInput } from "@/components/ui/search-input"
 import { BlogCard } from "@/components/blog/BlogCard"
 import { useAuth } from "@/context/AuthContext"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { breadcrumbSchema } from "@/lib/seo/schemas"
 import type { BlogPost } from "@/types/blog"
 import { fetchBlogPosts } from "@/lib/blogs"
 import { useLanguageNavigate } from "@/lib/i18nRouting"
@@ -37,7 +38,14 @@ export default function BlogPage() {
   const seoDescription = t("seo.blog.listDescription", {
     defaultValue: "Stories, product updates, and horticulture lessons from the Aphylia team.",
   })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({
+    title: seoTitle,
+    description: seoDescription,
+    jsonLd: breadcrumbSchema([
+      { name: 'Aphylia', url: '/' },
+      { name: seoTitle, url: '/blog' },
+    ]),
+  })
 
   const loadPosts = React.useCallback(async () => {
     setLoading(true)

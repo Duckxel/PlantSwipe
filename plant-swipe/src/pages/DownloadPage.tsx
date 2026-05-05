@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { breadcrumbSchema, softwareApplicationSchema } from "@/lib/seo/schemas"
 
 const deviceGuides = [
   {
@@ -65,7 +66,17 @@ export default function DownloadPage() {
   const seoDescription = t("seo.download.description", {
     defaultValue: "Learn how to add the Aphylia app to your phone, tablet, or computer in just a few taps.",
   })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({
+    title: seoTitle,
+    description: seoDescription,
+    jsonLd: [
+      softwareApplicationSchema(),
+      breadcrumbSchema([
+        { name: 'Aphylia', url: '/' },
+        { name: seoTitle, url: '/download' },
+      ]),
+    ],
+  })
 
   return (
     <div className="max-w-4xl mx-auto mt-8 px-4 pb-16 space-y-12">

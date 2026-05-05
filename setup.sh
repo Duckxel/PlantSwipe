@@ -1458,6 +1458,75 @@ else
   log "Linked $WEB_ROOT_LINK -> $NODE_DIR"
 fi
 
+# --- Sync brand assets from plant-swipe/assets/ into plant-swipe/public/ ---
+# We treat assets/ as the source of truth for shared brand artwork (favicon, brand
+# icon in SVG + PNG). The build never reads assets/ directly — it reads public/ —
+# so we copy on every setup run to keep them in sync. Mappings:
+#   assets/icon.svg     -> public/icons/plant-swipe-icon-outline.svg  (referenced from
+#                                                                     index.html, manifest, SSR HTML)
+#   assets/icon.png     -> public/icons/icon.png                      (canonical PNG;
+#                                                                     existing icon-192/512 PNGs are
+#                                                                     left alone because they advertise
+#                                                                     specific dimensions in manifest)
+#   assets/favicon.ico  -> public/favicon.ico                         (served by express.static; the
+#                                                                     /favicon.ico alias in server.js
+#                                                                     falls through to this file)
+ASSETS_DIR="$NODE_DIR/assets"
+PUBLIC_DIR="$NODE_DIR/public"
+if [[ -d "$ASSETS_DIR" ]]; then
+  log "Syncing brand assets from $ASSETS_DIR into $PUBLIC_DIR …"
+  $SUDO mkdir -p "$PUBLIC_DIR/icons"
+  # Hash helper so we can tell "updated" from "no change" in logs.
+  _hash_file() {
+    [[ -f "$1" ]] || { echo ""; return; }
+    if command -v sha1sum >/dev/null 2>&1; then sha1sum "$1" | awk '{print $1}'
+    elif command -v shasum  >/dev/null 2>&1; then shasum  "$1" | awk '{print $1}'
+    else stat -c '%Y-%s' "$1" 2>/dev/null || echo ""; fi
+  }
+  copy_brand_asset() {
+    local src="$1" dst="$2"
+    if [[ ! -f "$src" ]]; then
+      log "  [SKIP] $src not found"
+      return
+    fi
+    local rel="${dst#"$NODE_DIR/"}"
+    local existed=0 changed=1
+    if [[ -e "$dst" || -L "$dst" ]]; then
+      existed=1
+      [[ "$(_hash_file "$src")" == "$(_hash_file "$dst")" ]] && changed=0
+    fi
+    # Force the overwrite to win against:
+    #   - read-only files (chmod overrides via $SUDO),
+    #   - immutable bit set by accident (lsattr +i — chattr -i removes it),
+    #   - symlinks pointing somewhere else (rm replaces with a real file),
+    #   - whatever owner the previous build left behind.
+    if [[ $existed -eq 1 ]]; then
+      $SUDO chattr -i "$dst" 2>/dev/null || true
+      $SUDO rm -f "$dst"
+    fi
+    $SUDO install -D -m 0644 "$src" "$dst"
+    $SUDO chown "$SERVICE_USER:$SERVICE_USER" "$dst" 2>/dev/null || true
+    if [[ $existed -eq 0 ]]; then
+      log "  created  $rel"
+    elif [[ $changed -eq 1 ]]; then
+      log "  updated  $rel  ($(stat -c '%s' "$dst" 2>/dev/null || echo '?') bytes)"
+    else
+      log "  unchanged $rel"
+    fi
+  }
+  copy_brand_asset "$ASSETS_DIR/icon.svg"      "$PUBLIC_DIR/icons/plant-swipe-icon-outline.svg"
+  copy_brand_asset "$ASSETS_DIR/icon.png"      "$PUBLIC_DIR/icons/icon.png"
+  copy_brand_asset "$ASSETS_DIR/favicon.ico"   "$PUBLIC_DIR/favicon.ico"
+  # Push-notification badge: must be a white silhouette on transparent background.
+  # Android (and iOS Safari) tint this icon; if it's anything other than monochrome
+  # the system replaces it with a white circle. logo-dark.png is the cutout master
+  # already used by the Capacitor pipeline, so it's the right source.
+  # Referenced from src/sw.ts (notificationBadgeUrl).
+  copy_brand_asset "$ASSETS_DIR/logo-dark.png" "$PUBLIC_DIR/icons/notification-badge.png"
+else
+  log "[INFO] No $ASSETS_DIR directory; skipping brand asset sync."
+fi
+
 # Ensure public/ directory and generated files are writable by the service user
 # This is required for the sitemap generator (runs as www-data) to write
 # sitemap.xml and llms.txt into public/ and dist/

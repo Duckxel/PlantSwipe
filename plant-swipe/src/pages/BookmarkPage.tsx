@@ -56,11 +56,21 @@ export const BookmarkPage = () => {
   }, [fetchBookmark])
 
   const metaPlantCount = bookmark?.plant_count || bookmark?.items?.length || 0
+  // Quality gate (mirrors scripts/generate-sitemap.js — keep in sync):
+  // a bookmark collection is indexable only if it's public, isn't the auto-
+  // created "Likes" bucket, and curates ≥5 plants. Everything else stays
+  // shareable but noindex,follow.
+  const bookmarkQualifiesForIndex =
+    !!bookmark &&
+    bookmark.visibility === 'public' &&
+    bookmark.is_like !== true &&
+    metaPlantCount >= 5
   usePageMetadata({
     title: bookmark ? `${bookmark.name} | ${t('bookmarks.title', { defaultValue: 'Bookmarks' })} | Aphylia` : 'Bookmark',
     description: bookmark
       ? `${bookmark.name} - ${metaPlantCount} ${t('bookmarks.plants', { defaultValue: 'plants' })} | ${t('bookmarks.collection', { defaultValue: 'Plant Collection on Aphylia' })}`
-      : `View plants in bookmark`
+      : `View plants in bookmark`,
+    robots: bookmarkQualifiesForIndex ? 'index,follow' : 'noindex,follow',
   })
 
   const handleDelete = async () => {

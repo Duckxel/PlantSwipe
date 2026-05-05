@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { breadcrumbSchema, organizationSchema } from "@/lib/seo/schemas"
 import { useTeamMembers, type TeamMember } from "@/hooks/useTeamMembers"
 import { supabase } from "@/lib/supabaseClient"
 import { EasterEgg } from "@events/2026_EASTER"
@@ -63,8 +64,18 @@ export default function AboutPage() {
   const seoDescription = tCommon("seo.about.description", {
     defaultValue: "Meet the founders, rituals, and creative ambition behind Aphylia's augmented plant lab.",
   })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
-  
+  usePageMetadata({
+    title: seoTitle,
+    description: seoDescription,
+    jsonLd: [
+      organizationSchema(),
+      breadcrumbSchema([
+        { name: 'Aphylia', url: '/' },
+        { name: seoTitle, url: '/about' },
+      ]),
+    ],
+  })
+
   // Fetch team members from database
   const { teamMembers: dbTeamMembers, loading: teamLoading, error: teamError } = useTeamMembers()
   

@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { supabase } from "@/lib/supabaseClient"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import { breadcrumbSchema } from "@/lib/seo/schemas"
 import { useAuth } from "@/context/AuthContext"
 
 const CHANNEL_EMAILS = {
@@ -52,7 +53,14 @@ export default function ContactUsPage({ defaultChannel = "support" }: ContactUsP
         ? "Start partnership, press, or enterprise deployment conversations with the core team."
         : "Reach the team for product questions, onboarding help, or to report an issue.",
   })
-  usePageMetadata({ title: seoTitle, description: seoDescription })
+  usePageMetadata({
+    title: seoTitle,
+    description: seoDescription,
+    jsonLd: breadcrumbSchema([
+      { name: 'Aphylia', url: '/' },
+      { name: seoTitle, url: defaultChannel === 'business' ? '/contact/business' : '/contact' },
+    ]),
+  })
   const [formOpen, setFormOpen] = useState(false)
   const [copyState, setCopyState] = useState<CopyState>("idle")
   const copyResetRef = useRef<number | null>(null)

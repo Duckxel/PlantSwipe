@@ -3,6 +3,7 @@
 import React from "react";
 import ReactDOM from "react-dom";
 import { useAuth } from "@/context/AuthContext";
+import { usePageMetadata } from "@/hooks/usePageMetadata";
 import { useTutorial } from "@/context/TutorialContext";
 import { DEMO_GARDENS, DEMO_PLANT_IDS } from "@/lib/tutorialDemoData";
 import { useParams, Routes, Route, useLocation } from "react-router-dom";
@@ -186,6 +187,15 @@ export const GardenDashboardPage: React.FC = () => {
   }, [location.pathname, id]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- plants come from API + getGardenPlants with varying shapes
   const [plants, setPlants] = React.useState<Array<any>>([]);
+  // Quality gate (mirrors scripts/generate-sitemap.js — keep in sync):
+  // a garden is indexable only if it's public, has a cover image, and contains
+  // ≥3 plants. Anything below the bar stays shareable but emits noindex,follow.
+  const gardenQualifiesForIndex =
+    !!garden &&
+    garden.privacy === 'public' &&
+    !!(garden.coverImageUrl && garden.coverImageUrl.trim()) &&
+    plants.length >= 3;
+  usePageMetadata({ robots: gardenQualifiesForIndex ? 'index,follow' : 'noindex,follow' });
   const [members, setMembers] = React.useState<
     Array<{
       userId: string;

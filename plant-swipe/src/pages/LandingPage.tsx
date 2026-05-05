@@ -2,6 +2,12 @@ import React from "react"
 import { Typewriter } from "@/components/ui/typewriter"
 import { Link } from "@/components/i18n/Link"
 import { usePageMetadata } from "@/hooks/usePageMetadata"
+import {
+  organizationSchema,
+  softwareApplicationSchema,
+  webSiteSearchActionSchema,
+  faqSchema,
+} from "@/lib/seo/schemas"
 import { useAuth } from "@/context/AuthContext"
 import { useTranslation } from "react-i18next"
 import { TopBar } from "@/components/layout/TopBar"
@@ -449,10 +455,34 @@ const LandingPage: React.FC = () => {
     }
   }, [signOut, navigate, pathWithoutLang])
 
-  // Page metadata from translations
+  // Page metadata from translations + Schema.org JSON-LD for the homepage.
+  // FAQ entries below ride on the existing translations so they switch with i18n.
+  // Add real Q&A copy in src/locales/{lang}/Landing.json under the "faq.items" key
+  // (q + a per item) — until that exists, the FAQ schema falls back to a single seed entry.
+  const homepageJsonLd = React.useMemo(() => {
+    const rawFaqs = t("faq.items", { returnObjects: true, defaultValue: [] }) as
+      | Array<{ q?: string; a?: string }>
+      | unknown
+    const faqEntries = Array.isArray(rawFaqs)
+      ? rawFaqs
+          .filter((entry): entry is { q: string; a: string } => Boolean(entry?.q && entry?.a))
+          .map((entry) => ({ question: entry.q, answer: entry.a }))
+      : []
+
+    const blocks: object[] = [
+      softwareApplicationSchema(),
+      organizationSchema(),
+      webSiteSearchActionSchema(),
+    ]
+    if (faqEntries.length > 0) blocks.push(faqSchema(faqEntries))
+    return blocks
+  }, [t])
+
   usePageMetadata({
     title: "Aphylia – " + t("hero.badge"),
     description: t("hero.description"),
+    type: "website",
+    jsonLd: homepageJsonLd,
   })
 
   return (

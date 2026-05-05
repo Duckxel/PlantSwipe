@@ -34,6 +34,14 @@ const URL_TARGETS: MetaTarget[] = [
   { attr: 'name', key: 'twitter:url' },
 ]
 
+const TYPE_TARGETS: MetaTarget[] = [
+  { attr: 'property', key: 'og:type' },
+]
+
+const ROBOTS_TARGET: MetaTarget = { attr: 'name', key: 'robots' }
+
+const JSON_LD_MARKER_ATTR = 'data-aphylia-jsonld'
+
 /**
  * Compute the canonical URL for the current page
  * This removes language prefixes if they exist (e.g., /fr/plants/123 -> /plants/123)
@@ -238,13 +246,16 @@ type CanonicalSnapshot = {
   created: boolean
 }
 
+export type OgType = 'website' | 'article' | 'profile' | 'product'
+export type RobotsDirective = 'index,follow' | 'noindex,follow' | 'noindex,nofollow' | 'index,nofollow'
+
 export type PageMetadata = {
   title?: string | null
   description?: string | null
   image?: string | null
   url?: string | null
-  /** 
-   * Override canonical URL. If not provided, it's computed automatically 
+  /**
+   * Override canonical URL. If not provided, it's computed automatically
    * by removing the language prefix from the current URL.
    */
   canonicalUrl?: string | null
@@ -252,9 +263,37 @@ export type PageMetadata = {
    * If true, skip setting canonical URL (useful for error pages)
    */
   noCanonical?: boolean
+  /**
+   * Schema.org JSON-LD. Pass a single object or array of objects; each becomes
+   * its own <script type="application/ld+json"> tag. Tagged with data-aphylia-jsonld
+   * so cleanup removes only what we added (the static blocks in index.html survive).
+   */
+  jsonLd?: object | object[] | null
+  /**
+   * <meta name="robots"> content. Default behaviour is whatever index.html declares
+   * (no per-page robots tag) — pass 'noindex,follow' to deindex a route while still
+   * letting Google follow its links.
+   */
+  robots?: RobotsDirective
+  /**
+   * og:type override. Defaults to whatever index.html ships with ("website").
+   * Use 'article' for blog posts and plant pages, 'profile' for /u/:username.
+   */
+  type?: OgType
 }
 
-export function usePageMetadata({ title, description, image, url, canonicalUrl, noCanonical }: PageMetadata) {
+export function usePageMetadata({ title, description, image, url, canonicalUrl, noCanonical, jsonLd, robots, type }: PageMetadata) {
+  // Stable JSON-LD dependency: stringify once so changing object identity
+  // (without changing content) doesn't churn the effect.
+  const jsonLdKey = React.useMemo(() => {
+    if (!jsonLd) return ''
+    try {
+      return JSON.stringify(jsonLd)
+    } catch {
+      return ''
+    }
+  }, [jsonLd])
+
   React.useEffect(() => {
     if (typeof document === 'undefined') return
 
@@ -289,6 +328,40 @@ export function usePageMetadata({ title, description, image, url, canonicalUrl, 
     DESCRIPTION_TARGETS.forEach((target) => applyTarget(target, resolvedDescription))
     IMAGE_TARGETS.forEach((target) => applyTarget(target, resolvedImage))
     URL_TARGETS.forEach((target) => applyTarget(target, resolvedUrl))
+
+    // og:type override (only when caller specified one — otherwise leave the static
+    // 'website' value from index.html so it isn't repeatedly snapshot/restored).
+    if (type) {
+      TYPE_TARGETS.forEach((target) => applyTarget(target, type))
+    }
+
+    // <meta name="robots"> directive (only when caller specified one).
+    if (robots) {
+      applyTarget(ROBOTS_TARGET, robots)
+    }
+
+    // Schema.org JSON-LD. Each block becomes its own script tag, marked so cleanup
+    // removes only what we added (the static SoftwareApplication / Organization /
+    // WebSite blocks in index.html have no marker and survive). We re-parse from
+    // jsonLdKey so the effect's only JSON-LD dependency is the stringified key.
+    const jsonLdElements: HTMLScriptElement[] = []
+    if (jsonLdKey) {
+      try {
+        const parsed = JSON.parse(jsonLdKey) as unknown
+        const blocks = Array.isArray(parsed) ? parsed : [parsed]
+        for (const block of blocks) {
+          if (!block || typeof block !== 'object') continue
+          const script = document.createElement('script')
+          script.type = 'application/ld+json'
+          script.setAttribute(JSON_LD_MARKER_ATTR, '1')
+          script.textContent = JSON.stringify(block)
+          document.head.appendChild(script)
+          jsonLdElements.push(script)
+        }
+      } catch {
+        // Bad JSON in caller — drop it rather than crash the page.
+      }
+    }
 
     // Set canonical URL and hreflang alternate links
     let hreflangElements: HTMLLinkElement[] = []
@@ -333,6 +406,8 @@ export function usePageMetadata({ title, description, image, url, canonicalUrl, 
       }
       // Remove hreflang links we created
       hreflangElements.forEach(el => el.remove())
+      // Remove JSON-LD scripts we added (static blocks in index.html stay)
+      jsonLdElements.forEach(el => el.remove())
     }
-  }, [title, description, image, url, canonicalUrl, noCanonical])
+  }, [title, description, image, url, canonicalUrl, noCanonical, jsonLdKey, robots, type])
 }
