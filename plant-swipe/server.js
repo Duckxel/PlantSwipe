@@ -4984,12 +4984,10 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
 // Buffer API integration: schedule social posts from /admin/export
 // =====================================================================
 // The Buffer API key is read from the BUFFER environment variable and
-// used to call the Buffer GraphQL endpoint. The endpoint URL can be
-// overridden with BUFFER_GRAPHQL_URL (Buffer ships GraphQL at both
-// https://graphql.buffer.com and https://api.buffer.com/graphql at
-// various points in their rollout).
+// used to call the Buffer GraphQL endpoint at https://api.buffer.com/graphql.
+// The URL can be overridden with BUFFER_GRAPHQL_URL.
 
-const BUFFER_GRAPHQL_URL = (process.env.BUFFER_GRAPHQL_URL || 'https://graphql.buffer.com').trim()
+const BUFFER_GRAPHQL_URL = (process.env.BUFFER_GRAPHQL_URL || 'https://api.buffer.com/graphql').trim()
 
 // Surface whether BUFFER is loaded once at startup so operators can confirm
 // the .env value reached this process. We only log presence + length, never
