@@ -26,6 +26,12 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 import { Button } from "@/components/ui/button";
+import { PillTabs } from "@/components/ui/pill-tabs";
+import {
+  AdminExportBufferSchedule,
+  canvasesToCardBlobs,
+} from "@/components/admin/AdminExportBufferSchedule";
+import { AdminExportAphydlePanel } from "@/components/admin/AdminExportAphydlePanel";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import {
   ImageViewer,
@@ -2123,7 +2129,15 @@ function canvasToBlob(canvas: HTMLCanvasElement): Promise<Blob> {
 
 const CARD_LABELS = ["Cover", "Identity", "Deep Knowledge", "Wild Card"] as const;
 
+type ExportMode = "aphylia" | "aphydle";
+
+const EXPORT_MODE_TABS: Array<{ key: ExportMode; label: string }> = [
+  { key: "aphylia", label: "Aphylia" },
+  { key: "aphydle", label: "Aphydle" },
+];
+
 export function AdminExportPanel() {
+  const [mode, setMode] = React.useState<ExportMode>("aphylia");
   const [picked, setPicked] = React.useState<SearchItemOption | null>(null);
   const [options, setOptions] = React.useState<SearchItemOption[]>([]);
   const [bundle, setBundle] = React.useState<Bundle | null>(null);
@@ -2616,8 +2630,26 @@ export function AdminExportPanel() {
     }
   }, [bundle]);
 
+  if (mode === "aphydle") {
+    return (
+      <div className="space-y-4">
+        <PillTabs<ExportMode>
+          tabs={EXPORT_MODE_TABS}
+          activeKey={mode}
+          onTabChange={setMode}
+        />
+        <AdminExportAphydlePanel />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
+      <PillTabs<ExportMode>
+        tabs={EXPORT_MODE_TABS}
+        activeKey={mode}
+        onTabChange={setMode}
+      />
       <div className="rounded-2xl border p-4 bg-white/90 dark:bg-[#17171a]">
         <div className="text-xs uppercase tracking-[0.2em] text-stone-500 mb-2">
           Plant Export Studio · 1080×1350
@@ -2785,6 +2817,16 @@ export function AdminExportPanel() {
             </pre>
           </div>
         </div>
+      )}
+
+      {bundle && (
+        <AdminExportBufferSchedule
+          caption={fullCaption}
+          getCardBlobs={() => canvasesToCardBlobs(previewRefs.current)}
+          cardCount={4}
+          plantName={String(bundle.plant.name || "")}
+          disabled={loading || exporting}
+        />
       )}
 
       <ImageViewer

@@ -4980,6 +4980,743 @@ app.options('/api/admin/maintenance-mode/disable', (_req, res) => {
   res.status(204).end()
 })
 
+// =====================================================================
+// Buffer API integration: schedule social posts from /admin/export
+// =====================================================================
+// The Buffer API key is read from the BUFFER environment variable and
+// used to call the Buffer GraphQL endpoint at https://api.buffer.com/graphql.
+// The URL can be overridden with BUFFER_GRAPHQL_URL.
+
+const BUFFER_GRAPHQL_URL = (process.env.BUFFER_GRAPHQL_URL || 'https://api.buffer.com/graphql').trim()
+
+// Surface whether BUFFER is loaded once at startup so operators can confirm
+// the .env value reached this process. We only log presence + length, never
+// the key itself.
+{
+  const k = process.env.BUFFER || ''
+  if (k) {
+    console.log(`[buffer] API key loaded (length=${k.length}). GraphQL endpoint: ${BUFFER_GRAPHQL_URL}`)
+  } else {
+    console.warn('[buffer] BUFFER env var is NOT set on this process. Check that .env was edited and the service restarted.')
+  }
+}
+
+async function callBufferGraphQL(query, variables) {
+  const apiKey = process.env.BUFFER || ''
+  if (!apiKey) {
+    const err = new Error('BUFFER environment variable is not configured (the node process did not pick it up — restart the service after editing .env)')
+    err.statusCode = 500
+    throw err
+  }
+  let resp
+  try {
+    resp = await fetch(BUFFER_GRAPHQL_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({ query, variables: variables || {} }),
+    })
+  } catch (netErr) {
+    const err = new Error(`Buffer network error reaching ${BUFFER_GRAPHQL_URL}: ${netErr?.message || netErr}`)
+    err.statusCode = 502
+    throw err
+  }
+  const text = await resp.text()
+  let json = null
+  try { json = text ? JSON.parse(text) : null } catch { json = null }
+  if (!resp.ok) {
+    const err = new Error(`Buffer API error (${resp.status} from ${BUFFER_GRAPHQL_URL}): ${text?.slice(0, 500) || resp.statusText}`)
+    err.statusCode = resp.status
+    throw err
+  }
+  if (json?.errors?.length) {
+    const msg = json.errors.map((e) => e?.message || 'Unknown error').join('; ')
+    const err = new Error(`Buffer API error: ${msg}`)
+    err.statusCode = 502
+    throw err
+  }
+  return json?.data || {}
+}
+
+// List Buffer organizations connected to the authenticated account
+app.get('/api/admin/buffer/organizations', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const data = await callBufferGraphQL(`
+      query GetOrganizations {
+        account {
+          organizations { id name }
+        }
+      }
+    `)
+    const organizations = Array.isArray(data?.account?.organizations) ? data.account.organizations : []
+    res.json({ ok: true, organizations })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/organizations] failed:', e?.message || e)
+    res.status(status).json({ error: e?.message || 'Failed to fetch Buffer organizations' })
+  }
+})
+
+// List Buffer channels for an organization
+app.get('/api/admin/buffer/channels', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const organizationId = String(req.query?.organizationId || '').trim()
+    if (!organizationId) {
+      res.status(400).json({ error: 'organizationId is required' })
+      return
+    }
+    // Buffer's GraphQL exposes channels nested under each organization on the
+    // account. Pulling them via the account query avoids having to declare
+    // Buffer's custom scalars (OrganizationId, ChannelId, …) as variable
+    // types from JS. We then filter by the requested organizationId.
+    const data = await callBufferGraphQL(`
+      query GetChannels {
+        account {
+          organizations {
+            id
+            channels { id name service }
+          }
+        }
+      }
+    `)
+    const orgs = Array.isArray(data?.account?.organizations) ? data.account.organizations : []
+    const match = orgs.find((o) => String(o?.id || '') === organizationId) || null
+    const channels = Array.isArray(match?.channels) ? match.channels : []
+    res.json({ ok: true, channels })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/channels] failed:', e?.message || e)
+    res.status(status).json({ error: e?.message || 'Failed to fetch Buffer channels' })
+  }
+})
+
+// Multer for Buffer card images: up to 10 files, 8MB each
+const bufferCardsMulter = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 8 * 1024 * 1024, files: 10 },
+})
+
+// Upload a card image to Supabase storage and return the public URL.
+// Buffer needs a publicly fetchable URL to attach as media on a post.
+async function uploadCardToStorage(file) {
+  if (!supabaseServiceClient) {
+    throw new Error('Supabase service role key not configured')
+  }
+  const ext = (file.mimetype === 'image/jpeg' || file.mimetype === 'image/jpg')
+    ? 'jpg'
+    : (file.mimetype === 'image/webp' ? 'webp' : 'png')
+  const unique = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : crypto.randomBytes(10).toString('hex')
+  const objectPath = `buffer-posts/${unique}.${ext}`
+  const { error: uploadError } = await supabaseServiceClient.storage
+    .from(adminUploadBucket)
+    .upload(objectPath, file.buffer, {
+      cacheControl: '3600',
+      contentType: file.mimetype || 'image/png',
+      upsert: false,
+    })
+  if (uploadError) throw new Error(uploadError.message || 'Storage upload failed')
+  const { data: publicData } = supabaseServiceClient.storage
+    .from(adminUploadBucket)
+    .getPublicUrl(objectPath)
+  const url = publicData?.publicUrl || ''
+  if (!url) throw new Error('Failed to resolve public URL for card image')
+  return url
+}
+
+// Look up each Buffer channel's service (instagram, facebook, twitter, …) so
+// the post payload can be tuned per-platform. Returns a Map<channelId, service>.
+async function fetchBufferChannelServices() {
+  const out = {}
+  try {
+    const data = await callBufferGraphQL(`
+      query GetChannelServices {
+        account { organizations { channels { id service } } }
+      }
+    `)
+    const orgs = Array.isArray(data?.account?.organizations) ? data.account.organizations : []
+    for (const org of orgs) {
+      for (const ch of (org?.channels || [])) {
+        if (ch?.id) out[String(ch.id)] = String(ch.service || '').toLowerCase()
+      }
+    }
+  } catch (e) {
+    console.warn('[buffer] channel-service lookup failed:', e?.message || e)
+  }
+  return out
+}
+
+// Schedule a post on one or more Buffer channels. Shared by the manual
+// admin route and the Aphydle automation worker. Each channel gets its
+// own createPost mutation — Buffer rejects mixed-service inputs.
+async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaUrls, channelServices }) {
+  const safeText = String(text || '')
+  const ids = (channelIds || []).map((c) => String(c || '').trim()).filter(Boolean)
+  const urls = Array.isArray(mediaUrls) ? mediaUrls.filter(Boolean).map(String) : []
+  const dueAt = dueAtIso ? String(dueAtIso) : ''
+  const mode = dueAt ? 'customScheduled' : 'addToQueue'
+  const services = channelServices || (await fetchBufferChannelServices())
+
+  const gqlString = (v) => JSON.stringify(String(v ?? ''))
+  const assetsPartFor = (service) => {
+    const list = service === 'twitter' ? urls.slice(0, 4) : urls
+    if (!list.length) return ''
+    return `, assets: { images: [${list.map((u) => `{ url: ${gqlString(u)} }`).join(', ')}] }`
+  }
+  const truncateForTwitter = (s) => (!s || s.length <= 280 ? s : s.slice(0, 277).trimEnd() + '…')
+  const metadataFor = (service) => {
+    if (service === 'instagram') {
+      const igType = urls.length > 1 ? 'carousel' : 'post'
+      return `, metadata: { instagram: { type: ${igType}, shouldShareToFeed: true } }`
+    }
+    if (service === 'facebook') return `, metadata: { facebook: { type: post } }`
+    return ''
+  }
+  const buildMutation = (channelId, service) => {
+    const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
+    const postText = service === 'twitter' ? truncateForTwitter(safeText) : safeText
+    return `
+      mutation CreatePost {
+        createPost(input: {
+          text: ${gqlString(postText)},
+          channelId: ${gqlString(channelId)},
+          schedulingType: automatic,
+          mode: ${mode}${dueAtPart}${assetsPartFor(service)}${metadataFor(service)}
+        }) {
+          ... on PostActionSuccess { post { id text dueAt } }
+          ... on MutationError { message }
+        }
+      }
+    `
+  }
+
+  const results = []
+  for (const channelId of ids) {
+    const service = services[channelId] || ''
+    try {
+      const data = await callBufferGraphQL(buildMutation(channelId, service))
+      const cp = data?.createPost
+      if (cp?.post) {
+        results.push({ channelId, service, ok: true, post: cp.post })
+      } else if (cp?.message) {
+        results.push({ channelId, service, ok: false, error: cp.message })
+      } else {
+        results.push({ channelId, service, ok: false, error: 'Unknown Buffer response' })
+      }
+    } catch (e) {
+      results.push({ channelId, service, ok: false, error: e?.message || 'Buffer request failed' })
+    }
+  }
+  return results
+}
+
+// Create a scheduled (or queued) Buffer post on one or more channels.
+// Accepts multipart/form-data with optional image attachments ("cards" field,
+// repeated). The same images are attached to every selected channel.
+app.post('/api/admin/buffer/post', bufferCardsMulter.array('cards', 10), async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const body = req.body || {}
+    const text = String(body.text || '').trim()
+
+    let channelIdsRaw = []
+    if (typeof body.channelIds === 'string' && body.channelIds.trim().startsWith('[')) {
+      try { channelIdsRaw = JSON.parse(body.channelIds) } catch { channelIdsRaw = [] }
+    } else if (Array.isArray(body.channelIds)) {
+      channelIdsRaw = body.channelIds
+    } else if (body.channelIds) {
+      channelIdsRaw = [body.channelIds]
+    } else if (body.channelId) {
+      channelIdsRaw = [body.channelId]
+    }
+    const channelIds = channelIdsRaw.map((id) => String(id || '').trim()).filter(Boolean)
+    const dueAt = body.dueAt ? String(body.dueAt).trim() : ''
+
+    if (!text) { res.status(400).json({ error: 'text is required' }); return }
+    if (!channelIds.length) { res.status(400).json({ error: 'At least one channelId is required' }); return }
+    if (dueAt) {
+      const t = Date.parse(dueAt)
+      if (Number.isNaN(t)) { res.status(400).json({ error: 'dueAt must be an ISO 8601 datetime' }); return }
+      if (t <= Date.now()) { res.status(400).json({ error: 'dueAt must be in the future' }); return }
+    }
+
+    const files = Array.isArray(req.files) ? req.files : []
+    const mediaUrls = []
+    for (const f of files) {
+      if (!f || !f.buffer) continue
+      const mime = String(f.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) continue
+      try {
+        const url = await uploadCardToStorage(f)
+        mediaUrls.push(url)
+      } catch (e) {
+        res.status(500).json({ error: `Failed to host card image: ${e?.message || 'upload failed'}` })
+        return
+      }
+    }
+
+    const results = await createBufferPostsForChannels({
+      text,
+      channelIds,
+      dueAtIso: dueAt || null,
+      mediaUrls,
+    })
+
+    const allOk = results.length > 0 && results.every((r) => r.ok)
+    const anyOk = results.some((r) => r.ok)
+    res.status(allOk ? 200 : (anyOk ? 207 : 502)).json({ ok: allOk, results, mediaUrls })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    console.error('[buffer/post] failed:', e?.message || e)
+    res.status(status).json({ error: e?.message || 'Failed to create Buffer post' })
+  }
+})
+
+app.options('/api/admin/buffer/organizations', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/buffer/channels', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/buffer/post', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
+// =====================================================================
+// Aphydle automation: schedule today's daily puzzle to Buffer on a
+// recurring per-day timetable. Runs out of a 1-minute cron tick that
+// wakes up, reads the singleton config row from public.aphydle_buffer_schedule,
+// and — if today's weekday is enabled and HH:MM matches the configured run
+// time — fetches the puzzle, hosts the cards, and creates per-channel
+// Buffer posts due at the configured publish time.
+
+// Minutes in the day that other system jobs touch — declined as run times
+// to avoid the schedule firing while unattended-upgrades is rebooting the
+// box (5:00 UTC) or while GDPR cleanup is locking tables (3:00 UTC).
+const APHYDLE_RESERVED_MINUTES = new Set([
+  '03:00', // GDPR retention cleanup (server.js:20848)
+  '05:00', // unattended-upgrades auto-reboot window
+])
+
+const APHYDLE_DAYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+// Singleton row id — keeps a stable PK so PUT can upsert.
+const APHYDLE_SCHEDULE_ID = 'default'
+
+async function ensureAphydleScheduleTable() {
+  if (!sql) return false
+  try {
+    await sql`
+      create table if not exists public.aphydle_buffer_schedule (
+        id text primary key,
+        enabled boolean not null default false,
+        days_of_week text[] not null default '{}',
+        publish_time_local text not null default '13:00',
+        run_time_local text not null default '04:00',
+        timezone text not null default 'UTC',
+        organization_id text,
+        channel_ids text[] not null default '{}',
+        last_run_at timestamptz,
+        last_run_for_date date,
+        last_run_status text,
+        last_run_results jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `
+    return true
+  } catch (e) {
+    console.warn('[aphydle-schedule] ensure table failed:', e?.message || e)
+    return false
+  }
+}
+
+// Server-local IANA timezone (e.g. "Europe/Paris", "UTC"). Used for all
+// time-of-day comparisons in the Aphydle automation so the operator
+// doesn't have to think about UTC offsets and so dev + prod boxes
+// interpret the configured HH:MM identically when they share the same TZ.
+function aphydleServerTimezone() {
+  try {
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+    return (tz && typeof tz === 'string') ? tz : 'UTC'
+  } catch {
+    return 'UTC'
+  }
+}
+
+// Whether THIS process should fire the recurring runner. Multiple boxes
+// (dev01, prod, …) all share the same Supabase row, so without a guard
+// every server would post the same Buffer payload every day. The gate
+// uses VITE_SERVER_NAME — set to MAIN on the production box and DEV (or
+// anything else) on dev mirrors. APHYDLE_AUTOMATION_RUNNER=1 still
+// works as an explicit override if you want to flip the runner without
+// touching the server name.
+function aphydleServerName() {
+  return String(
+    process.env.VITE_SERVER_NAME ||
+    process.env.PLANTSWIPE_SERVER_NAME ||
+    process.env.SERVER_NAME ||
+    '',
+  ).trim().toUpperCase() || 'UNKNOWN'
+}
+
+function isAphydleAutomationRunner() {
+  const explicit = String(process.env.APHYDLE_AUTOMATION_RUNNER || '').trim().toLowerCase()
+  if (['1', 'true', 'yes', 'on'].includes(explicit)) return true
+  if (['0', 'false', 'no', 'off'].includes(explicit)) return false
+  return aphydleServerName() === 'MAIN'
+}
+
+async function loadAphydleScheduleConfig() {
+  if (!sql) return null
+  try {
+    await ensureAphydleScheduleTable()
+    const rows = await sql`
+      select * from public.aphydle_buffer_schedule where id = ${APHYDLE_SCHEDULE_ID} limit 1
+    `
+    return rows?.[0] || null
+  } catch (e) {
+    console.warn('[aphydle-schedule] load failed:', e?.message || e)
+    return null
+  }
+}
+
+function validateAphydleScheduleInput(body) {
+  const out = {}
+  out.enabled = !!body.enabled
+  const days = Array.isArray(body.days_of_week) ? body.days_of_week : []
+  out.days_of_week = days
+    .map((d) => String(d || '').trim().toLowerCase().slice(0, 3))
+    .filter((d) => APHYDLE_DAYS.includes(d))
+  // Times: HH:MM, 24h
+  const timeRe = /^([01]\d|2[0-3]):([0-5]\d)$/
+  const publishTime = String(body.publish_time_local || '').trim()
+  const runTime = String(body.run_time_local || '').trim()
+  if (!timeRe.test(publishTime)) throw new Error('publish_time_local must be HH:MM (24h)')
+  if (!timeRe.test(runTime)) throw new Error('run_time_local must be HH:MM (24h)')
+  if (APHYDLE_RESERVED_MINUTES.has(runTime)) {
+    throw new Error(
+      `run_time_local ${runTime} clashes with a reserved system job (3:00 GDPR cleanup, 5:00 auto-reboot). Pick another minute.`,
+    )
+  }
+  out.publish_time_local = publishTime
+  out.run_time_local = runTime
+  // Timezone is sourced from the runner box at runtime (not from user input).
+  // We still persist the snapshot of the saving box's TZ for audit purposes.
+  out.timezone = aphydleServerTimezone()
+  out.organization_id = body.organization_id ? String(body.organization_id).trim() : null
+  const channels = Array.isArray(body.channel_ids) ? body.channel_ids : []
+  out.channel_ids = channels.map((c) => String(c || '').trim()).filter(Boolean)
+  return out
+}
+
+// Resolve the Aphydle origin for server-to-server calls. The Aphydle service
+// runs on 127.0.0.1:${APHYDLE_PORT} (default 4173) on the same box, so prefer
+// that to avoid DNS / SSL / CORS round-trips. APHYDLE_API_URL env var can
+// override (e.g. for local dev pointing at staging Aphydle).
+function aphydleApiBase() {
+  const override = (process.env.APHYDLE_API_URL || '').trim().replace(/\/+$/, '')
+  if (override) return override
+  const port = String(process.env.APHYDLE_PORT || '4173').trim()
+  return `http://127.0.0.1:${port}`
+}
+
+// Build the same caption the frontend Aphydle panel emits, but server-side.
+function buildAphydleCaption(manifest, playUrl) {
+  const date = String(manifest?.puzzleDate || '')
+  const parts = date.split('-').map((s) => Number.parseInt(s, 10))
+  const monthLong = ['January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December']
+  const weekdayLong = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  let longDate = date
+  let numericDate = date
+  if (parts.length === 3 && parts.every((n) => Number.isFinite(n))) {
+    const [y, m, d] = parts
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    longDate = `${weekdayLong[dt.getUTCDay()]}, ${monthLong[m - 1]} ${d}, ${y}`
+    numericDate = `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`
+  }
+  const num = String(manifest?.puzzleNo || 0).padStart(2, '0')
+  return [
+    `🌿 Aphydle Puzzle #${num} — ${longDate}`,
+    '',
+    `Today (${numericDate}), a new mystery plant is hiding behind five cards.`,
+    'Each hint reveals a little more — foliage, climate, living space, and a final clue.',
+    'Can you name it before the cards run out?',
+    '',
+    `🎯 Play today's puzzle → ${playUrl}`,
+    "🌱 New puzzle every day at midnight UTC.",
+    '',
+    '#aphydle #aphylia #plantgame #botanyquiz #dailypuzzle #plantsofinstagram #plantcare',
+  ].join('\n')
+}
+
+async function fetchAphydleManifest() {
+  const base = aphydleApiBase()
+  const resp = await fetch(`${base}/api/puzzle/today`)
+  const text = await resp.text()
+  let json = null
+  try { json = text ? JSON.parse(text) : null } catch { json = null }
+  if (!resp.ok) {
+    throw new Error(`Aphydle manifest fetch failed (${resp.status}): ${text?.slice(0, 200) || resp.statusText}`)
+  }
+  if (!json || !Array.isArray(json.cards)) {
+    throw new Error('Aphydle manifest missing cards')
+  }
+  return json
+}
+
+async function fetchAphydleCardBuffer(card) {
+  const base = aphydleApiBase()
+  const url = String(card.url || '').startsWith('http') ? card.url : `${base}${card.url}`
+  const resp = await fetch(url)
+  if (!resp.ok) throw new Error(`Aphydle card ${card.index} fetch failed (${resp.status})`)
+  const buf = Buffer.from(await resp.arrayBuffer())
+  return { buffer: buf, mimetype: 'image/png', originalname: `aphydle-card-${card.index}.png` }
+}
+
+// Compute the dueAt ISO (UTC) for "today at HH:MM in tz". When the resulting
+// instant has already passed (e.g. publish time is 09:00 but the runner fires
+// at 10:00), bump to addToQueue by returning null.
+function computeAphydleDueAt(cfg) {
+  const tz = aphydleServerTimezone()
+  const [hh, mm] = String(cfg.publish_time_local || '13:00').split(':').map((v) => Number.parseInt(v, 10))
+  // Resolve today's date in the configured TZ, then build a UTC instant for
+  // that local wall-clock time. We do this via the en-CA locale (yyyy-mm-dd).
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  })
+  const today = fmt.format(new Date()) // YYYY-MM-DD in tz
+  const [y, m, d] = today.split('-').map((v) => Number.parseInt(v, 10))
+  // Build a Date in the local TZ by iterating: start with a UTC guess,
+  // measure how far off the local wall-clock reads, and subtract that diff.
+  // For UTC the guess is exact; for other zones we converge in one step.
+  const utcGuess = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0, 0))
+  const localStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(utcGuess).reduce((acc, p) => { acc[p.type] = p.value; return acc }, {})
+  const localAsUtc = Date.UTC(
+    Number(localStr.year), Number(localStr.month) - 1, Number(localStr.day),
+    Number(localStr.hour) % 24, Number(localStr.minute), Number(localStr.second || 0),
+  )
+  const offsetMs = localAsUtc - utcGuess.getTime()
+  const due = new Date(utcGuess.getTime() - offsetMs)
+  if (due.getTime() <= Date.now() + 60_000) return null
+  return due.toISOString()
+}
+
+// Pull the manifest, host the cards in Supabase, build the caption, and
+// hand off to the shared Buffer poster. Returns a structured result for
+// the audit row.
+async function runAphydleAutomation(cfg, { dryRun = false } = {}) {
+  if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) {
+    return { ok: false, error: 'No channel_ids configured' }
+  }
+  const manifest = await fetchAphydleManifest()
+  // Cards are sorted by index for deterministic order on the post.
+  const cards = [...manifest.cards].sort((a, b) => (a.index || 0) - (b.index || 0))
+  const mediaUrls = []
+  for (const card of cards) {
+    const f = await fetchAphydleCardBuffer(card)
+    if (dryRun) {
+      mediaUrls.push(`dry-run://${f.originalname}`)
+    } else {
+      mediaUrls.push(await uploadCardToStorage(f))
+    }
+  }
+  const playUrl = `${aphydleApiBase().replace(/^http:\/\/127\.0\.0\.1:\d+/, PRIMARY_DOMAIN_URL.replace('https://', 'https://aphydle.').replace('http://', 'http://aphydle.'))}/`
+  const caption = buildAphydleCaption(manifest, playUrl)
+  const dueAtIso = computeAphydleDueAt(cfg)
+
+  if (dryRun) {
+    return {
+      ok: true, dryRun: true, manifest: { puzzleNo: manifest.puzzleNo, puzzleDate: manifest.puzzleDate },
+      caption, dueAtIso, mediaUrls, channels: cfg.channel_ids,
+    }
+  }
+
+  const channelServices = await fetchBufferChannelServices()
+  const results = await createBufferPostsForChannels({
+    text: caption,
+    channelIds: cfg.channel_ids,
+    dueAtIso,
+    mediaUrls,
+    channelServices,
+  })
+  const allOk = results.length > 0 && results.every((r) => r.ok)
+  return {
+    ok: allOk,
+    results,
+    manifest: { puzzleNo: manifest.puzzleNo, puzzleDate: manifest.puzzleDate },
+    dueAtIso,
+    mediaUrls,
+  }
+}
+
+async function recordAphydleRun(forDate, status, details) {
+  if (!sql) return
+  try {
+    await sql`
+      update public.aphydle_buffer_schedule
+      set last_run_at = now(),
+          last_run_for_date = ${forDate || null},
+          last_run_status = ${String(status || '').slice(0, 64)},
+          last_run_results = ${sql.json(details || {})}
+      where id = ${APHYDLE_SCHEDULE_ID}
+    `
+  } catch (e) {
+    console.warn('[aphydle-schedule] record run failed:', e?.message || e)
+  }
+}
+
+// 1-minute tick. Cheap: load config, compare wall clock, bail if no match.
+// Gated by APHYDLE_AUTOMATION_RUNNER so dev + prod boxes don't both fire.
+cron.schedule('* * * * *', async () => {
+  if (!isAphydleAutomationRunner()) return
+  const cfg = await loadAphydleScheduleConfig()
+  if (!cfg || !cfg.enabled) return
+  if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) return
+  const tz = aphydleServerTimezone()
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc }, {})
+  const weekday = String(parts.weekday || '').toLowerCase().slice(0, 3) // sun..sat
+  const hhmm = `${parts.hour}:${parts.minute}`
+  const today = `${parts.year}-${parts.month}-${parts.day}`
+  const days = Array.isArray(cfg.days_of_week) ? cfg.days_of_week : []
+  if (!days.includes(weekday)) return
+  if (hhmm !== cfg.run_time_local) return
+  if (cfg.last_run_for_date && String(cfg.last_run_for_date).slice(0, 10) === today) return
+  console.log(`[aphydle-schedule] firing for ${today} ${hhmm} ${tz} on ${weekday}`)
+  try {
+    const result = await runAphydleAutomation(cfg)
+    await recordAphydleRun(today, result.ok ? 'ok' : 'partial', result)
+    console.log('[aphydle-schedule] run done:', result.ok ? 'ok' : 'partial')
+  } catch (e) {
+    console.error('[aphydle-schedule] run failed:', e?.message || e)
+    await recordAphydleRun(today, 'error', { error: e?.message || String(e) })
+  }
+})
+
+app.get('/api/admin/aphydle-schedule', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    await ensureAphydleScheduleTable()
+    const cfg = await loadAphydleScheduleConfig()
+    const serverTimezone = aphydleServerTimezone()
+    res.json({
+      ok: true,
+      reservedMinutes: Array.from(APHYDLE_RESERVED_MINUTES),
+      serverTimezone,
+      serverName: aphydleServerName(),
+      isAutomationRunner: isAphydleAutomationRunner(),
+      config: cfg || {
+        id: APHYDLE_SCHEDULE_ID,
+        enabled: false,
+        days_of_week: [],
+        publish_time_local: '13:00',
+        run_time_local: '04:00',
+        timezone: serverTimezone,
+        organization_id: null,
+        channel_ids: [],
+      },
+    })
+  } catch (e) {
+    console.error('[aphydle-schedule:get] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to load schedule' })
+  }
+})
+
+app.put('/api/admin/aphydle-schedule', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) { res.status(503).json({ error: 'Database not configured' }); return }
+    let next
+    try { next = validateAphydleScheduleInput(req.body || {}) }
+    catch (ve) { res.status(400).json({ error: ve.message }); return }
+    await ensureAphydleScheduleTable()
+    await sql`
+      insert into public.aphydle_buffer_schedule (
+        id, enabled, days_of_week, publish_time_local, run_time_local,
+        timezone, organization_id, channel_ids, updated_at
+      ) values (
+        ${APHYDLE_SCHEDULE_ID}, ${next.enabled}, ${next.days_of_week},
+        ${next.publish_time_local}, ${next.run_time_local}, ${next.timezone},
+        ${next.organization_id}, ${next.channel_ids}, now()
+      )
+      on conflict (id) do update set
+        enabled = excluded.enabled,
+        days_of_week = excluded.days_of_week,
+        publish_time_local = excluded.publish_time_local,
+        run_time_local = excluded.run_time_local,
+        timezone = excluded.timezone,
+        organization_id = excluded.organization_id,
+        channel_ids = excluded.channel_ids,
+        updated_at = now()
+    `
+    const cfg = await loadAphydleScheduleConfig()
+    res.json({ ok: true, config: cfg })
+  } catch (e) {
+    console.error('[aphydle-schedule:put] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to save schedule' })
+  }
+})
+
+// Force the automation to run right now using the saved config. Used by the
+// "Run now" button in the UI to validate end-to-end without waiting for the
+// configured run minute.
+app.post('/api/admin/aphydle-schedule/run-now', express.json({ limit: '8kb' }), async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const cfg = await loadAphydleScheduleConfig()
+    if (!cfg) { res.status(400).json({ error: 'No saved schedule yet — save the form once before running.' }); return }
+    if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) {
+      res.status(400).json({ error: 'No channels configured' }); return
+    }
+    const dryRun = !!(req.body && req.body.dryRun)
+    const result = await runAphydleAutomation(cfg, { dryRun })
+    if (!dryRun) {
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: aphydleServerTimezone(),
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date())
+      await recordAphydleRun(today, result.ok ? 'ok' : 'partial', result)
+    }
+    res.status(result.ok ? 200 : 207).json(result)
+  } catch (e) {
+    console.error('[aphydle-schedule:run-now] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to run schedule' })
+  }
+})
+
+app.options('/api/admin/aphydle-schedule', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/aphydle-schedule/run-now', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
 // Admin: Get sitemap info (last update time, file size)
 app.get('/api/admin/sitemap-info', async (req, res) => {
   try {
