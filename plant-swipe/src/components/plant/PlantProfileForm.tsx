@@ -108,6 +108,8 @@ interface FieldConfig {
     caseInsensitive?: boolean
     placeholder?: string
   }
+  /** When true, tag display values are formatted: snake_case → Title Case */
+  formatTagDisplay?: boolean
   /** If set, this field is only shown when the gate field is true */
   gatedBy?: string
 }
@@ -181,13 +183,17 @@ const normalizeMonthArray = (value: unknown): number[] => {
   return result
 }
 
+const formatTagLabel = (tag: string): string =>
+  tag.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
 const TagInput: React.FC<{
   value: string[]
   onChange: (v: string[]) => void
   placeholder?: string
   unique?: boolean
   caseInsensitive?: boolean
-}> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
+  displayFormatter?: (tag: string) => string
+}> = ({ value, onChange, placeholder, unique, caseInsensitive, displayFormatter }) => {
   const { t } = useTranslation('plantAdmin')
   const [input, setInput] = React.useState("")
   const commit = () => {
@@ -216,7 +222,7 @@ const TagInput: React.FC<{
       <div className="flex flex-wrap gap-2">
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
-            {tag}
+            {displayFormatter ? displayFormatter(tag) : tag}
             <button
               type="button"
               className="text-red-600 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-full w-4 h-4 flex items-center justify-center"
@@ -1163,11 +1169,11 @@ const careFields: FieldConfig[] = [
 // Section 3b: Care Details — Substrate, Mulch, Nutrition (8 items)
 // ============================================================================
 const careDetailsFields: FieldConfig[] = [
-  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags" },
-  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
+  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags", formatTagDisplay: true },
+  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags", formatTagDisplay: true },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
   { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
-  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", gatedBy: "mulchingNeeded" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", formatTagDisplay: true, gatedBy: "mulchingNeeded" },
   { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
@@ -1212,11 +1218,11 @@ const dangerFields: FieldConfig[] = [
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
   { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
-  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
-  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags", formatTagDisplay: true },
+  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
   { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
-  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags" },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags", formatTagDisplay: true },
   { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
   { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
   { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
@@ -1224,7 +1230,7 @@ const ecologyFields: FieldConfig[] = [
   { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
   { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
   { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
-  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags" },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags", formatTagDisplay: true },
   { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
 ]
 
@@ -1455,6 +1461,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
               placeholder={tagPlaceholder || undefined}
               unique={field.tagConfig?.unique}
               caseInsensitive={field.tagConfig?.caseInsensitive}
+              displayFormatter={field.formatTagDisplay ? formatTagLabel : undefined}
             />
               )
             })()}
