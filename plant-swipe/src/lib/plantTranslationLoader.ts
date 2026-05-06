@@ -201,9 +201,9 @@ function mapDbRowToPlant(
     urbanBiotopes: (basePlant.urban_biotopes as string[]) || [],
     ecologicalTolerance: ecologicalToleranceEnum.toDbArray(basePlant.ecological_tolerance) as Plant['ecologicalTolerance'],
     biodiversityRole: (basePlant.biodiversity_role as string[]) || [],
-    pollinatorsAttracted: (basePlant.pollinators_attracted as string[]) || [],
-    birdsAttracted: (basePlant.birds_attracted as string[]) || [],
-    mammalsAttracted: (basePlant.mammals_attracted as string[]) || [],
+    pollinatorsAttracted: ((translation.pollinators_attracted as string[])?.length ? translation.pollinators_attracted as string[] : null) || (basePlant.pollinators_attracted as string[]) || [],
+    birdsAttracted: ((translation.birds_attracted as string[])?.length ? translation.birds_attracted as string[] : null) || (basePlant.birds_attracted as string[]) || [],
+    mammalsAttracted: ((translation.mammals_attracted as string[])?.length ? translation.mammals_attracted as string[] : null) || (basePlant.mammals_attracted as string[]) || [],
     ecologicalManagement: (basePlant.ecological_management as string[]) || [],
     ecologicalImpact: ecologicalImpactEnum.toDbArray(basePlant.ecological_impact) as Plant['ecologicalImpact'],
     // Translatable

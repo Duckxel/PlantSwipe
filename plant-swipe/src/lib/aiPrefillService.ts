@@ -1076,6 +1076,9 @@ export async function processPlantRequest(
         addArrayField('beneficial_roles', plant.beneficialRoles)
         addArrayField('harmful_roles', plant.harmfulRoles)
         addArrayField('symbiosis', plant.symbiosis)
+        addArrayField('pollinators_attracted', plant.pollinatorsAttracted)
+        addArrayField('birds_attracted', plant.birdsAttracted)
+        addArrayField('mammals_attracted', plant.mammalsAttracted)
         addArrayField('spice_mixes', plant.spiceMixes)
         addArrayField('pests', plant.pests)
         addArrayField('diseases', plant.diseases)
@@ -1146,6 +1149,9 @@ export async function processPlantRequest(
           harmful_roles: arrayMap.get('harmful_roles') || [],
           symbiosis: arrayMap.get('symbiosis') || [],
           symbiosis_notes: stringMap.get('symbiosis_notes') || null,
+          pollinators_attracted: arrayMap.get('pollinators_attracted') || [],
+          birds_attracted: arrayMap.get('birds_attracted') || [],
+          mammals_attracted: arrayMap.get('mammals_attracted') || [],
           biotopes: arrayMap.get('biotopes') || [],
           mulch_type: arrayMap.get('mulch_type') || [],
           substrate: arrayMap.get('substrate') || [],

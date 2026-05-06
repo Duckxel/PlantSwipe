@@ -414,9 +414,9 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     urbanBiotopes: data.urban_biotopes || [],
     ecologicalTolerance: ecologicalToleranceEnum.toUiArray(data.ecological_tolerance) as Plant['ecologicalTolerance'],
     biodiversityRole: data.biodiversity_role || [],
-    pollinatorsAttracted: data.pollinators_attracted || [],
-    birdsAttracted: data.birds_attracted || [],
-    mammalsAttracted: data.mammals_attracted || [],
+    pollinatorsAttracted: (translation?.pollinators_attracted?.length ? translation.pollinators_attracted : null) || data.pollinators_attracted || [],
+    birdsAttracted: (translation?.birds_attracted?.length ? translation.birds_attracted : null) || data.birds_attracted || [],
+    mammalsAttracted: (translation?.mammals_attracted?.length ? translation.mammals_attracted : null) || data.mammals_attracted || [],
     ecologicalManagement: data.ecological_management || [],
     ecologicalImpact: ecologicalImpactEnum.toUiArray(data.ecological_impact) as Plant['ecologicalImpact'],
     // Section 6: Ecology (translatable)
