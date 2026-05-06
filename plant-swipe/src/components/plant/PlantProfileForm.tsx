@@ -1602,17 +1602,6 @@ const SOURCE_STYLES = {
 
 type ImageSource = keyof typeof SOURCE_STYLES
 
-function SourceBadge({ source }: { source?: string | null }) {
-  const s = SOURCE_STYLES[(source as ImageSource) ?? 'uploaded'] ?? SOURCE_STYLES.uploaded
-  const { Icon } = s
-  return (
-    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
-      <Icon className="h-2.5 w-2.5" />
-      {s.label}
-    </span>
-  )
-}
-
 function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void; onUpload?: () => void }) {
   const { t } = useTranslation('plantAdmin')
   const list = Array.isArray(images) ? images : []
