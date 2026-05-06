@@ -1,7 +1,7 @@
 # External APIs Used in Aphylia
 
 > **Comprehensive list of all third-party services and APIs**  
-> Last updated: May 4, 2026
+> Last updated: May 6, 2026
 
 ---
 
@@ -17,7 +17,8 @@
 8. [Email Services](#email-services)
 9. [Backend Infrastructure](#backend-infrastructure)
 10. [Fonts & Assets](#fonts--assets)
-11. [Payment Processing (Planned)](#payment-processing-planned)
+11. [Social Media Scheduling](#social-media-scheduling)
+12. [Payment Processing (Planned)](#payment-processing-planned)
 
 ---
 
@@ -504,6 +505,43 @@ https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap
 
 ---
 
+## Social Media Scheduling
+
+### 15. Buffer
+
+**URL:** `https://api.buffer.com/graphql` (GraphQL API)
+
+**Purpose:**
+- Scheduling social media posts (plant content cards) to connected channels
+- Listing organizations and channels for the admin scheduler UI
+
+**Authentication:** API Key via `BUFFER` environment variable (server-side only). Not exposed to clients.
+
+**Usage:**
+- **Admin-only.** All Buffer endpoints are gated by the `ensureAdmin` middleware; no end-user code path reaches Buffer.
+- Driven by the `aphydle_buffer_schedule` table (singleton config row, RLS-restricted to admins).
+
+**Files:**
+- `plant-swipe/server.js` (admin proxy routes: `/api/admin/buffer/organizations`, `/api/admin/buffer/channels`, `/api/admin/buffer/post`)
+- `plant-swipe/src/components/admin/AdminExportBufferSchedule.tsx` (admin scheduler UI)
+
+**Data Sent to Buffer:**
+- Social card images (PNG/JPG of plant content cards)
+- Post text (plant facts, captions)
+- **No end-user PII.** Content is admin-authored and derived from the public plant database.
+
+**Data Received from Buffer:**
+- Organization metadata, channel lists (rendered in admin UI; not persisted)
+
+**Transient Storage:**
+- Card images uploaded to Supabase storage (`adminUploadBucket/buffer-posts/`) for Buffer ingestion. Filenames are UUIDs; no user identifiers.
+
+**GDPR / Sub-processor Status:**
+- Listed in the internal sub-processor register for completeness.
+- No end-user personal data flows through this integration, so it is not invoked during data export or account deletion.
+
+---
+
 ## Payment Processing (Planned)
 
 ### 13. Stripe (Mentioned in Privacy Policy)
@@ -550,6 +588,7 @@ https://fonts.googleapis.com/css2?family=Quicksand:wght@600;700&display=swap
 | Supabase | Backend | ✅ Yes | Freemium | ✅ Yes | Full stack |
 | FCM HTTP v1 | Push | ✅ Yes | Free | ✅ Yes | Native push (Android/iOS) |
 | Google Fonts | Assets | ❌ No | Free | ✅ Yes | Typography |
+| Buffer | Social scheduling | ✅ Yes | Paid | ✅ Yes (admin-only, no end-user PII) | Schedule social media posts |
 
 ---
 
@@ -574,6 +613,9 @@ RESEND_FROM_NAME=Aphylia Support Form
 SUPABASE_URL=https://your-project.supabase.co
 SUPABASE_ANON_KEY=your-anon-key
 SUPABASE_SERVICE_ROLE_KEY=your-service-key
+
+# Social Media Scheduling (admin-only)
+BUFFER=your-buffer-api-key
 
 # Analytics & Monitoring (public keys - configured in code)
 # GA_MEASUREMENT_ID=G-LDSYW5QNK5
