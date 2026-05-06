@@ -1459,7 +1459,14 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       }
     }
 
-    // Fallback: format the value nicely (replace _ with space, capitalize words)
+    // If value is already human-readable translated text (has spaces, accents, mixed case),
+    // return it as-is — it came from plant_translations (DeepL output) and is already correct.
+    if (!/^[a-z0-9_]+$/.test(value.trim())) {
+      enumCache.set(raw, value)
+      return value
+    }
+
+    // Fallback: format snake_case key nicely (replace _ with space, capitalize words)
     const fallback = value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     enumCache.set(raw, fallback)
     return fallback
