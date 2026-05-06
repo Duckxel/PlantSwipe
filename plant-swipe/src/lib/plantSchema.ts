@@ -243,8 +243,9 @@ export const plantSchema = {
     description: 'IUCN conservation status and legal protection status',
   },
   ecologicalStatus: {
-    type: 'tag[]',
-    description: 'Ecological status tags (e.g. ["indigenous", "pioneer_species", "nitrogen_fixer"])',
+    type: 'enum[]',
+    options: ['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile'],
+    description: 'Ecological status of the plant',
   },
   biotopes: {
     type: 'tag[]',
@@ -260,8 +261,9 @@ export const plantSchema = {
     description: 'Environmental tolerances',
   },
   biodiversityRole: {
-    type: 'tag[]',
-    description: 'Biodiversity roles (e.g. ["melliferous", "insect_refuge", "nitrogen_fixer", "soil_improver"])',
+    type: 'enum[]',
+    options: ['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection'],
+    description: 'Role of the plant in garden biodiversity',
   },
   pollinatorsAttracted: { type: 'tag[]', description: 'Pollinators attracted (short list, e.g. ["Bees", "Butterflies"])' },
   birdsAttracted: { type: 'tag[]', description: 'Birds attracted (short list)' },
@@ -271,8 +273,9 @@ export const plantSchema = {
   symbiosis: { type: 'tag[]', description: 'Symbiotic relationships (plant, insect, or fungus names)' },
   symbiosisNotes: { type: 'text', description: 'Detailed description of symbiotic relationships' },
   ecologicalManagement: {
-    type: 'tag[]',
-    description: 'Ecological management tips (e.g. ["let_seed", "no_winter_pruning", "natural_foliage_mulch"])',
+    type: 'enum[]',
+    options: ['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'],
+    description: 'Eco-friendly management practices for this plant',
   },
   ecologicalImpact: {
     type: 'enum[]',
