@@ -151,10 +151,10 @@ export const plantSchema = {
   wateringMode: {
     type: 'enum',
     options: ['always', 'seasonal'],
-    description: 'Whether watering is the same year-round ("always") or varies by temperature ("seasonal" = hot/cold)',
+    description: 'Use "always" when the plant needs the same watering frequency all year (most houseplants, many garden plants). Use "seasonal" ONLY when watering genuinely differs between hot and cold seasons (e.g. cacti: 1x/week in summer, 1x/month in winter). Default to "always" when unsure.',
   },
-  wateringFrequencyWarm: { type: 'int', description: 'Watering times per week in warm/hot season (legacy — prefer wateringSchedules)' },
-  wateringFrequencyCold: { type: 'int', description: 'Watering times per week in cold season (legacy — prefer wateringSchedules)' },
+  wateringFrequencyWarm: { type: 'int', description: 'Watering frequency in warm/hot season. Required only when wateringMode is "seasonal".' },
+  wateringFrequencyCold: { type: 'int', description: 'Watering frequency in cold season. Required only when wateringMode is "seasonal". Must differ from wateringFrequencyWarm — if same, set wateringMode to "always" instead.' },
   wateringType: {
     type: 'enum[]',
     options: ['hose','surface','drip','soaking','wick'],

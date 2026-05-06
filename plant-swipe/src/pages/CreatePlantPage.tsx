@@ -2,7 +2,7 @@ import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud, X } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
@@ -369,11 +369,10 @@ const normalizeTimePeriodSlug = (value?: string | null): string | null => {
 
 function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
   if (!entries?.length) return []
-  return entries
+  const normalized = entries
     .map((entry) => {
       const qty = entry.quantity
       const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty
-      // Normalize timePeriod to valid DB values: 'week', 'month', 'year', or undefined
       const rawTimePeriod = entry.timePeriod && typeof entry.timePeriod === 'string' ? entry.timePeriod.trim() : undefined
       const normalizedTimePeriod = normalizeTimePeriodSlug(rawTimePeriod) as PlantWateringSchedule['timePeriod'] | undefined
       return {
@@ -384,6 +383,19 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+
+  // Auto-collapse seasonal with identical hot/cold values into 'always'
+  const hotEntry = normalized.find((e) => e.season === 'hot')
+  const coldEntry = normalized.find((e) => e.season === 'cold')
+  if (
+    hotEntry && coldEntry &&
+    hotEntry.quantity === coldEntry.quantity &&
+    hotEntry.timePeriod === coldEntry.timePeriod
+  ) {
+    return [{ quantity: hotEntry.quantity, timePeriod: hotEntry.timePeriod }]
+  }
+
+  return normalized
 }
 
 type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | null | undefined
@@ -1218,6 +1230,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
   const [aiCompleted, setAiCompleted] = React.useState(false)
+  const [aiProgressDismissed, setAiProgressDismissed] = React.useState(false)
+  const [imageFetchDismissed, setImageFetchDismissed] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
@@ -1612,7 +1626,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     wateringSchedules: normalizeSchedules(candidate.wateringSchedules),
   })
     const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
-    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
+    const showAiProgressCard = !aiProgressDismissed && (aiWorking || (!aiCompleted && hasAiProgress))
   const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
@@ -2192,6 +2206,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return
     }
     setFetchingExternalImages(true)
+    setImageFetchDismissed(false)
     setExternalImagesTotal(null)
     setImageUploadProgress({ phase: 'searching', current: 0, total: 0, uploaded: 0, failed: 0 })
     setError(null)
@@ -2346,6 +2361,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     initializeCategoryProgress()
     setAiCompleted(false)
+    setAiProgressDismissed(false)
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
@@ -2868,7 +2884,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           )}
         </div>
           {/* External Image Fetch + Upload Progress Card */}
-          {(fetchingExternalImages || externalImagesTotal !== null) && (
+          {!imageFetchDismissed && (fetchingExternalImages || externalImagesTotal !== null) && (
             <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 space-y-3 shadow-md shadow-stone-200/50 dark:shadow-black/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2887,6 +2903,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     {imageUploadProgress.current}/{imageUploadProgress.total}
                   </span>
+                )}
+                {!fetchingExternalImages && externalImagesTotal !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setImageFetchDismissed(true)}
+                    className="ml-2 p-1 rounded-md text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 )}
               </div>
 
@@ -3019,11 +3045,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   )}
                 </div>
               </div>
-              {aiWorking && aiFieldProgress.total > 0 && (
-                <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                  {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {aiWorking && aiFieldProgress.total > 0 && (
+                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
+                  </span>
+                )}
+                {aiCompleted && (
+                  <button
+                    type="button"
+                    onClick={() => setAiProgressDismissed(true)}
+                    className="p-1 rounded-md text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Current plant info when filling */}
