@@ -95,6 +95,7 @@ const ALLOWED_ECOLOGICAL_STATUS = new Set(['indigenous','endemic','subendemic','
 const ALLOWED_BIOTOPES = new Set(['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory'])
 const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','greenhouse','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
 const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'])
+const ALLOWED_INFUSION_PARTS = new Set(['flower','leaf','root','bulb','clove','fruit','peel','rhizome','seed','stem','stigma','scape','aerial_parts','flowering_top','bark','bud','berry','resin','cone','whole_plant'])
 
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
@@ -1840,7 +1841,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion_parts: p.infusionParts || [],
+            infusion_parts: toCheckedSlugs(p.infusionParts, ALLOWED_INFUSION_PARTS),
             edible_oil: p.edibleOil ?? false,
             // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
             companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),
@@ -1940,7 +1941,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion_parts: p.infusionParts || [],
+            infusion_parts: toCheckedSlugs(p.infusionParts, ALLOWED_INFUSION_PARTS),
             edible_oil: p.edibleOil ?? false,
             // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
             companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),

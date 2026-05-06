@@ -282,8 +282,9 @@ export const plantSchema = {
 
   // -- Section 7: Consumption -------------------------------------------------
   infusionParts: {
-    type: 'tag[]',
-    description: 'Which parts can be used for infusion (e.g. ["leaf", "flower"])',
+    type: 'enum[]',
+    options: ['flower','leaf','root','bulb','clove','fruit','peel','rhizome','seed','stem','stigma','scape','aerial_parts','flowering_top','bark','bud','berry','resin','cone','whole_plant'],
+    description: 'Which parts can be used for infusion',
   },
   infusionBenefits: { type: 'text', description: 'Benefits of infusion/tea from this plant' },
   infusionRecipeIdeas: { type: 'text', description: 'Infusion/tea recipe ideas' },
