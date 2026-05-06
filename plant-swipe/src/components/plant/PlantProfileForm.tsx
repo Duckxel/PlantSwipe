@@ -1180,11 +1180,11 @@ const careFields: FieldConfig[] = [
 // Section 3b: Care Details — Substrate, Mulch, Nutrition (8 items)
 // ============================================================================
 const careDetailsFields: FieldConfig[] = [
-  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags", formatTagDisplay: true },
-  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags", formatTagDisplay: true },
+  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags", formatTagDisplay: true, enumGroup: "substrate" },
+  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags", formatTagDisplay: true, enumGroup: "substrateMix" },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
   { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
-  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", formatTagDisplay: true, gatedBy: "mulchingNeeded" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", formatTagDisplay: true, enumGroup: "mulchType", gatedBy: "mulchingNeeded" },
   { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
@@ -1230,7 +1230,7 @@ const dangerFields: FieldConfig[] = [
 const ecologyFields: FieldConfig[] = [
   { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
   { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags", formatTagDisplay: true, enumGroup: "ecologicalStatus" },
-  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true },
+  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true, enumGroup: "biotopes" },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
   { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
   { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags", formatTagDisplay: true, enumGroup: "biodiversityRole" },
