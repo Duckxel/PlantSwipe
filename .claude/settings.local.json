@@ -9,7 +9,8 @@
       "mcp__Supabase__execute_sql",
       "mcp__Supabase__apply_migration",
       "mcp__8d3b00b6-ff70-4961-9e6d-8b2eda7c1751__execute_sql",
-      "mcp__8d3b00b6-ff70-4961-9e6d-8b2eda7c1751__apply_migration"
+      "mcp__8d3b00b6-ff70-4961-9e6d-8b2eda7c1751__apply_migration",
+      "mcp__8d3b00b6-ff70-4961-9e6d-8b2eda7c1751__list_tables"
     ]
   }
 }
