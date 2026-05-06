@@ -1612,7 +1612,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     wateringSchedules: normalizeSchedules(candidate.wateringSchedules),
   })
     const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
-    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
+    const showAiProgressCard = aiWorking || hasAiProgress
   const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
@@ -3075,57 +3075,53 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               </div>
             )}
 
-            {/* Category progress grid */}
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
-              {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
-                const info = aiProgress[cat]
-                if (!info?.total) return null
-                const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
-                const isDone = info.status === 'done'
-                const isFilling = info.status === 'filling'
-                return (
-                  <div 
-                    key={cat} 
-                    className={`rounded-lg p-2.5 transition-all ${
-                      isDone 
-                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50' 
-                        : isFilling
-                          ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
+            {/* Category progress grid — only shown after fill completes */}
+            {aiCompleted && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+                {plantFormCategoryOrder.filter(cat => cat !== 'meta').map((cat) => {
+                  const info = aiProgress[cat]
+                  if (!info?.total) return null
+                  const percent = info.total ? Math.round((info.completed / info.total) * 100) : 0
+                  const isDone = info.status === 'done'
+                  return (
+                    <div
+                      key={cat}
+                      className={`rounded-lg p-2.5 transition-all ${
+                        isDone
+                          ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
                           : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1.5">
-                      <span className={`text-[11px] font-medium truncate ${
-                        isDone ? 'text-emerald-700 dark:text-emerald-300' : 
-                        isFilling ? 'text-blue-700 dark:text-blue-300' : 
-                        'text-stone-500 dark:text-stone-400'
-                      }`}>
-                        {categoryLabels[cat]}
-                      </span>
-                      {isDone && <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
-                      {isFilling && <Loader2 className="h-3 w-3 animate-spin text-blue-500 flex-shrink-0" />}
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className={`text-[11px] font-medium truncate ${
+                          isDone ? 'text-emerald-700 dark:text-emerald-300' : 'text-stone-500 dark:text-stone-400'
+                        }`}>
+                          {categoryLabels[cat]}
+                        </span>
+                        {isDone && <Check className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />}
+                      </div>
+                      <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-300 rounded-full ${
+                            isDone ? 'bg-emerald-500' : 'bg-stone-300 dark:bg-stone-600'
+                          }`}
+                          style={{ width: `${percent}%` }}
+                        />
+                      </div>
+                      <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
+                        {info.completed}/{info.total}
+                      </div>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-stone-700/50 overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-300 rounded-full ${
-                          isDone ? 'bg-emerald-500' : isFilling ? 'bg-blue-500' : 'bg-stone-300 dark:bg-stone-600'
-                        }`}
-                        style={{ width: `${percent}%` }}
-                      />
-                    </div>
-                    <div className="text-[10px] text-stone-400 dark:text-stone-500 mt-1 text-right">
-                      {info.completed}/{info.total}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
+                  )
+                })}
+              </div>
+            )}
 
-            {/* Sections completed log */}
-            {recentSectionLog.length > 0 && (
+            {/* Sections completed log — only shown after fill */}
+            {aiCompleted && recentSectionLog.length > 0 && (
               <div className="space-y-2">
                 <div className="text-[11px] uppercase tracking-wider font-medium text-stone-400 dark:text-stone-500">
-                  {t('plantAdmin.sectionLogTitle', 'Recently Completed')}
+                  {t('plantAdmin.sectionLogTitle', 'Completed sections')}
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {recentSectionLog.map((entry) => (
@@ -3155,7 +3151,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             value={plant}
             onChange={setPlant}
             colorSuggestions={colorSuggestions}
-            categoryProgress={hasAiProgress ? aiProgress : undefined}
+            categoryProgress={hasAiProgress && aiCompleted ? aiProgress : undefined}
             language={language}
             onImageRemove={(imageUrl) => {
               if (isManagedPlantImageUrl(imageUrl)) {

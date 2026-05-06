@@ -36,7 +36,7 @@ const fieldCategoryMap: Record<string, PlantFormCategory> = {
   commonNames: 'base',
   presentation: 'base',
   featuredMonth: 'base',
-  colors: 'base',
+  colors: 'identity',
   images: 'base',
 
   // Section 2: Identity
