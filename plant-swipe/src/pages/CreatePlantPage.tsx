@@ -510,10 +510,11 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
       finalUse = 'other'
     }
     
-    const row: { plant_id: string; link: string; use: string; added_by?: string } = {
+    const row: { plant_id: string; link: string; use: string; added_by?: string; source: string } = {
       plant_id: plantId,
       link: img.link!.trim(),
       use: finalUse,
+      source: img.source || 'uploaded',
     }
     // Include added_by if the image tracks who uploaded it
     if (img.addedBy) {
@@ -851,7 +852,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   translation = translationData || null
   
   const { data: colorLinks } = await supabase.from('plant_colors').select('color_id, colors:color_id (id,name,hex_code)').eq('plant_id', id)
-  const { data: images } = await supabase.from('plant_images').select('id,link,use,added_by').eq('plant_id', id)
+  const { data: images } = await supabase.from('plant_images').select('id,link,use,added_by,source').eq('plant_id', id)
   const { data: schedules } = await supabase.from('plant_watering_schedules').select('season,quantity,time_period').eq('plant_id', id)
   const { data: sources } = await supabase.from('plant_sources').select('id,name,url').eq('plant_id', id)
   const { data: contributorRows } = await supabase
@@ -1032,6 +1033,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
       link: img.link,
       use: img.use,
       addedBy: img.added_by || null,
+      source: img.source || 'uploaded',
     })) as PlantImage[],
     // Flat watering fields (schedules stored in plant_watering_schedules table)
     wateringSchedules: normalizeSchedules(
@@ -2248,6 +2250,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
               link: uploaded.url,
               use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
               addedBy: adminUserId,
+              source: 'web' as const,
             }
             return { ...prev, images: [...existing, newImage] }
           })
@@ -2307,6 +2310,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             link: uploaded.url,
             use: (existing.length === 0 ? 'primary' : 'other') as 'primary' | 'discovery' | 'other',
             addedBy: adminUserId,
+            source: 'uploaded' as const,
           }
           return { ...prev, images: [...existing, newImage] }
         })

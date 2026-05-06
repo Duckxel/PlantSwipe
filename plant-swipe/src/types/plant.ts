@@ -115,6 +115,8 @@ export interface PlantImage {
   isVertical?: boolean
   /** UUID of the admin user who uploaded this image */
   addedBy?: string | null
+  /** Origin of the image: 'uploaded' (direct file), 'web' (URL import), 'dump' (plant dump workflow) */
+  source?: "uploaded" | "web" | "dump" | null
   [key: string]: unknown
 }
 

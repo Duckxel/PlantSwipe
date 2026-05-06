@@ -221,7 +221,10 @@ do $$ declare
     'event_registrations',
     'event_items',
     'event_item_translations',
-    'event_user_progress'
+    'event_user_progress',
+    -- Plant Image Dump (bulk upload staging)
+    'plant_dump_groups',
+    'plant_dump_images'
   ];
   rec record;
 begin

@@ -1,5 +1,5 @@
 import React from "react"
-import { CloudUpload, Inbox, Smartphone } from "lucide-react"
+import { CloudUpload, Inbox, Smartphone, Layers, ChevronRight } from "lucide-react"
 import { useLocation } from "react-router-dom"
 import { cn } from "@/lib/utils"
 import { AdminUploadPanel } from "@/components/admin/AdminUploadPanel"
@@ -60,6 +60,23 @@ export const AdminUploadMediaPanel: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {/* Plant Image Dump shortcut */}
+      <Link
+        to="/admin/upload/dump"
+        className="flex items-center gap-4 rounded-2xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50 dark:bg-emerald-950/20 px-5 py-4 hover:bg-emerald-100 dark:hover:bg-emerald-950/40 transition-colors group"
+      >
+        <div className="h-10 w-10 rounded-xl bg-emerald-600 dark:bg-emerald-700 flex items-center justify-center flex-shrink-0">
+          <Layers className="h-5 w-5 text-white" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-emerald-800 dark:text-emerald-200 text-sm">Plant Image Dump</p>
+          <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-0.5">
+            Bulk-upload hundreds of plant images, group them, assign plants, and submit in one workflow
+          </p>
+        </div>
+        <ChevronRight className="h-5 w-5 text-emerald-500 dark:text-emerald-400 flex-shrink-0 group-hover:translate-x-0.5 transition-transform" />
+      </Link>
 
       {/* Content */}
       {section === "upload" && <AdminUploadPanel />}

@@ -1882,6 +1882,8 @@ const singleGardenCoverUpload = gardenCoverMulter.single('file')
 // Plant images are stored in the PLANTS bucket, converted to WebP, and tracked in admin_media_uploads
 const plantImageUploadBucket = process.env.PLANT_IMAGE_BUCKET || 'PLANTS'
 const plantImageUploadPrefix = (process.env.PLANT_IMAGE_PREFIX || 'plants/images').replace(/^\/+|\/+$/g, '')
+// Dump staging: uploaded before being assigned to a plant
+const plantDumpUploadPrefix = 'plants/dump'
 const plantImageMaxDimension = 1600 // Good quality for plant detail pages
 const plantImageWebpQuality = 80 // High quality for plant reference images
 const plantImageMaxFetchBytes = 100 * 1024 * 1024 // 100MB max download - large originals are fine since we convert to WebP
@@ -6897,6 +6899,544 @@ app.options('/api/admin/plant-images/delete', (_req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
   res.status(204).end()
 })
+
+// ===========================================================================
+// Plant Image Dump — bulk upload staging area
+// ===========================================================================
+
+// POST /api/admin/plant-dump/upload
+// Upload one image to the dump staging area (PLANTS bucket, plants/dump/).
+// Uses same optimization pipeline as plant images (WebP, 80% quality, 1600px).
+app.post('/api/admin/plant-dump/upload', async (req, res) => {
+  const caller = await ensureEditor(req, res)
+  if (!caller) return
+
+  let adminId = null, adminName = null
+  try {
+    const userId = await getUserIdFromRequest(req)
+    if (userId && supabaseServiceClient) {
+      adminId = userId
+      const { data: profile } = await supabaseServiceClient
+        .from('profiles')
+        .select('display_name')
+        .eq('id', userId)
+        .maybeSingle()
+      if (profile) adminName = profile.display_name || null
+    }
+  } catch {}
+
+  // Use multer directly then process
+  singleAdminImageUpload(req, res, async (err) => {
+    if (err) {
+      const message = err?.code === 'LIMIT_FILE_SIZE'
+        ? `File exceeds the maximum upload size`
+        : err?.message || 'Upload error'
+      res.status(400).json({ error: message })
+      return
+    }
+    try {
+      const file = req.file
+      if (!file) { res.status(400).json({ error: 'No file provided (field: "file")' }); return }
+
+      const mime = (file.mimetype || '').toLowerCase()
+      if (!mime.startsWith('image/')) { res.status(400).json({ error: 'Only image files are accepted' }); return }
+
+      // Optimize to WebP
+      const optimizedBuffer = await sharp(file.buffer)
+        .rotate()
+        .resize({ width: plantImageMaxDimension, height: plantImageMaxDimension, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: plantImageWebpQuality, effort: 5, smartSubsample: true })
+        .toBuffer()
+
+      const uuid = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex')
+      const objectPath = `${plantDumpUploadPrefix}/${uuid}.webp`
+
+      const { error: upErr } = await supabaseServiceClient.storage
+        .from(plantImageUploadBucket)
+        .upload(objectPath, optimizedBuffer, { cacheControl: '31536000', contentType: 'image/webp', upsert: false })
+      if (upErr) throw new Error(upErr.message || 'Storage upload failed')
+
+      const { data: pubData } = supabaseServiceClient.storage.from(plantImageUploadBucket).getPublicUrl(objectPath)
+      const proxyUrl = supabaseStorageToMediaProxy(pubData?.publicUrl)
+
+      // Insert into plant_dump_images
+      const { data: dumpRow, error: dbErr } = await supabaseServiceClient
+        .from('plant_dump_images')
+        .insert({
+          bucket: plantImageUploadBucket,
+          path: objectPath,
+          url: proxyUrl,
+          original_name: file.originalname || null,
+          size_bytes: optimizedBuffer.length,
+          uploaded_by: adminId || null,
+        })
+        .select('*')
+        .single()
+      if (dbErr) {
+        console.error('[plant-dump] Failed to insert plant_dump_images row:', dbErr)
+        // Delete the orphaned storage file before returning error
+        await supabaseServiceClient.storage.from(plantImageUploadBucket).remove([objectPath]).catch(() => {})
+        res.status(500).json({ error: 'DB insert failed: ' + (dbErr.message || 'unknown error') })
+        return
+      }
+
+      res.json({ ok: true, image: dumpRow })
+    } catch (err) {
+      console.error('[plant-dump] upload failed:', err)
+      if (!res.headersSent) res.status(500).json({ error: err?.message || 'Upload failed' })
+    }
+  })
+})
+app.options('/api/admin/plant-dump/upload', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// GET /api/admin/plant-dump/list
+// Return all pending dump images with group + plant info
+app.get('/api/admin/plant-dump/list', async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const { data: images, error } = await supabaseServiceClient
+      .from('plant_dump_images')
+      .select(`
+        id, bucket, path, url, original_name, size_bytes,
+        group_id, plant_id, uploaded_by, uploaded_at, status,
+        plant_dump_groups ( id, name, plant_id, created_at, updated_at ),
+        plants ( id, name, scientific_name_species )
+      `)
+      .eq('status', 'pending')
+      .order('uploaded_at', { ascending: false })
+
+    if (error) throw new Error(error.message)
+
+    // Fetch groups separately so we can return them with their images
+    const { data: groups, error: gErr } = await supabaseServiceClient
+      .from('plant_dump_groups')
+      .select(`id, name, plant_id, created_at, updated_at, plants ( id, name, scientific_name_species )`)
+      .order('created_at', { ascending: false })
+
+    if (gErr) console.error('[plant-dump] list groups error:', gErr)
+
+    // Fetch uploader profiles
+    const uploaderIds = [...new Set((images || []).map(i => i.uploaded_by).filter(Boolean))]
+    let uploaderMap = {}
+    if (uploaderIds.length > 0) {
+      const { data: profiles } = await supabaseServiceClient
+        .from('profiles')
+        .select('id, display_name, avatar_url')
+        .in('id', uploaderIds)
+      for (const p of profiles || []) uploaderMap[p.id] = p
+    }
+
+    const enriched = (images || []).map(img => ({
+      ...img,
+      uploader: uploaderMap[img.uploaded_by] || null,
+    }))
+
+    res.json({ images: enriched, groups: groups || [] })
+  } catch (err) {
+    console.error('[plant-dump] list failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Failed to list dump images' })
+  }
+})
+app.options('/api/admin/plant-dump/list', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// POST /api/admin/plant-dump/groups
+// Create a new group and optionally assign imageIds to it
+app.post('/api/admin/plant-dump/groups', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const userId = await getUserIdFromRequest(req)
+    const body = req.body || {}
+    const name = typeof body.name === 'string' ? body.name.trim() : null
+    const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
+
+    const { data: group, error: gErr } = await supabaseServiceClient
+      .from('plant_dump_groups')
+      .insert({ name: name || null, created_by: userId || null })
+      .select('*')
+      .single()
+    if (gErr) throw new Error(gErr.message)
+
+    if (imageIds.length > 0) {
+      const { error: upErr } = await supabaseServiceClient
+        .from('plant_dump_images')
+        .update({ group_id: group.id })
+        .in('id', imageIds)
+        .eq('status', 'pending')
+      if (upErr) console.error('[plant-dump] Failed to assign images to new group:', upErr)
+    }
+
+    res.json({ ok: true, group })
+  } catch (err) {
+    console.error('[plant-dump] create group failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Failed to create group' })
+  }
+})
+app.options('/api/admin/plant-dump/groups', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// PATCH /api/admin/plant-dump/images/move-group
+// Move images into a group (or remove from group if groupId is null)
+app.patch('/api/admin/plant-dump/images/move-group', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
+    const groupId = typeof body.groupId === 'string' ? body.groupId : null
+
+    if (imageIds.length === 0) { res.status(400).json({ error: 'imageIds required' }); return }
+
+    const { error } = await supabaseServiceClient
+      .from('plant_dump_images')
+      .update({ group_id: groupId })
+      .in('id', imageIds)
+      .eq('status', 'pending')
+    if (error) throw new Error(error.message)
+
+    // Update group's updated_at
+    if (groupId) {
+      await supabaseServiceClient.from('plant_dump_groups').update({ updated_at: new Date().toISOString() }).eq('id', groupId)
+    }
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-dump] move-group failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Failed to move images' })
+  }
+})
+app.options('/api/admin/plant-dump/images/move-group', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'PATCH,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// PATCH /api/admin/plant-dump/assign-plant
+// Assign a plant to individual images or a whole group
+app.patch('/api/admin/plant-dump/assign-plant', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const plantId = typeof body.plantId === 'string' ? body.plantId : null
+    const groupId = typeof body.groupId === 'string' ? body.groupId : null
+    const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
+
+    if (!groupId && imageIds.length === 0) { res.status(400).json({ error: 'groupId or imageIds required' }); return }
+
+    if (groupId) {
+      // Update group plant_id
+      await supabaseServiceClient.from('plant_dump_groups')
+        .update({ plant_id: plantId, updated_at: new Date().toISOString() })
+        .eq('id', groupId)
+      // Update all images in the group
+      await supabaseServiceClient.from('plant_dump_images')
+        .update({ plant_id: plantId })
+        .eq('group_id', groupId)
+        .eq('status', 'pending')
+    }
+
+    if (imageIds.length > 0) {
+      const { error } = await supabaseServiceClient.from('plant_dump_images')
+        .update({ plant_id: plantId })
+        .in('id', imageIds)
+        .eq('status', 'pending')
+      if (error) throw new Error(error.message)
+    }
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-dump] assign-plant failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Failed to assign plant' })
+  }
+})
+app.options('/api/admin/plant-dump/assign-plant', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'PATCH,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// POST /api/admin/plant-dump/submit
+// Move dump images to the proper plant folder and insert into plant_images
+app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const adminId = await getUserIdFromRequest(req)
+    const body = req.body || {}
+    const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
+    const plantId = typeof body.plantId === 'string' ? body.plantId.trim() : ''
+    const primaryImageId = typeof body.primaryImageId === 'string' ? body.primaryImageId : null
+    const verticalImageId = typeof body.verticalImageId === 'string' ? body.verticalImageId : null
+
+    if (imageIds.length === 0) { res.status(400).json({ error: 'imageIds required' }); return }
+    if (!plantId) { res.status(400).json({ error: 'plantId required' }); return }
+
+    // Load plant name for path building
+    const { data: plant, error: plantErr } = await supabaseServiceClient
+      .from('plants')
+      .select('id, name')
+      .eq('id', plantId)
+      .single()
+    if (plantErr || !plant) { res.status(404).json({ error: 'Plant not found' }); return }
+
+    // Load dump images
+    const { data: dumpImages, error: loadErr } = await supabaseServiceClient
+      .from('plant_dump_images')
+      .select('id, bucket, path, url, original_name')
+      .in('id', imageIds)
+      .eq('status', 'pending')
+    if (loadErr) throw new Error(loadErr.message)
+    if (!dumpImages || dumpImages.length === 0) {
+      res.status(404).json({ error: 'No pending dump images found for the given IDs' }); return
+    }
+
+    const safePlantName = plant.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'plant'
+    const submitted = []
+    const errors = []
+
+    // Determine 'use' values
+    const hasExplicitPrimary = imageIds.includes(primaryImageId)
+    const hasExplicitVertical = imageIds.includes(verticalImageId)
+
+    // Check existing plant_images for this plant to avoid use conflicts
+    const { data: existingImages } = await supabaseServiceClient
+      .from('plant_images')
+      .select('id, use, source')
+      .eq('plant_id', plantId)
+    const hasPrimary = (existingImages || []).some(i => i.use === 'primary')
+    const hasDiscovery = (existingImages || []).some(i => i.use === 'discovery')
+
+    // Demote any existing primary/discovery that are NOT dump-sourced so that
+    // dump images can take those slots (dump content is preferred over web/uploaded).
+    const nonDumpPrimary = (!hasExplicitPrimary)
+      ? (existingImages || []).find(i => i.use === 'primary' && i.source !== 'dump')
+      : null
+    const nonDumpDiscovery = (!hasExplicitVertical)
+      ? (existingImages || []).find(i => i.use === 'discovery' && i.source !== 'dump')
+      : null
+
+    if (nonDumpPrimary) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', nonDumpPrimary.id)
+    }
+    if (nonDumpDiscovery) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', nonDumpDiscovery.id)
+    }
+
+    const effectiveHasPrimary = hasPrimary && !nonDumpPrimary
+    const effectiveHasDiscovery = hasDiscovery && !nonDumpDiscovery
+
+    // Track which uses have been assigned in this batch to prevent same-image double-role
+    const usedRoles = new Set()
+
+    for (let i = 0; i < dumpImages.length; i++) {
+      const img = dumpImages[i]
+      try {
+        // Download buffer from dump location
+        const { data: downloadData, error: dlErr } = await supabaseServiceClient.storage
+          .from(img.bucket)
+          .download(img.path)
+        if (dlErr || !downloadData) throw new Error(dlErr?.message || 'Failed to download dump image')
+
+        const arrayBuffer = await downloadData.arrayBuffer()
+        const buffer = Buffer.from(arrayBuffer)
+
+        // Re-optimize and upload to plant's proper folder
+        const optimized = await sharp(buffer)
+          .rotate()
+          .resize({ width: plantImageMaxDimension, height: plantImageMaxDimension, fit: 'inside', withoutEnlargement: true })
+          .webp({ quality: plantImageWebpQuality, effort: 5, smartSubsample: true })
+          .toBuffer()
+
+        const uuid = typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : crypto.randomBytes(16).toString('hex')
+        const newPath = `${plantImageUploadPrefix}/${safePlantName}/${uuid}.webp`
+
+        const { error: upErr } = await supabaseServiceClient.storage
+          .from(plantImageUploadBucket)
+          .upload(newPath, optimized, { cacheControl: '31536000', contentType: 'image/webp', upsert: false })
+        if (upErr) throw new Error(upErr.message || 'Storage upload failed')
+
+        const { data: pubData } = supabaseServiceClient.storage.from(plantImageUploadBucket).getPublicUrl(newPath)
+        const newUrl = supabaseStorageToMediaProxy(pubData?.publicUrl)
+
+        // Determine use — guard against assigning the same role twice or to the same image
+        let use = 'other'
+        if (img.id === primaryImageId && img.id !== verticalImageId && !usedRoles.has('primary')) {
+          use = 'primary'
+        } else if (img.id === verticalImageId && img.id !== primaryImageId && !usedRoles.has('discovery')) {
+          use = 'discovery'
+        } else if (!hasExplicitPrimary && !effectiveHasPrimary && !usedRoles.has('primary') && i === 0) {
+          use = 'primary'
+        } else if (!hasExplicitVertical && !effectiveHasDiscovery && !usedRoles.has('discovery') && i === 1) {
+          use = 'discovery'
+        }
+        if (use === 'primary' || use === 'discovery') usedRoles.add(use)
+
+        // Insert into plant_images
+        const { data: plantImageRow, error: piErr } = await supabaseServiceClient
+          .from('plant_images')
+          .insert({ plant_id: plantId, link: newUrl, use, added_by: adminId || null, source: 'dump' })
+          .select('id')
+          .single()
+        if (piErr) {
+          // Conflict means another image already has this use — fallback to 'other'
+          if (piErr.code === '23505') {
+            const { data: fallbackRow } = await supabaseServiceClient
+              .from('plant_images')
+              .insert({ plant_id: plantId, link: newUrl, use: 'other', added_by: adminId || null, source: 'dump' })
+              .select('id')
+              .single()
+            submitted.push({ imageId: img.id, newUrl, plantImageId: fallbackRow?.id || null })
+          } else {
+            throw new Error(piErr.message)
+          }
+        } else {
+          submitted.push({ imageId: img.id, newUrl, plantImageId: plantImageRow?.id || null })
+        }
+
+        // Mark dump image as submitted and delete temp file
+        await supabaseServiceClient.from('plant_dump_images')
+          .update({ status: 'submitted', submitted_at: new Date().toISOString() })
+          .eq('id', img.id)
+
+        await supabaseServiceClient.storage.from(img.bucket).remove([img.path])
+      } catch (imgErr) {
+        console.error(`[plant-dump] submit failed for image ${img.id}:`, imgErr)
+        errors.push({ imageId: img.id, error: imgErr?.message || 'Failed' })
+      }
+    }
+
+    console.log(`[plant-dump] submit: ${submitted.length} images added to plant "${plant.name}", ${errors.length} errors`)
+    res.json({ ok: true, plantId, plantName: plant.name, submitted, errors })
+  } catch (err) {
+    console.error('[plant-dump] submit failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Submit failed' })
+  }
+})
+app.options('/api/admin/plant-dump/submit', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// DELETE /api/admin/plant-dump/images
+// Delete dump images from storage and mark as deleted
+app.delete('/api/admin/plant-dump/images', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const imageIds = Array.isArray(body.imageIds) ? body.imageIds.filter(id => typeof id === 'string') : []
+    if (imageIds.length === 0) { res.status(400).json({ error: 'imageIds required' }); return }
+
+    const { data: images } = await supabaseServiceClient
+      .from('plant_dump_images')
+      .select('id, bucket, path')
+      .in('id', imageIds)
+      .eq('status', 'pending')
+
+    // Delete storage objects
+    const pathsByBucket = {}
+    for (const img of images || []) {
+      if (!pathsByBucket[img.bucket]) pathsByBucket[img.bucket] = []
+      pathsByBucket[img.bucket].push(img.path)
+    }
+    for (const [bucket, paths] of Object.entries(pathsByBucket)) {
+      await supabaseServiceClient.storage.from(bucket).remove(paths)
+    }
+
+    // Mark as deleted
+    await supabaseServiceClient.from('plant_dump_images')
+      .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+      .in('id', imageIds)
+
+    res.json({ ok: true, deleted: imageIds.length })
+  } catch (err) {
+    console.error('[plant-dump] delete images failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Delete failed' })
+  }
+})
+app.options('/api/admin/plant-dump/images', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// DELETE /api/admin/plant-dump/groups
+// Delete a group; optionally delete all its images too
+app.delete('/api/admin/plant-dump/groups', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const caller = await ensureEditor(req, res)
+    if (!caller) return
+
+    const body = req.body || {}
+    const groupId = typeof body.groupId === 'string' ? body.groupId : null
+    const deleteImages = body.deleteImages === true
+
+    if (!groupId) { res.status(400).json({ error: 'groupId required' }); return }
+
+    if (deleteImages) {
+      // Delete storage objects for images in this group
+      const { data: images } = await supabaseServiceClient
+        .from('plant_dump_images')
+        .select('id, bucket, path')
+        .eq('group_id', groupId)
+        .eq('status', 'pending')
+
+      const pathsByBucket = {}
+      for (const img of images || []) {
+        if (!pathsByBucket[img.bucket]) pathsByBucket[img.bucket] = []
+        pathsByBucket[img.bucket].push(img.path)
+      }
+      for (const [bucket, paths] of Object.entries(pathsByBucket)) {
+        await supabaseServiceClient.storage.from(bucket).remove(paths)
+      }
+
+      await supabaseServiceClient.from('plant_dump_images')
+        .update({ status: 'deleted', deleted_at: new Date().toISOString() })
+        .eq('group_id', groupId)
+    } else {
+      // Just unlink images from the group
+      await supabaseServiceClient.from('plant_dump_images')
+        .update({ group_id: null })
+        .eq('group_id', groupId)
+    }
+
+    await supabaseServiceClient.from('plant_dump_groups').delete().eq('id', groupId)
+
+    res.json({ ok: true })
+  } catch (err) {
+    console.error('[plant-dump] delete group failed:', err)
+    if (!res.headersSent) res.status(500).json({ error: err?.message || 'Delete group failed' })
+  }
+})
+app.options('/api/admin/plant-dump/groups', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'DELETE,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token')
+  res.status(204).end()
+})
+
+// ===========================================================================
+// End of Plant Image Dump endpoints
+// ===========================================================================
 
 // Admin/Editor: AI-assisted plant data fill
 app.post('/api/admin/ai/plant-fill', async (req, res) => {
