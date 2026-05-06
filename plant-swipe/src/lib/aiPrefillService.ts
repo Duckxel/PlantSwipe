@@ -297,6 +297,7 @@ async function upsertImages(plantId: string, images: Plant["images"]) {
       plant_id: plantId,
       link: img.link!.trim(),
       use: finalUse,
+      source: (img as { source?: string }).source || 'web',
     }
   })
   

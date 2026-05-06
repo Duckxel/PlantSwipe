@@ -7269,7 +7269,7 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
         // Insert into plant_images
         const { data: plantImageRow, error: piErr } = await supabaseServiceClient
           .from('plant_images')
-          .insert({ plant_id: plantId, link: newUrl, use, added_by: adminId || null })
+          .insert({ plant_id: plantId, link: newUrl, use, added_by: adminId || null, source: 'dump' })
           .select('id')
           .single()
         if (piErr) {
@@ -7277,7 +7277,7 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
           if (piErr.code === '23505') {
             const { data: fallbackRow } = await supabaseServiceClient
               .from('plant_images')
-              .insert({ plant_id: plantId, link: newUrl, use: 'other', added_by: adminId || null })
+              .insert({ plant_id: plantId, link: newUrl, use: 'other', added_by: adminId || null, source: 'dump' })
               .select('id')
               .single()
             submitted.push({ imageId: img.id, newUrl, plantImageId: fallbackRow?.id || null })

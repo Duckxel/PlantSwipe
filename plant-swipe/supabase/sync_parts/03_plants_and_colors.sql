@@ -2039,6 +2039,11 @@ create table if not exists public.plant_images (
   unique (plant_id, link)
 );
 alter table public.plant_images add column if not exists added_by uuid references auth.users(id) on delete set null;
+alter table public.plant_images add column if not exists source text not null default 'uploaded';
+do $$ begin
+  alter table public.plant_images add constraint plant_images_source_check check (source in ('uploaded', 'dump', 'web'));
+exception when duplicate_object then null;
+end $$;
 create index if not exists plant_images_added_by_idx on public.plant_images (added_by) where added_by is not null;
 alter table if exists public.plant_images drop constraint if exists plant_images_link_key;
 create unique index if not exists plant_images_plant_link_unique on public.plant_images (plant_id, link);

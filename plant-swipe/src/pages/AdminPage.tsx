@@ -3377,6 +3377,7 @@ export const AdminPage: React.FC = () => {
             plant_id: newId,
             link: img.link,
             use: img.use,
+            source: (img as { source?: string }).source || 'uploaded',
           }));
           
           const { error: imagesInsertError } = await supabase.from('plant_images').insert(newImages);
