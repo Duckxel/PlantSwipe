@@ -1100,7 +1100,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.specialNeeds = (translation?.special_needs?.length ? translation.special_needs : null) || data.special_needs || []
 
   // Section 3b: Care Details
-  flat.substrate = data.substrate || []
+  flat.substrate = (translation?.substrate?.length ? translation.substrate : null) || data.substrate || []
   flat.substrateMix = data.substrate_mix || []
   flat.soilAdvice = translation?.soil_advice || plant.plantCare?.adviceSoil || undefined
   flat.mulchingNeeded = data.mulching_needed || false
@@ -2022,11 +2022,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           medicinal_history: p2.medicinalHistory || null,
           aromatherapy_benefits: p2.aromatherapyBenefits || null,
           essential_oil_blends: p2.essentialOilBlends || null,
+          // Ecology (translatable free-form arrays)
+          biotopes: p2.biotopes || [],
           // Ecology
           beneficial_roles: p2.beneficialRoles || [],
           harmful_roles: p2.harmfulRoles || [],
           symbiosis: p2.symbiosis || [],
           symbiosis_notes: p2.symbiosisNotes || null,
+          // Care (translatable free-form arrays)
+          mulch_type: p2.mulchType || [],
+          substrate: p2.substrate || [],
           // Misc
           plant_tags: p2.plantTags || p2.miscellaneous?.tags || [],
           biodiversity_tags: p2.biodiversityTags || [],
@@ -2634,6 +2639,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           spice_mixes: await translateArrSafe(p2.spiceMixes || p2.usage?.spiceMixes),
           // Care tag fields
           mulch_type: await translateArrSafe(p2.mulchType),
+          substrate: await translateArrSafe(p2.substrate),
           nutrition_need: await translateArrSafe(p2.nutritionNeed),
           fertilizer: await translateArrSafe(p2.fertilizer),
           special_needs: await translateArrSafe(p2.specialNeeds),

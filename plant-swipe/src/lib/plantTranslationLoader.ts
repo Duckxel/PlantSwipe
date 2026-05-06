@@ -155,10 +155,10 @@ function mapDbRowToPlant(
     hygrometry: (basePlant.hygrometry as number) || undefined,
     mistingFrequency: (basePlant.misting_frequency as number) || undefined,
     specialNeeds: (basePlant.special_needs as string[]) || [],
-    substrate: (basePlant.substrate as string[]) || [],
+    substrate: ((translation.substrate as string[])?.length ? translation.substrate as string[] : null) || (basePlant.substrate as string[]) || [],
     substrateMix: (basePlant.substrate_mix as string[]) || [],
     mulchingNeeded: (basePlant.mulching_needed as boolean) ?? false,
-    mulchType: (basePlant.mulch_type as string[]) || [],
+    mulchType: ((translation.mulch_type as string[])?.length ? translation.mulch_type as string[] : null) || (basePlant.mulch_type as string[]) || [],
     nutritionNeed: (basePlant.nutrition_need as string[]) || [],
     fertilizer: (basePlant.fertilizer as string[]) || [],
     // Translatable
@@ -197,7 +197,7 @@ function mapDbRowToPlant(
     // Section 6: Ecology (non-translatable)
     conservationStatus: conservationStatusEnum.toDbArray(basePlant.conservation_status) as Plant['conservationStatus'],
     ecologicalStatus: (basePlant.ecological_status as string[]) || [],
-    biotopes: (basePlant.biotopes as string[]) || [],
+    biotopes: ((translation.biotopes as string[])?.length ? translation.biotopes as string[] : null) || (basePlant.biotopes as string[]) || [],
     urbanBiotopes: (basePlant.urban_biotopes as string[]) || [],
     ecologicalTolerance: ecologicalToleranceEnum.toDbArray(basePlant.ecological_tolerance) as Plant['ecologicalTolerance'],
     biodiversityRole: (basePlant.biodiversity_role as string[]) || [],

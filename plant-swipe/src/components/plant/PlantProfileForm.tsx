@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
+import i18next from "i18next"
 import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
@@ -1229,11 +1230,11 @@ const dangerFields: FieldConfig[] = [
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
   { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
-  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags", formatTagDisplay: true, enumGroup: "ecologicalStatus" },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "multiselect", enumGroup: "ecologicalStatus", options: ['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true, enumGroup: "biotopes" },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
   { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
-  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags", formatTagDisplay: true, enumGroup: "biodiversityRole" },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "multiselect", enumGroup: "biodiversityRole", options: ['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
   { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
   { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
@@ -1241,7 +1242,7 @@ const ecologyFields: FieldConfig[] = [
   { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
   { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
   { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
-  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags", formatTagDisplay: true, enumGroup: "ecologicalManagement" },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "multiselect", enumGroup: "ecologicalManagement", options: ['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
 ]
 
@@ -1308,6 +1309,10 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
     if (fieldScoped) return fieldScoped
     const globalScoped = t(`plantAdmin.optionLabels.${optionKey}`, { defaultValue: '' })
     if (globalScoped) return globalScoped
+    if (field.enumGroup) {
+      const enumTranslation = i18next.t(`plantInfo:enums.${field.enumGroup}.${optionKey}`, { defaultValue: '' })
+      if (enumTranslation) return enumTranslation
+    }
     return fallback
   }
 

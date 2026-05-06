@@ -875,11 +875,16 @@ export async function processPlantRequest(
       medicinal_history: plant.medicinalHistory || null,
       aromatherapy_benefits: plant.aromatherapyBenefits || null,
       essential_oil_blends: plant.essentialOilBlends || null,
+      // Ecology (translatable free-form arrays)
+      biotopes: plant.biotopes || [],
       // Ecology
       beneficial_roles: plant.beneficialRoles || [],
       harmful_roles: plant.harmfulRoles || [],
       symbiosis: plant.symbiosis || [],
       symbiosis_notes: plant.symbiosisNotes || null,
+      // Care (translatable free-form arrays)
+      mulch_type: plant.mulchType || [],
+      substrate: plant.substrate || [],
       // Misc
       plant_tags: plant.plantTags || [],
       biodiversity_tags: plant.biodiversityTags || [],
@@ -1057,6 +1062,9 @@ export async function processPlantRequest(
         addArrayField('common_names', plant.commonNames)
         addArrayField('allergens', plant.allergens)
         addArrayField('origin', plant.origin)
+        addArrayField('biotopes', plant.biotopes)
+        addArrayField('mulch_type', plant.mulchType)
+        addArrayField('substrate', plant.substrate)
         addArrayField('recipes_ideas', plant.recipes?.length
           ? plant.recipes.map(r => r.name).filter(Boolean)
           : plant.recipesIdeas)
@@ -1135,6 +1143,9 @@ export async function processPlantRequest(
           harmful_roles: arrayMap.get('harmful_roles') || [],
           symbiosis: arrayMap.get('symbiosis') || [],
           symbiosis_notes: stringMap.get('symbiosis_notes') || null,
+          biotopes: arrayMap.get('biotopes') || [],
+          mulch_type: arrayMap.get('mulch_type') || [],
+          substrate: arrayMap.get('substrate') || [],
           plant_tags: arrayMap.get('plant_tags') || [],
           biodiversity_tags: arrayMap.get('biodiversity_tags') || [],
           source_name: stringMap.get('sourceName') || null,
