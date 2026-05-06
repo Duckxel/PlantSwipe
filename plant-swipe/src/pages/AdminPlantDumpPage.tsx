@@ -866,8 +866,8 @@ export function AdminPlantDumpPage() {
               <SearchItem
                 value={img.plant_id || null}
                 onSearch={searchPlants}
-                onSelect={opt => void assignPlant(opt.id, [img.id])}
-                onClear={() => void unassignPlant([img.id])}
+                onSelect={opt => void assignPlant(opt.id, img.group_id ? undefined : [img.id], img.group_id ?? undefined)}
+                onClear={() => void unassignPlant(img.group_id ? undefined : [img.id], img.group_id ?? undefined)}
                 placeholder="Search plants…"
                 initialOption={plant ? { id: plant.id, label: plant.name, description: (plant as DumpImage["plants"])?.scientific_name_species || undefined } : null}
                 priorityZIndex={200}
@@ -926,7 +926,7 @@ export function AdminPlantDumpPage() {
                           size="sm"
                           variant="ghost"
                           className="h-6 px-2 text-xs shrink-0 text-emerald-600"
-                          onClick={() => void assignPlant(s.dbPlantId!, [img.id])}
+                          onClick={() => void assignPlant(s.dbPlantId!, img.group_id ? undefined : [img.id], img.group_id ?? undefined)}
                         >
                           Assign
                         </Button>
