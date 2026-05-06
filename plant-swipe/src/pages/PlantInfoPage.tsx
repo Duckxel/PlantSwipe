@@ -369,10 +369,10 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     hygrometry: data.hygrometry || undefined,
     mistingFrequency: data.misting_frequency || undefined,
     specialNeeds: data.special_needs || [],
-    substrate: data.substrate || [],
+    substrate: (translation?.substrate?.length ? translation.substrate : null) || data.substrate || [],
     substrateMix: data.substrate_mix || [],
     mulchingNeeded: data.mulching_needed ?? false,
-    mulchType: data.mulch_type || [],
+    mulchType: (translation?.mulch_type?.length ? translation.mulch_type : null) || data.mulch_type || [],
     nutritionNeed: data.nutrition_need || [],
     fertilizer: data.fertilizer || [],
     // Section 3: Care (translatable)
@@ -410,7 +410,7 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     // Section 6: Ecology (non-translatable)
     conservationStatus: conservationStatusEnum.toUiArray(data.conservation_status) as Plant['conservationStatus'],
     ecologicalStatus: data.ecological_status || [],
-    biotopes: data.biotopes || [],
+    biotopes: (translation?.biotopes?.length ? translation.biotopes : null) || data.biotopes || [],
     urbanBiotopes: data.urban_biotopes || [],
     ecologicalTolerance: ecologicalToleranceEnum.toUiArray(data.ecological_tolerance) as Plant['ecologicalTolerance'],
     biodiversityRole: data.biodiversity_role || [],
