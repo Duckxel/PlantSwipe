@@ -25,9 +25,18 @@
     "title": "Seasonal Timeline",
     "hoverPrompt": "Hover a month",
     "months": {
-      "jan": "Jan", "feb": "Feb", "mar": "Mar", "apr": "Apr",
-      "may": "May", "jun": "Jun", "jul": "Jul", "aug": "Aug",
-      "sep": "Sep", "oct": "Oct", "nov": "Nov", "dec": "Dec"
+      "jan": "Jan",
+      "feb": "Feb",
+      "mar": "Mar",
+      "apr": "Apr",
+      "may": "May",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aug",
+      "sep": "Sep",
+      "oct": "Oct",
+      "nov": "Nov",
+      "dec": "Dec"
     },
     "legend": {
       "flowering": "Flowering",
@@ -484,6 +493,36 @@
       "october": "October",
       "november": "November",
       "december": "December"
+    },
+    "ecologicalManagement": {
+      "let_seed": "Let Seed",
+      "no_winter_pruning": "No Winter Pruning",
+      "keep_dry_foliage": "Keep Dry Foliage",
+      "natural_foliage_mulch": "Natural Foliage Mulch",
+      "branch_chipping_mulch": "Branch Chipping Mulch",
+      "improves_microbial_life": "Improves Microbial Life",
+      "promotes_mycorrhizal_fungi": "Promotes Mycorrhizal Fungi",
+      "enriches_soil": "Enriches Soil",
+      "structures_soil": "Structures Soil"
+    },
+    "biodiversityRole": {
+      "melliferous": "Melliferous",
+      "insect_refuge": "Insect Refuge",
+      "nitrogen_fixer": "Nitrogen Fixer",
+      "host_plant": "Host Plant",
+      "nectar_plant": "Nectar Plant",
+      "pollen_plant": "Pollen Plant",
+      "seed_source": "Seed Source",
+      "fruit_source": "Fruit Source",
+      "shelter_plant": "Shelter Plant",
+      "water_plant": "Beneficial Water Plant",
+      "ground_cover": "Ground Cover",
+      "windbreak": "Windbreak",
+      "erosion_control": "Erosion Control",
+      "companion_plant": "Companion Plant",
+      "trap_crop": "Trap Crop",
+      "dynamic_accumulator": "Dynamic Accumulator",
+      "pioneer_species": "Pioneer Species"
     }
   },
   "share": {

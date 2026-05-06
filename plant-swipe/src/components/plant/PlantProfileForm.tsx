@@ -110,6 +110,8 @@ interface FieldConfig {
   }
   /** When true, tag display values are formatted: snake_case → Title Case */
   formatTagDisplay?: boolean
+  /** plantInfo enum group key to use for tag translations (e.g. 'ecologicalStatus') */
+  enumGroup?: string
   /** If set, this field is only shown when the gate field is true */
   gatedBy?: string
 }
@@ -193,8 +195,17 @@ const TagInput: React.FC<{
   unique?: boolean
   caseInsensitive?: boolean
   displayFormatter?: (tag: string) => string
-}> = ({ value, onChange, placeholder, unique, caseInsensitive, displayFormatter }) => {
-  const { t } = useTranslation('plantAdmin')
+  enumGroup?: string
+}> = ({ value, onChange, placeholder, unique, caseInsensitive, displayFormatter, enumGroup }) => {
+  const { t } = useTranslation(['plantAdmin', 'plantInfo'])
+  const resolveTagLabel = (tag: string): string => {
+    if (enumGroup) {
+      const key = tag.toLowerCase().replace(/[\s-]+/g, '_')
+      const translated = t(`plantInfo:enums.${enumGroup}.${key}`, { defaultValue: '' })
+      if (translated) return translated
+    }
+    return displayFormatter ? displayFormatter(tag) : tag
+  }
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
@@ -222,12 +233,12 @@ const TagInput: React.FC<{
       <div className="flex flex-wrap gap-2">
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
-            {displayFormatter ? displayFormatter(tag) : tag}
+            {resolveTagLabel(tag)}
             <button
               type="button"
               className="text-red-600 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-full w-4 h-4 flex items-center justify-center"
               onClick={() => onChange(value.filter((_, i) => i !== idx))}
-              aria-label={t('plantAdmin.tagInput.removeAria', { tag, defaultValue: `Remove ${tag}` })}
+              aria-label={t('plantAdmin:tagInput.removeAria', { tag: resolveTagLabel(tag), defaultValue: `Remove ${resolveTagLabel(tag)}` })}
             >
               <X className="h-3 w-3" />
             </button>
@@ -1218,11 +1229,11 @@ const dangerFields: FieldConfig[] = [
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
   { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
-  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags", formatTagDisplay: true },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags", formatTagDisplay: true, enumGroup: "ecologicalStatus" },
   { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
   { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
-  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags", formatTagDisplay: true },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags", formatTagDisplay: true, enumGroup: "biodiversityRole" },
   { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
   { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
   { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
@@ -1230,7 +1241,7 @@ const ecologyFields: FieldConfig[] = [
   { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
   { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
   { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
-  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags", formatTagDisplay: true },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags", formatTagDisplay: true, enumGroup: "ecologicalManagement" },
   { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
 ]
 
@@ -1462,6 +1473,7 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
               unique={field.tagConfig?.unique}
               caseInsensitive={field.tagConfig?.caseInsensitive}
               displayFormatter={field.formatTagDisplay ? formatTagLabel : undefined}
+              enumGroup={field.enumGroup}
             />
               )
             })()}

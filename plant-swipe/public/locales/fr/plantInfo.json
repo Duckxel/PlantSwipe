@@ -25,9 +25,18 @@
     "title": "Calendrier saisonnier",
     "hoverPrompt": "Survolez un mois",
     "months": {
-      "jan": "Jan", "feb": "Fév", "mar": "Mar", "apr": "Avr",
-      "may": "Mai", "jun": "Jun", "jul": "Jul", "aug": "Aoû",
-      "sep": "Sep", "oct": "Oct", "nov": "Nov", "dec": "Déc"
+      "jan": "Jan",
+      "feb": "Fév",
+      "mar": "Mar",
+      "apr": "Avr",
+      "may": "Mai",
+      "jun": "Jun",
+      "jul": "Jul",
+      "aug": "Aoû",
+      "sep": "Sep",
+      "oct": "Oct",
+      "nov": "Nov",
+      "dec": "Déc"
     },
     "legend": {
       "flowering": "Floraison",
@@ -484,6 +493,36 @@
       "october": "Octobre",
       "november": "Novembre",
       "december": "Décembre"
+    },
+    "ecologicalManagement": {
+      "let_seed": "Laisser monter en graine",
+      "no_winter_pruning": "Pas de taille hivernale",
+      "keep_dry_foliage": "Conserver le feuillage sec",
+      "natural_foliage_mulch": "Paillage naturel avec feuillage",
+      "branch_chipping_mulch": "Paillage de branches broyées",
+      "improves_microbial_life": "Améliore la vie microbienne",
+      "promotes_mycorrhizal_fungi": "Favorise les champignons mycorhiziens",
+      "enriches_soil": "Enrichit le sol",
+      "structures_soil": "Structure le sol"
+    },
+    "biodiversityRole": {
+      "melliferous": "Mellifère",
+      "insect_refuge": "Refuge à insectes",
+      "nitrogen_fixer": "Fixatrice d'azote",
+      "host_plant": "Plante hôte",
+      "nectar_plant": "Plante à nectar",
+      "pollen_plant": "Plante à pollen",
+      "seed_source": "Source de graines",
+      "fruit_source": "Source de fruits",
+      "shelter_plant": "Plante abri",
+      "water_plant": "Plante aquatique bénéfique",
+      "ground_cover": "Couvre-sol",
+      "windbreak": "Brise-vent",
+      "erosion_control": "Contrôle de l'érosion",
+      "companion_plant": "Plante compagne",
+      "trap_crop": "Plante piège",
+      "dynamic_accumulator": "Accumulatrice dynamique",
+      "pioneer_species": "Espèce pionnière"
     }
   },
   "share": {
