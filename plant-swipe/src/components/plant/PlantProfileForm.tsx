@@ -10,7 +10,7 @@ import type { TFunction } from "i18next"
 import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
-import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X, UploadCloud, Pencil, Check, Plus, Link as LinkIcon } from "lucide-react"
+import { Sparkles, ChevronDown, ChevronUp, Leaf, Loader2, ExternalLink, X, UploadCloud, Pencil, Check, Plus, Link as LinkIcon, Globe, HardDriveUpload, Layers } from "lucide-react"
 import { SearchInput } from "@/components/ui/search-input"
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item"
 import { FORM_STATUS_COLORS } from "@/constants/plantStatus"
@@ -1594,6 +1594,25 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
   return <div key={field.key}>{body}</div>
 }
 
+const SOURCE_STYLES = {
+  uploaded: { label: "Uploaded", bg: "bg-blue-100 dark:bg-blue-950/50", text: "text-blue-700 dark:text-blue-300", dot: "bg-blue-500", Icon: HardDriveUpload },
+  web:      { label: "Web",      bg: "bg-amber-100 dark:bg-amber-950/50", text: "text-amber-700 dark:text-amber-300", dot: "bg-amber-500", Icon: Globe },
+  dump:     { label: "Dump",     bg: "bg-emerald-100 dark:bg-emerald-950/50", text: "text-emerald-700 dark:text-emerald-300", dot: "bg-emerald-500", Icon: Layers },
+} as const
+
+type ImageSource = keyof typeof SOURCE_STYLES
+
+function SourceBadge({ source }: { source?: string | null }) {
+  const s = SOURCE_STYLES[(source as ImageSource) ?? 'uploaded'] ?? SOURCE_STYLES.uploaded
+  const { Icon } = s
+  return (
+    <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-semibold ${s.bg} ${s.text}`}>
+      <Icon className="h-2.5 w-2.5" />
+      {s.label}
+    </span>
+  )
+}
+
 function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantImage[]; onChange: (v: PlantImage[]) => void; onRemove?: (imageUrl: string) => void; onUpload?: () => void }) {
   const { t } = useTranslation('plantAdmin')
   const list = Array.isArray(images) ? images : []
@@ -1736,6 +1755,9 @@ function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantIm
                     <div className="absolute top-1 right-1 bg-black/70 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded">
                       {img.use === 'primary' ? t('plantAdmin.images.primaryCount', 'P') : img.use === 'discovery' ? t('plantAdmin.images.discoveryCount', 'D') : t('plantAdmin.images.otherCount', 'O')}
                     </div>
+                    {img.source && img.source !== 'uploaded' && (
+                      <div className={`absolute bottom-1 left-1 w-2 h-2 rounded-full ${SOURCE_STYLES[(img.source as ImageSource)]?.dot ?? ''}`} title={img.source} />
+                    )}
                   </div>
                 )
               })}
@@ -1802,6 +1824,26 @@ function ImageEditor({ images, onChange, onRemove, onUpload }: { images: PlantIm
                             {opt === 'primary' ? t('plantAdmin.images.usePrimary', 'primary') : opt === 'discovery' ? t('plantAdmin.images.useDiscovery', 'discovery') : t('plantAdmin.images.useOther', 'other')}
                           </button>
                         ))}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2 text-sm">
+                        <span className="text-muted-foreground">Source</span>
+                        {(Object.keys(SOURCE_STYLES) as ImageSource[]).map((src) => {
+                          const s = SOURCE_STYLES[src]
+                          const active = (img.source || 'uploaded') === src
+                          return (
+                            <button
+                              key={src}
+                              type="button"
+                              onClick={() => updateImage(idx, { source: src })}
+                              className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full border text-xs font-medium transition-colors ${
+                                active ? `${s.bg} ${s.text} border-transparent` : "bg-white dark:bg-[#2d2d30] border-border"
+                              }`}
+                            >
+                              <s.Icon className="h-3 w-3" />
+                              {s.label}
+                            </button>
+                          )
+                        })}
                       </div>
                       <p className="text-xs text-muted-foreground">
                         {img.use === 'primary'

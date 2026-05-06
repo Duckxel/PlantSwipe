@@ -7219,10 +7219,29 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
     // Check existing plant_images for this plant to avoid use conflicts
     const { data: existingImages } = await supabaseServiceClient
       .from('plant_images')
-      .select('id, use')
+      .select('id, use, source')
       .eq('plant_id', plantId)
     const hasPrimary = (existingImages || []).some(i => i.use === 'primary')
     const hasDiscovery = (existingImages || []).some(i => i.use === 'discovery')
+
+    // If existing primary/discovery are web-sourced (not our own images), demote them
+    // so dump images can take their slots — prefer own content over scraped web images.
+    const webPrimary = (!hasExplicitPrimary)
+      ? (existingImages || []).find(i => i.use === 'primary' && i.source === 'web')
+      : null
+    const webDiscovery = (!hasExplicitVertical)
+      ? (existingImages || []).find(i => i.use === 'discovery' && i.source === 'web')
+      : null
+
+    if (webPrimary) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', webPrimary.id)
+    }
+    if (webDiscovery) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', webDiscovery.id)
+    }
+
+    const effectiveHasPrimary = hasPrimary && !webPrimary
+    const effectiveHasDiscovery = hasDiscovery && !webDiscovery
 
     for (let i = 0; i < dumpImages.length; i++) {
       const img = dumpImages[i]
@@ -7260,9 +7279,9 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
           use = 'primary'
         } else if (img.id === verticalImageId) {
           use = 'discovery'
-        } else if (!hasExplicitPrimary && !hasPrimary && i === 0) {
+        } else if (!hasExplicitPrimary && !effectiveHasPrimary && i === 0) {
           use = 'primary'
-        } else if (!hasExplicitVertical && !hasDiscovery && i === 1) {
+        } else if (!hasExplicitVertical && !effectiveHasDiscovery && i === 1) {
           use = 'discovery'
         }
 
