@@ -1428,6 +1428,8 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
+      'ecologicalManagement', 'biodiversityRole',
+      'mulchType', 'substrate', 'biotopes',
       'status', 'month',
     ]
 
