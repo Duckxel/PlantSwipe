@@ -1065,6 +1065,9 @@ export async function processPlantRequest(
         addArrayField('biotopes', plant.biotopes)
         addArrayField('mulch_type', plant.mulchType)
         addArrayField('substrate', plant.substrate)
+        addArrayField('special_needs', plant.specialNeeds)
+        addArrayField('nutrition_need', plant.nutritionNeed)
+        addArrayField('fertilizer', plant.fertilizer)
         addArrayField('recipes_ideas', plant.recipes?.length
           ? plant.recipes.map(r => r.name).filter(Boolean)
           : plant.recipesIdeas)
@@ -1146,6 +1149,9 @@ export async function processPlantRequest(
           biotopes: arrayMap.get('biotopes') || [],
           mulch_type: arrayMap.get('mulch_type') || [],
           substrate: arrayMap.get('substrate') || [],
+          special_needs: arrayMap.get('special_needs') || [],
+          nutrition_need: arrayMap.get('nutrition_need') || [],
+          fertilizer: arrayMap.get('fertilizer') || [],
           plant_tags: arrayMap.get('plant_tags') || [],
           biodiversity_tags: arrayMap.get('biodiversity_tags') || [],
           source_name: stringMap.get('sourceName') || null,
