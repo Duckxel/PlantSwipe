@@ -1429,7 +1429,6 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
       'ecologicalManagement', 'biodiversityRole',
-      'mulchType', 'substrate', 'biotopes',
       'status', 'month',
     ]
 
@@ -1457,13 +1456,6 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
         enumCache.set(raw, translated)
         return translated
       }
-    }
-
-    // If value is already human-readable translated text (has spaces, accents, mixed case),
-    // return it as-is — it came from plant_translations (DeepL output) and is already correct.
-    if (!/^[a-z0-9_]+$/.test(value.trim())) {
-      enumCache.set(raw, value)
-      return value
     }
 
     // Fallback: format snake_case key nicely (replace _ with space, capitalize words)
@@ -1586,10 +1578,10 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
         { label: tp('labels.specialNeeds'), value: joinRaw(plant.specialNeeds) },
       ])
       const careDetails = filterInfoItems([
-        { label: tp('labels.substrate'), value: joinArr(plant.substrate) },
+        { label: tp('labels.substrate'), value: joinRaw(plant.substrate) },
         { label: tp('labels.substrateMix'), value: joinRaw(plant.substrateMix) },
         { label: tp('labels.soilAdvice'), value: formatTextValue(plant.soilAdvice), variant: 'note' },
-        { label: tp('labels.mulching'), value: plant.mulchingNeeded ? joinArr(plant.mulchType) || tp('values.recommended') : null },
+        { label: tp('labels.mulching'), value: plant.mulchingNeeded ? joinRaw(plant.mulchType) || tp('values.recommended') : null },
         { label: tp('labels.mulchingAdvice'), value: formatTextValue(plant.mulchAdvice), variant: 'note' },
         { label: tp('labels.nutritionNeed'), value: joinRaw(plant.nutritionNeed) },
         { label: tp('labels.fertilizer'), value: joinRaw(plant.fertilizer) },
@@ -1621,7 +1613,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const ecologyItems = filterInfoItems([
         { label: tp('labels.conservation'), value: joinArr(plant.conservationStatus as string[]), icon: <ShieldCheck className="h-3.5 w-3.5" /> },
         { label: tp('labels.ecologicalStatus'), value: joinArr(plant.ecologicalStatus) },
-        { label: tp('labels.biotopes'), value: joinArr(plant.biotopes) },
+        { label: tp('labels.biotopes'), value: joinRaw(plant.biotopes) },
         { label: tp('labels.urbanBiotopes'), value: joinArr(plant.urbanBiotopes) },
         { label: tp('labels.ecologicalTolerance'), value: joinArr(plant.ecologicalTolerance as string[]), icon: <Wind className="h-3.5 w-3.5" /> },
         { label: tp('labels.biodiversityRole'), value: joinArr(plant.biodiversityRole), icon: <Sprout className="h-3.5 w-3.5" /> },
