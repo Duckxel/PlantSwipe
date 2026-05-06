@@ -1429,6 +1429,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
       'ecologicalManagement', 'biodiversityRole',
+      'plantHabit', 'infusionParts',
       'status', 'month',
     ]
 
@@ -1631,7 +1632,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       // ── Section 7: Consumption / Usage ──
       const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
-        { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
+        { label: tp('labels.infusionParts'), value: joinArr(plant.infusionParts) },
         { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('plantInfo:enums.edibleOil.yes') : t('plantInfo:enums.edibleOil.no')) : null },
         { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
