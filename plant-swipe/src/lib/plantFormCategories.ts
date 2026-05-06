@@ -255,7 +255,7 @@ export function buildCategoryProgress(fieldKeys: string[]): CategoryProgress {
     progress[category] = {
       total: (progress[category]?.total || 0) + 1,
       completed: progress[category]?.completed || 0,
-      status: 'filling',
+      status: 'idle',
     }
   }
 

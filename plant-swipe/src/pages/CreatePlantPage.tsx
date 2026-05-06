@@ -2402,7 +2402,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             markFieldComplete(fieldKey)
             return withImages
           })
-          fieldsCompleted++
+          fieldsCompleted = Math.min(fieldsCompleted + 1, targetFields.length)
           setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
           return true
         } catch (err: any) {
@@ -2465,7 +2465,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 return withImages
               })
               markFieldComplete(field)
-              fieldsCompleted++
+              fieldsCompleted = Math.min(fieldsCompleted + 1, targetFields.length)
               setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
             },
           })
@@ -3059,14 +3059,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                         )}
                       </span>
                       <span className="text-stone-600 dark:text-stone-300 font-medium">
-                        {aiFieldProgress.completed}/{aiFieldProgress.total} fields
+                        {Math.min(aiFieldProgress.completed, aiFieldProgress.total)}/{aiFieldProgress.total} fields
                       </span>
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-[#1a1a1d] overflow-hidden">
                       <div
                         className="h-full bg-blue-500 transition-all duration-300 rounded-full"
                         style={{
-                          width: `${Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%`
+                          width: `${Math.min(100, Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100))}%`
                         }}
                       />
                     </div>
