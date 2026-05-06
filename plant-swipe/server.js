@@ -7224,24 +7224,27 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
     const hasPrimary = (existingImages || []).some(i => i.use === 'primary')
     const hasDiscovery = (existingImages || []).some(i => i.use === 'discovery')
 
-    // If existing primary/discovery are web-sourced (not our own images), demote them
-    // so dump images can take their slots — prefer own content over scraped web images.
-    const webPrimary = (!hasExplicitPrimary)
-      ? (existingImages || []).find(i => i.use === 'primary' && i.source === 'web')
+    // Demote any existing primary/discovery that are NOT dump-sourced so that
+    // dump images can take those slots (dump content is preferred over web/uploaded).
+    const nonDumpPrimary = (!hasExplicitPrimary)
+      ? (existingImages || []).find(i => i.use === 'primary' && i.source !== 'dump')
       : null
-    const webDiscovery = (!hasExplicitVertical)
-      ? (existingImages || []).find(i => i.use === 'discovery' && i.source === 'web')
+    const nonDumpDiscovery = (!hasExplicitVertical)
+      ? (existingImages || []).find(i => i.use === 'discovery' && i.source !== 'dump')
       : null
 
-    if (webPrimary) {
-      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', webPrimary.id)
+    if (nonDumpPrimary) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', nonDumpPrimary.id)
     }
-    if (webDiscovery) {
-      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', webDiscovery.id)
+    if (nonDumpDiscovery) {
+      await supabaseServiceClient.from('plant_images').update({ use: 'other' }).eq('id', nonDumpDiscovery.id)
     }
 
-    const effectiveHasPrimary = hasPrimary && !webPrimary
-    const effectiveHasDiscovery = hasDiscovery && !webDiscovery
+    const effectiveHasPrimary = hasPrimary && !nonDumpPrimary
+    const effectiveHasDiscovery = hasDiscovery && !nonDumpDiscovery
+
+    // Track which uses have been assigned in this batch to prevent same-image double-role
+    const usedRoles = new Set()
 
     for (let i = 0; i < dumpImages.length; i++) {
       const img = dumpImages[i]
@@ -7273,17 +7276,18 @@ app.post('/api/admin/plant-dump/submit', express.json({ limit: '64kb' }), async 
         const { data: pubData } = supabaseServiceClient.storage.from(plantImageUploadBucket).getPublicUrl(newPath)
         const newUrl = supabaseStorageToMediaProxy(pubData?.publicUrl)
 
-        // Determine use
+        // Determine use — guard against assigning the same role twice or to the same image
         let use = 'other'
-        if (img.id === primaryImageId) {
+        if (img.id === primaryImageId && img.id !== verticalImageId && !usedRoles.has('primary')) {
           use = 'primary'
-        } else if (img.id === verticalImageId) {
+        } else if (img.id === verticalImageId && img.id !== primaryImageId && !usedRoles.has('discovery')) {
           use = 'discovery'
-        } else if (!hasExplicitPrimary && !effectiveHasPrimary && i === 0) {
+        } else if (!hasExplicitPrimary && !effectiveHasPrimary && !usedRoles.has('primary') && i === 0) {
           use = 'primary'
-        } else if (!hasExplicitVertical && !effectiveHasDiscovery && i === 1) {
+        } else if (!hasExplicitVertical && !effectiveHasDiscovery && !usedRoles.has('discovery') && i === 1) {
           use = 'discovery'
         }
+        if (use === 'primary' || use === 'discovery') usedRoles.add(use)
 
         // Insert into plant_images
         const { data: plantImageRow, error: piErr } = await supabaseServiceClient
