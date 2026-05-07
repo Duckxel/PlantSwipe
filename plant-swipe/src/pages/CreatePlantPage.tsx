@@ -2,7 +2,7 @@ import React from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Select } from "@/components/ui/select"
-import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud } from "lucide-react"
+import { AlertCircle, ArrowLeft, ArrowUpRight, Check, Copy, ImagePlus, Loader2, Sparkles, Leaf, UploadCloud, X } from "lucide-react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { supabase } from "@/lib/supabaseClient"
 import { PlantProfileForm, type PlantReport, type PlantVariety } from "@/components/plant/PlantProfileForm"
@@ -95,6 +95,7 @@ const ALLOWED_ECOLOGICAL_STATUS = new Set(['indigenous','endemic','subendemic','
 const ALLOWED_BIOTOPES = new Set(['temperate_deciduous_forest','mixed_forest','coniferous_forest','mediterranean_forest','tropical_rainforest','tropical_dry_forest','shaded_understory','forest_edge','clearing','alluvial_forest','natural_meadow','wet_meadow','dry_meadow','calcareous_grassland','sandy_grassland','steppe','savanna','garrigue','maquis','wasteland','fallow','marsh','peat_bog','wetland','lakeshore','pond','natural_pool','reed_bed','stream','riverbank','swamp_forest','mangrove','rockery','scree','cliff','rocky_outcrop','stony_ground','calcareous_terrain','sandy_terrain','inland_dune','arid_steppe','desert','semi_desert','coastal_dune','beach','foreshore','lagoon','salt_marsh','sea_cliff','coastal_forest','coastal_meadow','alpine_meadow','montane_zone','subalpine_zone','alpine_zone','alpine_tundra','mountain_forest','mountain_edge','tropical_humid_forest','tropical_dry_forest_2','primary_forest','secondary_forest','tropical_savanna','mangrove_tropical','cloud_forest','tropical_understory'])
 const ALLOWED_URBAN_BIOTOPES = new Set(['urban_garden','periurban_garden','park','urban_wasteland','green_wall','green_roof','balcony','greenhouse','agricultural_hedge','cultivated_orchard','vegetable_garden','roadside'])
 const ALLOWED_ECOLOGICAL_MANAGEMENT = new Set(['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'])
+const ALLOWED_INFUSION_PARTS = new Set(['flower','leaf','root','bulb','clove','fruit','peel','rhizome','seed','stem','stigma','scape','aerial_parts','flowering_top','bark','bud','berry','resin','cone','whole_plant'])
 
 const AI_EXCLUDED_FIELDS = new Set([
   'name', 'image', 'imageurl', 'image_url', 'imageURL', 'images',
@@ -368,11 +369,10 @@ const normalizeTimePeriodSlug = (value?: string | null): string | null => {
 
 function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSchedule[] {
   if (!entries?.length) return []
-  return entries
+  const normalized = entries
     .map((entry) => {
       const qty = entry.quantity
       const parsedQuantity = typeof qty === 'string' ? parseInt(qty, 10) : qty
-      // Normalize timePeriod to valid DB values: 'week', 'month', 'year', or undefined
       const rawTimePeriod = entry.timePeriod && typeof entry.timePeriod === 'string' ? entry.timePeriod.trim() : undefined
       const normalizedTimePeriod = normalizeTimePeriodSlug(rawTimePeriod) as PlantWateringSchedule['timePeriod'] | undefined
       return {
@@ -383,6 +383,19 @@ function normalizeSchedules(entries?: PlantWateringSchedule[]): PlantWateringSch
       }
     })
     .filter((entry) => entry.season || entry.quantity !== undefined || entry.timePeriod)
+
+  // Auto-collapse seasonal with identical hot/cold values into 'always'
+  const hotEntry = normalized.find((e) => e.season === 'hot')
+  const coldEntry = normalized.find((e) => e.season === 'cold')
+  if (
+    hotEntry && coldEntry &&
+    hotEntry.quantity === coldEntry.quantity &&
+    hotEntry.timePeriod === coldEntry.timePeriod
+  ) {
+    return [{ quantity: hotEntry.quantity, timePeriod: hotEntry.timePeriod }]
+  }
+
+  return normalized
 }
 
 type ContributorInput = PlantContributor | { id?: string | null; name?: string | null } | null | undefined
@@ -1100,7 +1113,7 @@ async function loadPlant(id: string, language?: string): Promise<Plant | null> {
   flat.specialNeeds = (translation?.special_needs?.length ? translation.special_needs : null) || data.special_needs || []
 
   // Section 3b: Care Details
-  flat.substrate = data.substrate || []
+  flat.substrate = (translation?.substrate?.length ? translation.substrate : null) || data.substrate || []
   flat.substrateMix = data.substrate_mix || []
   flat.soilAdvice = translation?.soil_advice || plant.plantCare?.adviceSoil || undefined
   flat.mulchingNeeded = data.mulching_needed || false
@@ -1217,6 +1230,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
   const [error, setError] = React.useState<string | null>(null)
   const [aiWorking, setAiWorking] = React.useState(false)
   const [aiCompleted, setAiCompleted] = React.useState(false)
+  const [aiProgressDismissed, setAiProgressDismissed] = React.useState(false)
+  const [imageFetchDismissed, setImageFetchDismissed] = React.useState(false)
   const [translating, setTranslating] = React.useState(false)
   const [aiProgress, setAiProgress] = React.useState<CategoryProgress>(() => createEmptyCategoryProgress())
   const [aiSectionLog, setAiSectionLog] = React.useState<Array<{ category: PlantFormCategory; label: string; timestamp: number }>>([])
@@ -1611,7 +1626,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
     wateringSchedules: normalizeSchedules(candidate.wateringSchedules),
   })
     const hasAiProgress = React.useMemo(() => Object.values(aiProgress).some((p) => p.total > 0), [aiProgress])
-    const showAiProgressCard = aiWorking || (!aiCompleted && hasAiProgress)
+    const showAiProgressCard = !aiProgressDismissed && (aiWorking || (!aiCompleted && hasAiProgress))
   const recentSectionLog = React.useMemo(() => aiSectionLog.slice(-5).reverse(), [aiSectionLog])
   const initializeCategoryProgress = () => {
     const progress = buildCategoryProgress(targetFields)
@@ -1840,7 +1855,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion_parts: p.infusionParts || [],
+            infusion_parts: toCheckedSlugs(p.infusionParts, ALLOWED_INFUSION_PARTS),
             edible_oil: p.edibleOil ?? false,
             // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
             companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),
@@ -1940,7 +1955,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             ecological_management: toCheckedSlugs(p.ecologicalManagement, ALLOWED_ECOLOGICAL_MANAGEMENT),
             ecological_impact: ecologicalImpactEnum.toDbArray(p.ecologicalImpact),
             // Section 7: Consumption
-            infusion_parts: p.infusionParts || [],
+            infusion_parts: toCheckedSlugs(p.infusionParts, ALLOWED_INFUSION_PARTS),
             edible_oil: p.edibleOil ?? false,
             // Section 8: Misc — filter to valid UUIDs to clean legacy bad data
             companion_plants: filterValidUuids(p.companionPlants || p.miscellaneous?.companions),
@@ -2022,11 +2037,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           medicinal_history: p2.medicinalHistory || null,
           aromatherapy_benefits: p2.aromatherapyBenefits || null,
           essential_oil_blends: p2.essentialOilBlends || null,
+          // Ecology (translatable free-form arrays)
+          biotopes: p2.biotopes || [],
           // Ecology
           beneficial_roles: p2.beneficialRoles || [],
           harmful_roles: p2.harmfulRoles || [],
           symbiosis: p2.symbiosis || [],
           symbiosis_notes: p2.symbiosisNotes || null,
+          // Care (translatable free-form arrays)
+          mulch_type: p2.mulchType || [],
+          substrate: p2.substrate || [],
           // Misc
           plant_tags: p2.plantTags || p2.miscellaneous?.tags || [],
           biodiversity_tags: p2.biodiversityTags || [],
@@ -2186,6 +2206,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
       return
     }
     setFetchingExternalImages(true)
+    setImageFetchDismissed(false)
     setExternalImagesTotal(null)
     setImageUploadProgress({ phase: 'searching', current: 0, total: 0, uploaded: 0, failed: 0 })
     setError(null)
@@ -2340,6 +2361,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
 
     initializeCategoryProgress()
     setAiCompleted(false)
+    setAiProgressDismissed(false)
     setAiWorking(true)
     setColorSuggestions([])
     setError(null)
@@ -2396,7 +2418,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
             markFieldComplete(fieldKey)
             return withImages
           })
-          fieldsCompleted++
+          fieldsCompleted = Math.min(fieldsCompleted + 1, targetFields.length)
           setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
           return true
         } catch (err: any) {
@@ -2459,7 +2481,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 return withImages
               })
               markFieldComplete(field)
-              fieldsCompleted++
+              fieldsCompleted = Math.min(fieldsCompleted + 1, targetFields.length)
               setAiFieldProgress({ completed: fieldsCompleted, total: targetFields.length })
             },
           })
@@ -2634,6 +2656,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           spice_mixes: await translateArrSafe(p2.spiceMixes || p2.usage?.spiceMixes),
           // Care tag fields
           mulch_type: await translateArrSafe(p2.mulchType),
+          substrate: await translateArrSafe(p2.substrate),
           nutrition_need: await translateArrSafe(p2.nutritionNeed),
           fertilizer: await translateArrSafe(p2.fertilizer),
           special_needs: await translateArrSafe(p2.specialNeeds),
@@ -2861,7 +2884,7 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
           )}
         </div>
           {/* External Image Fetch + Upload Progress Card */}
-          {(fetchingExternalImages || externalImagesTotal !== null) && (
+          {!imageFetchDismissed && (fetchingExternalImages || externalImagesTotal !== null) && (
             <div className="rounded-2xl border border-stone-200 dark:border-[#3e3e42] bg-white dark:bg-[#1e1e20] p-4 space-y-3 shadow-md shadow-stone-200/50 dark:shadow-black/20">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -2880,6 +2903,16 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   <span className="text-xs font-semibold text-emerald-600 dark:text-emerald-400">
                     {imageUploadProgress.current}/{imageUploadProgress.total}
                   </span>
+                )}
+                {!fetchingExternalImages && externalImagesTotal !== null && (
+                  <button
+                    type="button"
+                    onClick={() => setImageFetchDismissed(true)}
+                    className="ml-2 p-1 rounded-md text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
                 )}
               </div>
 
@@ -3012,11 +3045,23 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   )}
                 </div>
               </div>
-              {aiWorking && aiFieldProgress.total > 0 && (
-                <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
-                  {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
-                </span>
-              )}
+              <div className="flex items-center gap-2">
+                {aiWorking && aiFieldProgress.total > 0 && (
+                  <span className="text-sm font-semibold text-emerald-600 dark:text-emerald-400">
+                    {Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%
+                  </span>
+                )}
+                {aiCompleted && (
+                  <button
+                    type="button"
+                    onClick={() => setAiProgressDismissed(true)}
+                    className="p-1 rounded-md text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-700 transition-colors"
+                    aria-label="Dismiss"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Current plant info when filling */}
@@ -3052,14 +3097,14 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                         )}
                       </span>
                       <span className="text-stone-600 dark:text-stone-300 font-medium">
-                        {aiFieldProgress.completed}/{aiFieldProgress.total} fields
+                        {Math.min(aiFieldProgress.completed, aiFieldProgress.total)}/{aiFieldProgress.total} fields
                       </span>
                     </div>
                     <div className="h-1.5 w-full rounded-full bg-stone-200 dark:bg-[#1a1a1d] overflow-hidden">
                       <div
                         className="h-full bg-blue-500 transition-all duration-300 rounded-full"
                         style={{
-                          width: `${Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100)}%`
+                          width: `${Math.min(100, Math.round((aiFieldProgress.completed / aiFieldProgress.total) * 100))}%`
                         }}
                       />
                     </div>
@@ -3077,11 +3122,11 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                 const isDone = info.status === 'done'
                 const isFilling = info.status === 'filling'
                 return (
-                  <div 
-                    key={cat} 
+                  <div
+                    key={cat}
                     className={`rounded-lg p-2.5 transition-all ${
-                      isDone 
-                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50' 
+                      isDone
+                        ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800/50'
                         : isFilling
                           ? 'bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800/50'
                           : 'bg-white dark:bg-[#1e1e20] border border-stone-100 dark:border-[#2a2a2d]'
@@ -3089,8 +3134,8 @@ export const CreatePlantPage: React.FC<{ onCancel: () => void; onSaved?: (id: st
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`text-[11px] font-medium truncate ${
-                        isDone ? 'text-emerald-700 dark:text-emerald-300' : 
-                        isFilling ? 'text-blue-700 dark:text-blue-300' : 
+                        isDone ? 'text-emerald-700 dark:text-emerald-300' :
+                        isFilling ? 'text-blue-700 dark:text-blue-300' :
                         'text-stone-500 dark:text-stone-400'
                       }`}>
                         {categoryLabels[cat]}

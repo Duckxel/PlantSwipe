@@ -368,13 +368,13 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     wateringType: wateringTypeEnum.toUiArray(data.watering_type) as Plant['wateringType'],
     hygrometry: data.hygrometry || undefined,
     mistingFrequency: data.misting_frequency || undefined,
-    specialNeeds: data.special_needs || [],
-    substrate: data.substrate || [],
+    specialNeeds: (translation?.special_needs?.length ? translation.special_needs : null) || data.special_needs || [],
+    substrate: (translation?.substrate?.length ? translation.substrate : null) || data.substrate || [],
     substrateMix: data.substrate_mix || [],
     mulchingNeeded: data.mulching_needed ?? false,
-    mulchType: data.mulch_type || [],
-    nutritionNeed: data.nutrition_need || [],
-    fertilizer: data.fertilizer || [],
+    mulchType: (translation?.mulch_type?.length ? translation.mulch_type : null) || data.mulch_type || [],
+    nutritionNeed: (translation?.nutrition_need?.length ? translation.nutrition_need : null) || data.nutrition_need || [],
+    fertilizer: (translation?.fertilizer?.length ? translation.fertilizer : null) || data.fertilizer || [],
     // Section 3: Care (translatable)
     soilAdvice: translation?.soil_advice || undefined,
     mulchAdvice: translation?.mulch_advice || undefined,
@@ -410,13 +410,13 @@ async function fetchPlantWithRelations(id: string, language?: string): Promise<P
     // Section 6: Ecology (non-translatable)
     conservationStatus: conservationStatusEnum.toUiArray(data.conservation_status) as Plant['conservationStatus'],
     ecologicalStatus: data.ecological_status || [],
-    biotopes: data.biotopes || [],
+    biotopes: (translation?.biotopes?.length ? translation.biotopes : null) || data.biotopes || [],
     urbanBiotopes: data.urban_biotopes || [],
     ecologicalTolerance: ecologicalToleranceEnum.toUiArray(data.ecological_tolerance) as Plant['ecologicalTolerance'],
     biodiversityRole: data.biodiversity_role || [],
-    pollinatorsAttracted: data.pollinators_attracted || [],
-    birdsAttracted: data.birds_attracted || [],
-    mammalsAttracted: data.mammals_attracted || [],
+    pollinatorsAttracted: (translation?.pollinators_attracted?.length ? translation.pollinators_attracted : null) || data.pollinators_attracted || [],
+    birdsAttracted: (translation?.birds_attracted?.length ? translation.birds_attracted : null) || data.birds_attracted || [],
+    mammalsAttracted: (translation?.mammals_attracted?.length ? translation.mammals_attracted : null) || data.mammals_attracted || [],
     ecologicalManagement: data.ecological_management || [],
     ecologicalImpact: ecologicalImpactEnum.toUiArray(data.ecological_impact) as Plant['ecologicalImpact'],
     // Section 6: Ecology (translatable)
@@ -1066,7 +1066,7 @@ const PlantInfoPage: React.FC = () => {
             </Button>
             {shareStatus !== 'idle' && (
               <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                {shareStatus === 'copied' ? 'Copied!' : shareStatus === 'shared' ? 'Shared!' : 'Error'}
+                {shareStatus === 'copied' ? t('plantInfo:share.copied') : shareStatus === 'shared' ? t('plantInfo:share.shared') : t('plantInfo:share.error')}
               </span>
             )}
           </div>
@@ -1417,7 +1417,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
   const enumCache = React.useMemo(() => new Map<string, string>(), [t])
   const translateEnum = React.useCallback((value: string | null | undefined): string => {
     if (!value) return ''
-    const raw = value.toLowerCase().trim()
+    const raw = value.toLowerCase().trim().replace(/[\s-]+/g, '_')
 
     const cached = enumCache.get(raw)
     if (cached !== undefined) return cached
@@ -1428,6 +1428,8 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       'livingSpace', 'season', 'climate', 'careLevel', 'sunlight',
       'wateringType', 'division', 'sowingMethod', 'conservationStatus',
       'ecologicalTolerance', 'ecologicalImpact', 'ecologicalStatus',
+      'ecologicalManagement', 'biodiversityRole',
+      'plantHabit', 'infusionParts',
       'status', 'month',
     ]
 
@@ -1457,7 +1459,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       }
     }
 
-    // Fallback: format the value nicely (replace _ with space, capitalize words)
+    // Fallback: format snake_case key nicely (replace _ with space, capitalize words)
     const fallback = value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
     enumCache.set(raw, fallback)
     return fallback
@@ -1577,10 +1579,10 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
         { label: tp('labels.specialNeeds'), value: joinRaw(plant.specialNeeds) },
       ])
       const careDetails = filterInfoItems([
-        { label: tp('labels.substrate'), value: joinArr(plant.substrate) },
+        { label: tp('labels.substrate'), value: joinRaw(plant.substrate) },
         { label: tp('labels.substrateMix'), value: joinRaw(plant.substrateMix) },
         { label: tp('labels.soilAdvice'), value: formatTextValue(plant.soilAdvice), variant: 'note' },
-        { label: tp('labels.mulching'), value: plant.mulchingNeeded ? joinArr(plant.mulchType) || tp('values.recommended') : null },
+        { label: tp('labels.mulching'), value: plant.mulchingNeeded ? joinRaw(plant.mulchType) || tp('values.recommended') : null },
         { label: tp('labels.mulchingAdvice'), value: formatTextValue(plant.mulchAdvice), variant: 'note' },
         { label: tp('labels.nutritionNeed'), value: joinRaw(plant.nutritionNeed) },
         { label: tp('labels.fertilizer'), value: joinRaw(plant.fertilizer) },
@@ -1612,7 +1614,7 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       const ecologyItems = filterInfoItems([
         { label: tp('labels.conservation'), value: joinArr(plant.conservationStatus as string[]), icon: <ShieldCheck className="h-3.5 w-3.5" /> },
         { label: tp('labels.ecologicalStatus'), value: joinArr(plant.ecologicalStatus) },
-        { label: tp('labels.biotopes'), value: joinArr(plant.biotopes) },
+        { label: tp('labels.biotopes'), value: joinRaw(plant.biotopes) },
         { label: tp('labels.urbanBiotopes'), value: joinArr(plant.urbanBiotopes) },
         { label: tp('labels.ecologicalTolerance'), value: joinArr(plant.ecologicalTolerance as string[]), icon: <Wind className="h-3.5 w-3.5" /> },
         { label: tp('labels.biodiversityRole'), value: joinArr(plant.biodiversityRole), icon: <Sprout className="h-3.5 w-3.5" /> },
@@ -1630,8 +1632,8 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
       // ── Section 7: Consumption / Usage ──
       const consumptionBaseItems = filterInfoItems([
         { label: tp('labels.nutritionalValue'), value: formatTextValue(plant.nutritionalValue) },
-        { label: tp('labels.infusionParts'), value: joinRaw(plant.infusionParts) },
-        { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('yes', 'Yes') : t('no', 'No')) : null },
+        { label: tp('labels.infusionParts'), value: joinArr(plant.infusionParts) },
+        { label: tp('labels.edibleOil'), value: plant.edibleOil != null ? (plant.edibleOil ? t('plantInfo:enums.edibleOil.yes') : t('plantInfo:enums.edibleOil.no')) : null },
         { label: tp('labels.spiceMixes'), value: joinRaw(plant.spiceMixes) },
       ])
       const consumptionMedicinalItems = filterInfoItems([
@@ -2015,13 +2017,13 @@ const MoreInformationSection: React.FC<{ plant: Plant; hideToxicityBanner?: bool
           {contributorsList.length > 0 && (
             <details className="rounded-2xl sm:rounded-3xl border border-stone-200/70 dark:border-[#3e3e42]/70 bg-white dark:bg-[#1f1f1f] p-4 sm:p-6">
               <summary className="cursor-pointer text-xs sm:text-sm font-semibold uppercase tracking-widest text-emerald-600 dark:text-emerald-300">
-                {t('plantInfo:contributors.title', 'Contributors')}
+                {t('plantInfo:contributors.title')}
               </summary>
               <div className="mt-3 space-y-2 text-xs sm:text-sm text-stone-600 dark:text-stone-400">
-                <p>{t('plantInfo:contributors.thanks', 'Thank you to all plant lovers that participated:')}</p>
+                <p>{t('plantInfo:contributors.thanks')}</p>
                 <div className="flex flex-wrap gap-2">
                   {contributorsList.map((c, idx) => {
-                    const displayName = c.name || 'Unknown'
+                    const displayName = c.name || t('plantInfo:contributors.unknown')
                     return (
                       <Badge key={c.id || `legacy-${idx}`} className="rounded-xl sm:rounded-2xl border-none bg-emerald-100/70 dark:bg-emerald-900/30 text-emerald-900 dark:text-emerald-100 text-[10px] sm:text-xs font-medium px-2 sm:px-3 py-0.5 sm:py-1">
                         {displayName}
@@ -2574,7 +2576,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
-                        {lifeCycleEnum.toUi(cycle) || cycle}
+                        {t(`plantInfo:enums.lifeCycle.${lifeCycleEnum.toDb(cycle) || cycle.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: lifeCycleEnum.toUi(cycle) || cycle })}
                       </span>
                       <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </div>
@@ -2583,7 +2585,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                       {data.stages.map((stage, i) => (
                         <div key={i} className={`${stage.color} relative group/stage`} style={{ flex: stage.flex }}>
                           <span className="absolute inset-0 flex items-center justify-center text-[6px] sm:text-[7px] font-semibold text-white/90 leading-none truncate px-0.5">
-                            {stage.label}
+                            {t(`plantInfo:lifeCycleCard.stages.${stage.label.toLowerCase().replace(/\s+/g, '_')}`, { defaultValue: stage.label })}
                           </span>
                         </div>
                       ))}
@@ -2618,7 +2620,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
               <div className={`rounded-xl border border-stone-200/60 dark:border-stone-700/40 p-2 sm:p-2.5 transition-all duration-200 ${isOpen ? 'ring-1 ring-emerald-400/40 bg-stone-50/80 dark:bg-stone-800/40 shadow-sm' : 'bg-stone-50/40 dark:bg-stone-800/20 hover:bg-stone-50/70 dark:hover:bg-stone-800/30'}`}>
                 <div className="flex items-center justify-between mb-1.5">
                   <span className={`text-xs sm:text-sm font-bold ${data.color}`}>
-                    {averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0]}
+                    {t(`plantInfo:enums.averageLifespan.${resolveLifespanKey(averageLifespan[0]) || averageLifespan[0]}`, { defaultValue: averageLifespanEnum.toUi(averageLifespan[0]) || averageLifespan[0] })}
                   </span>
                   <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                 </div>
@@ -2668,7 +2670,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                   >
                     <div className="flex items-center justify-between mb-1.5">
                       <span className={`text-[10px] sm:text-xs font-bold ${data.accent}`}>
-                        {foliagePersistenceEnum.toUi(foliage) || foliage}
+                        {t(`plantInfo:enums.foliagePersistence.${foliagePersistenceEnum.toDb(foliage) || foliage.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: foliagePersistenceEnum.toUi(foliage) || foliage })}
                       </span>
                       <ChevronDown className={`h-3 w-3 text-stone-400 dark:text-stone-500 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
                     </div>
@@ -2677,7 +2679,7 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                       {data.seasons.map((s, i) => (
                         <div key={i} className="flex flex-col items-center gap-0.5">
                           <div className={`w-full h-1.5 sm:h-2 rounded-full ${seasonStateColors[s.state]}`} />
-                          <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-500">{s.label}</span>
+                          <span className="text-[7px] sm:text-[8px] text-stone-400 dark:text-stone-500">{t(`plantInfo:lifeCycleCard.seasons.${s.label.toLowerCase()}`, { defaultValue: s.label })}</span>
                         </div>
                       ))}
                     </div>
@@ -2685,15 +2687,15 @@ const LifeCycleCard: React.FC<LifeCycleCardProps> = ({ lifeCycle, averageLifespa
                     <div className="flex gap-2 mt-1">
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-emerald-400 dark:bg-emerald-500" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Leaves</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.leaves', { defaultValue: 'Leaves' })}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-amber-300 dark:bg-amber-500" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Partial</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.partial', { defaultValue: 'Partial' })}</span>
                       </div>
                       <div className="flex items-center gap-1">
                         <div className="h-1 w-1 rounded-full bg-stone-200 dark:bg-stone-700" />
-                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">Bare</span>
+                        <span className="text-[6px] sm:text-[7px] text-stone-400 dark:text-stone-500">{t('plantInfo:lifeCycleCard.legend.bare', { defaultValue: 'Bare' })}</span>
                       </div>
                     </div>
                     {isOpen && (
@@ -2756,7 +2758,7 @@ const ClimateCard: React.FC<{ climate: string[] | undefined; t: (key: string, op
                   {icon || <Thermometer className="h-4 w-4 sm:h-5 sm:w-5" />}
                 </div>
                 <span className="text-[10px] sm:text-xs font-semibold text-sky-800 dark:text-sky-200 leading-tight">
-                  {climateEnum.toUi(c) || c}
+                  {t(`plantInfo:enums.climate.${climateEnum.toDb(c) || c.toLowerCase().replace(/[\s-]+/g, '_')}`, { defaultValue: climateEnum.toUi(c) || c })}
                 </span>
               </div>
             )
@@ -2801,7 +2803,7 @@ const OriginCard: React.FC<{ origin: string[] | undefined; originEnglish?: strin
               viewBox={ORIGIN_MAP_VIEWBOX}
               preserveAspectRatio="xMidYMid meet"
               role="img"
-              aria-label="World map showing plant origins"
+              aria-label={t('plantInfo:originCard.mapAriaLabel', { defaultValue: 'World map showing plant origins' })}
             >
               <image
                 href={ORIGIN_MAP_URL}
@@ -3580,6 +3582,7 @@ type CompanionPlantsCarouselProps = {
 }
 
 const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ companions, onPlantClick, loading }) => {
+  const { t } = useTranslation('plantInfo')
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
   const [canScrollRight, setCanScrollRight] = React.useState(false)
@@ -3645,7 +3648,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
           type="button"
           onClick={() => scroll('left')}
           className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-          aria-label="Scroll left"
+          aria-label={t('carousel.scrollLeft')}
         >
           <ChevronLeft className="h-5 w-5" />
         </button>
@@ -3671,7 +3674,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
           type="button"
           onClick={() => scroll('right')}
           className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-          aria-label="Scroll right"
+          aria-label={t('carousel.scrollRight')}
         >
           <ChevronRight className="h-5 w-5" />
         </button>
@@ -3681,6 +3684,7 @@ const CompanionPlantsCarousel: React.FC<CompanionPlantsCarouselProps> = ({ compa
 }
 
 const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }> = ({ images, plantName }) => {
+  const { t } = useTranslation('plantInfo')
   const validImages = images.filter((img): img is NonNullable<typeof img> & { link: string } => Boolean(img?.link))
   const scrollContainerRef = React.useRef<HTMLDivElement>(null)
   const [canScrollLeft, setCanScrollLeft] = React.useState(false)
@@ -3741,7 +3745,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
             type="button"
             onClick={() => scroll('left')}
             className="absolute left-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-            aria-label="Scroll left"
+            aria-label={t('carousel.scrollLeft')}
           >
             <ChevronLeft className="h-5 w-5" />
           </button>
@@ -3778,7 +3782,7 @@ const ImageGalleryCarousel: React.FC<{ images: PlantImage[]; plantName: string }
             type="button"
             onClick={() => scroll('right')}
             className="absolute right-2 top-1/2 z-10 -translate-y-1/2 rounded-full bg-black/60 p-2 text-white backdrop-blur-sm transition hover:bg-black/80 dark:bg-white/20 dark:text-white"
-            aria-label="Scroll right"
+            aria-label={t('carousel.scrollRight')}
           >
             <ChevronRight className="h-5 w-5" />
           </button>

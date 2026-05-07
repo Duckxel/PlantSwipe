@@ -875,11 +875,16 @@ export async function processPlantRequest(
       medicinal_history: plant.medicinalHistory || null,
       aromatherapy_benefits: plant.aromatherapyBenefits || null,
       essential_oil_blends: plant.essentialOilBlends || null,
+      // Ecology (translatable free-form arrays)
+      biotopes: plant.biotopes || [],
       // Ecology
       beneficial_roles: plant.beneficialRoles || [],
       harmful_roles: plant.harmfulRoles || [],
       symbiosis: plant.symbiosis || [],
       symbiosis_notes: plant.symbiosisNotes || null,
+      // Care (translatable free-form arrays)
+      mulch_type: plant.mulchType || [],
+      substrate: plant.substrate || [],
       // Misc
       plant_tags: plant.plantTags || [],
       biodiversity_tags: plant.biodiversityTags || [],
@@ -1057,6 +1062,12 @@ export async function processPlantRequest(
         addArrayField('common_names', plant.commonNames)
         addArrayField('allergens', plant.allergens)
         addArrayField('origin', plant.origin)
+        addArrayField('biotopes', plant.biotopes)
+        addArrayField('mulch_type', plant.mulchType)
+        addArrayField('substrate', plant.substrate)
+        addArrayField('special_needs', plant.specialNeeds)
+        addArrayField('nutrition_need', plant.nutritionNeed)
+        addArrayField('fertilizer', plant.fertilizer)
         addArrayField('recipes_ideas', plant.recipes?.length
           ? plant.recipes.map(r => r.name).filter(Boolean)
           : plant.recipesIdeas)
@@ -1065,6 +1076,9 @@ export async function processPlantRequest(
         addArrayField('beneficial_roles', plant.beneficialRoles)
         addArrayField('harmful_roles', plant.harmfulRoles)
         addArrayField('symbiosis', plant.symbiosis)
+        addArrayField('pollinators_attracted', plant.pollinatorsAttracted)
+        addArrayField('birds_attracted', plant.birdsAttracted)
+        addArrayField('mammals_attracted', plant.mammalsAttracted)
         addArrayField('spice_mixes', plant.spiceMixes)
         addArrayField('pests', plant.pests)
         addArrayField('diseases', plant.diseases)
@@ -1135,6 +1149,15 @@ export async function processPlantRequest(
           harmful_roles: arrayMap.get('harmful_roles') || [],
           symbiosis: arrayMap.get('symbiosis') || [],
           symbiosis_notes: stringMap.get('symbiosis_notes') || null,
+          pollinators_attracted: arrayMap.get('pollinators_attracted') || [],
+          birds_attracted: arrayMap.get('birds_attracted') || [],
+          mammals_attracted: arrayMap.get('mammals_attracted') || [],
+          biotopes: arrayMap.get('biotopes') || [],
+          mulch_type: arrayMap.get('mulch_type') || [],
+          substrate: arrayMap.get('substrate') || [],
+          special_needs: arrayMap.get('special_needs') || [],
+          nutrition_need: arrayMap.get('nutrition_need') || [],
+          fertilizer: arrayMap.get('fertilizer') || [],
           plant_tags: arrayMap.get('plant_tags') || [],
           biodiversity_tags: arrayMap.get('biodiversity_tags') || [],
           source_name: stringMap.get('sourceName') || null,

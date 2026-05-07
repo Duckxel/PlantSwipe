@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
+import i18next from "i18next"
 import { type CategoryProgress, type PlantFormCategory, BOOLEAN_GATE_DEPS } from "@/lib/plantFormCategories"
 import type { Plant, PlantColor, PlantImage, PlantRecipe, PlantSource, PlantWateringSchedule, RecipeCategory, RecipeTime, WateringMode } from "@/types/plant"
 import { supabase } from "@/lib/supabaseClient"
@@ -108,6 +109,10 @@ interface FieldConfig {
     caseInsensitive?: boolean
     placeholder?: string
   }
+  /** When true, tag display values are formatted: snake_case → Title Case */
+  formatTagDisplay?: boolean
+  /** plantInfo enum group key to use for tag translations (e.g. 'ecologicalStatus') */
+  enumGroup?: string
   /** If set, this field is only shown when the gate field is true */
   gatedBy?: string
 }
@@ -181,14 +186,27 @@ const normalizeMonthArray = (value: unknown): number[] => {
   return result
 }
 
+const formatTagLabel = (tag: string): string =>
+  tag.replace(/[_-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+
 const TagInput: React.FC<{
   value: string[]
   onChange: (v: string[]) => void
   placeholder?: string
   unique?: boolean
   caseInsensitive?: boolean
-}> = ({ value, onChange, placeholder, unique, caseInsensitive }) => {
-  const { t } = useTranslation('plantAdmin')
+  displayFormatter?: (tag: string) => string
+  enumGroup?: string
+}> = ({ value, onChange, placeholder, unique, caseInsensitive, displayFormatter, enumGroup }) => {
+  const { t } = useTranslation(['plantAdmin', 'plantInfo'])
+  const resolveTagLabel = (tag: string): string => {
+    if (enumGroup) {
+      const key = tag.toLowerCase().replace(/[\s-]+/g, '_')
+      const translated = t(`plantInfo:enums.${enumGroup}.${key}`, { defaultValue: '' })
+      if (translated) return translated
+    }
+    return displayFormatter ? displayFormatter(tag) : tag
+  }
   const [input, setInput] = React.useState("")
   const commit = () => {
     const v = input.trim()
@@ -216,12 +234,12 @@ const TagInput: React.FC<{
       <div className="flex flex-wrap gap-2">
         {value.map((tag, idx) => (
           <span key={`${tag}-${idx}`} className="px-2 py-1 bg-stone-100 dark:bg-[#2d2d30] rounded text-sm flex items-center gap-1">
-            {tag}
+            {resolveTagLabel(tag)}
             <button
               type="button"
               className="text-red-600 hover:text-red-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-500 rounded-full w-4 h-4 flex items-center justify-center"
               onClick={() => onChange(value.filter((_, i) => i !== idx))}
-              aria-label={t('plantAdmin.tagInput.removeAria', { tag, defaultValue: `Remove ${tag}` })}
+              aria-label={t('plantAdmin:tagInput.removeAria', { tag: resolveTagLabel(tag), defaultValue: `Remove ${resolveTagLabel(tag)}` })}
             >
               <X className="h-3 w-3" />
             </button>
@@ -1129,7 +1147,7 @@ const identityFields: FieldConfig[] = [
   { key: "foliagePersistence", label: "Foliage Persistence", description: "How leaves behave across seasons", type: "multiselect", options: ["Deciduous","Evergreen","Semi-Evergreen","Marcescent","Winter Dormant","Dry Season Deciduous"] },
   { key: "livingSpace", label: "Living Space", description: "Where the plant can be grown", type: "multiselect", options: ["Indoor","Outdoor","Terrarium","Greenhouse"] },
   { key: "landscaping", label: "Landscaping / Placement", description: "Garden placement options", type: "multiselect", options: ["Pot","Planter","Hanging","Window Box","Green Wall","Flowerbed","Border","Edging","Path","Tree Base","Vegetable Garden","Orchard","Hedge","Free Growing","Trimmed Hedge","Windbreak","Pond Edge","Waterside","Ground Cover","Grove","Background","Foreground"] },
-  { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", options: ["Upright","Arborescent","Shrubby","Bushy","Clumping","Erect","Creeping","Carpeting","Ground Cover","Prostrate","Spreading","Climbing","Twining","Scrambling","Liana","Trailing","Columnar","Conical","Fastigiate","Globular","Spreading Flat","Rosette","Cushion","Ball Shaped","Succulent","Palmate","Rhizomatous","Suckering"] },
+  { key: "plantHabit", label: "Plant Habit / Shape", description: "Growth habit and form", type: "multiselect", enumGroup: "plantHabit", options: ['upright','arborescent','shrubby','bushy','clumping','erect','creeping','carpeting','ground_cover','prostrate','spreading','climbing','twining','scrambling','liana','trailing','columnar','conical','fastigiate','globular','spreading_flat','rosette','cushion','ball_shaped','succulent','palmate','rhizomatous','suckering'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
 ]
 
 // ============================================================================
@@ -1163,11 +1181,11 @@ const careFields: FieldConfig[] = [
 // Section 3b: Care Details — Substrate, Mulch, Nutrition (8 items)
 // ============================================================================
 const careDetailsFields: FieldConfig[] = [
-  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags" },
-  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags" },
+  { key: "substrate", label: "Substrate", description: "Suitable substrates/soil types", type: "tags", formatTagDisplay: true },
+  { key: "substrateMix", label: "Substrate Mix", description: "Special substrate mix names", type: "tags", formatTagDisplay: true, enumGroup: "substrateMix" },
   { key: "soilAdvice", label: "Soil Guidance", description: "Substrate/soil advice text", type: "textarea" },
   { key: "mulchingNeeded", label: "Mulching Needed?", description: "Is mulching recommended?", type: "boolean" },
-  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", gatedBy: "mulchingNeeded" },
+  { key: "mulchType", label: "Mulch Type", description: "Recommended mulch types", type: "tags", formatTagDisplay: true, gatedBy: "mulchingNeeded" },
   { key: "mulchAdvice", label: "Mulch Advice", description: "Mulching guidance", type: "textarea", gatedBy: "mulchingNeeded" },
   { key: "nutritionNeed", label: "Nutrient Needs", description: "Key nutritional requirements", type: "tags" },
   { key: "fertilizer", label: "Fertilizer", description: "Recommended fertilizer types", type: "tags" },
@@ -1212,11 +1230,11 @@ const dangerFields: FieldConfig[] = [
 // ============================================================================
 const ecologyFields: FieldConfig[] = [
   { key: "conservationStatus", label: "Conservation Status (IUCN)", description: "IUCN conservation status and legal protection", type: "multiselect", options: ["Least Concern","Near Threatened","Vulnerable","Endangered","Critically Endangered","Extinct in Wild","Extinct","Data Deficient","Not Evaluated","Protected","Protected in Some Regions"] },
-  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "tags" },
-  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags" },
+  { key: "ecologicalStatus", label: "Ecological Status", description: "Ecological classification tags", type: "multiselect", enumGroup: "ecologicalStatus", options: ['indigenous','endemic','subendemic','introduced','naturalized','subspontaneous','cultivated_only','ecologically_neutral','biodiversity_favorable','potentially_invasive','exotic_invasive','locally_invasive','competitive_dominant','pioneer_species','climax_species','structuring_species','indicator_species','host_species','relict_species','heritage_species','common_species','nitrogen_fixer','hygrophile','heliophile','sciaphile','halophile','calcicole','acidophile'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
+  { key: "biotopes", label: "Biotopes", description: "Natural biotope environments", type: "tags", formatTagDisplay: true },
   { key: "urbanBiotopes", label: "Urban Biotopes", description: "Anthropized/urban environments", type: "multiselect", options: ["Urban Garden","Periurban Garden","Park","Urban Wasteland","Green Wall","Green Roof","Balcony","Greenhouse","Agricultural Hedge","Cultivated Orchard","Vegetable Garden","Roadside"] },
   { key: "ecologicalTolerance", label: "Ecological Tolerance", description: "Environmental tolerances", type: "multiselect", options: ["Drought","Scorching Sun","Permanent Shade","Excess Water","Frost","Heatwave","Wind"] },
-  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "tags" },
+  { key: "biodiversityRole", label: "Biodiversity Role", description: "Role in garden biodiversity", type: "multiselect", enumGroup: "biodiversityRole", options: ['melliferous','insect_refuge','bird_refuge','mammal_refuge','food_source','host_plant','nitrogen_fixer','soil_improver','ecological_corridor','natural_repellent','green_manure','fertility_improver','crop_shade','vegetable_garden_windbreak','moisture_retention','frost_protection','drought_protection'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "beneficialRoles", label: "Beneficial Role(s)", description: "Positive ecological contributions", type: "tags" },
   { key: "harmfulRoles", label: "Harmful Role(s)", description: "Negative ecological effects", type: "tags" },
   { key: "pollinatorsAttracted", label: "Pollinators Attracted", description: "Which pollinators visit this plant", type: "tags" },
@@ -1224,7 +1242,7 @@ const ecologyFields: FieldConfig[] = [
   { key: "mammalsAttracted", label: "Mammals Attracted", description: "Mammals drawn to this plant", type: "tags" },
   { key: "symbiosis", label: "Symbiosis", description: "Symbiotic relationships (plants, insects, fungi)", type: "tags" },
   { key: "symbiosisNotes", label: "Symbiosis Notes", description: "Detailed symbiosis description", type: "textarea" },
-  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "tags" },
+  { key: "ecologicalManagement", label: "Ecological Management", description: "Eco-friendly management tips", type: "multiselect", enumGroup: "ecologicalManagement", options: ['let_seed','no_winter_pruning','keep_dry_foliage','natural_foliage_mulch','branch_chipping_mulch','improves_microbial_life','promotes_mycorrhizal_fungi','enriches_soil','structures_soil'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "ecologicalImpact", label: "Ecological Impact", description: "Overall ecological impact", type: "multiselect", options: ["Neutral","Favorable","Potentially Invasive","Locally Invasive"] },
 ]
 
@@ -1233,7 +1251,7 @@ const ecologyFields: FieldConfig[] = [
 // ============================================================================
 const consumptionFields: FieldConfig[] = [
   { key: "nutritionalValue", label: "Nutritional Value", description: "Nutritional information for edible plants", type: "textarea" },
-  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "tags", gatedBy: "utility:infusion" },
+  { key: "infusionParts", label: "Infusion Part(s)", description: "Which parts can be used for infusion", type: "multiselect", enumGroup: "infusionParts", gatedBy: "utility:infusion", options: ['flower','leaf','root','bulb','clove','fruit','peel','rhizome','seed','stem','stigma','scape','aerial_parts','flowering_top','bark','bud','berry','resin','cone','whole_plant'].map(k => ({ label: k.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()), value: k })) },
   { key: "infusionBenefits", label: "Infusion Benefits", description: "Health benefits of infusion/tea", type: "textarea", gatedBy: "utility:infusion" },
   { key: "infusionRecipeIdeas", label: "Infusion Recipe Ideas", description: "Tea/infusion recipe suggestions", type: "textarea", gatedBy: "utility:infusion" },
   { key: "medicinalBenefits", label: "Medicinal Benefits", description: "Health benefits", type: "textarea", gatedBy: "utility:medicinal" },
@@ -1291,6 +1309,10 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
     if (fieldScoped) return fieldScoped
     const globalScoped = t(`plantAdmin.optionLabels.${optionKey}`, { defaultValue: '' })
     if (globalScoped) return globalScoped
+    if (field.enumGroup) {
+      const enumTranslation = i18next.t(`plantInfo:enums.${field.enumGroup}.${optionKey}`, { defaultValue: '' })
+      if (enumTranslation) return enumTranslation
+    }
     return fallback
   }
 
@@ -1455,6 +1477,8 @@ function renderField(plant: Plant, onChange: (path: string, value: any) => void,
               placeholder={tagPlaceholder || undefined}
               unique={field.tagConfig?.unique}
               caseInsensitive={field.tagConfig?.caseInsensitive}
+              displayFormatter={field.formatTagDisplay ? formatTagLabel : undefined}
+              enumGroup={field.enumGroup}
             />
               )
             })()}

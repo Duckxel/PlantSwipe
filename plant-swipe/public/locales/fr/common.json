@@ -1274,6 +1274,11 @@
       "lethal": "Létale",
       "toPets": "pour les animaux",
       "toHumans": "pour les humains"
+    },
+    "imageGallery": {
+      "previous": "Image précédente",
+      "next": "Image suivante",
+      "goToImage": "Aller à l'image {{number}}"
     }
   },
   "bookmarks": {

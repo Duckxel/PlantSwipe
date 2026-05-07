@@ -62,6 +62,7 @@ create table if not exists public.plant_translations (
   essential_oil_blends text,
 
   -- Care translatable tag fields
+  substrate text[] not null default '{}',
   mulch_type text[] not null default '{}',
   nutrition_need text[] not null default '{}',
   fertilizer text[] not null default '{}',
@@ -142,6 +143,7 @@ alter table if exists public.plant_translations add column if not exists medicin
 alter table if exists public.plant_translations add column if not exists aromatherapy_benefits text;
 alter table if exists public.plant_translations add column if not exists essential_oil_blends text;
 -- Care tag fields
+alter table if exists public.plant_translations add column if not exists substrate text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists mulch_type text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists nutrition_need text[] not null default '{}';
 alter table if exists public.plant_translations add column if not exists fertilizer text[] not null default '{}';

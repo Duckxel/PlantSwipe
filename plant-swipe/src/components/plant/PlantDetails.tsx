@@ -367,15 +367,15 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
               />
               {images.length > 1 && (
                 <>
-                  <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label="Previous image">
+                  <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label={t('plantDetails.imageGallery.previous')}>
                     <ChevronLeft className="h-5 w-5" />
                   </button>
-                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label="Next image">
+                  <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label={t('plantDetails.imageGallery.next')}>
                     <ChevronRight className="h-5 w-5" />
                   </button>
                   <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-1.5">
                     {images.map((_, idx) => (
-                      <button key={`m-dot-${idx}`} type="button" className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
+                      <button key={`m-dot-${idx}`} type="button" className={`h-1.5 rounded-full transition-all ${idx === activeImageIndex ? "w-5 bg-white" : "w-1.5 bg-white/50"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={t('plantDetails.imageGallery.goToImage', { number: String(idx + 1) })} />
                     ))}
                   </div>
                 </>
@@ -502,15 +502,15 @@ export const PlantDetails: React.FC<PlantDetailsProps> = ({ plant }) => {
                 />
                 {images.length > 1 && (
                   <>
-                    <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label="Previous image">
+                    <button type="button" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToPrevImage() }} aria-label={t('plantDetails.imageGallery.previous')}>
                       <ChevronLeft className="h-5 w-5" />
                     </button>
-                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label="Next image">
+                    <button type="button" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-black/40 p-2 text-white backdrop-blur hover:bg-black/60" onClick={(event) => { event.stopPropagation(); goToNextImage() }} aria-label={t('plantDetails.imageGallery.next')}>
                       <ChevronRight className="h-5 w-5" />
                     </button>
                     <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-2">
                       {images.map((_, idx) => (
-                        <button key={`d-dot-${idx}`} type="button" className={`h-2.5 w-2.5 rounded-full transition ${idx === activeImageIndex ? "bg-white" : "bg-white/40"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={`Go to image ${idx + 1}`} />
+                        <button key={`d-dot-${idx}`} type="button" className={`h-2.5 w-2.5 rounded-full transition ${idx === activeImageIndex ? "bg-white" : "bg-white/40"}`} onClick={(event) => { event.stopPropagation(); setActiveImageIndex(idx) }} aria-label={t('plantDetails.imageGallery.goToImage', { number: String(idx + 1) })} />
                       ))}
                     </div>
                   </>
