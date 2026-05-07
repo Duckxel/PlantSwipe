@@ -5,6 +5,13 @@ import { isNativeCapacitor } from '@/platform/runtime'
 const AUTO_HIDE_MS = 8000
 const READY_ACK_KEY = 'plantswipe.offlineReadyAck'
 const VERSION_KEY = 'plantswipe.appVersion'
+/** Persisted across reloads so the update popup can always show the target version,
+ *  even when SW_UPDATE_FOUND (broadcast only at install time) is no longer in flight. */
+const AVAILABLE_VERSION_KEY = 'plantswipe.availableVersion'
+/** If skipWaiting → controllerchange takes longer than this, give up and force a clean
+ *  unregister+reload — better than spinning forever. Activation should normally take well
+ *  under a second; we leave generous headroom for slow devices. */
+const SW_ACTIVATION_TIMEOUT_MS = 10000
 /** Delay (ms) after an offline event before we verify with a real fetch */
 const OFFLINE_VERIFY_DELAY_MS = 3000
 /** How often (ms) to re-check connectivity while the offline popup is shown */
@@ -94,6 +101,28 @@ const persistVersion = (value: string | null) => {
   }
 }
 
+const readStoredAvailableVersion = () => {
+  if (typeof window === 'undefined') return null
+  try {
+    return window.localStorage.getItem(AVAILABLE_VERSION_KEY)
+  } catch {
+    return null
+  }
+}
+
+const persistAvailableVersion = (value: string | null) => {
+  if (typeof window === 'undefined') return
+  try {
+    if (value) {
+      window.localStorage.setItem(AVAILABLE_VERSION_KEY, value)
+    } else {
+      window.localStorage.removeItem(AVAILABLE_VERSION_KEY)
+    }
+  } catch {
+    // ignore
+  }
+}
+
 const isLikelyStaleChunkError = (err: unknown): boolean => {
   const msg = err instanceof Error ? err.message : String(err)
   return /Loading chunk [\w-]+ failed|ChunkLoadError|Failed to fetch dynamically imported module|Importing a module script failed/i.test(
@@ -114,7 +143,7 @@ export function ServiceWorkerToast() {
   const [isOffline, setIsOffline] = React.useState(false)
   const [offlineHint, setOfflineHint] = React.useState<string | null>(null)
   const [activeVersion, setActiveVersion] = React.useState<string | null>(readStoredVersion)
-  const [availableVersion, setAvailableVersion] = React.useState<string | null>(null)
+  const [availableVersion, setAvailableVersion] = React.useState<string | null>(readStoredAvailableVersion)
   const autoHideTimer = React.useRef<number | null>(null)
   const wbRef = React.useRef<Workbox | null>(null)
   const pendingReloadRef = React.useRef(false)
@@ -217,6 +246,10 @@ export function ServiceWorkerToast() {
       if (data.type === 'SW_UPDATE_FOUND') {
         if (typeof data.meta?.version === 'string') {
           setAvailableVersion(data.meta.version)
+          // Persist so the popup keeps its version across reloads.  SW_UPDATE_FOUND is
+          // only broadcast at install time, so without persistence a subsequent reload
+          // would show a generic "New release available" prompt instead of the version.
+          persistAvailableVersion(data.meta.version)
         }
         surfaceWaitingUpdate()
         return
@@ -226,7 +259,13 @@ export function ServiceWorkerToast() {
         if (nextVersion) {
           setActiveVersion(nextVersion)
           persistVersion(nextVersion)
-          setAvailableVersion((current) => (current === nextVersion ? null : current))
+          setAvailableVersion((current) => {
+            if (current === nextVersion) {
+              persistAvailableVersion(null)
+              return null
+            }
+            return current
+          })
           // The current update cycle is complete — reset the guard so that
           // a *future* service-worker update can surface a new popup.
           updateShownRef.current = false
@@ -495,9 +534,11 @@ export function ServiceWorkerToast() {
   const triggerUpdate = () => {
     setNeedRefreshFlag(false)
     setRefreshDismissed(false)
-    setAvailableVersion(null)
     // Do NOT reset updateShownRef — a reload is pending; no reason to
     // allow the popup to re-appear if the reload takes a moment.
+    // Do NOT clear availableVersion either — keep it persisted so that, if
+    // the reload fails for any reason, the popup that re-appears still shows
+    // the version (matching the user's preference).
     pendingReloadRef.current = true
     setVisible(false)
 
@@ -537,15 +578,30 @@ export function ServiceWorkerToast() {
         messaged = await postSkipWaitingToWaiting()
       }
 
-      // Safety net: if controllerchange never fires (waiting SW absent, browser
-      // quirks, etc.), reload anyway after a short grace period. The new SW
-      // will activate on next load even without skipWaiting.
+      // No waiting SW to activate — just reload now; nothing to wait for.
+      if (!messaged) {
+        pendingReloadRef.current = false
+        window.location.reload()
+        return
+      }
+
+      // SKIP_WAITING was sent.  The new SW will activate, then `clientsClaim()`
+      // makes it the controller, which fires `controllerchange` on this client —
+      // and the controllerchange handler reloads the page immediately.  This is
+      // the only correct moment to reload: reloading earlier would serve the page
+      // through the *old* SW, leaving the new SW still in `waiting` state, which
+      // is exactly what produced the infinite reload loop.
+      //
+      // SAFETY NET (last resort): if controllerchange never fires within
+      // SW_ACTIVATION_TIMEOUT_MS — e.g. activation hangs or the browser is in
+      // an odd state — unregister the SW and clear caches before reloading.
+      // This guarantees the next load starts from a clean slate (no waiting SW
+      // to re-trigger the popup) instead of looping.
       window.setTimeout(() => {
-        if (pendingReloadRef.current) {
-          pendingReloadRef.current = false
-          window.location.reload()
-        }
-      }, messaged ? 2500 : 250)
+        if (!pendingReloadRef.current) return
+        pendingReloadRef.current = false
+        void unregisterCachesAndReload()
+      }, SW_ACTIVATION_TIMEOUT_MS)
     })()
   }
 
@@ -615,23 +671,27 @@ export function ServiceWorkerToast() {
       )
     }
 
-    if (!visible || (mode === 'update' && (refreshDismissed || !needRefreshFlag)) || (mode === 'offline' && !isOffline)) return null
+    // For update mode, require a known availableVersion before surfacing the popup.
+    // SW_UPDATE_FOUND carries the version; we also persist it so it survives reloads.
+    // Without a version we silently skip the popup rather than show a generic prompt.
+    if (
+      !visible ||
+      (mode === 'update' && (refreshDismissed || !needRefreshFlag || !availableVersion)) ||
+      (mode === 'offline' && !isOffline)
+    )
+      return null
 
     const title =
       mode === 'update'
-        ? availableVersion
-          ? `Aphylia v${availableVersion} ready`
-          : 'New release available'
+        ? `Aphylia v${availableVersion} ready`
         : mode === 'offline'
           ? 'You appear to be offline'
           : 'Offline mode ready'
     const description =
       mode === 'update'
-        ? availableVersion && activeVersion && availableVersion !== activeVersion
+        ? activeVersion && availableVersion !== activeVersion
           ? `Reload to move from v${activeVersion} to v${availableVersion}.`
-          : availableVersion
-            ? `Reload to use Aphylia v${availableVersion}.`
-            : 'Reload to use the latest Aphylia experience.'
+          : `Reload to use Aphylia v${availableVersion}.`
         : mode === 'offline'
           ? 'Reconnect to the internet to continue using Aphylia without interruptions.'
           : 'You can keep swiping even without a network connection.'
