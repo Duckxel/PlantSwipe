@@ -36439,9 +36439,10 @@ async function generateCrawlerHtml(req, pagePath) {
 
     // Homepage with dynamic content - ONLY page that gets the banner image
     else if (pagePath === '/' || effectivePath.length === 0) {
+      req._ssrDebug.matchedRoute = 'landing'
       title = `🌱 ${tr.homeTitle}`
       description = tr.homeDesc
-      
+
       // Landing page is the ONLY page that uses the banner image
       image = LANDING_BANNER_IMAGE
       imageAlt = 'Aphylia - Your Personal Plant Companion'
@@ -37238,7 +37239,107 @@ async function generateCrawlerHtml(req, pagePath) {
     ]
     if (isBusiness) crumbs.push({ name: businessLabel, item: canonicalUrl })
     jsonLdSchemas.push(buildBreadcrumb(crumbs))
+  } else if (req._ssrDebug?.matchedRoute === 'landing') {
+    // Homepage: emit the full schema suite so Google sees rich structured data
+    // even before it runs JavaScript (SSR-first indexing pass).
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'WebSite',
+      name: 'Aphylia',
+      url: siteUrl,
+      description: 'Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds.',
+      potentialAction: {
+        '@type': 'SearchAction',
+        target: { '@type': 'EntryPoint', urlTemplate: `${siteUrl}/search?q={search_term_string}` },
+        'query-input': 'required name=search_term_string',
+      },
+    })
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'SoftwareApplication',
+      name: 'Aphylia',
+      url: siteUrl,
+      applicationCategory: 'LifestyleApplication',
+      operatingSystem: 'Web, iOS, Android',
+      description: 'Aphylia is the plant care app that tracks every plant in your garden, sends smart watering reminders, and identifies species in seconds.',
+      image: LANDING_BANNER_IMAGE,
+      offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+    })
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'Organization',
+      name: 'Aphylia',
+      url: siteUrl,
+      logo: `${siteUrlNoTrailing}/icons/icon-512x512.png`,
+      email: 'support@aphylia.app',
+      sameAs: [
+        'https://www.instagram.com/aphylia_app/',
+        'https://x.com/aphylia_app',
+        'https://www.youtube.com/@aphylia_app',
+        'https://discord.gg/SRt74hDESC',
+      ],
+    })
+    // FAQPage schema — enables accordion rich results in SERPs (significant CTR uplift).
+    // Items mirror the locale/Landing.json faq.items that the client-side React also uses.
+    const homeFaqs = detectedLang === 'fr' ? [
+      { q: 'Aphylia est-elle gratuite ?', a: 'Oui ! Notre forfait gratuit vous permet de suivre jusqu’à 5 jardins avec des plantes illimitées et des rappels basiques. Passez au supérieur à tout moment pour des jardins illimités et des fonctionnalités avancées.' },
+      { q: 'Puis-je synchroniser entre appareils ?', a: 'Oui. Créez un compte et votre jardin se synchronise parfaitement entre votre téléphone, tablette et ordinateur.' },
+      { q: 'Quelle est la précision de l’identification ?', a: 'Notre système identifie des milliers de plantes d’intérieur et d’espèces de jardin avec une grande précision. En cas de doute, il suggère des correspondances similaires.' },
+      { q: 'Mes données sont-elles privées ?', a: 'Votre vie privée est notre priorité. Nous ne vendons jamais vos données. Toutes les données de jardin sont cryptées et accessibles uniquement par vous.' },
+      { q: 'Puis-je annuler mon abonnement à tout moment ?', a: 'Oui, annulez à tout moment depuis vos paramètres. Vous conserverez les fonctionnalités Plus jusqu’à la fin de votre période de facturation.' },
+    ] : [
+      { q: 'Is Aphylia free to use?', a: 'Yes! Our free plan lets you track up to 5 gardens with unlimited plants and basic reminders. Upgrade anytime for unlimited gardens and advanced features.' },
+      { q: 'Can I sync across devices?', a: 'Yes. Create an account and your garden syncs seamlessly between your phone, tablet, and computer.' },
+      { q: 'How accurate is the plant identification?', a: 'Our system identifies thousands of common houseplants and garden species with high accuracy. If unsure, it suggests similar matches.' },
+      { q: 'Is my data private?', a: 'Your privacy is our priority. We never sell your data. All garden data is encrypted and only accessible to you.' },
+      { q: 'Can I cancel my subscription anytime?', a: 'Yes, cancel anytime from your settings. You’ll keep Plus features until the end of your billing period.' },
+    ]
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: homeFaqs.map((f) => ({
+        '@type': 'Question',
+        name: f.q,
+        acceptedAnswer: { '@type': 'Answer', text: f.a },
+      })),
+    })
   } else if (req._ssrDebug?.matchedRoute === 'pricing') {
+    // Product schema with real offer tiers enables rich price snippets in SERPs
+    // (known to lift CTR by 15-30% on high-intent commercial queries).
+    jsonLdSchemas.push({
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: 'Aphylia',
+      description: (detectedLang === 'fr')
+        ? 'Application de jardinage avec rappels intelligents, identification des plantes et journal de jardin personnel.'
+        : 'Plant care companion with smart reminders, plant identification, and a personal garden journal.',
+      image: LANDING_BANNER_IMAGE,
+      brand: { '@type': 'Brand', name: 'Aphylia' },
+      offers: [
+        {
+          '@type': 'Offer',
+          name: (detectedLang === 'fr') ? 'Aphylia Gratuit' : 'Aphylia Free',
+          price: '0',
+          priceCurrency: 'USD',
+          description: (detectedLang === 'fr')
+            ? 'Parfait pour commencer — jardins illimités, rappels de base, identification de plantes.'
+            : 'Perfect for getting started — unlimited plants, basic reminders, plant identification.',
+          url: `${siteUrlNoTrailing}/pricing`,
+          availability: 'https://schema.org/InStock',
+        },
+        {
+          '@type': 'Offer',
+          name: (detectedLang === 'fr') ? 'Aphylia Plus' : 'Aphylia Plus',
+          price: '4.99',
+          priceCurrency: 'USD',
+          description: (detectedLang === 'fr')
+            ? 'Pour les passionnés de jardinage — jardins illimités, analytiques avancées et support prioritaire.'
+            : 'For serious plant parents — unlimited gardens, advanced analytics, and priority support.',
+          url: `${siteUrlNoTrailing}/pricing`,
+          availability: 'https://schema.org/InStock',
+        },
+      ],
+    })
     jsonLdSchemas.push(buildBreadcrumb([
       { name: crumbLabel('home'), item: `${siteUrlNoTrailing}/` },
       { name: (detectedLang === 'fr') ? 'Tarifs' : 'Pricing', item: canonicalUrl },
