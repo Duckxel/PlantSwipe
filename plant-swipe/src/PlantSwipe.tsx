@@ -274,7 +274,7 @@ export default function PlantSwipe() {
   const initialCardBoostRef = React.useRef(true)
 
   // Discovery scoring state
-  const sessionSeedRef = React.useRef(Math.random())
+  const sessionSeedRef = React.useRef((() => { const arr = new Uint32Array(1); crypto.getRandomValues(arr); return arr[0] / (0xffffffff + 1); })())
   const hasInitialShuffleRef = React.useRef(false)
   const [seenPlantIds, setSeenPlantIds] = useState<Map<string, number>>(new Map())
   const [seenLoaded, setSeenLoaded] = useState(false)
@@ -866,14 +866,20 @@ export default function PlantSwipe() {
     try {
       anonId = localStorage.getItem('plantswipe.anon_id')
       if (!anonId) {
-        anonId = `anon_${Math.random().toString(36).slice(2, 10)}`
+        const arr = new Uint32Array(2);
+        crypto.getRandomValues(arr);
+        const randomStr = arr[0].toString(36) + arr[1].toString(36);
+        anonId = `anon_${randomStr.slice(0, 8)}`
         localStorage.setItem('plantswipe.anon_id', anonId)
       }
     } catch {
       // Ignore localStorage errors
     }
 
-    const key = user?.id || anonId || `anon_${Math.random().toString(36).slice(2, 10)}`
+    const arr = new Uint32Array(2);
+    crypto.getRandomValues(arr);
+    const randomStr = arr[0].toString(36) + arr[1].toString(36);
+    const key = user?.id || anonId || `anon_${randomStr.slice(0, 8)}`
     const channel = supabase.channel('global-presence', { config: { presence: { key } } })
 
     channel
@@ -1704,7 +1710,9 @@ export default function PlantSwipe() {
       const next = i + 1
       // When we complete a full cycle, reshuffle with a new seed for variety
       if (swipeList.length > 0 && next % swipeList.length === 0) {
-        sessionSeedRef.current = Math.random()
+        const arr = new Uint32Array(1);
+        crypto.getRandomValues(arr);
+        sessionSeedRef.current = arr[0] / (0xffffffff + 1);
         setShuffleEpoch((e) => e + 1)
       }
       return next
