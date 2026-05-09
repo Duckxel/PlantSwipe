@@ -17,7 +17,6 @@ import { useAuthActions } from "@/context/AuthActionsContext"
 import { useLanguageNavigate, usePathWithoutLanguage } from "@/lib/i18nRouting"
 import { supabase } from "@/lib/supabaseClient"
 import i18n from "@/lib/i18n"
-import { DitheringShader } from "@/components/ui/dithering-shader"
 import { PixelSprite } from "@/components/ui/pixel-sprite"
 import "./LandingPage.css"
 
@@ -488,39 +487,10 @@ const LandingPage: React.FC = () => {
   return (
     <LandingDataContext.Provider value={landingData}>
     <div className="min-h-screen w-full bg-gradient-to-b from-emerald-50/50 via-white to-stone-100 dark:from-[#0a0f0a] dark:via-[#111714] dark:to-[#0d1210] overflow-x-hidden pb-24 lg:pb-0">
-      {/* Ambient Background — dithering swirl shader + layered orbs */}
+      {/* Ambient Background — two soft, static washes. Calm > busy. */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
-        {/* WebGL swirl shader — subtle animated texture behind everything */}
-        <div className="absolute inset-0 opacity-[0.015] dark:opacity-[0.015] mix-blend-multiply dark:mix-blend-lighten">
-          <DitheringShader
-            shape="swirl"
-            type="4x4"
-            colorBack="#0a0f0a"
-            colorFront="#34d399"
-            pxSize={5}
-            speed={0.2}
-            className="w-full h-full"
-            style={{ width: "100%", height: "100%" }}
-            width={1200}
-            height={1200}
-          />
-        </div>
-        {/* Top-left: warm emerald glow */}
-        <div className="absolute -top-32 -left-20 w-[500px] h-[500px] bg-emerald-500/[0.07] rounded-full blur-3xl" />
-        {/* Top-right: subtle teal accent */}
-        <div className="absolute top-16 right-[10%] w-[350px] h-[350px] bg-teal-400/[0.06] rounded-full blur-3xl" />
-        {/* Center-left: deeper green, offset low */}
-        <div className="absolute top-[40%] -left-16 w-[400px] h-[400px] bg-green-600/[0.05] rounded-full blur-3xl" />
-        {/* Center-right: cyan hint for variety */}
-        <div className="absolute top-[35%] right-[5%] w-[300px] h-[300px] bg-cyan-500/[0.04] rounded-full blur-3xl" />
-        {/* Mid-page: warm lime accent to break monotone */}
-        <div className="absolute top-[55%] left-[30%] w-[450px] h-[350px] bg-lime-500/[0.04] rounded-full blur-3xl" />
-        {/* Lower-left: teal depth */}
-        <div className="absolute top-[70%] -left-10 w-[350px] h-[350px] bg-teal-500/[0.06] rounded-full blur-3xl" />
-        {/* Lower-right: emerald anchor */}
-        <div className="absolute top-[75%] right-[15%] w-[400px] h-[400px] bg-emerald-400/[0.05] rounded-full blur-3xl" />
-        {/* Bottom: subtle warm green wash */}
-        <div className="absolute -bottom-20 left-[20%] w-[600px] h-[300px] bg-green-500/[0.04] rounded-full blur-3xl" />
+        <div className="absolute -top-40 -left-20 w-[600px] h-[600px] bg-emerald-500/[0.05] rounded-full blur-3xl" />
+        <div className="absolute -bottom-40 -right-20 w-[600px] h-[600px] bg-teal-500/[0.04] rounded-full blur-3xl" />
       </div>
 
       <div className="relative">
@@ -553,15 +523,13 @@ const LandingPage: React.FC = () => {
         {/* Hero Section */}
         {(landingData.settings?.show_hero_section ?? true) && <HeroSection />}
 
-        {/* Stats Banner - above fold on some viewports, keep eager */}
-        {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
-
         {/* Mobile-only app screen carousel — high-density visual proof of the product */}
         <AppPreviewStrip />
 
         {/* Below-fold sections: lazily rendered via IntersectionObserver */}
+        {/* Merged "Get started" — combines old How It Works + Beginner Friendly */}
         {(landingData.settings?.show_beginner_section ?? true) && (
-          <LazySection minHeight="400px"><BeginnerFriendlySection /></LazySection>
+          <LazySection minHeight="400px"><GetStartedSection /></LazySection>
         )}
 
         {/* Cross-device strip — shows mobile + desktop side-by-side */}
@@ -577,10 +545,6 @@ const LandingPage: React.FC = () => {
 
         {(landingData.settings?.show_showcase_section ?? true) && (
           <LazySection minHeight="600px"><ShowcaseSection /></LazySection>
-        )}
-
-        {(landingData.settings?.show_how_it_works_section ?? true) && (
-          <LazySection minHeight="400px"><HowItWorksSection /></LazySection>
         )}
 
         {(landingData.settings?.show_testimonials_section ?? true) && (
@@ -632,37 +596,13 @@ const HeroSection: React.FC = React.memo(() => {
 
   return (
     <section className="relative pt-6 pb-10 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
-      {/* Floating Plant Elements */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-[10%] opacity-20 dark:opacity-10 animate-float">
-          <Leaf className="h-12 w-12 text-emerald-500 rotate-[-15deg]" />
-        </div>
-        <div className="absolute top-40 right-[15%] opacity-15 dark:opacity-10 animate-float-delayed">
-          <Flower2 className="h-16 w-16 text-pink-400 rotate-12" />
-        </div>
-        <div className="absolute bottom-32 left-[20%] opacity-20 dark:opacity-10 animate-float-slow">
-          <TreeDeciduous className="h-14 w-14 text-emerald-600 rotate-[-8deg]" />
-        </div>
-        <div className="absolute top-60 left-[5%] opacity-10 dark:opacity-5 animate-float-delayed">
-          <Sprout className="h-10 w-10 text-green-500" />
-        </div>
-        <div className="absolute bottom-20 right-[10%] opacity-15 dark:opacity-10 animate-float">
-          <Droplets className="h-8 w-8 text-blue-400" />
-        </div>
-      </div>
-
       <div className="relative max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 items-center">
           {/* Left: Hero Content */}
           <div className="text-center lg:text-left space-y-5 lg:space-y-8 animate-fade-in-up">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
-              <div className="relative">
-                <Sparkles className="h-4 w-4 text-emerald-500" />
-                <div className="absolute inset-0 animate-ping">
-                  <Sparkles className="h-4 w-4 text-emerald-500 opacity-50" />
-                </div>
-              </div>
+              <Sparkles className="h-4 w-4 text-emerald-500" />
               <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
                 {badgeText}
               </span>
@@ -781,272 +721,154 @@ const HeroVisual: React.FC = () => {
 
   return (
     <div className="relative">
-      {/* Glow Effects — layered for depth */}
-      <div className="absolute inset-0 -m-16 bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-green-500/20 rounded-full blur-3xl animate-pulse-glow" />
-      <div className="absolute inset-0 -m-8 bg-gradient-to-tr from-teal-400/15 to-emerald-600/15 rounded-full blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
+      {/* One soft, static glow behind the composition — no pulse */}
+      <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/10 via-transparent to-teal-500/10 rounded-[40%] blur-3xl pointer-events-none" />
 
-      {/* Desktop Browser Mockup — sits behind the phone on lg+, signals "works on any device" */}
-      <div className="hidden lg:block absolute -top-4 -right-32 xl:-right-44 w-[420px] xl:w-[480px] rotate-[3deg] opacity-90 pointer-events-none">
-        <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/30 ring-1 ring-white/10 overflow-hidden">
-          {/* Window chrome */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800">
-            <div className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
-            <div className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
-            <div className="ml-3 flex-1 h-5 rounded-md bg-stone-600/60 dark:bg-stone-700/60 flex items-center px-2">
-              <Globe className="h-2.5 w-2.5 text-stone-300/70 mr-1.5" />
-              <span className="text-[9px] text-stone-300/70 truncate">aphylia.app/discovery</span>
-            </div>
-          </div>
-          {/* Browser viewport */}
-          <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] p-3">
-            <div className="flex items-center justify-between mb-2.5">
-              <div className="flex items-center gap-1.5">
-                <Leaf className="h-3 w-3 text-emerald-500" />
-                <span className="text-[10px] font-bold text-stone-800 dark:text-white">My Garden</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">12 plants</span>
-                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300">🔥 7d</span>
+      {/* Mobile: phone only. Desktop (lg+): browser + phone side-by-side, no rotation, no overlap. */}
+      <div className="relative flex items-center justify-center lg:justify-end gap-4 xl:gap-6">
+
+        {/* Desktop browser — only visible on lg+, left-of-phone */}
+        <div className="hidden lg:block flex-1 max-w-[360px] xl:max-w-[420px]">
+          <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-xl shadow-emerald-900/15 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
+            {/* Window chrome */}
+            <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
+              <div className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
+              <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+              <div className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+              <div className="ml-3 flex-1 h-5 rounded-md bg-stone-600/40 dark:bg-stone-700/60 flex items-center px-2">
+                <Globe className="h-2.5 w-2.5 text-stone-300/70 mr-1.5" />
+                <span className="text-[9px] text-stone-300/70 truncate">aphylia.app/garden</span>
               </div>
             </div>
-            <div className="grid grid-cols-4 gap-1.5">
-              {[
-                'from-emerald-400 to-teal-500',
-                'from-lime-400 to-green-500',
-                'from-green-400 to-emerald-500',
-                'from-teal-400 to-cyan-500',
-                'from-emerald-500 to-green-600',
-                'from-green-500 to-teal-600',
-                'from-amber-400 to-orange-500',
-                'from-pink-400 to-rose-500',
-              ].map((g, i) => (
-                <div key={i} className={`aspect-square rounded-lg bg-gradient-to-br ${g} flex items-center justify-center relative overflow-hidden`}>
-                  <Leaf className="h-3 w-3 text-white/70" />
-                  {i % 3 === 0 && <div className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-1 ring-white/40" />}
+            {/* Viewport */}
+            <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] p-4 aspect-[16/10]">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-1.5">
+                  <Leaf className="h-3 w-3 text-emerald-500" />
+                  <span className="text-[11px] font-semibold text-stone-800 dark:text-white">{t("heroCard.gardenName", { defaultValue: "My Indoor Jungle" })}</span>
                 </div>
-              ))}
-            </div>
-            <div className="mt-2.5 flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-              <Bell className="h-2.5 w-2.5 text-emerald-600" />
-              <span className="text-[8px] text-emerald-700 dark:text-emerald-300 font-medium">Water Pothos in 2h</span>
-              <ArrowRight className="ml-auto h-2.5 w-2.5 text-emerald-600" />
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Main Phone Frame */}
-      <div className="relative w-[260px] sm:w-[290px] animate-float-slow">
-        {/* Phone body — thin bezel */}
-        <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.8rem] p-[2px] shadow-2xl shadow-black/30 ring-1 ring-white/10">
-          <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.75rem] p-1.5">
-            {/* Screen */}
-            <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.4rem] overflow-hidden">
-              {/* Status Bar + Dynamic Island with camera */}
-              <div className="flex items-center justify-between px-7 pt-2.5 pb-0.5">
-                <span className="text-[10px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
-                <div className="relative w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full flex items-center justify-end pr-2">
-                  <div className="h-[10px] w-[10px] rounded-full bg-stone-800 dark:bg-stone-900 ring-1 ring-stone-600/50" />
-                </div>
-                <div className="flex items-center gap-1">
-                  <div className="flex gap-[2px]">
-                    <div className="w-[3px] h-[6px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
-                    <div className="w-[3px] h-[8px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
-                    <div className="w-[3px] h-[10px] bg-stone-400 dark:bg-stone-500 rounded-sm" />
-                    <div className="w-[3px] h-[12px] bg-stone-300 dark:bg-stone-600 rounded-sm" />
+                <span className="text-[9px] text-stone-500 dark:text-stone-400">12 plants · 7 day streak</span>
+              </div>
+              <div className="grid grid-cols-4 gap-1.5">
+                {[
+                  'from-emerald-400 to-teal-500',
+                  'from-lime-400 to-green-500',
+                  'from-green-400 to-emerald-500',
+                  'from-teal-400 to-cyan-500',
+                  'from-emerald-500 to-green-600',
+                  'from-green-500 to-teal-600',
+                  'from-amber-400 to-orange-500',
+                  'from-pink-400 to-rose-500',
+                ].map((g, i) => (
+                  <div key={i} className={`aspect-square rounded-lg bg-gradient-to-br ${g} flex items-center justify-center`}>
+                    <Leaf className="h-3 w-3 text-white/70" />
                   </div>
-                  <Wifi className="h-3 w-3 text-stone-400 dark:text-stone-500" />
-                </div>
+                ))}
               </div>
+              <div className="mt-3 flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <Bell className="h-2.5 w-2.5 text-emerald-600" />
+                <span className="text-[9px] text-emerald-700 dark:text-emerald-300 font-medium">Water Pothos in 2h</span>
+              </div>
+            </div>
+          </div>
+          <p className="mt-3 text-center text-[11px] uppercase tracking-wider text-stone-500 dark:text-stone-500 font-medium">
+            <Globe className="inline h-3 w-3 mr-1 -mt-0.5" />
+            {t("heroVisual.web", { defaultValue: "On the web" })}
+          </p>
+        </div>
 
-              {/* App Content */}
-              <div className="px-4 pb-2 pt-2 space-y-3">
-                {/* Plant Image — hero card style */}
-                <div className="relative aspect-[4/3] rounded-2xl overflow-hidden group">
-                  {/* Shimmer placeholder */}
-                  <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30" />
-                  {imageUrl ? (
-                    <img
-                      src={imageUrl}
-                      alt={plantName}
-                      loading="lazy"
-                      decoding="async"
-                      className="absolute inset-0 w-full h-full object-cover transition-all duration-700 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="relative">
-                        <div className="absolute inset-0 bg-emerald-500/20 rounded-full blur-xl animate-pulse" />
-                        <Leaf className="relative h-20 w-20 text-emerald-500/60" />
+        {/* Phone — always visible */}
+        <div className="relative w-[230px] sm:w-[260px] lg:w-[200px] xl:w-[230px] flex-shrink-0">
+          {/* Phone body */}
+          <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.4rem] p-[2px] shadow-xl shadow-black/20 ring-1 ring-white/10">
+            <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.35rem] p-1.5">
+              <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2rem] overflow-hidden">
+                {/* Status bar */}
+                <div className="flex items-center justify-between px-6 pt-2 pb-0.5">
+                  <span className="text-[9px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
+                  <div className="w-20 h-[22px] bg-stone-900 dark:bg-black rounded-full" />
+                  <Wifi className="h-2.5 w-2.5 text-stone-400 dark:text-stone-500" />
+                </div>
+
+                <div className="px-3 pb-2 pt-2 space-y-2.5">
+                  {/* Plant image card */}
+                  <div className="relative aspect-[4/3] rounded-2xl overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30" />
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={plantName}
+                        loading="lazy"
+                        decoding="async"
+                        className="absolute inset-0 w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Leaf className="h-16 w-16 text-emerald-500/50" />
+                      </div>
+                    )}
+                    <div className="absolute bottom-2 left-2 right-2">
+                      <div className="glass-card rounded-xl p-2 border border-white/30 dark:border-white/10">
+                        <p className="text-stone-900 dark:text-white font-bold text-xs">{plantName}</p>
+                        <p className="text-stone-600 dark:text-stone-300 text-[10px] italic">{plantScientific}</p>
                       </div>
                     </div>
+                  </div>
+
+                  {/* Stat pills */}
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                      <Droplets className="h-3 w-3 text-blue-500 flex-shrink-0" />
+                      <span className="text-[9px] leading-tight text-stone-600 dark:text-stone-300 truncate">{waterFrequency}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+                      <Sun className="h-3 w-3 text-amber-500 flex-shrink-0" />
+                      <span className="text-[9px] leading-tight text-stone-600 dark:text-stone-300 truncate">{lightLevel}</span>
+                    </div>
+                  </div>
+
+                  {/* Reminder */}
+                  <div className="flex items-center gap-2 px-2.5 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500">
+                    <div className="h-7 w-7 rounded-lg bg-white/20 flex items-center justify-center flex-shrink-0">
+                      <Bell className="h-3.5 w-3.5 text-white" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[8px] text-white/70 uppercase tracking-wider font-medium">{t("heroCard.nextReminder")}</p>
+                      <p className="text-xs font-semibold text-white truncate">{reminderText}</p>
+                    </div>
+                  </div>
+
+                  {dbHeroCards.length > 1 && (
+                    <div className="flex justify-center gap-1 pt-0.5">
+                      {dbHeroCards.map((_, i) => (
+                        <button
+                          key={i}
+                          onClick={() => setActiveCardIndex(i)}
+                          aria-label={`Show plant ${i + 1}`}
+                          className={`h-1 rounded-full transition-all duration-300 ${
+                            i === activeCardIndex ? 'w-5 bg-emerald-500' : 'w-1 bg-stone-300 dark:bg-stone-600'
+                          }`}
+                        />
+                      ))}
+                    </div>
                   )}
-                  {/* Plant Info — glass card overlay */}
-                  <div className="absolute bottom-3 left-3 right-3">
-                    <div className="glass-card rounded-2xl p-3 border border-white/30 dark:border-white/10">
-                      <p className="text-stone-900 dark:text-white font-bold text-sm drop-shadow-sm">{plantName}</p>
-                      <p className="text-stone-600 dark:text-stone-300 text-xs italic">{plantScientific}</p>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Stats Row — simple pills, no water animation */}
-                <div className="grid grid-cols-2 gap-2">
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
-                    <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center flex-shrink-0">
-                      <Droplets className="h-4 w-4 text-blue-500" />
-                    </div>
-                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{waterFrequency}</span>
-                  </div>
-                  <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-white/80 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
-                    <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center flex-shrink-0">
-                      <Sun className="h-4 w-4 text-amber-500" />
-                    </div>
-                    <span className="text-[11px] leading-tight text-stone-600 dark:text-stone-300">{lightLevel}</span>
-                  </div>
+                <div className="flex justify-center pb-1.5 pt-0.5">
+                  <div className="w-20 h-0.5 rounded-full bg-stone-300 dark:bg-stone-600" />
                 </div>
-
-                {/* Reminder Card — elevated design */}
-                <div className="relative flex items-center gap-3 px-4 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-500 shadow-lg shadow-emerald-500/20 overflow-hidden">
-                  {/* Subtle pattern overlay */}
-                  <div className="absolute inset-0 opacity-10" style={{
-                    backgroundImage: 'radial-gradient(circle at 2px 2px, white 1px, transparent 0)',
-                    backgroundSize: '16px 16px'
-                  }} />
-                  <div className="relative h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-                    <Bell className="h-5 w-5 text-white animate-bounce-subtle" />
-                  </div>
-                  <div className="relative flex-1">
-                    <p className="text-[10px] text-white/70 uppercase tracking-wider font-medium">{t("heroCard.nextReminder")}</p>
-                    <p className="text-sm font-bold text-white">{reminderText}</p>
-                  </div>
-                  <ArrowRight className="relative h-4 w-4 text-white/70" />
-                </div>
-
-                {/* Card Indicators - show if multiple cards */}
-                {dbHeroCards.length > 1 && (
-                  <div className="flex justify-center gap-1.5 pt-1">
-                    {dbHeroCards.map((_, i) => (
-                      <button
-                        key={i}
-                        onClick={() => setActiveCardIndex(i)}
-                        className={`h-1.5 rounded-full transition-all duration-300 ${
-                          i === activeCardIndex
-                            ? 'w-6 bg-emerald-500'
-                            : 'w-1.5 bg-stone-300 dark:bg-stone-600 hover:bg-stone-400'
-                        }`}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Bottom bar indicator — pinned to bottom of screen */}
-              <div className="flex justify-center pb-2 pt-1">
-                <div className="w-28 h-1 rounded-full bg-stone-300 dark:bg-stone-600" />
               </div>
             </div>
           </div>
-        </div>
-
-        {/* Side buttons */}
-        <div className="absolute right-[-2px] top-28 w-[3px] h-8 bg-stone-700 dark:bg-stone-800 rounded-r-sm" />
-        <div className="absolute left-[-2px] top-24 w-[3px] h-6 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
-        <div className="absolute left-[-2px] top-36 w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
-        <div className="absolute left-[-2px] top-[196px] w-[3px] h-12 bg-stone-700 dark:bg-stone-800 rounded-l-sm" />
-      </div>
-
-      {/* Floating Cards — redesigned with blur and better positioning */}
-      <div className="absolute -top-3 -left-6 sm:-left-10 animate-float" style={{ animationDelay: '0.5s' }}>
-        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
-          <div className="h-8 w-8 rounded-full bg-emerald-500 flex items-center justify-center">
-            <Check className="h-4 w-4 text-white" />
-          </div>
-          <span className="text-sm font-semibold text-stone-800 dark:text-white">{t("heroCard.careLogged")}</span>
-        </div>
-      </div>
-
-      <div className="absolute -bottom-1 -right-4 sm:-right-8 animate-float-delayed">
-        <div className="flex items-center gap-2.5 px-4 py-2.5 rounded-2xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-xl shadow-pink-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-pink-500 to-rose-500 flex items-center justify-center">
-            <Heart className="h-4 w-4 text-white fill-white" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-bold text-stone-800 dark:text-white">{t("floatingCards.newLikes", { defaultValue: "+42 today" })}</span>
-            <span className="text-[10px] text-stone-500 dark:text-stone-400">{t("floatingCards.likesLabel", { defaultValue: "new likes" })}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Extra floating badge — plant count */}
-      <div className="absolute top-1/2 -right-4 sm:-right-12 animate-float" style={{ animationDelay: '1.5s' }}>
-        <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/90 dark:bg-stone-800/90 backdrop-blur-xl shadow-lg shadow-emerald-900/10 dark:shadow-black/20 border border-white/50 dark:border-white/10">
-          <div className="h-7 w-7 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center">
-            <Leaf className="h-3.5 w-3.5 text-white" />
-          </div>
-          <span className="text-xs font-bold text-stone-800 dark:text-white">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
+          <p className="mt-3 hidden lg:block text-center text-[11px] uppercase tracking-wider text-stone-500 dark:text-stone-500 font-medium">
+            <Smartphone className="inline h-3 w-3 mr-1 -mt-0.5" />
+            {t("heroVisual.mobile", { defaultValue: "On the go" })}
+          </p>
         </div>
       </div>
     </div>
   )
 }
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   STATS BANNER - Animated Counter Section
-   ═══════════════════════════════════════════════════════════════════════════════ */
-const StatsBanner: React.FC = React.memo(() => {
-  const { t } = useTranslation("Landing")
-  const { stats: dbStats } = useLandingData()
-  
-  // Use database values if available, otherwise fallback to translations
-  const stats = [
-    { 
-      value: dbStats?.plants_count || "10K+", 
-      label: dbStats?.plants_label || t("stats.plants", { defaultValue: "Plant Species" }), 
-      icon: Leaf 
-    },
-    { 
-      value: dbStats?.users_count || "50K+", 
-      label: dbStats?.users_label || t("stats.users", { defaultValue: "Happy Gardeners" }), 
-      icon: Users 
-    },
-    { 
-      value: dbStats?.tasks_count || "100K+", 
-      label: dbStats?.tasks_label || t("stats.tasks", { defaultValue: "Care Tasks Done" }), 
-      icon: Check 
-    },
-    { 
-      value: dbStats?.rating_value || "4.9", 
-      label: dbStats?.rating_label || t("stats.rating", { defaultValue: "App Store Rating" }), 
-      icon: Star 
-    },
-  ]
-
-  return (
-    <section className="relative py-6 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
-      <div className="max-w-7xl mx-auto">
-        <div className="relative rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 p-[1px]">
-          <div className="rounded-3xl bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
-              {stats.map((stat, i) => (
-                <div key={i} className="text-center group">
-                  <div className="inline-flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-emerald-500/10 mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
-                    <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
-                  </div>
-                  <div className="text-2xl sm:text-3xl lg:text-4xl font-bold text-stone-900 dark:text-white mb-0.5 sm:mb-1">
-                    {stat.value}
-                  </div>
-                  <div className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 leading-tight">{stat.label}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-})
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    APP PREVIEW STRIP - Horizontal scroll of mini phone screens (mobile-only)
@@ -1142,7 +964,7 @@ const AppPreviewStrip: React.FC = React.memo(() => {
               </div>
               <span className="flex-1 text-[8px] text-stone-700 dark:text-stone-200 truncate">{item.text}</span>
               <span className="text-[7px] text-stone-400">{item.time}</span>
-              {item.pulse && <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
+              {item.pulse && <div className="h-1.5 w-1.5 rounded-full bg-blue-500" />}
             </div>
           ))}
         </div>
@@ -1231,126 +1053,125 @@ const AppPreviewStrip: React.FC = React.memo(() => {
         <div className="flex-shrink-0 w-2" aria-hidden="true" />
       </div>
 
-      {/* Scroll hint */}
-      <div className="px-4 flex items-center justify-center gap-2 mt-2">
-        <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
-          <span>Swipe to explore</span>
-          <ArrowRight className="h-3 w-3 animate-pulse" />
-        </div>
+      {/* Scroll hint — quiet */}
+      <div className="px-4 flex items-center justify-center gap-1.5 mt-2 text-[10px] text-stone-400 dark:text-stone-500">
+        <span>Swipe to explore</span>
+        <ArrowRight className="h-3 w-3" />
       </div>
     </section>
   )
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   BEGINNER FRIENDLY SECTION - New Gardeners Welcome
+   GET STARTED SECTION - Merged "How It Works" + "Beginner Friendly"
+   One editorial moment: 3 numbered steps as the spine, with a quieter
+   trio of beginner-friendly beats underneath. No mid-page CTA card —
+   the page already has a Final CTA.
    ═══════════════════════════════════════════════════════════════════════════════ */
-const BeginnerFriendlySection: React.FC = React.memo(() => {
+const GetStartedSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
-  // All text content from translations (not editable via admin)
-  const badge = t("beginner.badge", { defaultValue: "Perfect for Beginners" })
-  const title = t("beginner.title", { defaultValue: "Know Nothing About Gardening?" })
-  const titleHighlight = t("beginner.titleHighlight", { defaultValue: "That's Exactly Why We Built This" })
-  const subtitle = t("beginner.subtitle", { defaultValue: "Everyone starts somewhere. Aphylia turns complete beginners into confident plant parents with gentle guidance, smart reminders, and a helpful assistant that speaks your language — not complicated botany." })
+  const steps = [
+    {
+      num: "01",
+      icon: Search,
+      title: t("getStarted.step1.title", { defaultValue: t("howItWorks.step1.title", { defaultValue: "Snap a photo" }) }),
+      description: t("getStarted.step1.description", { defaultValue: t("howItWorks.step1.description", { defaultValue: "Identify any plant in seconds — no botany degree needed." }) }),
+    },
+    {
+      num: "02",
+      icon: Sprout,
+      title: t("getStarted.step2.title", { defaultValue: t("howItWorks.step2.title", { defaultValue: "Add it to your garden" }) }),
+      description: t("getStarted.step2.description", { defaultValue: t("howItWorks.step2.description", { defaultValue: "We'll set up a care schedule based on your plant and your home." }) }),
+    },
+    {
+      num: "03",
+      icon: Bell,
+      title: t("getStarted.step3.title", { defaultValue: t("howItWorks.step3.title", { defaultValue: "Get gentle reminders" }) }),
+      description: t("getStarted.step3.description", { defaultValue: t("howItWorks.step3.description", { defaultValue: "Water, light, repot — only when it actually matters." }) }),
+    },
+  ]
 
-  const beginnerFeatures = [
+  const beats = [
     {
       icon: GraduationCap,
-      title: t("beginner.feature1Title", { defaultValue: "Learn as You Grow" }),
-      description: t("beginner.feature1Desc", { defaultValue: "No gardening experience? No problem! Our app teaches you everything step by step." }),
-      color: "emerald",
+      title: t("getStarted.beat1.title", { defaultValue: t("beginner.feature1Title", { defaultValue: "Built for first-timers" }) }),
+      description: t("getStarted.beat1.description", { defaultValue: t("beginner.feature1Desc", { defaultValue: "Every term is plain English. No jargon, no shame." }) }),
     },
     {
       icon: Sparkles,
-      title: t("beginner.feature2Title", { defaultValue: "Your Plant Assistant" }),
-      description: t("beginner.feature2Desc", { defaultValue: "Not sure what's wrong? Just ask Aphylia - your friendly assistant that explains plant care in simple terms." }),
-      color: "purple",
+      title: t("getStarted.beat2.title", { defaultValue: t("beginner.feature2Title", { defaultValue: "An assistant on call" }) }),
+      description: t("getStarted.beat2.description", { defaultValue: t("beginner.feature2Desc", { defaultValue: "Ask Aphylia anything — yellow leaves, pests, repotting." }) }),
     },
     {
-      icon: Bell,
-      title: t("beginner.feature3Title", { defaultValue: "Never Forget to Water" }),
-      description: t("beginner.feature3Desc", { defaultValue: "Get gentle reminders exactly when your plants need attention. We'll help you build the habit." }),
-      color: "blue",
-    },
-    {
-      icon: Camera,
-      title: t("beginner.feature4Title", { defaultValue: "Identify Any Plant" }),
-      description: t("beginner.feature4Desc", { defaultValue: "Found a plant but don't know what it is? Snap a photo and we'll tell you everything about it." }),
-      color: "pink",
+      icon: Heart,
+      title: t("getStarted.beat3.title", { defaultValue: "Forgive-as-you-grow" }),
+      description: t("getStarted.beat3.description", { defaultValue: "Miss a day? We'll re-route the schedule. No streak shame." }),
     },
   ]
 
   return (
-    <section className="py-12 lg:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-      {/* Background decoration */}
-      <div className="absolute inset-0 pointer-events-none">
-        <div className="absolute top-1/4 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
-        <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-teal-500/5 rounded-full blur-3xl" />
-      </div>
-
-      <div className="relative max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
-            <Sprout className="h-4 w-4 text-emerald-500" />
-            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-              {badge}
-            </span>
+    <section id="how-it-works" className="py-12 lg:py-28 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+      <div className="max-w-6xl mx-auto">
+        {/* Editorial header — kicker + tight headline + one supporting line */}
+        <div className="max-w-3xl mb-10 lg:mb-16">
+          <div className="text-xs uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-3">
+            {t("getStarted.kicker", { defaultValue: "Get started" })}
           </div>
-          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
-            {title}
-            <br />
-            <span className="gradient-text">{titleHighlight}</span>
+          <h2 className="text-[1.875rem] sm:text-4xl lg:text-[3.25rem] font-bold tracking-tight text-stone-900 dark:text-white leading-[1.1] mb-4">
+            {t("getStarted.titleA", { defaultValue: "From " })}
+            <span className="italic font-brand text-emerald-600 dark:text-emerald-400">{t("getStarted.titleEm", { defaultValue: "first plant" })}</span>
+            {t("getStarted.titleB", { defaultValue: " to thriving garden in three steps." })}
           </h2>
-          <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-400 leading-relaxed">
-            {subtitle}
+          <p className="text-base sm:text-lg text-stone-600 dark:text-stone-400 max-w-xl leading-relaxed">
+            {t("getStarted.subtitle", { defaultValue: "Most plant apps assume you already know what you're doing. We don't." })}
           </p>
         </div>
 
-        {/* Feature Cards */}
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {beginnerFeatures.map((feature, i) => (
-            <div
-              key={i}
-              className="group relative rounded-3xl bg-white/80 dark:bg-stone-900/80 backdrop-blur-sm border border-stone-200 dark:border-stone-800 p-6 hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-emerald-500/5"
-            >
-              <div className={`h-14 w-14 rounded-2xl bg-${feature.color}-500/10 flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
-                <feature.icon className={`h-7 w-7 text-${feature.color}-500`} />
+        {/* Steps — quiet numbered list, single accent column on the left */}
+        <div className="grid md:grid-cols-3 gap-6 lg:gap-10 mb-16 lg:mb-24">
+          {steps.map((step, i) => (
+            <div key={i} className="relative group">
+              <div className="flex items-start gap-4">
+                <span className="font-brand text-3xl lg:text-4xl text-emerald-500/40 dark:text-emerald-400/30 leading-none flex-shrink-0">
+                  {step.num}
+                </span>
+                <div className="pt-1">
+                  <div className="inline-flex h-9 w-9 rounded-lg bg-emerald-500/10 items-center justify-center mb-3 transition-colors group-hover:bg-emerald-500/20">
+                    <step.icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-1.5">
+                    {step.title}
+                  </h3>
+                  <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+                    {step.description}
+                  </p>
+                </div>
               </div>
-              <h3 className="text-lg font-bold text-stone-900 dark:text-white mb-2">
-                {feature.title}
-              </h3>
-              <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">
-                {feature.description}
-              </p>
+              {/* Subtle connector dot (visual only, no animation) */}
+              {i < steps.length - 1 && (
+                <div className="hidden md:block absolute top-5 -right-4 lg:-right-6 h-px w-6 lg:w-10 bg-gradient-to-r from-emerald-500/30 to-transparent" aria-hidden="true" />
+              )}
             </div>
           ))}
         </div>
 
-        {/* Bottom CTA */}
-        <div className="mt-12 text-center">
-          <div className="inline-flex flex-col sm:flex-row items-center gap-4 p-6 rounded-2xl bg-gradient-to-r from-emerald-500/5 via-teal-500/5 to-green-500/5 backdrop-blur-sm border border-emerald-500/10">
-            <div className="flex items-center gap-3">
-              <div className="h-12 w-12 rounded-xl bg-emerald-500/20 flex items-center justify-center">
-                <Heart className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+        {/* Supporting beats — text-only, no card chrome, no glow */}
+        <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-10 lg:pt-12">
+          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
+            {beats.map((beat, i) => (
+              <div key={i} className="flex items-start gap-3">
+                <beat.icon className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
+                <div>
+                  <h4 className="text-sm font-semibold text-stone-900 dark:text-white mb-1">
+                    {beat.title}
+                  </h4>
+                  <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+                    {beat.description}
+                  </p>
+                </div>
               </div>
-              <div className="text-left">
-                <p className="font-semibold text-stone-900 dark:text-white">
-                  {t("beginner.ctaTitle", { defaultValue: "Join thousands of first-time plant parents" })}
-                </p>
-                <p className="text-sm text-stone-600 dark:text-stone-400">
-                  {t("beginner.ctaSubtitle", { defaultValue: "Start your green journey today — we'll guide you every step of the way" })}
-                </p>
-              </div>
-            </div>
-            <Link
-              to="/discovery"
-              className="flex-shrink-0 inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition-colors shadow-lg shadow-emerald-500/20"
-            >
-              {t("beginner.ctaButton", { defaultValue: "Get Started Free" })}
-              <ArrowRight className="h-4 w-4" />
-            </Link>
+            ))}
           </div>
         </div>
       </div>
@@ -1510,7 +1331,7 @@ const CrossDeviceStrip: React.FC = React.memo(() => {
             </div>
             {/* Sync indicator badge */}
             <div className="absolute -top-2 -left-2 sm:-top-3 sm:-left-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full px-1.5 py-0.5 sm:px-2 sm:py-1 shadow-lg flex items-center gap-1">
-              <div className="h-1 w-1 sm:h-1.5 sm:w-1.5 rounded-full bg-white animate-pulse" />
+              <div className="h-1 w-1 sm:h-1.5 sm:w-1.5 rounded-full bg-white" />
               <span className="text-[6px] sm:text-[9px] font-bold text-white">Synced</span>
             </div>
             <div className="mt-2 sm:mt-3 flex items-center justify-center gap-1 sm:gap-1.5">
@@ -1596,7 +1417,7 @@ const FeaturesSection: React.FC = React.memo(() => {
                   <p className="text-xs font-medium text-stone-700 dark:text-stone-200 truncate">{t("features.careReminders.notification1Title")}</p>
                   <p className="text-[10px] text-stone-500">{t("features.careReminders.notification1Time")}</p>
                 </div>
-                <div className="h-2 w-2 rounded-full bg-blue-500 animate-pulse" />
+                <div className="h-2 w-2 rounded-full bg-blue-500" />
               </div>
               
               {/* Notification 2 */}
@@ -2271,60 +2092,6 @@ const ShowcaseSection: React.FC = React.memo(() => {
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   HOW IT WORKS - Redesigned
-   ═══════════════════════════════════════════════════════════════════════════════ */
-const HowItWorksSection: React.FC = React.memo(() => {
-  const { t } = useTranslation("Landing")
-
-  const steps = [
-    { num: 1, icon: Search, titleKey: "howItWorks.step1.title", descKey: "howItWorks.step1.description" },
-    { num: 2, icon: Sprout, titleKey: "howItWorks.step2.title", descKey: "howItWorks.step2.description" },
-    { num: 3, icon: Bell, titleKey: "howItWorks.step3.title", descKey: "howItWorks.step3.description" },
-  ]
-
-  return (
-    <section id="how-it-works" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
-          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
-            {t("howItWorks.title")}
-          </h2>
-          <p className="text-lg text-stone-600 dark:text-stone-400">
-            {t("howItWorks.subtitle")}
-          </p>
-        </div>
-
-        <div className="relative">
-          {/* Connecting Line */}
-          <div className="hidden lg:block absolute top-24 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 rounded-full" />
-
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {steps.map((step, i) => (
-              <div key={i} className="relative text-center group">
-                {/* Step Number with Icon */}
-                <div className="relative z-10 mx-auto mb-8">
-                  <div className="relative inline-flex">
-                    <div className="h-20 w-20 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center shadow-xl shadow-emerald-500/30 group-hover:scale-110 transition-transform">
-                      <step.icon className="h-8 w-8 text-white" />
-                    </div>
-                    <div className="absolute -top-2 -right-2 h-8 w-8 rounded-full bg-white dark:bg-stone-900 border-2 border-emerald-500 flex items-center justify-center">
-                      <span className="text-sm font-bold text-emerald-600">{step.num}</span>
-                    </div>
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-bold text-stone-900 dark:text-white mb-3">{t(step.titleKey)}</h3>
-                <p className="text-stone-600 dark:text-stone-400 max-w-xs mx-auto">{t(step.descKey)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  )
-})
-
-/* ═══════════════════════════════════════════════════════════════════════════════
    TESTIMONIALS - Redesigned with Marquee
    ═══════════════════════════════════════════════════════════════════════════════ */
 const TestimonialsSection: React.FC = React.memo(() => {
@@ -2456,8 +2223,8 @@ const FAQSection: React.FC = React.memo(() => {
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_right,_var(--tw-gradient-stops))] from-purple-500/30 via-transparent to-transparent" />
             
             {/* Glowing orbs */}
-            <div className="absolute -top-20 -left-20 w-60 h-60 bg-emerald-400/40 rounded-full blur-3xl animate-pulse" />
-            <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-cyan-400/40 rounded-full blur-3xl animate-pulse" style={{ animationDelay: '1s' }} />
+            <div className="absolute -top-20 -left-20 w-60 h-60 bg-emerald-400/30 rounded-full blur-3xl" />
+            <div className="absolute -bottom-20 -right-20 w-60 h-60 bg-cyan-400/30 rounded-full blur-3xl" />
             <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-80 h-80 bg-teal-300/20 rounded-full blur-3xl" />
             
             {/* Grid pattern overlay */}
@@ -2689,99 +2456,34 @@ const AphydleSection: React.FC = React.memo(() => {
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   FINAL CTA - Enhanced
+   FINAL CTA - Slim banner. The page already sold the user; this is the close.
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FinalCTASection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
-  // All text content from translations (not editable via admin)
-  const badge = t("finalCta.badge", { defaultValue: "No experience needed" })
-  const title = t("finalCta.title", { defaultValue: "Ready to Start Your Plant Journey?" })
-  const subtitle = t("finalCta.subtitle", { defaultValue: "Whether it's your first succulent or you're building a jungle, Aphylia grows with you. Join thousands who went from plant newbies to proud plant parents." })
-  const primaryButtonText = t("finalCta.ctaDownload", { defaultValue: "Start Growing" })
-  const secondaryButtonText = t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
+  const title = t("finalCta.titleShort", { defaultValue: t("finalCta.title", { defaultValue: "Ready when you are." }) })
+  const primaryButtonText = t("finalCta.ctaDownload", { defaultValue: "Start growing" })
 
   return (
-    <section className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="relative rounded-[2.5rem] overflow-hidden">
-          {/* Gradient Background */}
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 via-teal-500 to-green-600" />
-          
-          {/* Animated Orbs */}
-          <div className="absolute top-0 left-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" />
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-white/10 rounded-full blur-3xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
-          
-          {/* Pattern Overlay */}
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
-
-          <div className="relative px-6 py-10 sm:px-8 sm:py-16 lg:px-16 lg:py-24 text-center">
-            <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
-              {/* Beginner Badge */}
-              <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
-                <Sprout className="h-4 w-4 text-white" />
-                <span className="text-sm font-medium text-white">
-                  {badge}
-                </span>
+    <section className="py-10 lg:py-20 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-5xl mx-auto">
+        <div className="relative rounded-2xl lg:rounded-3xl overflow-hidden bg-gradient-to-br from-emerald-500 to-teal-600">
+          <div className="relative px-6 py-8 sm:px-10 sm:py-10 flex flex-col sm:flex-row items-center justify-between gap-5">
+            <div className="flex items-center gap-4">
+              <div className="hidden sm:flex h-12 w-12 rounded-xl bg-white/15 items-center justify-center flex-shrink-0">
+                <Leaf className="h-6 w-6 text-white" strokeWidth={1.75} />
               </div>
-
-              <h2 className="text-3xl sm:text-4xl lg:text-5xl xl:text-6xl font-bold text-white leading-tight">
+              <h2 className="text-xl sm:text-2xl lg:text-[1.75rem] font-semibold text-white tracking-tight leading-tight text-center sm:text-left">
                 {title}
               </h2>
-              <p className="text-lg sm:text-xl text-white/80 max-w-2xl mx-auto">
-                {subtitle}
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
-                <Link
-                  to="/download"
-                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white text-emerald-600 text-base font-bold hover:bg-white/90 transition-all shadow-xl hover:shadow-2xl hover:-translate-y-0.5"
-                >
-                  <Leaf className="h-5 w-5" />
-                  {primaryButtonText}
-                </Link>
-                <Link
-                  to="/discovery"
-                  className="group inline-flex items-center justify-center gap-2 px-8 py-4 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-base font-semibold border border-white/30 transition-all hover:-translate-y-0.5"
-                >
-                  {secondaryButtonText}
-                  <ArrowRight className="h-4 w-4 group-hover:translate-x-1 transition-transform" />
-                </Link>
-              </div>
-
-              {/* Social Links */}
-              <div className="pt-8 border-t border-white/20">
-                <p className="text-white/70 text-sm mb-4">
-                  {t("finalCta.socialText", { defaultValue: "Let's connect! We love hearing from you" })}
-                </p>
-                <div className="flex items-center justify-center gap-3">
-                  <a
-                    href="https://instagram.com/aphylia_app"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                    aria-label="Instagram"
-                  >
-                    <Instagram className="h-5 w-5 text-white" />
-                  </a>
-                  <a
-                    href="https://twitter.com/aphylia_app"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                    aria-label="Twitter"
-                  >
-                    <Twitter className="h-5 w-5 text-white" />
-                  </a>
-                  <a
-                    href="mailto:hello@aphylia.app"
-                    className="h-10 w-10 rounded-xl bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
-                    aria-label="Email"
-                  >
-                    <Mail className="h-5 w-5 text-white" />
-                  </a>
-                </div>
-              </div>
             </div>
+            <Link
+              to="/download"
+              className="group w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-white text-emerald-700 text-sm font-semibold hover:bg-white/95 transition-all shadow-lg hover:shadow-xl flex-shrink-0"
+            >
+              {primaryButtonText}
+              <ArrowRight className="h-4 w-4 group-hover:translate-x-0.5 transition-transform" />
+            </Link>
           </div>
         </div>
       </div>
