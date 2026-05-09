@@ -234,7 +234,7 @@ export function AdminPlantDumpPage() {
 
   const addFiles = React.useCallback((files: File[]) => {
     const items: FileUploadStatus[] = files.map(file => ({
-      id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      id: `${Date.now()}-${(() => { const arr = new Uint32Array(2); crypto.getRandomValues(arr); return (arr[0].toString(36) + arr[1].toString(36)); })()}`,
       file,
       preview: URL.createObjectURL(file),
       status: "pending",

@@ -47,7 +47,7 @@ const createDraftFolder = () => {
   const randomId =
     typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
       ? crypto.randomUUID().slice(0, 8)
-      : Math.random().toString(36).slice(2, 10)
+      : (() => { const arr = new Uint32Array(2); crypto.getRandomValues(arr); return (arr[0].toString(36) + arr[1].toString(36)).slice(0, 8); })()
   return `blog/draft-${randomId}`
 }
 

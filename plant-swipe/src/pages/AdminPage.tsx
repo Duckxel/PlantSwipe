@@ -3250,7 +3250,7 @@ export const AdminPage: React.FC = () => {
         // Generate new UUID for the duplicated plant
         const newId = crypto.randomUUID?.() || 
           'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-            const r = Math.random() * 16 | 0;
+            const arr = new Uint8Array(1); crypto.getRandomValues(arr); const r = arr[0] % 16;
             const v = c === 'x' ? r : (r & 0x3 | 0x8);
             return v.toString(16);
           });

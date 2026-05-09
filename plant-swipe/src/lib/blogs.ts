@@ -46,7 +46,7 @@ const slugifyTitle = (value: string) => {
     .replace(/-{2,}/g, '-')
     .slice(0, 80)
   if (base) return base
-  return `post-${Math.random().toString(36).slice(2, 10)}`
+  return `post-${(() => { const arr = new Uint32Array(2); crypto.getRandomValues(arr); return (arr[0].toString(36) + arr[1].toString(36)).slice(0, 8); })()}`
 }
 
 const normalizeExcerpt = (html: string, fallback?: string | null, limit = 260) => {

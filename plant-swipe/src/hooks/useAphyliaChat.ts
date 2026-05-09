@@ -69,7 +69,12 @@ interface UseAphyliaChatReturn {
 }
 
 // Generate a unique ID
-const generateId = () => crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+const generateId = () => {
+  if (crypto.randomUUID) return crypto.randomUUID();
+  const arr = new Uint32Array(2);
+  crypto.getRandomValues(arr);
+  return `${Date.now()}-${arr[0].toString(36)}${arr[1].toString(36)}`.slice(0, 22);
+}
 
 // Initial state
 const createInitialState = (options?: UseAphyliaChatOptions): AphyliaChatState => ({
