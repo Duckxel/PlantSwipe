@@ -226,8 +226,15 @@ registerRoute(
 
 registerRoute(
   ({ request, url }) => {
+    // Only intercept SAME-ORIGIN script/style/worker. Cross-origin scripts
+    // (GTM, reCAPTCHA, etc.) must pass through to the network: an SW fetch is
+    // governed by connect-src, so caching them here would force every
+    // third-party host to be enumerated there — and a missing entry blocks
+    // the script intermittently (only after SW activation + on cache miss).
     const destinations = ['style', 'script', 'worker']
-    if (destinations.includes(request.destination)) return true
+    if (destinations.includes(request.destination)) {
+      return url.origin === self.location.origin
+    }
     if (request.destination || request.mode === 'navigate') return false
     const assetsPrefix = `${scopeBasePath}assets/`
     return url.origin === self.location.origin && url.pathname.startsWith(assetsPrefix)
