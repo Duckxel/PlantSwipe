@@ -55,7 +55,6 @@ import {
   Wifi,
   ChevronDown,
   Star,
-  Check,
   Sparkles,
   ArrowRight,
   Users,
