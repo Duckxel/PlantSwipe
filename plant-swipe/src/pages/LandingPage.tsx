@@ -842,8 +842,8 @@ const HeroVisual: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop browser — desktop only, larger and richer */}
-      <div className="hidden lg:block relative">
+      {/* Desktop browser — desktop only, larger and richer. Cursor parallax on hover. */}
+      <CursorParallax className="hidden lg:block relative" max={3}>
         <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
           {/* Window chrome */}
           <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
@@ -894,7 +894,11 @@ const HeroVisual: React.FC = () => {
                   ].map((p, i) => {
                     const real = approvedPlants[i]
                     return (
-                      <div key={i} className={`aspect-square rounded-xl bg-gradient-to-br ${p.g} relative overflow-hidden flex items-center justify-center`}>
+                      <div
+                        key={i}
+                        className={`aspect-square rounded-xl bg-gradient-to-br ${p.g} relative overflow-hidden flex items-center justify-center animate-stagger-up transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg`}
+                        style={{ animationDelay: `${0.15 + i * 0.07}s` }}
+                      >
                         {real?.image_url ? (
                           <img src={real.image_url} alt={real.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
                         ) : (
@@ -916,21 +920,21 @@ const HeroVisual: React.FC = () => {
 
               <div className="space-y-2">
                 <p className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 uppercase tracking-wider">Today</p>
-                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5">
+                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '0.7s' }}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Bell className="h-3 w-3 text-emerald-600 animate-bounce-subtle" />
                     <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Water Pothos</span>
                   </div>
                   <p className="text-[9px] text-stone-600 dark:text-stone-300">in 2 hours</p>
                 </div>
-                <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5">
+                <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '0.85s' }}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Sun className="h-3 w-3 text-amber-500" />
                     <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Rotate Fern</span>
                   </div>
                   <p className="text-[9px] text-stone-600 dark:text-stone-300">tomorrow</p>
                 </div>
-                <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2.5">
+                <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '1s' }}>
                   <div className="flex items-center gap-1.5 mb-1">
                     <Droplets className="h-3 w-3 text-blue-500" />
                     <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400">Mist Calathea</span>
@@ -941,7 +945,7 @@ const HeroVisual: React.FC = () => {
             </div>
           </div>
         </div>
-      </div>
+      </CursorParallax>
     </div>
   )
 }
@@ -1012,17 +1016,23 @@ const GetStartedSection: React.FC = React.memo(() => {
           </p>
         </div>
 
-        {/* Steps — quiet numbered list, single accent column on the left */}
+        {/* Steps — numbered list with scroll-reveal stagger and hover micro-interactions.
+            Numbers grow + tilt slightly on hover; the connector line under each row
+            sweeps emerald → transparent left-to-right. */}
         <div className="grid md:grid-cols-3 gap-6 lg:gap-10 mb-16 lg:mb-24">
           {steps.map((step, i) => (
-            <div key={i} className="relative group">
+            <div
+              key={i}
+              className="relative group animate-stagger-up"
+              style={{ animationDelay: `${i * 0.12}s` }}
+            >
               <div className="flex items-start gap-4">
-                <span className="font-brand text-3xl lg:text-4xl text-emerald-500/40 dark:text-emerald-400/30 leading-none flex-shrink-0">
+                <span className="font-brand text-4xl lg:text-5xl text-emerald-500/40 dark:text-emerald-400/30 leading-none flex-shrink-0 transition-all duration-300 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 group-hover:-rotate-3 group-hover:scale-110">
                   {step.num}
                 </span>
                 <div className="pt-1">
-                  <div className="inline-flex h-9 w-9 rounded-lg bg-emerald-500/10 items-center justify-center mb-3 transition-colors group-hover:bg-emerald-500/20">
-                    <step.icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+                  <div className="inline-flex h-9 w-9 rounded-lg bg-emerald-500/10 items-center justify-center mb-3 transition-all duration-300 group-hover:bg-emerald-500 group-hover:rotate-6">
+                    <step.icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400 transition-colors group-hover:text-white" />
                   </div>
                   <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-1.5">
                     {step.title}
@@ -1032,20 +1042,27 @@ const GetStartedSection: React.FC = React.memo(() => {
                   </p>
                 </div>
               </div>
-              {/* Subtle connector dot (visual only, no animation) */}
+              {/* Connector line — extends from the right edge toward the next step. */}
               {i < steps.length - 1 && (
-                <div className="hidden md:block absolute top-5 -right-4 lg:-right-6 h-px w-6 lg:w-10 bg-gradient-to-r from-emerald-500/30 to-transparent" aria-hidden="true" />
+                <div
+                  className="hidden md:block absolute top-6 -right-4 lg:-right-6 h-[2px] w-6 lg:w-10 bg-gradient-to-r from-emerald-500/50 to-transparent rounded-full"
+                  aria-hidden="true"
+                />
               )}
             </div>
           ))}
         </div>
 
-        {/* Supporting beats — text-only, no card chrome, no glow */}
+        {/* Supporting beats — text-only, no card chrome, no glow. Stagger-reveal. */}
         <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-10 lg:pt-12">
           <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
             {beats.map((beat, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <beat.icon className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5" strokeWidth={1.75} />
+              <div
+                key={i}
+                className="flex items-start gap-3 animate-stagger-up"
+                style={{ animationDelay: `${0.4 + i * 0.1}s` }}
+              >
+                <beat.icon className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5 transition-transform duration-300 hover:scale-110 hover:rotate-6" strokeWidth={1.75} />
                 <div>
                   <h4 className="text-sm font-semibold text-stone-900 dark:text-white mb-1">
                     {beat.title}
@@ -1221,8 +1238,11 @@ type TourFeature = {
   accent: { bg: string; text: string; ring: string }
 }
 
+const TOUR_CYCLE_MS = 4500
+
 const LiveTourSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
+  const { approvedPlants } = useLandingData()
   const [active, setActive] = React.useState(0)
   const [paused, setPaused] = React.useState(false)
 
@@ -1260,11 +1280,30 @@ const LiveTourSection: React.FC = React.memo(() => {
   // Auto-advance, pauses on hover for accessibility
   React.useEffect(() => {
     if (paused) return
-    const id = setInterval(() => setActive((a) => (a + 1) % features.length), 4500)
+    const id = setInterval(() => setActive((a) => (a + 1) % features.length), TOUR_CYCLE_MS)
     return () => clearInterval(id)
   }, [paused, features.length])
 
   const current = features[active]
+  const cycleStyle = { '--tour-cycle': `${TOUR_CYCLE_MS}ms` } as React.CSSProperties
+
+  // Live-activity ticker items. Cycles through real approved plants when present
+  // so the ticker references species the visitor will actually see in the demo.
+  const tickerItems: Array<{ icon: React.ElementType; text: string }> = React.useMemo(() => {
+    const names = approvedPlants.slice(0, 8).map((p) => p.name)
+    const fallback = ['Monstera', 'Pothos', 'Snake Plant', 'Fern', 'Calathea', 'Anthurium']
+    const pick = (i: number) => names[i] || fallback[i % fallback.length]
+    return [
+      { icon: Camera, text: `Sarah identified ${pick(0)}` },
+      { icon: Heart, text: `Marcus saved 3 plants` },
+      { icon: Sprout, text: `Lina added ${pick(1)} to her garden` },
+      { icon: Sparkles, text: `Aphylia answered 124 care questions today` },
+      { icon: Bell, text: `Sophie hit a 14-day care streak` },
+      { icon: Droplets, text: `Watered ${pick(2)} on time` },
+      { icon: Leaf, text: `New: ${pick(3)} in the encyclopedia` },
+      { icon: BookMarked, text: `${pick(4)} added to Pet-Safe collection` },
+    ]
+  }, [approvedPlants])
 
   return (
     <section
@@ -1274,7 +1313,7 @@ const LiveTourSection: React.FC = React.memo(() => {
     >
       <div className="max-w-6xl mx-auto">
         {/* Editorial header */}
-        <div className="max-w-2xl mb-8 lg:mb-12 text-center mx-auto">
+        <div className="max-w-2xl mb-8 lg:mb-10 text-center mx-auto">
           <div className="text-xs uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-3">
             {t("liveTour.kicker", { defaultValue: "A live tour" })}
           </div>
@@ -1283,13 +1322,36 @@ const LiveTourSection: React.FC = React.memo(() => {
             <span className="italic font-brand text-emerald-600 dark:text-emerald-400">{t("liveTour.titleEm", { defaultValue: "do its thing" })}</span>
             {t("liveTour.titleB", { defaultValue: "." })}
           </h2>
-          <p className="text-sm sm:text-base text-stone-600 dark:text-stone-400 leading-relaxed">
+          {/* Caption swaps between features — keyed so it fades on switch. */}
+          <p key={`caption-${current.id}`} className="animate-tour-screen-slide text-sm sm:text-base text-stone-600 dark:text-stone-400 leading-relaxed">
             {current.caption}
           </p>
         </div>
 
-        {/* Big device — phone on mobile, browser on desktop. The keyed inner container
-            re-mounts when active changes so the screen-fade-in animation re-runs. */}
+        {/* Live-activity ticker — small, single line, signals "this app is alive". */}
+        <div className="mb-6 lg:mb-8 mx-auto max-w-3xl">
+          <div className="relative overflow-hidden rounded-full border border-emerald-500/15 bg-white/40 dark:bg-white/[0.03] backdrop-blur-sm">
+            {/* Edge fade masks */}
+            <div className="absolute inset-y-0 left-0 w-12 bg-gradient-to-r from-white dark:from-stone-950 to-transparent z-10 pointer-events-none" />
+            <div className="absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-white dark:from-stone-950 to-transparent z-10 pointer-events-none" />
+            <div className="flex w-max animate-ticker-scroll py-1.5">
+              {[...tickerItems, ...tickerItems].map((item, i) => {
+                const Icon = item.icon
+                return (
+                  <div key={i} className="flex items-center gap-2 px-5 whitespace-nowrap">
+                    <span className="inline-flex items-center justify-center h-5 w-5 rounded-full bg-emerald-500/15">
+                      <Icon className="h-3 w-3 text-emerald-600 dark:text-emerald-400" strokeWidth={2.25} />
+                    </span>
+                    <span className="text-xs text-stone-600 dark:text-stone-400 font-medium">{item.text}</span>
+                    <span className="text-emerald-500/40 mx-2">•</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* Big device — phone on mobile, browser on desktop. */}
         <div className="relative mb-8 lg:mb-10">
           {/* PHONE — visible only on mobile */}
           <div className="lg:hidden mx-auto w-[280px] sm:w-[320px]">
@@ -1301,7 +1363,7 @@ const LiveTourSection: React.FC = React.memo(() => {
                     <div className="w-24 h-[26px] bg-stone-900 dark:bg-black rounded-full" />
                     <Wifi className="h-3 w-3 text-stone-400 dark:text-stone-500" />
                   </div>
-                  <div key={current.id} className="animate-tour-screen px-3 py-3 h-[calc(100%-2rem)]">
+                  <div key={current.id} className="animate-tour-screen-slide px-3 py-3 h-[calc(100%-2rem)]">
                     <TourScreen feature={current} compact />
                   </div>
                   <div className="absolute bottom-1.5 left-0 right-0 flex justify-center">
@@ -1312,8 +1374,8 @@ const LiveTourSection: React.FC = React.memo(() => {
             </div>
           </div>
 
-          {/* BROWSER — visible only on desktop */}
-          <div className="hidden lg:block max-w-4xl mx-auto">
+          {/* BROWSER — visible only on desktop. Cursor parallax: tilt slightly with mouse. */}
+          <CursorParallax className="hidden lg:block max-w-4xl mx-auto">
             <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
               <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
                 <div className="h-3 w-3 rounded-full bg-rose-400/80" />
@@ -1324,14 +1386,16 @@ const LiveTourSection: React.FC = React.memo(() => {
                   <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/{current.id}</span>
                 </div>
               </div>
-              <div key={current.id} className="animate-tour-screen relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/9]">
+              <div key={current.id} className="animate-tour-screen-slide relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/9]">
                 <TourScreen feature={current} />
               </div>
             </div>
-          </div>
+          </CursorParallax>
         </div>
 
-        {/* Tabs — interactive, click to switch. Active tab uses accent ring + bg. */}
+        {/* Tabs with per-tab progress fill — visible feedback for the auto-advance.
+            Active tab fills its bottom rule from 0→100% over the cycle, restarts
+            when active changes (key=active+id forces re-mount of the bar). */}
         <div className="flex justify-center gap-2 sm:gap-3 flex-wrap">
           {features.map((f, i) => {
             const isActive = i === active
@@ -1340,39 +1404,70 @@ const LiveTourSection: React.FC = React.memo(() => {
               <button
                 key={f.id}
                 onClick={() => setActive(i)}
-                className={`group inline-flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300 ${
+                className={`group relative overflow-hidden inline-flex items-center gap-2 px-4 py-2.5 rounded-xl transition-all duration-300 ${
                   isActive
-                    ? `${f.accent.bg} text-white shadow-lg ring-2 ${f.accent.ring} ring-offset-2 ring-offset-white dark:ring-offset-stone-950`
-                    : 'bg-white/80 dark:bg-white/5 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-emerald-500/40 hover:-translate-y-0.5'
+                    ? `${f.accent.bg} text-white shadow-lg ring-2 ${f.accent.ring} ring-offset-2 ring-offset-white dark:ring-offset-stone-950 scale-105`
+                    : 'bg-white/80 dark:bg-white/5 text-stone-700 dark:text-stone-300 border border-stone-200 dark:border-white/10 hover:border-emerald-500/40 hover:-translate-y-0.5 hover:bg-white dark:hover:bg-white/10'
                 }`}
                 aria-pressed={isActive}
               >
-                <Icon className={`h-4 w-4 ${isActive ? 'text-white' : f.accent.text}`} strokeWidth={isActive ? 2.25 : 2} />
+                <Icon className={`h-4 w-4 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : f.accent.text}`} strokeWidth={isActive ? 2.25 : 2} />
                 <span className="text-sm font-semibold">{f.label}</span>
+                {/* Per-tab progress fill (only on active, only when not paused) */}
                 {isActive && !paused && (
-                  <span className="ml-1 h-1.5 w-1.5 rounded-full bg-white/80" aria-hidden="true" />
+                  <span
+                    key={`progress-${active}`}
+                    className="absolute left-0 bottom-0 h-0.5 bg-white/70 animate-tour-tab-progress"
+                    style={cycleStyle}
+                    aria-hidden="true"
+                  />
                 )}
               </button>
             )
           })}
         </div>
-
-        {/* Auto-cycle progress dot row (under tabs) */}
-        <div className="mt-5 flex justify-center gap-1.5">
-          {features.map((_, i) => (
-            <div
-              key={i}
-              className={`h-1 rounded-full transition-all duration-500 ${
-                i === active ? 'w-8 bg-emerald-500' : 'w-1.5 bg-stone-300 dark:bg-stone-700'
-              }`}
-              aria-hidden="true"
-            />
-          ))}
-        </div>
       </div>
     </section>
   )
 })
+
+/* ─── CursorParallax — small mouse-follow tilt on a child container.
+   Disabled on touch devices and reduced-motion preference. ───────────────── */
+const CursorParallax: React.FC<{ children: React.ReactNode; className?: string; max?: number }> = ({
+  children, className, max = 4,
+}) => {
+  const ref = React.useRef<HTMLDivElement>(null)
+
+  const handleMove = React.useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const el = ref.current
+    if (!el) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const r = el.getBoundingClientRect()
+    const px = (e.clientX - r.left) / r.width   // 0..1
+    const py = (e.clientY - r.top)  / r.height  // 0..1
+    const rx = (0.5 - py) * max     // tilt X
+    const ry = (px - 0.5) * max     // tilt Y
+    el.style.setProperty('--tilt', `perspective(1200px) rotateX(${rx}deg) rotateY(${ry}deg)`)
+  }, [max])
+
+  const handleLeave = React.useCallback(() => {
+    const el = ref.current
+    if (!el) return
+    el.style.setProperty('--tilt', 'perspective(1200px) rotateX(0deg) rotateY(0deg)')
+  }, [])
+
+  return (
+    <div
+      ref={ref}
+      className={className}
+      onMouseMove={handleMove}
+      onMouseLeave={handleLeave}
+      style={{ transform: 'var(--tilt, perspective(1200px))', transition: 'transform 250ms ease-out', willChange: 'transform' }}
+    >
+      {children}
+    </div>
+  )
+}
 
 /* ─── TOUR SCREEN — bespoke animated content per feature ─────────────────── */
 const TourScreen: React.FC<{ feature: TourFeature; compact?: boolean }> = ({ feature, compact }) => {

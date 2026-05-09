@@ -178,6 +178,42 @@
 }
 .animate-tour-screen { animation: tour-screen-fade-in 0.45s ease-out; }
 
+/* Slide-in from the right — used when LiveTour switches feature.
+   Combines a translate with opacity so the previous content visually
+   "passes through" as the new one arrives. */
+@keyframes tour-screen-slide-in {
+  0%   { transform: translate3d(24px, 0, 0); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+.animate-tour-screen-slide { animation: tour-screen-slide-in 0.55s cubic-bezier(.2,.7,.2,1); }
+
+/* Tab progress fill — driven by a CSS variable for cycle duration so the
+   bar finishes exactly when the auto-advance fires. */
+@keyframes tour-tab-progress {
+  0%   { width: 0%; }
+  100% { width: 100%; }
+}
+.animate-tour-tab-progress {
+  animation: tour-tab-progress var(--tour-cycle, 4.5s) linear forwards;
+}
+
+/* Marquee — used by the live activity ticker. Single duplicate row inside,
+   shifted by -50% so the loop is seamless. */
+@keyframes ticker-scroll {
+  0%   { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+.animate-ticker-scroll { animation: ticker-scroll 28s linear infinite; }
+
+/* Stagger-reveal — one-shot fade-up. Use animation-delay (inline) per item. */
+@keyframes stagger-up {
+  0%   { transform: translateY(14px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-stagger-up {
+  animation: stagger-up 0.6s cubic-bezier(.2,.7,.2,1) both;
+}
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,
@@ -194,6 +230,8 @@
 .landing-section-hidden .animate-tour-result-pop,
 .landing-section-hidden .animate-tour-tile-in,
 .landing-section-hidden .animate-tour-notif-in,
-.landing-section-hidden .animate-tour-progress {
+.landing-section-hidden .animate-tour-progress,
+.landing-section-hidden .animate-tour-tab-progress,
+.landing-section-hidden .animate-ticker-scroll {
   animation-play-state: paused;
 }
