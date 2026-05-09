@@ -44,6 +44,22 @@
             android:grantUriPermissions="true">
             <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/file_paths" />
         </provider>
+
+        <!--
+            Default small icon for FCM-delivered notifications. Android tints
+            this in the status bar and replaces anything non-monochrome with a
+            white square, so the colored launcher icon can't be used directly.
+            ic_stat_notification.png (per-density) is regenerated from
+            assets/logo-dark.png by scripts/sync-brand-assets.mjs on every
+            predev / prebuild — including the CI mobile build that produces
+            the APK.
+        -->
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_icon"
+            android:resource="@drawable/ic_stat_notification" />
+        <meta-data
+            android:name="com.google.firebase.messaging.default_notification_color"
+            android:resource="@color/notification_color" />
     </application>
 
     <!-- Permissions -->

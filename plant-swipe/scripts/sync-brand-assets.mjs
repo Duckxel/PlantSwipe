@@ -23,6 +23,20 @@ const __dirname = path.dirname(__filename)
 const repoAppDir = path.resolve(__dirname, '..')
 const assetsDir = path.join(repoAppDir, 'assets')
 const publicDir = path.join(repoAppDir, 'public')
+const androidResDir = path.join(repoAppDir, 'android', 'app', 'src', 'main', 'res')
+
+// Per-density Android status-bar notification icon. Source must be a white
+// silhouette on transparent background (Android tints the alpha channel and
+// renders anything non-monochrome as a white square).
+const NOTIFICATION_ICON_SOURCE = 'logo-dark.png'
+const NOTIFICATION_ICON_NAME = 'ic_stat_notification.png'
+const NOTIFICATION_ICON_DENSITIES = [
+  ['drawable-mdpi',    24],
+  ['drawable-hdpi',    36],
+  ['drawable-xhdpi',   48],
+  ['drawable-xxhdpi',  72],
+  ['drawable-xxxhdpi', 96],
+]
 
 // src -> dst (relative to assetsDir / publicDir respectively)
 const ASSET_MAP = [
@@ -83,6 +97,49 @@ async function syncOne(srcRel, dstRel) {
   console.log(`  ${action.padEnd(9)} ${dstRel}  (${size} bytes)`)
 }
 
+// Regenerate android/app/src/main/res/drawable-{m,h,xh,xxh,xxxh}dpi/ic_stat_notification.png
+// from assets/logo-dark.png. The committed PNGs are the source of truth at build
+// time (CI doesn't run this script), but devs editing logo-dark.png locally need
+// the resized variants to refresh. SHA1-checked against a sidecar so we only
+// rewrite when the source actually changed. Sharp is already a runtime dep; if
+// it fails to load on a fresh checkout we skip rather than block dev/build.
+async function syncAndroidNotificationIcons() {
+  const src = path.join(assetsDir, NOTIFICATION_ICON_SOURCE)
+  if (!(await fileExists(src))) return
+  if (!(await fileExists(androidResDir))) return // No native android project yet.
+
+  let sharp
+  try {
+    ({ default: sharp } = await import('sharp'))
+  } catch (err) {
+    console.log(`  [SKIP]    android notification icons (sharp not available: ${err?.code || err?.message || 'unknown'})`)
+    return
+  }
+
+  const srcHash = await sha1(src)
+  const stampPath = path.join(androidResDir, '.ic_stat_notification.sha1')
+  const prevHash = await fileExists(stampPath)
+    ? (await fs.readFile(stampPath, 'utf8')).trim()
+    : ''
+  if (prevHash === srcHash) {
+    console.log(`  unchanged android/.../${NOTIFICATION_ICON_NAME} (×${NOTIFICATION_ICON_DENSITIES.length})`)
+    return
+  }
+
+  for (const [density, size] of NOTIFICATION_ICON_DENSITIES) {
+    const dstDir = path.join(androidResDir, density)
+    await fs.mkdir(dstDir, { recursive: true })
+    const dst = path.join(dstDir, NOTIFICATION_ICON_NAME)
+    await sharp(src)
+      .resize(size, size, { kernel: 'lanczos3', fit: 'contain', background: { r: 0, g: 0, b: 0, alpha: 0 } })
+      .png({ compressionLevel: 9 })
+      .toFile(dst)
+    const { size: bytes } = await fs.stat(dst)
+    console.log(`  generated ${path.relative(repoAppDir, dst)}  ${size}×${size}  (${bytes} bytes)`)
+  }
+  await fs.writeFile(stampPath, srcHash + '\n', 'utf8')
+}
+
 async function main() {
   if (!(await fileExists(assetsDir))) {
     console.log(`[brand-assets] No ${assetsDir} directory; skipping.`)
@@ -92,6 +149,7 @@ async function main() {
   for (const [srcRel, dstRel] of ASSET_MAP) {
     await syncOne(srcRel, dstRel)
   }
+  await syncAndroidNotificationIcons()
 }
 
 main().catch((err) => {

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tint applied to the FCM small notification icon by Android. Matches the
+         brand green used as backgroundColor in capacitor.config.json. -->
+    <color name="notification_color">#052e16</color>
+</resources>
