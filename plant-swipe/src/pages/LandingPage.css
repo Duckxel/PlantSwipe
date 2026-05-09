@@ -115,6 +115,69 @@
   filter: brightness(0) saturate(100%) invert(15%) opacity(0.7);
 }
 
+/* ───────────────────────────────────────────────────────────
+   Live Tour animations — drive the in-screen motion of each
+   feature demo (swipe, scan beam, stagger fill, notification stack)
+   ─────────────────────────────────────────────────────────── */
+@keyframes tour-swipe-right {
+  0%, 18%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  35%       { transform: translate(60%, -4%) rotate(12deg); opacity: 1; }
+  50%, 100% { transform: translate(120%, -8%) rotate(20deg); opacity: 0; }
+}
+.animate-tour-swipe-right { animation: tour-swipe-right 3.2s ease-in-out infinite; }
+
+@keyframes tour-card-emerge {
+  0%, 30%   { transform: translateY(8%) scale(0.94); opacity: 0; }
+  55%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-tour-card-emerge { animation: tour-card-emerge 3.2s ease-out infinite; }
+
+@keyframes tour-scan-beam {
+  0%   { transform: translateY(-110%); opacity: 0; }
+  10%  { opacity: 0.95; }
+  85%  { opacity: 0.95; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.animate-tour-scan-beam { animation: tour-scan-beam 2.4s ease-in-out infinite; }
+
+@keyframes tour-result-pop {
+  0%, 60%  { transform: translateY(8%); opacity: 0; }
+  75%, 100%{ transform: translateY(0);  opacity: 1; }
+}
+.animate-tour-result-pop { animation: tour-result-pop 2.4s ease-out infinite; }
+
+@keyframes tour-tile-in {
+  0%, 8%   { transform: translateY(20%) scale(0.85); opacity: 0; }
+  60%      { transform: translateY(0) scale(1); opacity: 1; }
+  90%, 100%{ transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-tour-tile-in {
+  animation: tour-tile-in 4s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes tour-notif-in {
+  0%, 5%   { transform: translateY(-110%); opacity: 0; }
+  20%, 90% { transform: translateY(0); opacity: 1; }
+  100%     { transform: translateY(-110%); opacity: 0; }
+}
+.animate-tour-notif-in {
+  animation: tour-notif-in 4s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes tour-progress-fill {
+  0%   { width: 0%; }
+  100% { width: var(--tour-fill, 70%); }
+}
+.animate-tour-progress { animation: tour-progress-fill 2s ease-out infinite alternate; }
+
+@keyframes tour-screen-fade-in {
+  0%   { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-tour-screen { animation: tour-screen-fade-in 0.45s ease-out; }
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,
@@ -124,6 +187,13 @@
 .landing-section-hidden .animate-marquee,
 .landing-section-hidden .animate-spin-slow,
 .landing-section-hidden .animate-counter-spin-slow,
-.landing-section-hidden .animate-bounce-subtle {
+.landing-section-hidden .animate-bounce-subtle,
+.landing-section-hidden .animate-tour-swipe-right,
+.landing-section-hidden .animate-tour-card-emerge,
+.landing-section-hidden .animate-tour-scan-beam,
+.landing-section-hidden .animate-tour-result-pop,
+.landing-section-hidden .animate-tour-tile-in,
+.landing-section-hidden .animate-tour-notif-in,
+.landing-section-hidden .animate-tour-progress {
   animation-play-state: paused;
 }
