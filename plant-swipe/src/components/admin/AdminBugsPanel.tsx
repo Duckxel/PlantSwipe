@@ -576,6 +576,8 @@ export const AdminBugsPanel: React.FC = () => {
             className="rounded-xl"
             onClick={handleRefresh}
             disabled={refreshing}
+            aria-label="Refresh bugs"
+            title="Refresh bugs"
           >
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
           </Button>
@@ -1072,6 +1074,8 @@ export const AdminBugsPanel: React.FC = () => {
                             size="icon"
                             className="rounded-lg h-9 w-9 text-red-600 shrink-0"
                             onClick={() => removeQuestion(index)}
+                            aria-label="Remove question"
+                            title="Remove question"
                           >
                             <X className="h-4 w-4" />
                           </Button>

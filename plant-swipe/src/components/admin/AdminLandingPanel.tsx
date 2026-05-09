@@ -734,6 +734,8 @@ const ImagePickerModal: React.FC<{
                   onClick={handleCopyUrl}
                   className="rounded-xl"
                   disabled={!urlInput}
+                  aria-label="Copy URL"
+                  title="Copy URL"
                 >
                   {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
                 </Button>
@@ -1730,6 +1732,8 @@ const HeroCardsTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveCard(index, "up")}
                         disabled={index === 0}
+                        aria-label="Move card up"
+                        title="Move card up"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </Button>
@@ -1742,6 +1746,8 @@ const HeroCardsTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveCard(index, "down")}
                         disabled={index === localCards.length - 1}
+                        aria-label="Move card down"
+                        title="Move card down"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -1785,6 +1791,8 @@ const HeroCardsTab: React.FC<{
                           size="icon"
                           onClick={() => setExpandedCardId(expandedCardId === card.id ? null : card.id)}
                           className="rounded-xl flex-shrink-0 h-8 w-8"
+                          aria-label={expandedCardId === card.id ? "Collapse card" : "Expand card"}
+                          title={expandedCardId === card.id ? "Collapse card" : "Expand card"}
                         >
                           <ChevronDown className={cn(
                             "h-4 w-4 transition-transform",
@@ -4318,6 +4326,8 @@ const ShowcaseTab: React.FC<{
                         variant="destructive"
                         className="h-8 w-8 rounded-lg"
                         onClick={() => removePlantCard(card.id)}
+                        aria-label="Remove plant card"
+                        title="Remove plant card"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>

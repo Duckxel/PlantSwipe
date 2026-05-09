@@ -55,3 +55,6 @@
 ## 2024-04-26 - Accessible Action Buttons within Preview Cards
 **Learning:** Action buttons overlaid on media/link preview cards (like Download or External Link icons) often lack explicit screen reader labels and keyboard focus indicators (`focus-visible`). This makes these contextual actions completely inaccessible to users relying on assistive technology or keyboard navigation.
 **Action:** Always add `aria-label` (translated via `t()`) and `focus-visible` utility classes (e.g. `focus-visible:ring-2 focus-visible:outline-none`) to any overlaid icon-only action button inside preview components. Also, ensure the preview container itself (if interactive/clickable) has a clear focus indicator.
+## 2024-05-09 - Missing ARIA Labels on Icon-only Buttons in Admin Panels
+**Learning:** I found a recurring pattern in the admin interface (`AdminLandingPanel.tsx`, `AdminBugsPanel.tsx`) where icon-only buttons (like `ChevronUp`, `Trash2`, `Copy`, `X`, `RefreshCw`) lacked `aria-label` and `title` attributes, making them inaccessible to screen readers and lacking tooltips for regular users.
+**Action:** When adding or reviewing interactive components in the admin UI, always ensure that `Button` elements with `size="icon"` or standalone icons inside buttons include descriptive `aria-label` and `title` attributes to improve accessibility and UX.
