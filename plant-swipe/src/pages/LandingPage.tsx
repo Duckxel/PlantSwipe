@@ -525,13 +525,13 @@ const LandingPage: React.FC = () => {
 
       <div className="relative">
         {/* Mobile Logo Header */}
-        <header className="md:hidden flex items-center justify-center py-6 mb-2 px-4">
+        <header className="md:hidden flex items-center justify-center pt-5 pb-3 px-4">
           <Link to={user ? "/discovery" : "/"} className="flex items-center gap-3 no-underline group">
             <div className="relative">
               <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
-              <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="relative h-11 w-10 plant-icon-theme" draggable="false" />
+              <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="relative h-14 w-[3.25rem] plant-icon-theme" draggable="false" />
             </div>
-            <span className="font-brand text-[1.75rem] font-bold tracking-tight text-stone-900 dark:text-white">
+            <span className="font-brand text-[2rem] font-bold tracking-tight text-stone-900 dark:text-white">
               {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
             </span>
           </Link>
@@ -556,10 +556,16 @@ const LandingPage: React.FC = () => {
         {/* Stats Banner - above fold on some viewports, keep eager */}
         {(landingData.settings?.show_stats_section ?? true) && <StatsBanner />}
 
+        {/* Mobile-only app screen carousel — high-density visual proof of the product */}
+        <AppPreviewStrip />
+
         {/* Below-fold sections: lazily rendered via IntersectionObserver */}
         {(landingData.settings?.show_beginner_section ?? true) && (
           <LazySection minHeight="400px"><BeginnerFriendlySection /></LazySection>
         )}
+
+        {/* Cross-device strip — shows mobile + desktop side-by-side */}
+        <LazySection minHeight="380px"><CrossDeviceStrip /></LazySection>
 
         {(landingData.settings?.show_features_section ?? true) && (
           <LazySection minHeight="500px"><FeaturesSection /></LazySection>
@@ -625,7 +631,7 @@ const HeroSection: React.FC = React.memo(() => {
   const ratingValue = stats?.rating_value || "4.9"
 
   return (
-    <section className="relative pt-24 pb-16 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
+    <section className="relative pt-6 pb-10 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
       {/* Floating Plant Elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute top-20 left-[10%] opacity-20 dark:opacity-10 animate-float">
@@ -646,9 +652,9 @@ const HeroSection: React.FC = React.memo(() => {
       </div>
 
       <div className="relative max-w-7xl mx-auto">
-        <div className="grid lg:grid-cols-2 gap-8 lg:gap-12 items-center">
+        <div className="grid lg:grid-cols-2 gap-6 lg:gap-12 items-center">
           {/* Left: Hero Content */}
-          <div className="text-center lg:text-left space-y-8 animate-fade-in-up">
+          <div className="text-center lg:text-left space-y-5 lg:space-y-8 animate-fade-in-up">
             {/* Badge */}
             <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 backdrop-blur-sm">
               <div className="relative">
@@ -663,7 +669,7 @@ const HeroSection: React.FC = React.memo(() => {
             </div>
 
             {/* Headline */}
-            <h1 className="text-4xl sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
+            <h1 className="text-[2rem] sm:text-5xl lg:text-6xl xl:text-7xl font-bold tracking-tight leading-[1.1]">
               <span className="gradient-text-title">{titleStart}</span>{" "}
               {Array.isArray(titleRotating) && titleRotating.length > 0 && (
                 <Typewriter
@@ -682,15 +688,15 @@ const HeroSection: React.FC = React.memo(() => {
             </h1>
 
             {/* Subheadline */}
-            <p className="text-lg sm:text-xl text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0 leading-relaxed">
+            <p className="text-base sm:text-xl text-stone-600 dark:text-stone-300 max-w-xl mx-auto lg:mx-0 leading-snug sm:leading-relaxed">
               {description}
             </p>
 
             {/* CTA Buttons - Enhanced with stronger visual emphasis */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+            <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center lg:justify-start">
               <Link
                 to={ctaPrimaryLink}
-                className="group relative inline-flex items-center justify-center gap-3 px-10 py-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 text-white text-lg font-bold overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-1 animate-gradient"
+                className="group relative inline-flex w-full sm:w-auto items-center justify-center gap-2 sm:gap-3 px-6 py-3.5 sm:px-10 sm:py-5 rounded-2xl bg-gradient-to-r from-emerald-500 via-emerald-500 to-teal-500 text-white text-base sm:text-lg font-bold overflow-hidden transition-all duration-300 hover:shadow-xl hover:shadow-emerald-500/40 hover:-translate-y-1 animate-gradient"
               >
                 <div className="absolute inset-0 bg-gradient-to-r from-emerald-600 via-teal-500 to-emerald-600 opacity-0 group-hover:opacity-100 transition-opacity animate-gradient" />
                 <Sparkles className="relative h-5 w-5" />
@@ -699,7 +705,7 @@ const HeroSection: React.FC = React.memo(() => {
               </Link>
               <Link
                 to={ctaSecondaryLink}
-                className="group inline-flex items-center justify-center gap-2 px-8 py-5 rounded-2xl bg-white/90 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-base font-semibold border-2 border-emerald-500/30 dark:border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all duration-300 hover:-translate-y-0.5"
+                className="group inline-flex w-full sm:w-auto items-center justify-center gap-2 px-6 py-3.5 sm:px-8 sm:py-5 rounded-2xl bg-white/90 dark:bg-white/10 backdrop-blur-sm text-stone-900 dark:text-white text-sm sm:text-base font-semibold border-2 border-emerald-500/30 dark:border-emerald-500/30 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all duration-300 hover:-translate-y-0.5"
               >
                 <Globe className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
                 <span>{ctaSecondaryText}</span>
@@ -708,7 +714,7 @@ const HeroSection: React.FC = React.memo(() => {
             </div>
 
             {/* Social Proof Pills */}
-            <div className="flex flex-wrap items-center gap-4 justify-center lg:justify-start pt-4">
+            <div className="flex flex-wrap items-center gap-3 sm:gap-4 justify-center lg:justify-start pt-1 sm:pt-4">
               <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10">
                 <div className="flex -space-x-2">
                   {[...Array(4)].map((_, i) => (
@@ -778,6 +784,57 @@ const HeroVisual: React.FC = () => {
       {/* Glow Effects — layered for depth */}
       <div className="absolute inset-0 -m-16 bg-gradient-to-br from-emerald-500/20 via-teal-500/10 to-green-500/20 rounded-full blur-3xl animate-pulse-glow" />
       <div className="absolute inset-0 -m-8 bg-gradient-to-tr from-teal-400/15 to-emerald-600/15 rounded-full blur-2xl animate-pulse-glow" style={{ animationDelay: '2s' }} />
+
+      {/* Desktop Browser Mockup — sits behind the phone on lg+, signals "works on any device" */}
+      <div className="hidden lg:block absolute -top-4 -right-32 xl:-right-44 w-[420px] xl:w-[480px] rotate-[3deg] opacity-90 pointer-events-none">
+        <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/30 ring-1 ring-white/10 overflow-hidden">
+          {/* Window chrome */}
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800">
+            <div className="h-2.5 w-2.5 rounded-full bg-rose-400/80" />
+            <div className="h-2.5 w-2.5 rounded-full bg-amber-400/80" />
+            <div className="h-2.5 w-2.5 rounded-full bg-emerald-400/80" />
+            <div className="ml-3 flex-1 h-5 rounded-md bg-stone-600/60 dark:bg-stone-700/60 flex items-center px-2">
+              <Globe className="h-2.5 w-2.5 text-stone-300/70 mr-1.5" />
+              <span className="text-[9px] text-stone-300/70 truncate">aphylia.app/discovery</span>
+            </div>
+          </div>
+          {/* Browser viewport */}
+          <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] p-3">
+            <div className="flex items-center justify-between mb-2.5">
+              <div className="flex items-center gap-1.5">
+                <Leaf className="h-3 w-3 text-emerald-500" />
+                <span className="text-[10px] font-bold text-stone-800 dark:text-white">My Garden</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">12 plants</span>
+                <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300">🔥 7d</span>
+              </div>
+            </div>
+            <div className="grid grid-cols-4 gap-1.5">
+              {[
+                'from-emerald-400 to-teal-500',
+                'from-lime-400 to-green-500',
+                'from-green-400 to-emerald-500',
+                'from-teal-400 to-cyan-500',
+                'from-emerald-500 to-green-600',
+                'from-green-500 to-teal-600',
+                'from-amber-400 to-orange-500',
+                'from-pink-400 to-rose-500',
+              ].map((g, i) => (
+                <div key={i} className={`aspect-square rounded-lg bg-gradient-to-br ${g} flex items-center justify-center relative overflow-hidden`}>
+                  <Leaf className="h-3 w-3 text-white/70" />
+                  {i % 3 === 0 && <div className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-amber-400 ring-1 ring-white/40" />}
+                </div>
+              ))}
+            </div>
+            <div className="mt-2.5 flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <Bell className="h-2.5 w-2.5 text-emerald-600" />
+              <span className="text-[8px] text-emerald-700 dark:text-emerald-300 font-medium">Water Pothos in 2h</span>
+              <ArrowRight className="ml-auto h-2.5 w-2.5 text-emerald-600" />
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Main Phone Frame */}
       <div className="relative w-[260px] sm:w-[290px] animate-float-slow">
@@ -967,24 +1024,218 @@ const StatsBanner: React.FC = React.memo(() => {
   ]
 
   return (
-    <section className="relative py-12 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
+    <section className="relative py-6 lg:py-16 px-4 sm:px-6 lg:px-8 overflow-hidden">
       <div className="max-w-7xl mx-auto">
         <div className="relative rounded-3xl bg-gradient-to-r from-emerald-500 via-teal-500 to-green-500 p-[1px]">
-          <div className="rounded-3xl bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl px-8 py-10 lg:px-12">
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
+          <div className="rounded-3xl bg-white/95 dark:bg-stone-950/95 backdrop-blur-xl px-4 py-6 sm:px-8 sm:py-10 lg:px-12">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 lg:gap-8">
               {stats.map((stat, i) => (
                 <div key={i} className="text-center group">
-                  <div className="inline-flex items-center justify-center h-12 w-12 rounded-2xl bg-emerald-500/10 mb-4 group-hover:scale-110 transition-transform">
-                    <stat.icon className="h-6 w-6 text-emerald-600 dark:text-emerald-400" />
+                  <div className="inline-flex items-center justify-center h-10 w-10 sm:h-12 sm:w-12 rounded-2xl bg-emerald-500/10 mb-2 sm:mb-4 group-hover:scale-110 transition-transform">
+                    <stat.icon className="h-5 w-5 sm:h-6 sm:w-6 text-emerald-600 dark:text-emerald-400" />
                   </div>
-                  <div className="text-3xl lg:text-4xl font-bold text-stone-900 dark:text-white mb-1">
+                  <div className="text-2xl sm:text-3xl lg:text-4xl font-bold text-stone-900 dark:text-white mb-0.5 sm:mb-1">
                     {stat.value}
                   </div>
-                  <div className="text-sm text-stone-600 dark:text-stone-400">{stat.label}</div>
+                  <div className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 leading-tight">{stat.label}</div>
                 </div>
               ))}
             </div>
           </div>
+        </div>
+      </div>
+    </section>
+  )
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   APP PREVIEW STRIP - Horizontal scroll of mini phone screens (mobile-only)
+   Goal: give mobile visitors a fast, tactile glimpse of multiple app screens
+   without making them scroll the whole page first.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const AppPreviewStrip: React.FC = React.memo(() => {
+  const { t } = useTranslation("Landing")
+  const screens: Array<{
+    label: string
+    accent: string
+    render: () => React.ReactNode
+  }> = [
+    {
+      label: t("appPreview.discovery", { defaultValue: "Discovery" }),
+      accent: "from-emerald-400 to-teal-500",
+      render: () => (
+        <div className="space-y-2">
+          <div className="aspect-[4/5] rounded-2xl bg-gradient-to-br from-emerald-300 to-teal-500 relative overflow-hidden">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <Leaf className="h-12 w-12 text-white/70" />
+            </div>
+            <div className="absolute bottom-2 left-2 right-2">
+              <div className="rounded-lg bg-white/90 dark:bg-stone-900/90 backdrop-blur-sm px-2 py-1.5">
+                <p className="text-[9px] font-bold text-stone-900 dark:text-white">Monstera Deliciosa</p>
+                <p className="text-[7px] italic text-stone-500 dark:text-stone-400">Swiss cheese plant</p>
+              </div>
+            </div>
+            <div className="absolute top-2 right-2 h-6 w-6 rounded-full bg-emerald-500 flex items-center justify-center shadow-lg">
+              <Heart className="h-3 w-3 text-white fill-white" />
+            </div>
+          </div>
+          <div className="flex justify-center gap-1">
+            <div className="h-7 w-7 rounded-full bg-rose-500/90 flex items-center justify-center">
+              <span className="text-white text-[10px]">✕</span>
+            </div>
+            <div className="h-7 w-7 rounded-full bg-emerald-500/90 flex items-center justify-center">
+              <Heart className="h-3 w-3 text-white fill-white" />
+            </div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      label: t("appPreview.garden", { defaultValue: "My Garden" }),
+      accent: "from-lime-400 to-green-500",
+      render: () => (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[9px] font-bold text-stone-900 dark:text-white">My Jungle</span>
+            <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-600 dark:text-orange-400">🔥 7d</span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              'from-emerald-400 to-teal-500',
+              'from-lime-400 to-green-500',
+              'from-green-400 to-emerald-500',
+              'from-teal-400 to-cyan-500',
+              'from-emerald-500 to-green-600',
+              'from-green-500 to-teal-600',
+            ].map((g, i) => (
+              <div key={i} className={`aspect-square rounded-lg bg-gradient-to-br ${g} relative flex items-center justify-center`}>
+                <Leaf className="h-4 w-4 text-white/70" />
+                {i === 1 && <div className="absolute top-0.5 right-0.5 h-3 w-3 rounded-full bg-amber-400 text-[7px] font-bold text-white flex items-center justify-center">2</div>}
+              </div>
+            ))}
+          </div>
+          <div className="rounded-lg bg-emerald-500/10 px-2 py-1 flex items-center gap-1.5 border border-emerald-500/20">
+            <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" />
+            <span className="text-[8px] text-emerald-700 dark:text-emerald-300">85% tasks done today</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      label: t("appPreview.care", { defaultValue: "Care Reminders" }),
+      accent: "from-blue-400 to-indigo-500",
+      render: () => (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between mb-1">
+            <span className="text-[9px] font-bold text-stone-900 dark:text-white">Today</span>
+            <Bell className="h-3 w-3 text-blue-500" />
+          </div>
+          {[
+            { icon: Droplets, color: 'bg-blue-500', text: 'Water Pothos', time: 'Now', pulse: true },
+            { icon: Sun, color: 'bg-amber-500', text: 'Rotate Fern', time: '2h', pulse: false },
+            { icon: Leaf, color: 'bg-emerald-500', text: 'Fertilize Monstera', time: 'Tomorrow', pulse: false },
+            { icon: NotebookPen, color: 'bg-purple-500', text: 'Log Snake plant', time: 'Fri', pulse: false },
+          ].map((item, i) => (
+            <div key={i} className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-white/70 dark:bg-white/5 border border-stone-200/60 dark:border-white/10">
+              <div className={`h-5 w-5 rounded-md ${item.color} flex items-center justify-center flex-shrink-0`}>
+                <item.icon className="h-2.5 w-2.5 text-white" />
+              </div>
+              <span className="flex-1 text-[8px] text-stone-700 dark:text-stone-200 truncate">{item.text}</span>
+              <span className="text-[7px] text-stone-400">{item.time}</span>
+              {item.pulse && <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse" />}
+            </div>
+          ))}
+        </div>
+      ),
+    },
+    {
+      label: t("appPreview.identify", { defaultValue: "Plant ID" }),
+      accent: "from-pink-400 to-rose-500",
+      render: () => (
+        <div className="space-y-2">
+          <div className="aspect-[4/3] rounded-xl bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 relative overflow-hidden flex items-center justify-center">
+            <Camera className="h-10 w-10 text-white/80" />
+            <div className="absolute inset-3 border-2 border-dashed border-white/60 rounded-lg" />
+            <div className="absolute top-1.5 left-1.5 right-1.5 flex justify-between">
+              <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+              <span className="text-[7px] text-white/90">Scanning...</span>
+            </div>
+          </div>
+          <div className="rounded-lg bg-white/90 dark:bg-stone-900/90 p-2 border border-emerald-500/30">
+            <div className="flex items-center justify-between mb-0.5">
+              <span className="text-[9px] font-bold text-stone-900 dark:text-white">Snake Plant</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">98%</span>
+            </div>
+            <p className="text-[7px] italic text-stone-500 dark:text-stone-400">Sansevieria trifasciata</p>
+            <div className="flex gap-1 mt-1">
+              <span className="text-[7px] px-1 py-0.5 rounded bg-amber-500/20 text-amber-700 dark:text-amber-400">Easy</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-blue-500/20 text-blue-700 dark:text-blue-400">Low water</span>
+            </div>
+          </div>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <section className="lg:hidden py-8 overflow-hidden">
+      <div className="px-4 mb-4">
+        <div className="flex items-center gap-2 mb-1">
+          <Smartphone className="h-4 w-4 text-emerald-500" />
+          <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+            {t("appPreview.kicker", { defaultValue: "A peek inside" })}
+          </span>
+        </div>
+        <h2 className="text-[1.5rem] font-bold tracking-tight text-stone-900 dark:text-white leading-tight">
+          {t("appPreview.title", { defaultValue: "See the app, before you sign up" })}
+        </h2>
+      </div>
+
+      <div className="flex gap-3 overflow-x-auto px-4 pb-4 snap-x snap-mandatory scroll-smooth scrollbar-hide">
+        {screens.map((screen, i) => (
+          <div
+            key={i}
+            className="snap-center flex-shrink-0 w-[180px] animate-fade-in-up"
+            style={{ animationDelay: `${i * 0.08}s` }}
+          >
+            {/* Phone frame */}
+            <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[1.75rem] p-[2px] shadow-xl shadow-black/20 ring-1 ring-white/10">
+              <div className="bg-stone-800 dark:bg-stone-900 rounded-[1.65rem] p-1">
+                <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[1.4rem] overflow-hidden aspect-[9/16]">
+                  {/* Tiny status bar */}
+                  <div className="flex items-center justify-between px-3 pt-1.5 pb-0.5">
+                    <span className="text-[7px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
+                    <div className="w-12 h-2.5 bg-stone-900 dark:bg-black rounded-full" />
+                    <Wifi className="h-2 w-2 text-stone-400" />
+                  </div>
+                  {/* Screen content */}
+                  <div className="px-2.5 py-2">
+                    {screen.render()}
+                  </div>
+                  {/* Bottom indicator */}
+                  <div className="absolute bottom-1 left-0 right-0 flex justify-center">
+                    <div className="w-12 h-0.5 rounded-full bg-stone-300 dark:bg-stone-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Caption pill */}
+            <div className="mt-2.5 flex justify-center">
+              <span className={`text-[10px] font-semibold px-2.5 py-1 rounded-full bg-gradient-to-r ${screen.accent} text-white shadow-md`}>
+                {screen.label}
+              </span>
+            </div>
+          </div>
+        ))}
+        {/* trailing spacer so last card can snap-center */}
+        <div className="flex-shrink-0 w-2" aria-hidden="true" />
+      </div>
+
+      {/* Scroll hint */}
+      <div className="px-4 flex items-center justify-center gap-2 mt-2">
+        <div className="flex items-center gap-1 text-[10px] text-stone-500 dark:text-stone-400">
+          <span>Swipe to explore</span>
+          <ArrowRight className="h-3 w-3 animate-pulse" />
         </div>
       </div>
     </section>
@@ -1031,7 +1282,7 @@ const BeginnerFriendlySection: React.FC = React.memo(() => {
   ]
 
   return (
-    <section className="py-20 lg:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
+    <section className="py-12 lg:py-28 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute inset-0 pointer-events-none">
         <div className="absolute top-1/4 -left-20 w-80 h-80 bg-emerald-500/5 rounded-full blur-3xl" />
@@ -1040,14 +1291,14 @@ const BeginnerFriendlySection: React.FC = React.memo(() => {
 
       <div className="relative max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-6">
             <Sprout className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               {badge}
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
             {title}
             <br />
             <span className="gradient-text">{titleHighlight}</span>
@@ -1108,23 +1359,191 @@ const BeginnerFriendlySection: React.FC = React.memo(() => {
 })
 
 /* ═══════════════════════════════════════════════════════════════════════════════
+   CROSS-DEVICE STRIP - "Same garden, any device"
+   Pairs a phone screen and a desktop browser screen so visitors see both
+   surfaces of the product side-by-side. On mobile the desktop frame
+   compresses but stays visible to reinforce the message.
+   ═══════════════════════════════════════════════════════════════════════════════ */
+const CrossDeviceStrip: React.FC = React.memo(() => {
+  const { t } = useTranslation("Landing")
+  return (
+    <section className="py-10 lg:py-20 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center max-w-2xl mx-auto mb-8 lg:mb-12">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 mb-3">
+            <Smartphone className="h-3.5 w-3.5 text-emerald-500" />
+            <Globe className="h-3.5 w-3.5 text-emerald-500" />
+            <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">
+              {t("crossDevice.badge", { defaultValue: "Mobile + Web" })}
+            </span>
+          </div>
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-3">
+            {t("crossDevice.title", { defaultValue: "Same garden." })}{" "}
+            <span className="gradient-text">{t("crossDevice.titleHighlight", { defaultValue: "Any device." })}</span>
+          </h2>
+          <p className="text-sm sm:text-base text-stone-600 dark:text-stone-400 leading-snug sm:leading-relaxed">
+            {t("crossDevice.subtitle", { defaultValue: "Identify a plant on your phone in the morning, plan watering from your laptop at lunch — every change syncs instantly." })}
+          </p>
+        </div>
+
+        <div className="relative grid grid-cols-12 gap-3 sm:gap-6 items-center">
+          {/* Desktop browser — wider, occupies more cols */}
+          <div className="col-span-8 sm:col-span-8 relative">
+            <div className="rounded-xl sm:rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-white/10 overflow-hidden">
+              {/* Window chrome */}
+              <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 py-1.5 sm:py-2 bg-stone-700/80 dark:bg-stone-800">
+                <div className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 rounded-full bg-rose-400/80" />
+                <div className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 rounded-full bg-amber-400/80" />
+                <div className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 rounded-full bg-emerald-400/80" />
+                <div className="ml-1 sm:ml-3 flex-1 h-3 sm:h-5 rounded sm:rounded-md bg-stone-600/60 dark:bg-stone-700/60 flex items-center px-1 sm:px-2">
+                  <Globe className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 text-stone-300/70 mr-0.5 sm:mr-1.5" />
+                  <span className="text-[6px] sm:text-[9px] text-stone-300/70 truncate">aphylia.app/garden</span>
+                </div>
+              </div>
+              {/* Browser viewport */}
+              <div className="bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] p-2 sm:p-4 aspect-[16/10]">
+                <div className="flex items-center justify-between mb-1.5 sm:mb-3">
+                  <div className="flex items-center gap-1 sm:gap-1.5">
+                    <Leaf className="h-2 w-2 sm:h-3.5 sm:w-3.5 text-emerald-500" />
+                    <span className="text-[7px] sm:text-xs font-bold text-stone-800 dark:text-white">My Indoor Jungle</span>
+                  </div>
+                  <div className="flex items-center gap-0.5 sm:gap-1">
+                    <span className="text-[5px] sm:text-[9px] px-1 sm:px-1.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300">12 plants</span>
+                    <span className="text-[5px] sm:text-[9px] px-1 sm:px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-700 dark:text-orange-300">🔥 7d</span>
+                    <span className="hidden sm:inline text-[9px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-700 dark:text-blue-300">8 species</span>
+                  </div>
+                </div>
+
+                {/* Two-column desktop layout */}
+                <div className="grid grid-cols-3 gap-1.5 sm:gap-3">
+                  {/* Plants gallery (2 cols) */}
+                  <div className="col-span-2 grid grid-cols-4 gap-1 sm:gap-1.5">
+                    {[
+                      'from-emerald-400 to-teal-500',
+                      'from-lime-400 to-green-500',
+                      'from-green-400 to-emerald-500',
+                      'from-teal-400 to-cyan-500',
+                      'from-emerald-500 to-green-600',
+                      'from-green-500 to-teal-600',
+                      'from-amber-400 to-orange-500',
+                      'from-pink-400 to-rose-500',
+                    ].map((g, i) => (
+                      <div key={i} className={`aspect-square rounded sm:rounded-lg bg-gradient-to-br ${g} flex items-center justify-center relative overflow-hidden`}>
+                        <Leaf className="h-1.5 w-1.5 sm:h-3 sm:w-3 text-white/70" />
+                        {i % 4 === 0 && <div className="absolute top-0 right-0 sm:top-0.5 sm:right-0.5 h-1.5 w-1.5 sm:h-2 sm:w-2 rounded-full bg-amber-400 ring-1 ring-white/40" />}
+                      </div>
+                    ))}
+                  </div>
+                  {/* Sidebar (1 col) */}
+                  <div className="space-y-1 sm:space-y-1.5">
+                    <div className="rounded sm:rounded-lg bg-emerald-500/10 px-1 sm:px-2 py-1 sm:py-1.5 border border-emerald-500/20">
+                      <div className="flex items-center gap-0.5 sm:gap-1">
+                        <Bell className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 text-emerald-600" />
+                        <span className="text-[5px] sm:text-[8px] font-medium text-emerald-700 dark:text-emerald-300">Today</span>
+                      </div>
+                      <p className="text-[5px] sm:text-[8px] text-stone-700 dark:text-stone-300 mt-0.5">3 tasks due</p>
+                    </div>
+                    <div className="rounded sm:rounded-lg bg-blue-500/10 px-1 sm:px-2 py-1 sm:py-1.5 border border-blue-500/20">
+                      <div className="flex items-center gap-0.5 sm:gap-1">
+                        <Droplets className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 text-blue-500" />
+                        <span className="text-[5px] sm:text-[8px] font-medium text-blue-700 dark:text-blue-300">Water</span>
+                      </div>
+                      <p className="text-[5px] sm:text-[8px] text-stone-700 dark:text-stone-300 mt-0.5">Pothos · 2h</p>
+                    </div>
+                    <div className="hidden sm:block rounded-lg bg-amber-500/10 px-2 py-1.5 border border-amber-500/20">
+                      <div className="flex items-center gap-1">
+                        <Sun className="h-2.5 w-2.5 text-amber-500" />
+                        <span className="text-[8px] font-medium text-amber-700 dark:text-amber-300">Light</span>
+                      </div>
+                      <p className="text-[8px] text-stone-700 dark:text-stone-300 mt-0.5">Fern · low</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Caption */}
+            <div className="mt-2 sm:mt-3 flex items-center justify-center gap-1.5">
+              <Globe className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+              <span className="text-[10px] sm:text-sm font-medium text-stone-600 dark:text-stone-400">
+                {t("crossDevice.desktopLabel", { defaultValue: "Web · plan & analyze" })}
+              </span>
+            </div>
+          </div>
+
+          {/* Phone — narrower, overlaps for visual interest */}
+          <div className="col-span-4 sm:col-span-4 relative -ml-2 sm:ml-0">
+            <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[1.25rem] sm:rounded-[2rem] p-[1.5px] sm:p-[2px] shadow-2xl shadow-emerald-900/20 ring-1 ring-white/10 mx-auto max-w-[140px] sm:max-w-[180px]">
+              <div className="bg-stone-800 dark:bg-stone-900 rounded-[1.15rem] sm:rounded-[1.9rem] p-1">
+                <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[0.95rem] sm:rounded-[1.6rem] overflow-hidden aspect-[9/19]">
+                  <div className="flex items-center justify-between px-2 sm:px-3 pt-1 sm:pt-1.5">
+                    <span className="text-[6px] sm:text-[8px] font-semibold text-stone-500 dark:text-stone-400">9:41</span>
+                    <div className="w-8 sm:w-12 h-1.5 sm:h-2.5 bg-stone-900 dark:bg-black rounded-full" />
+                    <Wifi className="h-1.5 w-1.5 sm:h-2 sm:w-2 text-stone-400" />
+                  </div>
+                  <div className="px-1.5 sm:px-2.5 py-1.5 sm:py-2 space-y-1.5 sm:space-y-2">
+                    <div className="aspect-[4/3] rounded-md sm:rounded-xl bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 relative flex items-center justify-center">
+                      <Leaf className="h-3 w-3 sm:h-6 sm:w-6 text-white/80" />
+                      <div className="absolute bottom-0.5 left-0.5 right-0.5 sm:bottom-1.5 sm:left-1.5 sm:right-1.5 rounded sm:rounded-md bg-white/90 dark:bg-stone-900/90 px-1 py-0.5 sm:px-1.5 sm:py-1">
+                        <p className="text-[5px] sm:text-[7px] font-bold text-stone-900 dark:text-white truncate">Pothos</p>
+                      </div>
+                    </div>
+                    <div className="rounded sm:rounded-lg bg-emerald-500 px-1 py-0.5 sm:px-2 sm:py-1.5 flex items-center gap-1">
+                      <Bell className="h-1.5 w-1.5 sm:h-2.5 sm:w-2.5 text-white" />
+                      <span className="text-[5px] sm:text-[8px] font-bold text-white truncate">Water in 2h</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-0.5 sm:gap-1">
+                      <div className="rounded bg-blue-500/10 px-0.5 py-0.5 sm:px-1.5 sm:py-1 flex items-center gap-0.5 sm:gap-1">
+                        <Droplets className="h-1 w-1 sm:h-2 sm:w-2 text-blue-500" />
+                        <span className="text-[4px] sm:text-[7px] text-stone-700 dark:text-stone-300 truncate">2/wk</span>
+                      </div>
+                      <div className="rounded bg-amber-500/10 px-0.5 py-0.5 sm:px-1.5 sm:py-1 flex items-center gap-0.5 sm:gap-1">
+                        <Sun className="h-1 w-1 sm:h-2 sm:w-2 text-amber-500" />
+                        <span className="text-[4px] sm:text-[7px] text-stone-700 dark:text-stone-300 truncate">Bright</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="absolute bottom-0.5 left-0 right-0 flex justify-center">
+                    <div className="w-6 sm:w-10 h-0.5 rounded-full bg-stone-300 dark:bg-stone-600" />
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Sync indicator badge */}
+            <div className="absolute -top-2 -left-2 sm:-top-3 sm:-left-3 bg-gradient-to-br from-emerald-500 to-teal-500 rounded-full px-1.5 py-0.5 sm:px-2 sm:py-1 shadow-lg flex items-center gap-1">
+              <div className="h-1 w-1 sm:h-1.5 sm:w-1.5 rounded-full bg-white animate-pulse" />
+              <span className="text-[6px] sm:text-[9px] font-bold text-white">Synced</span>
+            </div>
+            <div className="mt-2 sm:mt-3 flex items-center justify-center gap-1 sm:gap-1.5">
+              <Smartphone className="h-3 w-3 sm:h-4 sm:w-4 text-emerald-500" />
+              <span className="text-[10px] sm:text-sm font-medium text-stone-600 dark:text-stone-400">
+                {t("crossDevice.mobileLabel", { defaultValue: "Mobile · on the go" })}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+})
+
+/* ═══════════════════════════════════════════════════════════════════════════════
    FEATURES SECTION - Bento Grid Style
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FeaturesSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
   return (
-    <section id="features" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+    <section id="features" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
       <div className="max-w-7xl mx-auto">
         {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 mb-6">
             <Zap className="h-4 w-4 text-emerald-500" />
             <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
               {t("features.badge", { defaultValue: "Powerful Features" })}
             </span>
           </div>
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("features.title")}
           </h2>
           <p className="text-lg text-stone-600 dark:text-stone-400">
@@ -1293,7 +1712,7 @@ const InteractiveDemoSection: React.FC = React.memo(() => {
   }, [features.length])
 
   return (
-    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
+    <section className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
       <div className="max-w-7xl mx-auto">
         <div className="grid lg:grid-cols-2 gap-12 lg:gap-20 items-center">
           {/* Left: Demo Visual */}
@@ -1348,7 +1767,7 @@ const InteractiveDemoSection: React.FC = React.memo(() => {
 
           {/* Right: Content */}
           <div className="order-1 lg:order-2 text-center lg:text-left">
-            <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
+            <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-6">
               {t("demo.title", { defaultValue: "Your Complete Plant Care Companion" })}
             </h2>
             <p className="text-lg text-stone-600 dark:text-stone-400 mb-8 max-w-lg mx-auto lg:mx-0">
@@ -1459,10 +1878,10 @@ const ShowcaseSection: React.FC = React.memo(() => {
   const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S']
 
   return (
-    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
+    <section className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-stone-100/50 to-transparent dark:via-stone-900/30">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("showcase.title")}
           </h2>
           <p className="text-lg text-stone-600 dark:text-stone-400">
@@ -1864,10 +2283,10 @@ const HowItWorksSection: React.FC = React.memo(() => {
   ]
 
   return (
-    <section id="how-it-works" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+    <section id="how-it-works" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("howItWorks.title")}
           </h2>
           <p className="text-lg text-stone-600 dark:text-stone-400">
@@ -1930,10 +2349,10 @@ const TestimonialsSection: React.FC = React.memo(() => {
   if (testimonials.length === 0) return null
 
   return (
-    <section className="py-20 lg:py-32 overflow-hidden">
+    <section className="py-12 lg:py-32 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("testimonials.title")}
           </h2>
           <p className="text-lg text-stone-600 dark:text-stone-400">
@@ -1997,10 +2416,10 @@ const FAQSection: React.FC = React.memo(() => {
   if (faqs.length === 0) return null
 
   return (
-    <section id="faq" className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
+    <section id="faq" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
       <div className="max-w-4xl mx-auto">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
+        <div className="text-center mb-10 lg:mb-16">
+          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
             {t("faq.title")}
           </h2>
           <p className="text-lg text-stone-600 dark:text-stone-400">
@@ -2283,7 +2702,7 @@ const FinalCTASection: React.FC = React.memo(() => {
   const secondaryButtonText = t("finalCta.ctaDocs", { defaultValue: "Explore Plants" })
 
   return (
-    <section className="py-20 lg:py-32 px-4 sm:px-6 lg:px-8">
+    <section className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="relative rounded-[2.5rem] overflow-hidden">
           {/* Gradient Background */}
@@ -2296,8 +2715,8 @@ const FinalCTASection: React.FC = React.memo(() => {
           {/* Pattern Overlay */}
           <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNjAiIGhlaWdodD0iNjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGRlZnM+PHBhdHRlcm4gaWQ9ImdyaWQiIHdpZHRoPSI2MCIgaGVpZ2h0PSI2MCIgcGF0dGVyblVuaXRzPSJ1c2VyU3BhY2VPblVzZSI+PHBhdGggZD0iTSA2MCAwIEwgMCAwIDAgNjAiIGZpbGw9Im5vbmUiIHN0cm9rZT0icmdiYSgyNTUsMjU1LDI1NSwwLjEpIiBzdHJva2Utd2lkdGg9IjEiLz48L3BhdHRlcm4+PC9kZWZzPjxyZWN0IHdpZHRoPSIxMDAlIiBoZWlnaHQ9IjEwMCUiIGZpbGw9InVybCgjZ3JpZCkiLz48L3N2Zz4=')] opacity-30" />
 
-          <div className="relative px-8 py-16 lg:px-16 lg:py-24 text-center">
-            <div className="max-w-3xl mx-auto space-y-8">
+          <div className="relative px-6 py-10 sm:px-8 sm:py-16 lg:px-16 lg:py-24 text-center">
+            <div className="max-w-3xl mx-auto space-y-6 sm:space-y-8">
               {/* Beginner Badge */}
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
                 <Sprout className="h-4 w-4 text-white" />
