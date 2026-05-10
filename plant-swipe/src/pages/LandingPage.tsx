@@ -611,12 +611,78 @@ const LandingPage: React.FC = () => {
   )
 }
 
+/* ─── LiveJoinAvatars — animated avatar row that simulates a live join feed.
+   Every ~2.5s a new "person" replaces a slot: a fresh letter initial on a
+   randomized color appears with a small pop-in. Designed to feel alive
+   without making any factual claim about user counts. ───────────────────── */
+const AVATAR_COLORS = [
+  'bg-emerald-500',
+  'bg-teal-500',
+  'bg-lime-500',
+  'bg-rose-500',
+  'bg-amber-500',
+  'bg-violet-500',
+  'bg-sky-500',
+  'bg-pink-500',
+  'bg-cyan-500',
+  'bg-orange-500',
+  'bg-indigo-500',
+  'bg-fuchsia-500',
+]
+// Plausible-feeling first-letter pool. Weighted toward common names so the
+// row never feels random/programmatic.
+const AVATAR_LETTERS = ['S','M','L','J','A','E','R','K','T','N','C','P','D','O','I','H']
+
+type Avatar = { id: number; letter: string; color: string }
+
+const randomAvatar = (id: number): Avatar => ({
+  id,
+  letter: AVATAR_LETTERS[Math.floor(Math.random() * AVATAR_LETTERS.length)],
+  color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
+})
+
+const LiveJoinAvatars: React.FC = () => {
+  const SLOTS = 4
+  const nextId = React.useRef(SLOTS)
+  const [avatars, setAvatars] = React.useState<Avatar[]>(() =>
+    Array.from({ length: SLOTS }, (_, i) => randomAvatar(i))
+  )
+
+  React.useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+    const id = setInterval(() => {
+      setAvatars((prev) => {
+        // Replace one slot with a new avatar — picks a slot at random so
+        // the swap doesn't follow a predictable pattern.
+        const slot = Math.floor(Math.random() * SLOTS)
+        const next = [...prev]
+        next[slot] = randomAvatar(nextId.current++)
+        return next
+      })
+    }, 2200)
+    return () => clearInterval(id)
+  }, [])
+
+  return (
+    <div className="flex -space-x-2" aria-label="Recent joins">
+      {avatars.map((a) => (
+        <span
+          key={a.id}
+          className={`relative h-7 w-7 rounded-full border-2 border-white dark:border-stone-800 ${a.color} flex items-center justify-center text-[10px] font-bold text-white shadow-sm animate-stagger-up`}
+          style={{ animationDuration: '0.5s' }}
+        >
+          {a.letter}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    HERO SECTION - Completely Redesigned
    ═══════════════════════════════════════════════════════════════════════════════ */
 const HeroSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
-  const { stats } = useLandingData()
 
   // All text content from translations (not editable via admin)
   const badgeText = t("hero.badge")
@@ -630,9 +696,6 @@ const HeroSection: React.FC = React.memo(() => {
   const ctaSecondaryText = t("hero.ctaTryBrowser")
   const ctaSecondaryLink = "/discovery"
   const socialProofText = t("hero.socialProof")
-  
-  // Stats from database for social proof (rating is editable via Stats tab)
-  const ratingValue = stats?.rating_value || "4.9"
 
   return (
     <section className="relative pt-6 pb-10 lg:pt-32 lg:pb-24 px-4 sm:px-6 lg:px-8 overflow-visible">
@@ -693,21 +756,12 @@ const HeroSection: React.FC = React.memo(() => {
               </Link>
             </div>
 
-            {/* Social Proof Pills */}
+            {/* Social Proof — animated "live join" avatar feed.
+                Avatars cycle in/out as if people were joining right now. */}
             <div className="flex flex-wrap items-center gap-3 sm:gap-4 justify-center lg:justify-start pt-1 sm:pt-4">
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10">
-                <div className="flex -space-x-2">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className={`h-6 w-6 rounded-full border-2 border-white dark:border-stone-800 ${['bg-emerald-400', 'bg-teal-400', 'bg-green-400', 'bg-lime-400'][i]}`} />
-                  ))}
-                </div>
+              <div className="flex items-center gap-3 px-3 py-1.5 rounded-full bg-white/60 dark:bg-white/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10">
+                <LiveJoinAvatars />
                 <span className="text-sm text-stone-600 dark:text-stone-300">{socialProofText}</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {[...Array(5)].map((_, i) => (
-                  <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />
-                ))}
-                <span className="text-sm font-medium text-stone-600 dark:text-stone-300 ml-1">{ratingValue}</span>
               </div>
             </div>
           </div>
@@ -724,7 +778,7 @@ const HeroSection: React.FC = React.memo(() => {
 
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
-  const { heroCards: dbHeroCards, approvedPlants } = useLandingData()
+  const { heroCards: dbHeroCards } = useLandingData()
 
   // Start with a random card for variety across different page loads
   const [activeCardIndex, setActiveCardIndex] = React.useState(() =>
@@ -841,111 +895,128 @@ const HeroVisual: React.FC = () => {
         </div>
       </div>
 
-      {/* Desktop browser — desktop only, larger and richer. Cursor parallax on hover. */}
-      <CursorParallax className="hidden lg:block relative" max={3}>
-        <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
-          {/* Window chrome */}
-          <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
-            <div className="h-3 w-3 rounded-full bg-rose-400/80" />
-            <div className="h-3 w-3 rounded-full bg-amber-400/80" />
-            <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
-            <div className="ml-3 flex-1 h-6 rounded-md bg-stone-600/40 dark:bg-stone-700/60 flex items-center px-2.5 gap-1.5">
-              <Globe className="h-3 w-3 text-stone-300/70" />
-              <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/garden</span>
-            </div>
+      {/* Desktop browser — plant detail / encyclopedia view. Showcases the
+          information depth users get on a single plant, which is unique to
+          the app and not pitched anywhere else on the page. Cursor parallax
+          on hover. */}
+      <HeroPlantDetailBrowser />
+    </div>
+  )
+}
+
+/* ─── HeroPlantDetailBrowser — detail view of a single approved plant.
+   Image left, name + scientific + care badges + care plan right. Pulls
+   from approvedPlants so the page always shows real species data, with
+   tasteful fallbacks if the data hasn't loaded yet. ───────────────────── */
+const HeroPlantDetailBrowser: React.FC = () => {
+  const { approvedPlants } = useLandingData()
+  const plant = approvedPlants[0]
+  const name = plant?.name || 'Monstera Deliciosa'
+  const sci = plant?.scientific_name || 'Monstera deliciosa'
+  const image = plant?.image_url
+  const slug = name.toLowerCase().replace(/\s+/g, '-')
+
+  // Static-ish care attributes — these are placeholders styled to look like
+  // real encyclopedia data; in a future pass we could pull from the plants
+  // table once the relevant columns are surfaced via the landing fetch.
+  const care = [
+    { icon: Droplets, label: 'Water',    value: 'Weekly',     color: 'text-blue-500',    bg: 'bg-blue-500/10' },
+    { icon: Sun,      label: 'Light',    value: 'Bright indirect', color: 'text-amber-500', bg: 'bg-amber-500/10' },
+    { icon: Sprout,   label: 'Soil',     value: 'Well-drained',    color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+    { icon: Heart,    label: 'Pet-safe', value: 'No',         color: 'text-rose-500',    bg: 'bg-rose-500/10' },
+  ]
+
+  return (
+    <CursorParallax className="hidden lg:block relative" max={3}>
+      <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
+        {/* Window chrome */}
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
+          <div className="h-3 w-3 rounded-full bg-rose-400/80" />
+          <div className="h-3 w-3 rounded-full bg-amber-400/80" />
+          <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
+          <div className="ml-3 flex-1 h-6 rounded-md bg-stone-600/40 dark:bg-stone-700/60 flex items-center px-2.5 gap-1.5">
+            <Globe className="h-3 w-3 text-stone-300/70" />
+            <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/plants/{slug}</span>
           </div>
-          {/* Viewport */}
-          <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/10] overflow-hidden">
-            {/* Top bar */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-200/50 dark:border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="h-7 w-7 rounded-lg bg-emerald-500 flex items-center justify-center shadow-md shadow-emerald-500/30">
-                  <Leaf className="h-3.5 w-3.5 text-white" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-stone-900 dark:text-white">{t("heroCard.gardenName", { defaultValue: "My Indoor Jungle" })}</p>
-                  <p className="text-[10px] text-stone-500 dark:text-stone-400">12 plants · 7 day streak</p>
-                </div>
+        </div>
+
+        {/* Viewport */}
+        <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/10] overflow-hidden grid grid-cols-5">
+
+          {/* Image column — full-bleed plant photo */}
+          <div className="col-span-2 relative bg-gradient-to-br from-emerald-300 to-teal-500">
+            {image ? (
+              <img src={image} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Leaf className="h-24 w-24 text-white/60" />
               </div>
-              <div className="flex items-center gap-2">
-                <div className="px-2.5 py-1 rounded-md bg-emerald-500/10 text-[10px] text-emerald-700 dark:text-emerald-300 font-medium">85% on track</div>
-                <div className="h-7 w-7 rounded-full bg-gradient-to-br from-pink-400 to-rose-500" />
+            )}
+            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/50 text-white backdrop-blur-sm text-[10px]">
+              <BookMarked className="h-3 w-3" />
+              <span>Encyclopedia</span>
+            </div>
+            <button
+              className="absolute top-3 right-3 h-8 w-8 rounded-full bg-white/95 hover:bg-white shadow-lg flex items-center justify-center transition-transform hover:scale-105"
+              aria-label="Save"
+            >
+              <Heart className="h-4 w-4 text-rose-500" />
+            </button>
+          </div>
+
+          {/* Detail column */}
+          <div className="col-span-3 p-5 lg:p-6 flex flex-col gap-4 overflow-hidden">
+            {/* Header */}
+            <div className="animate-stagger-up" style={{ animationDelay: '0.1s' }}>
+              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-1">
+                Plant detail
+              </p>
+              <h3 className="text-xl lg:text-2xl font-bold text-stone-900 dark:text-white leading-tight truncate">
+                {name}
+              </h3>
+              <p className="text-[11px] italic text-stone-500 dark:text-stone-400 truncate">{sci}</p>
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-medium">Easy</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">Tropical</span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-400 font-medium">Indoor</span>
               </div>
             </div>
 
-            {/* Body: plants gallery + sidebar */}
-            <div className="grid grid-cols-3 gap-4 p-5">
-              <div className="col-span-2">
-                <div className="flex items-center justify-between mb-2.5">
-                  <p className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 uppercase tracking-wider">Plants</p>
-                  <span className="text-[10px] text-stone-400">view all</span>
-                </div>
-                <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { g: 'from-emerald-400 to-teal-500', name: 'Monstera', due: 0 },
-                    { g: 'from-lime-400 to-green-500', name: 'Pothos', due: 1 },
-                    { g: 'from-green-400 to-emerald-500', name: 'Snake', due: 0 },
-                    { g: 'from-teal-400 to-cyan-500', name: 'Fern', due: 2 },
-                    { g: 'from-emerald-500 to-green-600', name: 'Lily', due: 0 },
-                    { g: 'from-green-500 to-teal-600', name: 'Calathea', due: 0 },
-                    { g: 'from-amber-400 to-orange-500', name: 'Succulent', due: 0 },
-                    { g: 'from-pink-400 to-rose-500', name: 'Anthurium', due: 0 },
-                  ].map((p, i) => {
-                    const real = approvedPlants[i]
-                    return (
-                      <div
-                        key={i}
-                        className={`aspect-square rounded-xl bg-gradient-to-br ${p.g} relative overflow-hidden flex items-center justify-center animate-stagger-up transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-lg`}
-                        style={{ animationDelay: `${0.15 + i * 0.07}s` }}
-                      >
-                        {real?.image_url ? (
-                          <img src={real.image_url} alt={real.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                        ) : (
-                          <Leaf className="h-5 w-5 text-white/70" />
-                        )}
-                        {p.due > 0 && (
-                          <div className="absolute top-1 right-1 h-4 w-4 rounded-full bg-amber-400 text-[8px] font-bold text-white flex items-center justify-center shadow">
-                            {p.due}
-                          </div>
-                        )}
-                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5">
-                          <p className="text-[8px] text-white truncate font-medium">{real?.name || p.name}</p>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              </div>
+            {/* Care attributes — 2x2 grid */}
+            <div className="grid grid-cols-2 gap-2">
+              {care.map((c, i) => {
+                const Icon = c.icon
+                return (
+                  <div
+                    key={c.label}
+                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-white/5 border border-stone-200/60 dark:border-white/10 animate-stagger-up"
+                    style={{ animationDelay: `${0.25 + i * 0.07}s` }}
+                  >
+                    <div className={`h-7 w-7 rounded-md ${c.bg} flex items-center justify-center flex-shrink-0`}>
+                      <Icon className={`h-3.5 w-3.5 ${c.color}`} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[9px] uppercase tracking-wider text-stone-500 dark:text-stone-400">{c.label}</p>
+                      <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100 truncate">{c.value}</p>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
 
-              <div className="space-y-2">
-                <p className="text-[11px] font-semibold text-stone-700 dark:text-stone-200 uppercase tracking-wider">Today</p>
-                <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '0.7s' }}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Bell className="h-3 w-3 text-emerald-600 animate-bounce-subtle" />
-                    <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-300">Water Pothos</span>
-                  </div>
-                  <p className="text-[9px] text-stone-600 dark:text-stone-300">in 2 hours</p>
-                </div>
-                <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '0.85s' }}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Sun className="h-3 w-3 text-amber-500" />
-                    <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-400">Rotate Fern</span>
-                  </div>
-                  <p className="text-[9px] text-stone-600 dark:text-stone-300">tomorrow</p>
-                </div>
-                <div className="rounded-xl bg-blue-500/10 border border-blue-500/20 p-2.5 animate-stagger-up" style={{ animationDelay: '1s' }}>
-                  <div className="flex items-center gap-1.5 mb-1">
-                    <Droplets className="h-3 w-3 text-blue-500" />
-                    <span className="text-[10px] font-semibold text-blue-700 dark:text-blue-400">Mist Calathea</span>
-                  </div>
-                  <p className="text-[9px] text-stone-600 dark:text-stone-300">Friday</p>
-                </div>
+            {/* Care plan strip */}
+            <div className="rounded-lg bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 px-3 py-2 flex items-center gap-2 animate-stagger-up" style={{ animationDelay: '0.6s' }}>
+              <Bell className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 animate-bounce-subtle flex-shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] uppercase tracking-wider text-emerald-700/70 dark:text-emerald-400/70">Next care</p>
+                <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100">Water in 2 days · mist weekly</p>
               </div>
+              <ArrowRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
             </div>
           </div>
         </div>
-      </CursorParallax>
-    </div>
+      </div>
+    </CursorParallax>
   )
 }
 
