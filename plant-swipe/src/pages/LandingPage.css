@@ -320,6 +320,62 @@
   opacity: 0;
 }
 
+/* ───────────────────────────────────────────────────────────
+   Cross-Device card — morphing screen between phone / TV / laptop.
+   The frame cycles aspect ratio and border-radius to suggest the
+   same content reflowing across devices. ~3s per device with a
+   smooth ~0.7s morph between them.
+   ─────────────────────────────────────────────────────────── */
+@keyframes device-morph {
+  0%, 22%   { width: 56px;  height: 96px; border-radius: 14px; }
+  33%, 55%  { width: 128px; height: 80px; border-radius: 10px; }
+  66%, 88%  { width: 144px; height: 88px; border-radius: 8px;  }
+  100%      { width: 56px;  height: 96px; border-radius: 14px; }
+}
+.animate-device-morph {
+  animation: device-morph 9s cubic-bezier(.6,0,.4,1) infinite;
+}
+
+/* Laptop base — only visible when the frame is in laptop shape. */
+@keyframes device-laptop-base {
+  0%, 60%   { opacity: 0; transform: scaleX(0.3); }
+  68%, 88%  { opacity: 1; transform: scaleX(1);   }
+  100%      { opacity: 0; transform: scaleX(0.3); }
+}
+.animate-device-laptop-base {
+  animation: device-laptop-base 9s cubic-bezier(.6,0,.4,1) infinite;
+  opacity: 0;
+  transform-origin: center;
+}
+
+/* TV stand — only visible when the frame is in TV shape. */
+@keyframes device-tv-stand {
+  0%, 26%   { opacity: 0; }
+  33%, 55%  { opacity: 1; }
+  62%, 100% { opacity: 0; }
+}
+.animate-device-tv-stand {
+  animation: device-tv-stand 9s cubic-bezier(.6,0,.4,1) infinite;
+  opacity: 0;
+}
+
+/* Per-device labels under the frame — each fades in during its window. */
+@keyframes device-label-mobile { 0%, 22%   { opacity: 1; } 28%, 100% { opacity: 0; } }
+@keyframes device-label-tv     { 0%, 28%   { opacity: 0; } 33%, 55%  { opacity: 1; } 62%, 100% { opacity: 0; } }
+@keyframes device-label-web    { 0%, 62%   { opacity: 0; } 66%, 88%  { opacity: 1; } 94%, 100% { opacity: 0; } }
+.animate-device-label-mobile { animation: device-label-mobile 9s cubic-bezier(.6,0,.4,1) infinite; }
+.animate-device-label-tv     { animation: device-label-tv     9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
+.animate-device-label-web    { animation: device-label-web    9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
+
+/* Plant ID card — scan beam loop for the small camera preview. */
+@keyframes plantid-scan {
+  0%   { transform: translateY(-110%); opacity: 0; }
+  10%  { opacity: 0.95; }
+  90%  { opacity: 0.95; }
+  100% { transform: translateY(110%);  opacity: 0; }
+}
+.animate-plantid-scan { animation: plantid-scan 3.6s ease-in-out infinite; }
+
 /* Join toast — one-shot animation (fade-up in, hold, fade-out) for the
    "X just joined" pill that occasionally surfaces above the avatar row.
    Single keyframe so React just mounts it and lets it run; we unmount
@@ -359,6 +415,13 @@
 .landing-section-hidden .animate-gs-grow,
 .landing-section-hidden .animate-gs-bell,
 .landing-section-hidden .animate-gs-notif,
-.landing-section-hidden .animate-gs-week-day {
+.landing-section-hidden .animate-gs-week-day,
+.landing-section-hidden .animate-device-morph,
+.landing-section-hidden .animate-device-laptop-base,
+.landing-section-hidden .animate-device-tv-stand,
+.landing-section-hidden .animate-device-label-mobile,
+.landing-section-hidden .animate-device-label-tv,
+.landing-section-hidden .animate-device-label-web,
+.landing-section-hidden .animate-plantid-scan {
   animation-play-state: paused;
 }
