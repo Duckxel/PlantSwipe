@@ -1084,6 +1084,7 @@ const GetStartedSection: React.FC = React.memo(() => {
    ═══════════════════════════════════════════════════════════════════════════════ */
 const FeaturesSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
+  const { approvedPlants } = useLandingData()
 
   return (
     <section id="features" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
@@ -1118,13 +1119,37 @@ const FeaturesSection: React.FC = React.memo(() => {
               <h3 className="text-2xl font-bold text-stone-900 dark:text-white mb-3">{t("features.smartLibrary.title")}</h3>
               <p className="text-stone-600 dark:text-stone-400 text-base leading-relaxed max-w-lg">{t("features.smartLibrary.description")}</p>
               
-              {/* Mini preview */}
-              <div className="mt-8 flex gap-3">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="h-16 w-16 rounded-xl bg-gradient-to-br from-emerald-400/20 to-teal-400/20 border border-emerald-500/20 flex items-center justify-center">
-                    <Leaf className="h-6 w-6 text-emerald-500/50" />
-                  </div>
-                ))}
+              {/* Mini preview — real approved plants. Picks 4 different ones than
+                  what the LiveTour Garden screen shows so this section feels fresh. */}
+              <div className="mt-8 flex gap-3 flex-wrap">
+                {[0, 1, 2, 3].map((slot) => {
+                  // Offset by 4 so this row doesn't duplicate the first 4 plants
+                  // shown in the hero gallery and the tour Garden screen.
+                  const plant = approvedPlants[slot + 4] || approvedPlants[slot]
+                  return (
+                    <div
+                      key={slot}
+                      className="relative h-16 w-16 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 border border-emerald-500/20 transition-transform duration-200 group-hover:-translate-y-0.5 hover:scale-105 flex items-center justify-center"
+                    >
+                      {plant?.image_url ? (
+                        <>
+                          <img
+                            src={plant.image_url}
+                            alt={plant.name}
+                            loading="lazy"
+                            decoding="async"
+                            className="absolute inset-0 w-full h-full object-cover"
+                          />
+                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5">
+                            <p className="text-[8px] text-white truncate font-medium">{plant.name}</p>
+                          </div>
+                        </>
+                      ) : (
+                        <Leaf className="h-6 w-6 text-emerald-500/50" />
+                      )}
+                    </div>
+                  )
+                })}
                 <div className="h-16 w-16 rounded-xl bg-stone-100 dark:bg-white/5 border border-stone-200 dark:border-white/10 flex items-center justify-center">
                   <span className="text-sm font-medium text-stone-400">{t("floatingCards.morePlants", { defaultValue: "+10K" })}</span>
                 </div>
