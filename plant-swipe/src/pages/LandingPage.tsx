@@ -67,9 +67,6 @@ import {
   Thermometer,
   ChevronLeft,
   Plus,
-  Smartphone,
-  Tv,
-  Monitor,
   Sprout,
   Instagram,
   Twitter,
@@ -1934,9 +1931,10 @@ const FeaturesSection: React.FC = React.memo(() => {
           </div>
 
           {/* Plant ID — simple feature card */}
-          {/* Visual Plant ID — camera viewfinder preview with scan beam +
-              identified-result chip, mirroring the LiveTour Identify motion
-              but compressed into a static-card preview. */}
+          {/* Visual Plant ID — compact viewfinder preview using a stylized
+              leaf icon instead of a real photo. Shorter than the previous
+              4:3 aspect (was leaving the row visually uneven) and lighter
+              on chrome. */}
           <div className="group relative rounded-3xl bg-gradient-to-br from-pink-500/10 to-rose-500/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-pink-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
             <div className="inline-flex h-12 w-12 rounded-xl bg-pink-500 items-center justify-center mb-4 shadow-lg shadow-pink-500/30 group-hover:scale-110 transition-transform">
               <Camera className="h-6 w-6 text-white" />
@@ -1944,37 +1942,38 @@ const FeaturesSection: React.FC = React.memo(() => {
             <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{t("features.plantId.title")}</h3>
             <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed mb-4">{t("features.plantId.description")}</p>
 
-            {/* Camera viewfinder preview — real plant photo with corner
-                brackets, looping scan beam, and a result chip below. */}
-            <div className="relative aspect-[4/3] rounded-xl overflow-hidden bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 mb-2">
-              <PlantImage
-                src={approvedPlants[2]?.image_url}
-                alt={approvedPlants[2]?.name || 'Plant'}
-                fallback={<Leaf className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-12 w-12 text-white/60" />}
-              />
-              {/* Viewfinder corner brackets */}
+            {/* Compact preview — 16:9 aspect, stylized leaf icon, scan beam,
+                inline result chip stamped at the bottom of the preview. */}
+            <div className="relative aspect-[16/9] rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/80 via-green-500/80 to-teal-500/80 dark:from-emerald-700/60 dark:via-green-700/60 dark:to-teal-700/60">
+              {/* Centered icon — replaces the real plant image. Light radial
+                  glow behind so the icon reads against the gradient. */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <div className="absolute inset-0 -m-3 bg-emerald-300/30 rounded-full blur-xl" />
+                <Leaf className="relative h-9 w-9 text-white drop-shadow-md" strokeWidth={1.5} />
+              </div>
+              {/* Viewfinder brackets */}
               <div className="absolute top-1.5 left-1.5 w-3 h-3 border-t-2 border-l-2 border-white/90 rounded-tl" />
               <div className="absolute top-1.5 right-1.5 w-3 h-3 border-t-2 border-r-2 border-white/90 rounded-tr" />
               <div className="absolute bottom-1.5 left-1.5 w-3 h-3 border-b-2 border-l-2 border-white/90 rounded-bl" />
               <div className="absolute bottom-1.5 right-1.5 w-3 h-3 border-b-2 border-r-2 border-white/90 rounded-br" />
-              {/* Scan beam — looped */}
+              {/* Scan beam */}
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute inset-x-0 h-5 bg-gradient-to-b from-transparent via-emerald-200/95 to-transparent shadow-[0_0_18px_rgba(16,185,129,0.85)] animate-plantid-scan" />
+                <div className="absolute inset-x-0 h-4 bg-gradient-to-b from-transparent via-white/90 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.7)] animate-plantid-scan" />
               </div>
-              {/* "Scanning..." pill at top */}
+              {/* "Scanning..." pill */}
               <div className="absolute top-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/55 backdrop-blur-sm">
                 <span className="h-1 w-1 rounded-full bg-emerald-300" />
                 <span className="text-[7px] text-white font-medium">Scanning…</span>
               </div>
-            </div>
-
-            {/* Identified-result chip */}
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-white/70 dark:bg-white/5 border-2 border-emerald-500/40">
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500 flex-shrink-0" />
-              <span className="text-xs font-bold text-stone-900 dark:text-white truncate">
-                {approvedPlants[2]?.name || 'Monstera'}
-              </span>
-              <span className="ml-auto text-[10px] font-bold text-emerald-600 dark:text-emerald-400">98%</span>
+              {/* Result strip stamped at the bottom of the preview, no
+                  separate chip below — keeps the card compact. */}
+              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 flex items-center gap-1.5">
+                <CheckCircle2 className="h-3 w-3 text-emerald-300 flex-shrink-0" />
+                <span className="text-[10px] font-bold text-white truncate">
+                  {approvedPlants[2]?.name || 'Monstera'}
+                </span>
+                <span className="ml-auto text-[9px] font-bold text-emerald-300">98%</span>
+              </div>
             </div>
           </div>
 
@@ -2087,12 +2086,13 @@ const FeaturesSection: React.FC = React.memo(() => {
             </div>
           </div>
 
-          {/* Cross-Device Sync — central frame morphs between phone, TV,
-              and laptop shapes on a 9s loop, with the same content
-              ("Aphylia • 12 plants") staying consistent inside. The
-              accompanying laptop base and TV stand fade in only during
-              their respective windows. A row of device icons below tracks
-              the active state with a small dot indicator. */}
+          {/* Cross-Device Sync — a single screen frame that morphs between
+              three abstract device shapes (phone, wide, laptop-wide) on a
+              9s loop. No device labels and no extra stand/base shapes — the
+              shape change alone conveys "any device". The inner viewport
+              shows a simplified Aphylia plant-info preview that stays
+              consistent across all morph states; a small live "Synced" dot
+              is part of the screen itself so it morphs with it. */}
           <div className="group relative rounded-3xl bg-gradient-to-br from-purple-500/10 to-violet-500/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-purple-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
             <div className="inline-flex h-12 w-12 rounded-xl bg-purple-500 items-center justify-center mb-4 shadow-lg shadow-purple-500/30 group-hover:scale-110 transition-transform">
               <Wifi className="h-6 w-6 text-white" />
@@ -2100,57 +2100,48 @@ const FeaturesSection: React.FC = React.memo(() => {
             <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{t("features.pwa.title")}</h3>
             <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed mb-4">{t("features.pwa.description")}</p>
 
-            {/* Morphing device stage */}
+            {/* Morphing device stage — single screen, no extra furniture. */}
             <div className="relative h-28 flex items-center justify-center">
-              {/* TV stand — only visible during TV window */}
-              <div
-                aria-hidden="true"
-                className="absolute bottom-3 left-1/2 -translate-x-1/2 animate-device-tv-stand"
-                style={{ width: '40px', height: '6px' }}
-              >
-                <div className="h-1 w-full bg-stone-400 dark:bg-stone-500 rounded-full" />
-                <div className="mx-auto mt-0.5 h-2 w-12 -translate-x-1/2 left-1/2 relative bg-stone-400/60 dark:bg-stone-500/60 rounded" />
-              </div>
+              <div className="relative animate-device-morph bg-gradient-to-br from-stone-800 to-stone-900 dark:from-stone-900 dark:to-black ring-1 ring-purple-500/30 shadow-lg shadow-purple-900/20 overflow-hidden">
 
-              {/* The morphing screen — contains a tiny consistent app preview.
-                  Width / height / border-radius are animated by the keyframe. */}
-              <div className="relative animate-device-morph bg-gradient-to-br from-stone-700 to-stone-900 dark:from-stone-800 dark:to-stone-950 ring-1 ring-purple-500/30 shadow-lg shadow-purple-900/20 overflow-hidden">
-                {/* Inner viewport */}
-                <div className="absolute inset-1 rounded-md bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-950/60 dark:to-teal-950/60 flex flex-col items-center justify-center gap-0.5">
-                  <Leaf className="h-3 w-3 text-emerald-500" />
-                  <p className="text-[7px] font-bold text-stone-700 dark:text-stone-200">Aphylia</p>
-                  <p className="text-[6px] text-stone-500 dark:text-stone-400">12 plants</p>
+                {/* Inner viewport — simplified plant info that conveys "real
+                    Aphylia data" no matter what device shape contains it. */}
+                <div className="absolute inset-[2px] rounded-[inherit] bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-950/70 dark:to-teal-950/70 p-1 flex flex-col">
+                  {/* Tiny header row: leaf + Aphylia + live dot */}
+                  <div className="flex items-center gap-0.5 mb-0.5">
+                    <Leaf className="h-1.5 w-1.5 text-emerald-500 flex-shrink-0" />
+                    <span className="text-[5px] font-bold text-stone-800 dark:text-stone-100 leading-none">Aphylia</span>
+                    <span className="ml-auto h-1 w-1 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                  {/* Plant row — leaf chip + name + tiny water bar */}
+                  <div className="flex items-center gap-0.5 mb-0.5">
+                    <div className="h-2 w-2 rounded-sm bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center flex-shrink-0">
+                      <Leaf className="h-1 w-1 text-white/80" />
+                    </div>
+                    <span className="text-[5px] font-semibold text-stone-700 dark:text-stone-200 leading-none truncate">Pothos</span>
+                  </div>
+                  {/* Water bar */}
+                  <div className="h-0.5 rounded-full bg-stone-200/60 dark:bg-stone-700/60 overflow-hidden">
+                    <div className="h-full w-3/4 rounded-full bg-gradient-to-r from-blue-500 to-cyan-400" />
+                  </div>
+                  {/* Three plant tiles — small enough to fit in the phone shape */}
+                  <div className="mt-auto grid grid-cols-3 gap-0.5">
+                    {['from-emerald-400 to-teal-500','from-lime-400 to-green-500','from-amber-400 to-orange-500'].map((g, i) => (
+                      <div key={i} className={`aspect-square rounded-sm bg-gradient-to-br ${g}`} />
+                    ))}
+                  </div>
                 </div>
-              </div>
-
-              {/* Laptop base — only visible during laptop window */}
-              <div
-                aria-hidden="true"
-                className="absolute bottom-1 left-1/2 -translate-x-1/2 h-1.5 w-44 rounded-b-md bg-gradient-to-b from-stone-600 to-stone-800 dark:from-stone-700 dark:to-stone-900 animate-device-laptop-base"
-              />
-
-              {/* Sync pulse — small badge that sits in the top-right and pulses */}
-              <div className="absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/30">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="text-[8px] text-emerald-700 dark:text-emerald-300 font-semibold">Synced</span>
               </div>
             </div>
 
-            {/* Device label crossfade — only one is opaque at a time. They stack
-                in the same spot via absolute positioning. */}
-            <div className="relative mt-3 h-5 flex items-center justify-center">
-              <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300 animate-device-label-mobile">
-                <Smartphone className="h-3 w-3" />
-                <span>Mobile</span>
+            {/* Live "Synced" status — sits below the stage where it's always
+                visible, anchored to the card not the morphing screen. */}
+            <div className="mt-3 flex items-center justify-center gap-1.5">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full rounded-full bg-emerald-400/60 animate-ping" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               </span>
-              <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300 animate-device-label-tv">
-                <Tv className="h-3 w-3" />
-                <span>Television</span>
-              </span>
-              <span className="absolute inset-0 flex items-center justify-center gap-1.5 text-[11px] font-semibold text-purple-700 dark:text-purple-300 animate-device-label-web">
-                <Monitor className="h-3 w-3" />
-                <span>Web</span>
-              </span>
+              <span className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">Synced just now</span>
             </div>
           </div>
 
