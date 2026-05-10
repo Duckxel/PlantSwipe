@@ -616,69 +616,180 @@ const LandingPage: React.FC = () => {
   )
 }
 
-/* ─── LiveJoinAvatars — animated avatar row that simulates a live join feed.
-   Every ~2.5s a new "person" replaces a slot: a fresh letter initial on a
-   randomized color appears with a small pop-in. Designed to feel alive
-   without making any factual claim about user counts. ───────────────────── */
+/* ─── LiveJoinAvatars — conveyor-belt of "people just joining". A new
+   avatar slides in from the LEFT, pushing the row to the right; the
+   rightmost one fades off the edge. New arrivals show their first name
+   for a beat, then collapse to just the initial. The cadence is
+   randomized (1.8–4.5s) so it doesn't feel metronomic.
+
+   Implemented with absolute positioning + CSS transition on `transform`
+   so each avatar smoothly transitions from slot N to slot N+1 when a
+   new one is inserted. New avatars start at slot=-1 (off-canvas left,
+   opacity 0) and animate to slot=0 on the next frame; leaving avatars
+   exit at slot=SLOTS and are removed after the transition. ──────── */
 const AVATAR_COLORS = [
-  'bg-emerald-500',
-  'bg-teal-500',
-  'bg-lime-500',
-  'bg-rose-500',
-  'bg-amber-500',
-  'bg-violet-500',
-  'bg-sky-500',
-  'bg-pink-500',
-  'bg-cyan-500',
-  'bg-orange-500',
-  'bg-indigo-500',
-  'bg-fuchsia-500',
+  'bg-emerald-500', 'bg-teal-500',  'bg-lime-500',     'bg-rose-500',
+  'bg-amber-500',   'bg-violet-500','bg-sky-500',      'bg-pink-500',
+  'bg-cyan-500',    'bg-orange-500','bg-indigo-500',   'bg-fuchsia-500',
+  'bg-green-500',   'bg-blue-500',  'bg-yellow-500',   'bg-purple-500',
 ]
-// Plausible-feeling first-letter pool. Weighted toward common names so the
-// row never feels random/programmatic.
-const AVATAR_LETTERS = ['S','M','L','J','A','E','R','K','T','N','C','P','D','O','I','H']
+// Mixed pool of common English + French first names. Letter for the
+// avatar comes from name[0], so the visual letter is always tied to a
+// real-feeling name.
+const AVATAR_NAMES = [
+  // English
+  'Sarah', 'Mark', 'Liam', 'Olivia', 'Emma', 'James', 'Ava', 'Henry',
+  'Charlotte', 'Daniel', 'Emily', 'Lucas', 'Sophia', 'Owen', 'Mia',
+  'Noah', 'Hannah', 'Oscar', 'Zoe', 'Grace', 'Ben', 'Ruby',
+  // French
+  'Léa', 'Hugo', 'Camille', 'Louis', 'Manon', 'Julien', 'Chloé',
+  'Théo', 'Inès', 'Antoine', 'Margaux', 'Élodie', 'Pierre', 'Justine',
+  'Romain', 'Clara', 'Nicolas', 'Amélie', 'Maxime', 'Yasmine',
+]
 
-type Avatar = { id: number; letter: string; color: string }
+type Avatar = {
+  id: number
+  name: string
+  letter: string
+  color: string
+  slot: number       // -1 = entering off-left; 0..SLOTS-1 = visible; SLOTS = leaving off-right
+  showLabel: boolean
+}
 
-const randomAvatar = (id: number): Avatar => ({
-  id,
-  letter: AVATAR_LETTERS[Math.floor(Math.random() * AVATAR_LETTERS.length)],
-  color: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
-})
+const SLOT_OFFSET = 22   // px between avatar centers (creates an 8px overlap on a 28px circle)
+const AVATAR_SIZE = 28
+const TRANSITION_MS = 700
+const LABEL_HOLD_MS = 1400
+const SLOTS = 4
+
+const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]
+const makeAvatar = (id: number, slot: number, showLabel = false): Avatar => {
+  const name = pick(AVATAR_NAMES)
+  return {
+    id,
+    name,
+    letter: name.charAt(0).toUpperCase(),
+    color: pick(AVATAR_COLORS),
+    slot,
+    showLabel,
+  }
+}
 
 const LiveJoinAvatars: React.FC = () => {
-  const SLOTS = 4
   const nextId = React.useRef(SLOTS)
   const [avatars, setAvatars] = React.useState<Avatar[]>(() =>
-    Array.from({ length: SLOTS }, (_, i) => randomAvatar(i))
+    Array.from({ length: SLOTS }, (_, i) => makeAvatar(i, i))
   )
 
   React.useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
-    const id = setInterval(() => {
-      setAvatars((prev) => {
-        // Replace one slot with a new avatar — picks a slot at random so
-        // the swap doesn't follow a predictable pattern.
-        const slot = Math.floor(Math.random() * SLOTS)
-        const next = [...prev]
-        next[slot] = randomAvatar(nextId.current++)
-        return next
+
+    let nextTimeout: number | undefined
+    let labelTimeout: number | undefined
+    let cleanupTimeout: number | undefined
+
+    const tick = () => {
+      const id = nextId.current++
+      const newAvatar = makeAvatar(id, -1, true)
+
+      // Step 1: shift everyone right by one slot, append the new one
+      // at slot=-1 (off-canvas left, opacity 0).
+      setAvatars((prev) => [
+        ...prev.map((a) => ({ ...a, slot: a.slot + 1 })),
+        newAvatar,
+      ])
+
+      // Step 2: next frame, animate the new one from slot=-1 to slot=0.
+      // The transition on `transform` carries the existing avatars from
+      // their N→N+1 positions during the same window.
+      requestAnimationFrame(() => {
+        setAvatars((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, slot: 0 } : a))
+        )
       })
-    }, 2200)
-    return () => clearInterval(id)
+
+      // Step 3: after the transition completes, drop avatars that have
+      // slid past the right edge.
+      cleanupTimeout = window.setTimeout(() => {
+        setAvatars((prev) => prev.filter((a) => a.slot < SLOTS))
+      }, TRANSITION_MS)
+
+      // Step 4: collapse the freshly-arrived label after a brief hold,
+      // leaving just the letter avatar.
+      labelTimeout = window.setTimeout(() => {
+        setAvatars((prev) =>
+          prev.map((a) => (a.id === id ? { ...a, showLabel: false } : a))
+        )
+      }, LABEL_HOLD_MS)
+
+      scheduleNext()
+    }
+
+    const scheduleNext = () => {
+      // Random cadence so the feed doesn't feel metronomic.
+      const delay = 1800 + Math.random() * 2700
+      nextTimeout = window.setTimeout(tick, delay)
+    }
+
+    scheduleNext()
+
+    return () => {
+      if (nextTimeout)    window.clearTimeout(nextTimeout)
+      if (labelTimeout)   window.clearTimeout(labelTimeout)
+      if (cleanupTimeout) window.clearTimeout(cleanupTimeout)
+    }
   }, [])
 
+  // Container width holds SLOTS visible avatars with overlap.
+  const trackWidth = (SLOTS - 1) * SLOT_OFFSET + AVATAR_SIZE
+
   return (
-    <div className="flex -space-x-2" aria-label="Recent joins">
-      {avatars.map((a) => (
-        <span
-          key={a.id}
-          className={`relative h-7 w-7 rounded-full border-2 border-white dark:border-stone-800 ${a.color} flex items-center justify-center text-[10px] font-bold text-white shadow-sm animate-stagger-up`}
-          style={{ animationDuration: '0.5s' }}
-        >
-          {a.letter}
-        </span>
-      ))}
+    <div
+      className="relative"
+      style={{ width: trackWidth, height: AVATAR_SIZE }}
+      aria-label="Recent joins"
+    >
+      {avatars.map((a) => {
+        const isVisible = a.slot >= 0 && a.slot < SLOTS
+        return (
+          <div
+            key={a.id}
+            className="absolute top-0 left-0"
+            style={{
+              transform: `translateX(${a.slot * SLOT_OFFSET}px)`,
+              opacity: isVisible ? 1 : 0,
+              transition: `transform ${TRANSITION_MS}ms cubic-bezier(.2,.7,.2,1), opacity ${TRANSITION_MS}ms ease-out`,
+              // New avatars sit on top during their slide-in so they overlap cleanly.
+              zIndex: SLOTS - a.slot,
+              willChange: 'transform, opacity',
+            }}
+          >
+            {/* Avatar dot */}
+            <span
+              className={`relative h-7 w-7 rounded-full border-2 border-white dark:border-stone-800 ${a.color} flex items-center justify-center text-[10px] font-bold text-white shadow-sm`}
+            >
+              {a.letter}
+            </span>
+
+            {/* Floating name tag — appears for fresh arrivals, fades to just the letter. */}
+            <span
+              className="absolute left-1/2 -translate-x-1/2 -top-7 px-2 py-0.5 rounded-md bg-stone-900 dark:bg-white text-white dark:text-stone-900 text-[10px] font-semibold whitespace-nowrap shadow-md pointer-events-none"
+              style={{
+                opacity: a.showLabel ? 1 : 0,
+                transform: a.showLabel
+                  ? 'translate(-50%, 0)'
+                  : 'translate(-50%, 4px)',
+                transition: 'opacity 350ms ease-out, transform 350ms ease-out',
+              }}
+              aria-hidden={!a.showLabel}
+            >
+              {a.name}
+              {/* Tail */}
+              <span className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[4px] border-t-stone-900 dark:border-t-white" />
+            </span>
+          </div>
+        )
+      })}
     </div>
   )
 }
