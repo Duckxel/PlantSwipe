@@ -1,5 +1,26 @@
 /* Landing Page Animations - extracted for better caching and parsing performance */
 
+/* ───────────────────────────────────────────────────────────
+   Liana / vine system — flowing curves of leaves that drift
+   along SVG paths. Used as ambient garden decoration behind
+   page content. Vine stem color flips with theme so the watermark
+   stays subtle but visible against either background.
+   ─────────────────────────────────────────────────────────── */
+:root        { --landing-vine-stem: #4f8665; }  /* light mode */
+.dark        { --landing-vine-stem: #2c5238; }  /* dark mode  */
+
+/* Per-leaf wobble — adds subtle texture on top of the path-travel motion.
+   The traveling leaves provide the main "flowing serpent" animation. */
+@keyframes leaf-wobble {
+  0%   { transform: rotate(-0.9deg); }
+  50%  { transform: rotate(0.9deg);  }
+  100% { transform: rotate(-0.9deg); }
+}
+.leaf-wobble {
+  transform-origin: 0 0;
+  animation: leaf-wobble 6s ease-in-out infinite;
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0px) rotate(0deg); }
   50% { transform: translateY(-20px) rotate(3deg); }

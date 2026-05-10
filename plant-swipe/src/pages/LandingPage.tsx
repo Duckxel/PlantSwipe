@@ -369,6 +369,170 @@ const LazySection: React.FC<{ children: React.ReactNode; minHeight?: string }> =
   )
 }
 
+/* ─── Vine — ambient liana decoration ──────────────────────────────────────
+   Renders an SVG with a stem path, then dynamically appends `<g>` elements
+   along the path that flow forward over time using requestAnimationFrame
+   plus path.getPointAtLength() + tangent. Each leaf also has a subtle
+   CSS rotate-wobble so the motion reads as organic, not mechanical.
+
+   Ported from a hand-tuned HTML prototype — keeping the per-vine knobs
+   (spacing/start/end/leafScale/tilt/speed) so each vine on the page can
+   be tuned independently. ─────────────────────────────────────────────── */
+type VineProps = {
+  /** Tailwind classes for absolute positioning + width/height. */
+  className?: string
+  /** SVG path d for the stem. Should start and end OFF-screen so leaves
+      enter and exit cleanly — long curving paths read better than stubs. */
+  d: string
+  /** SVG viewBox — matches the path's coordinate space. */
+  viewBox: string
+  /** Distance between leaves along the path (in path units). */
+  spacing?: number
+  /** Off-stage padding at the start of the path. */
+  start?: number
+  /** Off-stage padding at the end of the path. */
+  end?: number
+  /** Overall leaf size multiplier. */
+  leafScale?: number
+  /** Forward lean angle (degrees) so leaves don't sit perpendicular. */
+  tilt?: number
+  /** Path units per second. Higher = faster flow. */
+  speed?: number
+  /** Stem stroke width in path units. */
+  strokeWidth?: number
+}
+
+const Vine: React.FC<VineProps> = React.memo(({
+  className,
+  d,
+  viewBox,
+  spacing = 56,
+  start = 40,
+  end = 40,
+  leafScale = 1,
+  tilt = 30,
+  speed = 10,
+  strokeWidth = 8,
+}) => {
+  const svgRef = React.useRef<SVGSVGElement>(null)
+
+  React.useEffect(() => {
+    const svg = svgRef.current
+    if (!svg) return
+
+    const stem = svg.querySelector('path.vine-stem') as SVGPathElement | null
+    if (!stem) return
+
+    const total = stem.getTotalLength()
+    const usable = total - start - end
+    if (usable <= 0) return
+
+    const fadeDist = Math.min(50, spacing * 0.85)
+    const cycle = usable + spacing
+    const num = Math.floor(usable / spacing) + 2
+    const NS = 'http://www.w3.org/2000/svg'
+
+    type Leaf = {
+      el: SVGGElement
+      side: number
+      scale: number
+      slot: number
+    }
+    const leaves: Leaf[] = []
+
+    // Build leaf nodes once, then animate transforms in the rAF loop.
+    for (let i = 0; i < num; i++) {
+      const gPos = document.createElementNS(NS, 'g')
+      gPos.setAttribute('data-leaf', '')
+
+      const gWob = document.createElementNS(NS, 'g')
+      gWob.setAttribute('class', 'leaf-wobble')
+      gWob.style.animationDelay = `${(-i * 0.22).toFixed(2)}s`
+
+      const use = document.createElementNS(NS, 'use')
+      use.setAttribute('href', '#vine-leaf')
+
+      gWob.appendChild(use)
+      gPos.appendChild(gWob)
+      svg.appendChild(gPos)
+
+      leaves.push({
+        el: gPos,
+        side: (i % 2 === 0) ? -90 + tilt : 90 - tilt,
+        scale: (0.92 + (i % 3) * 0.07) * leafScale,
+        slot: i * spacing,
+      })
+    }
+
+    const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const t0 = performance.now()
+    let rafId = 0
+
+    const tick = (t: number) => {
+      // Reduced motion: place leaves once at their static positions, no rAF.
+      const elapsed = reduced ? 0 : (t - t0) / 1000
+      const drift = elapsed * speed
+
+      for (let i = 0; i < leaves.length; i++) {
+        const leaf = leaves[i]
+        const cycled = ((leaf.slot + drift) % cycle + cycle) % cycle
+
+        if (cycled > usable) {
+          leaf.el.setAttribute('opacity', '0')
+          continue
+        }
+
+        let opacity = 1
+        if (cycled < fadeDist) opacity = cycled / fadeDist
+        else if (cycled > usable - fadeDist) opacity = (usable - cycled) / fadeDist
+        leaf.el.setAttribute('opacity', opacity.toFixed(3))
+
+        const dist = start + cycled
+        const p = stem.getPointAtLength(dist)
+        const ahead = stem.getPointAtLength(Math.min(dist + 0.5, total))
+        const tan = Math.atan2(ahead.y - p.y, ahead.x - p.x) * 180 / Math.PI
+        const angle = tan + leaf.side
+
+        leaf.el.setAttribute(
+          'transform',
+          `translate(${p.x.toFixed(2)} ${p.y.toFixed(2)}) rotate(${angle.toFixed(2)}) scale(${leaf.scale.toFixed(3)})`
+        )
+      }
+
+      if (!reduced) rafId = requestAnimationFrame(tick)
+    }
+
+    rafId = requestAnimationFrame(tick)
+
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId)
+      // Remove the leaf <g> elements we appended.
+      for (const l of leaves) l.el.remove()
+    }
+  }, [d, viewBox, spacing, start, end, leafScale, tilt, speed])
+
+  return (
+    <svg
+      ref={svgRef}
+      className={`absolute pointer-events-none ${className ?? ''}`}
+      viewBox={viewBox}
+      style={{ overflow: 'visible' }}
+      aria-hidden="true"
+    >
+      <path
+        className="vine-stem"
+        d={d}
+        stroke="var(--landing-vine-stem)"
+        strokeWidth={strokeWidth}
+        fill="none"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+})
+
+
+
 const LandingPage: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { user, profile, signOut } = useAuth()
@@ -600,7 +764,75 @@ const LandingPage: React.FC = () => {
         <div className="absolute -bottom-40 -right-20 w-[600px] h-[600px] bg-teal-500/[0.04] rounded-full blur-3xl" />
       </div>
 
+      {/* Global SVG defs — single leaf shape referenced by every Vine via
+          <use href="#vine-leaf">. Stem color is the only theme-aware bit;
+          leaves inherit from --landing-vine-stem too. */}
+      <svg width="0" height="0" style={{ position: 'absolute' }} aria-hidden="true">
+        <defs>
+          <g id="vine-leaf">
+            <path d="M 0,0 C 4,-9 16,-10 26,-3 L 30,0 L 26,3 C 16,10 4,9 0,0 Z" fill="var(--landing-vine-stem)" />
+          </g>
+        </defs>
+      </svg>
+
       <div className="relative">
+        {/* Liana layer — sits BEHIND every section via z-0; every page section
+            below is wrapped in `relative z-10` so vines are always under the
+            content. Vines start and end OFF-screen (negative inset positions
+            + paths whose endpoints are outside the viewBox) and use the
+            shared #vine-leaf def with theme-aware color. Distributed across
+            the page so the garden motif recurs as the visitor scrolls. */}
+        <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
+          {/* Hero — top-left, sweeps in from above and curls toward the right
+              past the headline, exits down the left side. */}
+          <Vine
+            className="-top-16 -left-16 w-[420px] h-[440px]"
+            viewBox="0 0 400 420"
+            d="M 100,-60 C 240,20 340,70 340,190 C 340,290 240,330 140,300 C 70,280 80,210 30,200 C -20,190 -40,260 -100,340"
+            spacing={56} start={40} end={40} speed={11} tilt={30}
+          />
+
+          {/* Hero/below-fold — top-right, drapes down past the device mockup
+              and exits bottom-right off-screen. Hidden on mobile so it
+              doesn't crowd the hero phone preview. */}
+          <Vine
+            className="hidden md:block -top-12 -right-10 w-[400px] h-[640px]"
+            viewBox="0 0 380 600"
+            d="M 280,-60 C 200,60 100,140 180,240 C 260,330 340,310 290,400 C 240,490 360,540 430,640"
+            spacing={58} start={40} end={40} speed={10} tilt={30}
+          />
+
+          {/* Mid-page (around LiveTour / GetStarted) — left side, sweeps
+              right with multiple swerves before exiting left. */}
+          <Vine
+            className="top-[1700px] -left-20 w-[480px] h-[400px]"
+            viewBox="0 0 460 360"
+            d="M -100,220 C 60,160 220,260 340,180 C 420,130 380,40 260,40 C 160,40 140,150 80,160 C 20,170 -30,100 -100,100"
+            spacing={58} start={40} end={40} speed={10} tilt={30}
+          />
+
+          {/* Around Features — right side. Hidden on mobile so it doesn't
+              fight with cards stacked at narrow widths. */}
+          <Vine
+            className="hidden md:block top-[2900px] -right-12 w-[440px] h-[420px]"
+            viewBox="0 0 420 400"
+            d="M 480,40 C 320,80 240,170 280,260 C 310,330 230,360 130,330 C 60,310 30,230 70,170 C 110,110 220,90 280,30 C 340,-20 420,-30 480,-10"
+            spacing={56} start={36} end={36} speed={11} tilt={30}
+          />
+
+          {/* Bottom (around Final CTA / Aphydle) — left side, gentle horizontal
+              wave exiting bottom-left. */}
+          <Vine
+            className="top-[4300px] -left-16 w-[420px] h-[320px]"
+            viewBox="0 0 400 300"
+            d="M -80,80 C 80,40 200,170 320,110 C 380,80 410,180 460,200 C 320,260 180,290 80,260 C 0,240 -40,160 -80,200"
+            spacing={54} start={36} end={36} speed={10} tilt={30}
+          />
+        </div>
+
+        {/* Page content — wrapped in z-10 so it always renders above the
+            vine layer regardless of individual section positioning. */}
+        <div className="relative z-10">
         {/* Mobile Logo Header */}
         <header className="md:hidden flex items-center justify-center pt-5 pb-3 px-4">
           <Link to={user ? "/discovery" : "/"} className="flex items-center gap-3 no-underline group">
@@ -664,7 +896,8 @@ const LandingPage: React.FC = () => {
 
         {/* Footer */}
         <Footer />
-      </div>
+        </div>{/* /content z-10 */}
+      </div>{/* /relative wrapper containing vines + content */}
     </div>
     </LandingDataContext.Provider>
   )
