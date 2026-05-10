@@ -783,49 +783,99 @@ const LandingPage: React.FC = () => {
             shared #vine-leaf def with theme-aware color. Distributed across
             the page so the garden motif recurs as the visitor scrolls. */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-          {/* Hero — top-left, sweeps in from above and curls toward the right
-              past the headline, exits down the left side. */}
+          {/* Vine paths use SVG `S` (smooth-cubic) commands after the first
+              `C` so every segment join is C1-continuous — no kinks. The
+              first C kicks off the curve direction; each S that follows
+              auto-mirrors the previous control point about the join, which
+              produces continuously curving "swirly" motion regardless of
+              how many segments the path has. */}
+
+          {/* Hero — top-left, weaves down past the headline. */}
           <Vine
-            className="-top-16 -left-16 w-[420px] h-[440px]"
-            viewBox="0 0 400 420"
-            d="M 100,-60 C 240,20 340,70 340,190 C 340,290 240,330 140,300 C 70,280 80,210 30,200 C -20,190 -40,260 -100,340"
+            className="-top-16 -left-16 w-[420px] h-[460px]"
+            viewBox="0 0 400 440"
+            d="M 100,-60
+               C 200,-10 290,30 290,80
+               S 30,160 50,200
+               S 340,280 320,320
+               S -80,400 -100,440"
             spacing={56} start={40} end={40} speed={11} tilt={30}
           />
 
-          {/* Hero/below-fold — top-right, drapes down past the device mockup
-              and exits bottom-right off-screen. Hidden on mobile so it
-              doesn't crowd the hero phone preview. */}
+          {/* Hero/below-fold — top-right, cascades down past the device.
+              Hidden on mobile so it doesn't crowd the phone preview. */}
           <Vine
-            className="hidden md:block -top-12 -right-10 w-[400px] h-[640px]"
-            viewBox="0 0 380 600"
-            d="M 280,-60 C 200,60 100,140 180,240 C 260,330 340,310 290,400 C 240,490 360,540 430,640"
+            className="hidden md:block -top-12 -right-10 w-[400px] h-[660px]"
+            viewBox="0 0 380 620"
+            d="M 280,-60
+               C 220,-10 160,40 160,80
+               S 320,160 300,200
+               S 130,300 140,340
+               S 360,420 340,460
+               S 470,580 430,620"
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
-          {/* Mid-page (around LiveTour / GetStarted) — left side, sweeps
-              right with multiple swerves before exiting left. */}
+          {/* Mid-page (around LiveTour / GetStarted) — left side, horizontal
+              weave that sweeps right then loops back left. */}
           <Vine
-            className="top-[1700px] -left-20 w-[480px] h-[400px]"
-            viewBox="0 0 460 360"
-            d="M -100,220 C 60,160 220,260 340,180 C 420,130 380,40 260,40 C 160,40 140,150 80,160 C 20,170 -30,100 -100,100"
+            className="top-[1700px] -left-20 w-[480px] h-[420px]"
+            viewBox="0 0 460 380"
+            d="M -100,220
+               C 20,160 80,80 120,80
+               S 280,160 320,220
+               S 220,360 180,320
+               S -30,260 -100,200"
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
-          {/* Around Features — right side. Hidden on mobile so it doesn't
-              fight with cards stacked at narrow widths. */}
+          {/* NEW — between LiveTour and GetStarted (~1100px down), right
+              side. A small right-edge curl. Hidden on mobile. */}
           <Vine
-            className="hidden md:block top-[2900px] -right-12 w-[440px] h-[420px]"
-            viewBox="0 0 420 400"
-            d="M 480,40 C 320,80 240,170 280,260 C 310,330 230,360 130,330 C 60,310 30,230 70,170 C 110,110 220,90 280,30 C 340,-20 420,-30 480,-10"
+            className="hidden md:block top-[1100px] -right-16 w-[380px] h-[400px]"
+            viewBox="0 0 360 380"
+            d="M 380,-40
+               C 320,0 240,40 240,80
+               S 130,160 140,200
+               S 280,260 260,300
+               S 460,340 440,360"
+            spacing={54} start={36} end={36} speed={10} tilt={30}
+          />
+
+          {/* Around Features — right side, four big sweeps. Hidden mobile. */}
+          <Vine
+            className="hidden md:block top-[2900px] -right-12 w-[480px] h-[440px]"
+            viewBox="0 0 460 420"
+            d="M 480,30
+               C 380,60 320,90 300,120
+               S 160,200 130,260
+               S 280,300 290,330
+               S 460,380 480,400"
             spacing={56} start={36} end={36} speed={11} tilt={30}
           />
 
-          {/* Bottom (around Final CTA / Aphydle) — left side, gentle horizontal
-              wave exiting bottom-left. */}
+          {/* NEW — testimonials/FAQ zone (~3700px down), left side. */}
           <Vine
-            className="top-[4300px] -left-16 w-[420px] h-[320px]"
-            viewBox="0 0 400 300"
-            d="M -80,80 C 80,40 200,170 320,110 C 380,80 410,180 460,200 C 320,260 180,290 80,260 C 0,240 -40,160 -80,200"
+            className="top-[3700px] -left-16 w-[460px] h-[400px]"
+            viewBox="0 0 440 380"
+            d="M -80,160
+               C 40,100 140,80 180,80
+               S 320,160 340,200
+               S 220,340 160,300
+               S -20,300 -80,260"
+            spacing={56} start={36} end={36} speed={10} tilt={30}
+          />
+
+          {/* Bottom (around Final CTA / Aphydle) — left side, low gentle
+              weave with two crests. */}
+          <Vine
+            className="top-[4500px] -left-16 w-[440px] h-[360px]"
+            viewBox="0 0 420 340"
+            d="M -80,80
+               C 60,40 140,30 180,40
+               S 360,80 380,140
+               S 260,300 200,260
+               S 0,240 -80,200"
             spacing={54} start={36} end={36} speed={10} tilt={30}
           />
         </div>
@@ -1398,9 +1448,11 @@ const HeroVisual: React.FC = () => {
       {/* Mobile (< lg): phone only. Desktop (lg+): browser only.
           Each visitor sees the device they're using. */}
 
-      {/* Phone — mobile only */}
+      {/* Phone — mobile only. Frosted bezel so vines passing under the
+          phone read through the chrome edges. The screen interior stays
+          opaque so plant info isn't leaf-punched. */}
       <div className="lg:hidden relative w-[260px] sm:w-[290px] mx-auto">
-        <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.6rem] p-[2px] shadow-xl shadow-black/20 ring-1 ring-white/10">
+        <div className="relative bg-gradient-to-b from-stone-700/75 to-stone-800/75 dark:from-stone-800/75 dark:to-stone-900/75 backdrop-blur-xl rounded-[2.6rem] p-[2px] shadow-xl shadow-black/20 ring-1 ring-white/10">
           <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.55rem] p-1.5">
             <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.2rem] overflow-hidden">
               <div className="flex items-center justify-between px-7 pt-2.5 pb-0.5">
@@ -1524,9 +1576,13 @@ const HeroPlantDetailBrowser: React.FC = () => {
 
   return (
     <CursorParallax className="hidden lg:block relative" max={3}>
-      <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
+      {/* Frosted-glass card: frame + chrome are translucent + backdrop-blur
+          so vines passing under read as a soft watermark behind the card.
+          The viewport (the actual "screen" content below) stays opaque so
+          fake plant info doesn't bleed leaves through. */}
+      <div className="rounded-2xl bg-stone-800/70 dark:bg-stone-900/70 backdrop-blur-xl shadow-2xl shadow-emerald-900/20 ring-1 ring-white/10 dark:ring-white/10 overflow-hidden">
         {/* Window chrome */}
-        <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
+        <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/40 dark:bg-stone-800/50 backdrop-blur-md">
           <div className="h-3 w-3 rounded-full bg-rose-400/80" />
           <div className="h-3 w-3 rounded-full bg-amber-400/80" />
           <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
@@ -2576,9 +2632,9 @@ const LiveTourSection: React.FC = React.memo(() => {
 
         {/* Big device — phone on mobile, browser on desktop. */}
         <div className="relative mb-8 lg:mb-10">
-          {/* PHONE — visible only on mobile */}
+          {/* PHONE — visible only on mobile. Frosted bezel, opaque screen. */}
           <div className="lg:hidden mx-auto w-[280px] sm:w-[320px]">
-            <div className="relative bg-gradient-to-b from-stone-700 to-stone-800 dark:from-stone-800 dark:to-stone-900 rounded-[2.6rem] p-[2px] shadow-2xl shadow-emerald-900/15 ring-1 ring-white/10">
+            <div className="relative bg-gradient-to-b from-stone-700/75 to-stone-800/75 dark:from-stone-800/75 dark:to-stone-900/75 backdrop-blur-xl rounded-[2.6rem] p-[2px] shadow-2xl shadow-emerald-900/15 ring-1 ring-white/10">
               <div className="bg-stone-800 dark:bg-stone-900 rounded-[2.55rem] p-1.5">
                 <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] rounded-[2.2rem] overflow-hidden aspect-[9/19]">
                   <div className="flex items-center justify-between px-7 pt-2.5 pb-0.5">
@@ -2597,10 +2653,12 @@ const LiveTourSection: React.FC = React.memo(() => {
             </div>
           </div>
 
-          {/* BROWSER — visible only on desktop. Cursor parallax: tilt slightly with mouse. */}
+          {/* BROWSER — visible only on desktop. Cursor parallax tilt with
+              mouse. Frosted-glass chrome so vines passing under read as a
+              soft watermark; the viewport stays opaque. */}
           <CursorParallax className="hidden lg:block max-w-4xl mx-auto">
-            <div className="rounded-2xl bg-stone-800 dark:bg-stone-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-black/5 dark:ring-white/10 overflow-hidden">
-              <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/80 dark:bg-stone-800/80">
+            <div className="rounded-2xl bg-stone-800/70 dark:bg-stone-900/70 backdrop-blur-xl shadow-2xl shadow-emerald-900/20 ring-1 ring-white/10 dark:ring-white/10 overflow-hidden">
+              <div className="flex items-center gap-1.5 px-3 py-2 bg-stone-700/40 dark:bg-stone-800/50 backdrop-blur-md">
                 <div className="h-3 w-3 rounded-full bg-rose-400/80" />
                 <div className="h-3 w-3 rounded-full bg-amber-400/80" />
                 <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
