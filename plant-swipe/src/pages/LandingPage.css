@@ -306,6 +306,20 @@
   opacity: 0;
 }
 
+/* Stage 3 — weekly calendar cell check. Each day fills (scales up + fades
+   in) on its own staggered delay, holds visible through the bulk of the
+   loop, and resets together so the visitor watches the week "fill in"
+   over and over. Pair with inline animation-delay for the stagger. */
+@keyframes gs-week-day {
+  0%, 8%    { transform: scale(0.4); opacity: 0; }
+  22%, 92%  { transform: scale(1);   opacity: 1; }
+  100%      { transform: scale(0.55);opacity: 0; }
+}
+.animate-gs-week-day {
+  animation: gs-week-day 5.5s cubic-bezier(.2,.8,.2,1) infinite;
+  opacity: 0;
+}
+
 /* Join toast — one-shot animation (fade-up in, hold, fade-out) for the
    "X just joined" pill that occasionally surfaces above the avatar row.
    Single keyframe so React just mounts it and lets it run; we unmount
@@ -344,6 +358,7 @@
 .landing-section-hidden .animate-gs-tile,
 .landing-section-hidden .animate-gs-grow,
 .landing-section-hidden .animate-gs-bell,
-.landing-section-hidden .animate-gs-notif {
+.landing-section-hidden .animate-gs-notif,
+.landing-section-hidden .animate-gs-week-day {
   animation-play-state: paused;
 }

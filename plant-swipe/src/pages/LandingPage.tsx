@@ -723,12 +723,15 @@ const AVATAR_SIZE = 28
 const TRANSITION_MS = 700
 const TOAST_LIFETIME_MS = 3200
 const SLOTS = 4
-// Probability that a given avatar swap also surfaces a "X just joined" toast.
-// Most joins are silent (avatar slides in, no fanfare); only some are
-// announced — that rarity is what makes each toast feel like a real event.
-// Lowered from 0.35 -> 0.22 alongside the cadence slowdown so toasts feel
-// like genuine moments rather than a rolling feed.
-const TOAST_PROBABILITY = 0.22
+// Probability that a given avatar swap also surfaces a "X just joined"
+// toast. Higher than before — at 0.22 the row could go 30–50s between
+// toasts, long enough that visitors often missed any. With cadence at
+// 6–12s and probability 0.6, a visitor sees a toast every 10–20s on
+// average, which is rare enough to feel like an event but reliable
+// enough that nobody scrolls past without seeing one. The very first
+// tick after mount uses a near-certain probability so the row visibly
+// announces itself the moment the visitor arrives.
+const TOAST_PROBABILITY = 0.6
 
 // Gardening-flavored copy variants for the join toast. Picked at random
 // each time a toast fires so the surfacing reads as varied real activity
@@ -770,7 +773,7 @@ const LiveJoinAvatars: React.FC = () => {
     let cleanupTimeout: number | undefined
     let toastTimeout: number | undefined
 
-    const tick = () => {
+    const tick = (isFirst: boolean) => {
       const id = nextId.current++
       const { avatar: newAvatar, name } = makeAvatar(id, -1)
 
@@ -796,9 +799,13 @@ const LiveJoinAvatars: React.FC = () => {
         setAvatars((prev) => prev.filter((a) => a.slot < SLOTS))
       }, TRANSITION_MS)
 
-      // Step 4: occasionally announce the join with a small toast — most
-      // swaps stay silent so when one fires it reads as a real event.
-      if (Math.random() < TOAST_PROBABILITY) {
+      // Step 4: announce the join with a toast. The very first tick after
+      // mount almost always announces (so visitors see the row is alive
+      // immediately); subsequent ticks announce on a moderate-probability
+      // basis so the row reads as "live" without firing on every single
+      // swap.
+      const probability = isFirst ? 0.9 : TOAST_PROBABILITY
+      if (Math.random() < probability) {
         if (toastTimeout) window.clearTimeout(toastTimeout)
         setToast({ id, name, variantIdx: Math.floor(Math.random() * JOIN_TOAST_VARIANTS.length) })
         toastTimeout = window.setTimeout(() => {
@@ -806,21 +813,20 @@ const LiveJoinAvatars: React.FC = () => {
         }, TOAST_LIFETIME_MS)
       }
 
-      scheduleNext()
+      scheduleNext(false)
     }
 
-    const scheduleNext = () => {
-      // Cadence is 2.5–5.5s — slow enough that each join feels noteworthy
-      // rather than a constant churn of name labels.
-      // Slowed cadence: 5–11s between joins (was 2.5–5.5s). At ~22% toast
-      // probability this means a toast fires roughly every 25–50s — rare
-      // enough that each one reads like a genuine notification rather than
-      // a constant churn.
-      const delay = 5000 + Math.random() * 6000
-      nextTimeout = window.setTimeout(tick, delay)
+    const scheduleNext = (isFirst: boolean) => {
+      // First tick fires within 1.5–3s of mount so visitors immediately see
+      // the row is alive. After that, cadence is 6–12s — slow enough that
+      // each join feels real rather than a churn of fake activity.
+      const delay = isFirst
+        ? (1500 + Math.random() * 1500)
+        : (6000 + Math.random() * 6000)
+      nextTimeout = window.setTimeout(() => tick(isFirst), delay)
     }
 
-    scheduleNext()
+    scheduleNext(true)
 
     return () => {
       if (nextTimeout)    window.clearTimeout(nextTimeout)
@@ -1671,59 +1677,127 @@ const BuildIllustration: React.FC = () => {
   )
 }
 
-/* ─── ThriveIllustration — potted plant that grows on a loop, with a bell
-   that rings periodically and a reminder chip that slides in from the right. */
+/* ─── ThriveIllustration — a "care dashboard" mini-mockup with multiple
+   live elements: streak chip, week-of-care calendar that fills in with
+   stagger, a plant that grows in its pot, three stat bars (Water / Light
+   / Growth) with shimmer to feel live, a bell that rings, and a slide-in
+   reminder chip. Designed to read as densely as Stage 2's garden grid. */
 const ThriveIllustration: React.FC = () => {
   const { approvedPlants } = useLandingData()
   const plant = approvedPlants[1] || approvedPlants[0]
 
+  // Mon-Sun. The last day is "in progress" (not yet completed) so the
+  // visitor sees a 6-of-7 week, mirroring real plant-tracker UI where you
+  // catch up by the end of the week.
+  const days: Array<{ letter: string; done: boolean }> = [
+    { letter: 'M', done: true },
+    { letter: 'T', done: true },
+    { letter: 'W', done: true },
+    { letter: 'T', done: true },
+    { letter: 'F', done: true },
+    { letter: 'S', done: true },
+    { letter: 'S', done: false },
+  ]
+
   return (
-    <div className="absolute inset-0">
-      {/* Soft horizontal "ground" line at the base of the pot */}
-      <div className="absolute inset-x-6 bottom-[18%] h-px bg-gradient-to-r from-transparent via-blue-500/25 to-transparent" />
-
-      {/* Calendar-grid backdrop with checkmarks — static, conveys "ongoing care" */}
-      <div className="absolute top-4 left-5 right-5 grid grid-cols-7 gap-1 opacity-40">
-        {Array.from({ length: 14 }).map((_, i) => (
-          <div
-            key={i}
-            className={`aspect-square rounded-sm ${i < 9 ? 'bg-blue-500/40' : 'bg-stone-300/30 dark:bg-stone-600/20'}`}
-          />
-        ))}
-      </div>
-
-      {/* Pot at the bottom-center */}
-      <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 w-20 h-7 rounded-b-xl rounded-t-md bg-gradient-to-b from-stone-600 to-stone-800 shadow-md" />
-
-      {/* Plant on the pot — grows from bottom */}
-      <div
-        className="absolute bottom-[calc(10%+1.75rem)] left-1/2 origin-bottom animate-gs-grow h-24 w-24"
-      >
-        <PlantImage
-          src={plant?.image_url}
-          alt={plant?.name || 'Plant'}
-          className="absolute inset-0 w-full h-full object-contain drop-shadow-lg"
-          fallback={<Sprout className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-20 w-20 text-emerald-500" />}
-        />
-      </div>
-
-      {/* Bell — wiggles periodically */}
-      <div className="absolute top-3 right-4">
+    <div className="absolute inset-0 p-3 sm:p-4 flex flex-col gap-2.5">
+      {/* Top row — streak chip on the left, bell on the right. */}
+      <div className="flex items-center justify-between">
+        <div className="inline-flex items-center gap-1.5 px-2 py-1 rounded-full bg-orange-500/15 border border-orange-500/25">
+          <Flame className="h-3 w-3 text-orange-500" />
+          <span className="text-[10px] font-bold text-orange-700 dark:text-orange-300">14 day streak</span>
+        </div>
         <div className="h-7 w-7 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
           <Bell className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 animate-gs-bell" />
         </div>
       </div>
 
-      {/* Reminder chip — slides in from the right */}
-      <div className="absolute top-3 left-3 animate-gs-notif">
-        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 shadow-md border border-blue-500/25">
+      {/* Week calendar — 7 day cells. Each cell scales+fades-in on a
+          staggered loop so the week visibly "fills in" over and over. */}
+      <div className="grid grid-cols-7 gap-1">
+        {days.map((d, i) => (
+          <div key={i} className="flex flex-col items-center gap-0.5">
+            <span className="text-[8px] font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">{d.letter}</span>
+            <div className="relative w-full h-5">
+              {/* Empty slot — always visible underneath */}
+              <div className="absolute inset-0 rounded-md border border-stone-300/40 dark:border-stone-600/40 bg-stone-100/40 dark:bg-stone-800/40" />
+              {/* Filled state — animated for completed days */}
+              {d.done && (
+                <div
+                  className="absolute inset-0 rounded-md bg-emerald-500/20 border border-emerald-500/50 flex items-center justify-center animate-gs-week-day"
+                  style={{ animationDelay: `${0.2 + i * 0.4}s` }}
+                >
+                  <CheckCircle2 className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400" />
+                </div>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Middle — plant on the left, three stat bars on the right.
+          The bars use a shimmering gradient so they read as "live data"
+          without an awkward fill/drain cycle. */}
+      <div className="flex-1 grid grid-cols-2 gap-3 items-end min-h-0">
+        {/* Plant + pot */}
+        <div className="relative h-full flex items-end justify-center">
+          {/* Pot */}
+          <div className="relative w-16 h-5 rounded-b-xl rounded-t-md bg-gradient-to-b from-stone-600 to-stone-800 shadow-md" />
+          {/* Plant grows from the pot's top edge */}
+          <div className="absolute bottom-5 left-1/2 -translate-x-1/2 origin-bottom animate-gs-grow h-20 w-20">
+            <PlantImage
+              src={plant?.image_url}
+              alt={plant?.name || 'Plant'}
+              className="absolute inset-0 w-full h-full object-contain drop-shadow-lg"
+              fallback={<Sprout className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-16 w-16 text-emerald-500" />}
+            />
+          </div>
+        </div>
+
+        {/* Stat bars */}
+        <div className="flex flex-col gap-2 pb-1">
+          <ThriveStatBar icon={Droplets} iconCls="text-blue-500"    label="Water"  value="75%"     barFrom="from-blue-500"    barTo="to-cyan-400"    width="75%" />
+          <ThriveStatBar icon={Sun}       iconCls="text-amber-500"  label="Light"  value="82%"     barFrom="from-amber-400"   barTo="to-yellow-300"  width="82%" />
+          <ThriveStatBar icon={TrendingUp}iconCls="text-emerald-500"label="Growth" value="+8 cm"   barFrom="from-emerald-500" barTo="to-green-400"   width="62%" />
+        </div>
+      </div>
+
+      {/* Reminder chip — slides in from the right, holds, slides out. */}
+      <div className="animate-gs-notif self-start">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 shadow-md border border-blue-500/30">
           <Droplets className="h-3 w-3 text-blue-500" />
-          <span className="text-[10px] font-semibold text-stone-800 dark:text-white">Water in 2h</span>
+          <span className="text-[10px] font-semibold text-stone-800 dark:text-white">Water Pothos in 2h</span>
         </div>
       </div>
     </div>
   )
 }
+
+const ThriveStatBar: React.FC<{
+  icon: React.ElementType
+  iconCls: string
+  label: string
+  value: string
+  barFrom: string
+  barTo: string
+  width: string
+}> = ({ icon: Icon, iconCls, label, value, barFrom, barTo, width }) => (
+  <div>
+    <div className="flex items-center gap-1 mb-0.5">
+      <Icon className={`h-2.5 w-2.5 ${iconCls}`} />
+      <span className="text-[9px] uppercase tracking-wider font-semibold text-stone-500 dark:text-stone-400">{label}</span>
+      <span className={`ml-auto text-[10px] font-bold ${iconCls}`}>{value}</span>
+    </div>
+    <div className="h-1.5 rounded-full bg-stone-200/60 dark:bg-stone-700/50 overflow-hidden">
+      {/* Shimmer gradient on the fill — feels "live" without an explicit
+          fill/drain animation that could be misread as the plant suffering. */}
+      <div
+        className={`h-full rounded-full bg-gradient-to-r ${barFrom} ${barTo} bg-[length:200%_100%] animate-shimmer`}
+        style={{ width }}
+      />
+    </div>
+  </div>
+)
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FEATURES SECTION - Bento Grid Style
