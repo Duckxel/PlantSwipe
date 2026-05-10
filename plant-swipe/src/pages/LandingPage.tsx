@@ -783,99 +783,87 @@ const LandingPage: React.FC = () => {
             shared #vine-leaf def with theme-aware color. Distributed across
             the page so the garden motif recurs as the visitor scrolls. */}
         <div className="absolute inset-0 z-0 pointer-events-none overflow-hidden">
-          {/* Vine paths use SVG `S` (smooth-cubic) commands after the first
-              `C` so every segment join is C1-continuous — no kinks. The
-              first C kicks off the curve direction; each S that follows
-              auto-mirrors the previous control point about the join, which
-              produces continuously curving "swirly" motion regardless of
-              how many segments the path has. */}
+          {/* Each vine is now ONE or TWO wide arcs instead of 3-4 short
+              segments. The earlier multi-segment paths read as zig-zags
+              because each segment was too short relative to the path's
+              extent — visually crests stacked on top of each other. A
+              single big cubic bezier (with control points placed wide
+              apart) draws a long sweeping S-shape that flows naturally;
+              an optional second `S` continues the sweep without changing
+              direction. */}
 
-          {/* Hero — top-left, weaves down past the headline. */}
+          {/* Hero — top-left: enters from above, big right-bow at top,
+              long sweeping curve down-left. */}
           <Vine
             className="-top-16 -left-16 w-[420px] h-[460px]"
             viewBox="0 0 400 440"
-            d="M 100,-60
-               C 200,-10 290,30 290,80
-               S 30,160 50,200
-               S 340,280 320,320
-               S -80,400 -100,440"
+            d="M 80,-60
+               C 320,80 360,200 280,340
+               S 60,440 -120,460"
             spacing={56} start={40} end={40} speed={11} tilt={30}
           />
 
-          {/* Hero/below-fold — top-right, cascades down past the device.
-              Hidden on mobile so it doesn't crowd the phone preview. */}
+          {/* Hero/below-fold — top-right: long cascade down past the
+              device with one wide S-shape spanning the full height.
+              Hidden on mobile. */}
           <Vine
             className="hidden md:block -top-12 -right-10 w-[400px] h-[660px]"
             viewBox="0 0 380 620"
-            d="M 280,-60
-               C 220,-10 160,40 160,80
-               S 320,160 300,200
-               S 130,300 140,340
-               S 360,420 340,460
-               S 470,580 430,620"
+            d="M 260,-60
+               C 180,140 220,320 320,440
+               S 460,640 480,660"
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
-          {/* Mid-page (around LiveTour / GetStarted) — left side, horizontal
-              weave that sweeps right then loops back left. */}
+          {/* Mid-page (around LiveTour / GetStarted) — left side: ONE big
+              horizontal S-curve crossing from off-screen left to off-
+              screen right, bowing up then down. */}
           <Vine
             className="top-[1700px] -left-20 w-[480px] h-[420px]"
             viewBox="0 0 460 380"
-            d="M -100,220
-               C 20,160 80,80 120,80
-               S 280,160 320,220
-               S 220,360 180,320
-               S -30,260 -100,200"
+            d="M -100,180
+               C 120,60 320,320 480,180"
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
-          {/* NEW — between LiveTour and GetStarted (~1100px down), right
-              side. A small right-edge curl. Hidden on mobile. */}
+          {/* Between LiveTour and GetStarted (~1100px) — right side:
+              single inward curl from top-right to bottom-right.
+              Hidden on mobile. */}
           <Vine
             className="hidden md:block top-[1100px] -right-16 w-[380px] h-[400px]"
             viewBox="0 0 360 380"
             d="M 380,-40
-               C 320,0 240,40 240,80
-               S 130,160 140,200
-               S 280,260 260,300
-               S 460,340 440,360"
+               C 200,140 200,280 380,400"
             spacing={54} start={36} end={36} speed={10} tilt={30}
           />
 
-          {/* Around Features — right side, four big sweeps. Hidden mobile. */}
+          {/* Around Features — right side: single big sweeping arc bowing
+              left then back right. Hidden on mobile. */}
           <Vine
             className="hidden md:block top-[2900px] -right-12 w-[480px] h-[440px]"
             viewBox="0 0 460 420"
             d="M 480,30
-               C 380,60 320,90 300,120
-               S 160,200 130,260
-               S 280,300 290,330
-               S 460,380 480,400"
+               C 280,160 240,260 480,400"
             spacing={56} start={36} end={36} speed={11} tilt={30}
           />
 
-          {/* NEW — testimonials/FAQ zone (~3700px down), left side. */}
+          {/* Testimonials/FAQ zone — left side: horizontal S-sweep across
+              the page, mirror of vine 3 in the opposite direction. */}
           <Vine
             className="top-[3700px] -left-16 w-[460px] h-[400px]"
             viewBox="0 0 440 380"
             d="M -80,160
-               C 40,100 140,80 180,80
-               S 320,160 340,200
-               S 220,340 160,300
-               S -20,300 -80,260"
+               C 100,60 320,300 460,180"
             spacing={56} start={36} end={36} speed={10} tilt={30}
           />
 
-          {/* Bottom (around Final CTA / Aphydle) — left side, low gentle
-              weave with two crests. */}
+          {/* Bottom (around Final CTA / Aphydle) — left side: low gentle
+              wave, single arc. */}
           <Vine
             className="top-[4500px] -left-16 w-[440px] h-[360px]"
             viewBox="0 0 420 340"
             d="M -80,80
-               C 60,40 140,30 180,40
-               S 360,80 380,140
-               S 260,300 200,260
-               S 0,240 -80,200"
+               C 120,40 320,220 460,140"
             spacing={54} start={36} end={36} speed={10} tilt={30}
           />
         </div>
