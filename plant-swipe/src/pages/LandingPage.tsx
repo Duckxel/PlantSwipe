@@ -547,7 +547,7 @@ const LandingPage: React.FC = () => {
               <div className="absolute inset-0 bg-emerald-500/20 rounded-xl blur-lg group-hover:bg-emerald-500/30 transition-colors" />
               <img src="/icons/plant-swipe-icon.svg" alt="Aphylia" className="relative h-14 w-[3.25rem] plant-icon-theme" draggable="false" />
             </div>
-            <span className="font-brand text-[2rem] font-bold tracking-tight text-stone-900 dark:text-white">
+            <span className="text-[1.625rem] font-bold tracking-tight text-stone-900 dark:text-white lowercase">
               {t("common.appName", { ns: "common", defaultValue: "Aphylia" })}
             </span>
           </Link>
@@ -1008,7 +1008,7 @@ const GetStartedSection: React.FC = React.memo(() => {
           </div>
           <h2 className="text-[1.875rem] sm:text-4xl lg:text-[3.25rem] font-bold tracking-tight text-stone-900 dark:text-white leading-[1.1] mb-4">
             {t("getStarted.titleA", { defaultValue: "From " })}
-            <span className="italic font-brand text-emerald-600 dark:text-emerald-400">{t("getStarted.titleEm", { defaultValue: "first plant" })}</span>
+            <span className="italic text-emerald-600 dark:text-emerald-400 underline decoration-emerald-500/30 decoration-2 underline-offset-[6px]">{t("getStarted.titleEm", { defaultValue: "first plant" })}</span>
             {t("getStarted.titleB", { defaultValue: " to thriving garden in three steps." })}
           </h2>
           <p className="text-base sm:text-lg text-stone-600 dark:text-stone-400 max-w-xl leading-relaxed">
@@ -1027,7 +1027,7 @@ const GetStartedSection: React.FC = React.memo(() => {
               style={{ animationDelay: `${i * 0.12}s` }}
             >
               <div className="flex items-start gap-4">
-                <span className="font-brand text-4xl lg:text-5xl text-emerald-500/40 dark:text-emerald-400/30 leading-none flex-shrink-0 transition-all duration-300 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 group-hover:-rotate-3 group-hover:scale-110">
+                <span className="font-mono tabular-nums text-3xl lg:text-4xl font-bold text-emerald-500/30 dark:text-emerald-400/25 leading-none flex-shrink-0 transition-all duration-300 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 group-hover:scale-110 before:content-['['] before:mr-0.5 before:opacity-50 after:content-[']'] after:ml-0.5 after:opacity-50">
                   {step.num}
                 </span>
                 <div className="pt-1">
@@ -1236,15 +1236,22 @@ type TourFeature = {
   caption: string
   icon: React.ElementType
   accent: { bg: string; text: string; ring: string }
+  // Per-feature dwell time. Some screens (notably Identify) need longer
+  // because the scan animation runs ~1.6s and the result needs time to
+  // be appreciated before the auto-advance fires.
+  cycleMs?: number
 }
 
-const TOUR_CYCLE_MS = 4500
+// Auto-cycle pacing — short enough that visitors see every feature within
+// ~12-13s of dwelling on the section. Each manual click resets the timer
+// (see useEffect on `active` below) so the user always gets a full window
+// to look at what they picked.
+const TOUR_CYCLE_MS = 3500
 
 const LiveTourSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
   const { approvedPlants } = useLandingData()
   const [active, setActive] = React.useState(0)
-  const [paused, setPaused] = React.useState(false)
 
   const features: TourFeature[] = React.useMemo(() => [
     {
@@ -1274,18 +1281,29 @@ const LiveTourSection: React.FC = React.memo(() => {
       caption: t("liveTour.identify.caption", { defaultValue: "Snap any plant. Get its name and care plan in seconds." }),
       icon: Camera,
       accent: { bg: 'bg-pink-500', text: 'text-pink-600 dark:text-pink-400', ring: 'ring-pink-500/40' },
+      // Identify needs longer: scan ~1.6s + result pop ~0.7s = ~2.3s of intro
+      // before there's anything for the visitor to read. Give it ~5.5s total.
+      cycleMs: 5500,
     },
   ], [t])
 
-  // Auto-advance, pauses on hover for accessibility
-  React.useEffect(() => {
-    if (paused) return
-    const id = setInterval(() => setActive((a) => (a + 1) % features.length), TOUR_CYCLE_MS)
-    return () => clearInterval(id)
-  }, [paused, features.length])
-
   const current = features[active]
-  const cycleStyle = { '--tour-cycle': `${TOUR_CYCLE_MS}ms` } as React.CSSProperties
+  const currentCycle = current.cycleMs ?? TOUR_CYCLE_MS
+
+  // Auto-advance: schedule the next switch via setTimeout keyed on `active`.
+  // Every state change (auto-fire OR manual tab click) cancels the pending
+  // timeout and starts a fresh one — so the cycle never stalls and a manual
+  // click gives the visitor a full window to look. Crucially we do NOT pause
+  // on hover, because most desktop visitors hover the demo the whole time
+  // they're reading it; pause-on-hover effectively froze the showcase.
+  React.useEffect(() => {
+    const id = setTimeout(() => {
+      setActive((a) => (a + 1) % features.length)
+    }, currentCycle)
+    return () => clearTimeout(id)
+  }, [active, currentCycle, features.length])
+
+  const cycleStyle = { '--tour-cycle': `${currentCycle}ms` } as React.CSSProperties
 
   // Live-activity ticker items. Cycles through real approved plants when present
   // so the ticker references species the visitor will actually see in the demo.
@@ -1306,11 +1324,7 @@ const LiveTourSection: React.FC = React.memo(() => {
   }, [approvedPlants])
 
   return (
-    <section
-      className="py-14 lg:py-28 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20"
-      onMouseEnter={() => setPaused(true)}
-      onMouseLeave={() => setPaused(false)}
-    >
+    <section className="py-14 lg:py-28 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-transparent via-emerald-50/30 to-transparent dark:via-emerald-950/20">
       <div className="max-w-6xl mx-auto">
         {/* Editorial header */}
         <div className="max-w-2xl mb-8 lg:mb-10 text-center mx-auto">
@@ -1319,7 +1333,7 @@ const LiveTourSection: React.FC = React.memo(() => {
           </div>
           <h2 className="text-[1.875rem] sm:text-4xl lg:text-[3rem] font-bold tracking-tight text-stone-900 dark:text-white leading-[1.1] mb-3">
             {t("liveTour.titleA", { defaultValue: "Watch the app " })}
-            <span className="italic font-brand text-emerald-600 dark:text-emerald-400">{t("liveTour.titleEm", { defaultValue: "do its thing" })}</span>
+            <span className="italic text-emerald-600 dark:text-emerald-400 underline decoration-emerald-500/30 decoration-2 underline-offset-[6px]">{t("liveTour.titleEm", { defaultValue: "do its thing" })}</span>
             {t("liveTour.titleB", { defaultValue: "." })}
           </h2>
           {/* Caption swaps between features — keyed so it fades on switch. */}
@@ -1413,8 +1427,9 @@ const LiveTourSection: React.FC = React.memo(() => {
               >
                 <Icon className={`h-4 w-4 transition-transform group-hover:scale-110 ${isActive ? 'text-white' : f.accent.text}`} strokeWidth={isActive ? 2.25 : 2} />
                 <span className="text-sm font-semibold">{f.label}</span>
-                {/* Per-tab progress fill (only on active, only when not paused) */}
-                {isActive && !paused && (
+                {/* Per-tab progress fill — keyed on `active` so it restarts in
+                    sync with the setTimeout that drives auto-advance. */}
+                {isActive && (
                   <span
                     key={`progress-${active}`}
                     className="absolute left-0 bottom-0 h-0.5 bg-white/70 animate-tour-tab-progress"
@@ -1663,65 +1678,116 @@ const CareTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
   )
 }
 
-/* IDENTIFY — a scan beam moves vertically over a real approved-plant photo,
-   then a result card pops in showing that plant's name + scientific name. */
+/* IDENTIFY — scan beam sweeps the plant photo, then a result card pops in
+   and stays visible for the rest of the tour dwell. The scan and result
+   are one-shot animations (see CSS) so on each tab activation the user
+   sees: scan ~1.5s, then result holds until the tour switches.
+   Layout differs by viewport: mobile stacks (camera on top, result below);
+   desktop puts a constrained camera left + a wider info panel right —
+   matching how the real app shows plant detail next to the capture. */
 const IdentifyTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const { approvedPlants } = useLandingData()
-  // Pick a deterministic plant for the scan target (stable across re-renders).
   const target = approvedPlants[0]
   const targetName = target?.name || 'Snake Plant'
   const targetSci = target?.scientific_name || 'Sansevieria trifasciata'
   const targetImage = target?.image_url
 
-  return (
-    <div className={`h-full w-full ${compact ? 'p-2 flex flex-col gap-2' : 'p-6 lg:p-10 flex flex-col gap-5'}`}>
-      {/* Camera viewport */}
-      <div className={`relative flex-1 rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 ${compact ? 'min-h-[140px]' : 'min-h-[180px]'}`}>
-        {targetImage ? (
-          <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-16 w-16' : 'h-28 w-28'} text-white/60`} />
-        )}
+  // Camera viewport: an actual capture frame, NOT a giant hero.
+  // Mobile keeps the original 4:3 stack; desktop is a constrained square.
+  const CameraFrame = (
+    <div className={`relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 ${
+      compact ? 'aspect-[4/3] w-full' : 'aspect-square w-full max-w-[260px] mx-auto'
+    }`}>
+      {targetImage ? (
+        <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+      ) : (
+        <Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-16 w-16' : 'h-20 w-20'} text-white/60`} />
+      )}
 
-        {/* Frame brackets */}
-        <div className="absolute top-3 left-3 w-6 h-6 border-t-2 border-l-2 border-white/80 rounded-tl-md" />
-        <div className="absolute top-3 right-3 w-6 h-6 border-t-2 border-r-2 border-white/80 rounded-tr-md" />
-        <div className="absolute bottom-3 left-3 w-6 h-6 border-b-2 border-l-2 border-white/80 rounded-bl-md" />
-        <div className="absolute bottom-3 right-3 w-6 h-6 border-b-2 border-r-2 border-white/80 rounded-br-md" />
+      {/* Frame brackets */}
+      <div className="absolute top-2.5 left-2.5 w-5 h-5 border-t-2 border-l-2 border-white/85 rounded-tl-md" />
+      <div className="absolute top-2.5 right-2.5 w-5 h-5 border-t-2 border-r-2 border-white/85 rounded-tr-md" />
+      <div className="absolute bottom-2.5 left-2.5 w-5 h-5 border-b-2 border-l-2 border-white/85 rounded-bl-md" />
+      <div className="absolute bottom-2.5 right-2.5 w-5 h-5 border-b-2 border-r-2 border-white/85 rounded-br-md" />
 
-        {/* Scan beam */}
-        <div className="absolute inset-x-0 top-0 bottom-0 overflow-hidden pointer-events-none">
-          <div className="absolute inset-x-0 bg-gradient-to-b from-transparent via-emerald-300 to-transparent shadow-[0_0_18px_rgba(16,185,129,0.8)] animate-tour-scan-beam" style={{ height: compact ? '28px' : '52px' }} />
-        </div>
-
-        {/* Status pill */}
-        <div className={`absolute top-2 left-1/2 -translate-x-1/2 ${compact ? 'text-[8px] px-2 py-0.5' : 'text-[10px] px-3 py-1'} rounded-full bg-black/50 text-white backdrop-blur-sm flex items-center gap-1.5`}>
-          <div className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
-          <span>Scanning…</span>
-        </div>
+      {/* Scan beam — one-shot (1.6s) */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute inset-x-0 bg-gradient-to-b from-transparent via-emerald-200 to-transparent shadow-[0_0_22px_rgba(16,185,129,0.85)] animate-tour-scan-beam"
+          style={{ height: compact ? '32px' : '40px' }}
+        />
       </div>
 
-      {/* Result card */}
-      <div className={`rounded-xl bg-white dark:bg-stone-900 border-2 border-emerald-500/40 ${compact ? 'p-2' : 'p-4'} shadow-lg animate-tour-result-pop`}>
-        <div className="flex items-start gap-3">
-          <div className={`${compact ? 'h-9 w-9' : 'h-12 w-12'} rounded-lg overflow-hidden flex-shrink-0 ${targetImage ? '' : 'bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center'}`}>
-            {targetImage ? (
-              <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-            ) : (
-              <Sprout className={`${compact ? 'h-4 w-4' : 'h-6 w-6'} text-white`} />
-            )}
+      {/* Status pill */}
+      <div className={`absolute top-2 left-1/2 -translate-x-1/2 ${compact ? 'text-[8px] px-2 py-0.5' : 'text-[10px] px-2.5 py-0.5'} rounded-full bg-black/55 text-white backdrop-blur-sm flex items-center gap-1.5`}>
+        <div className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+        <span>Scanning…</span>
+      </div>
+    </div>
+  )
+
+  // Result card — appears after scan and STAYS (animation-fill: forwards).
+  const ResultCard = (
+    <div className={`rounded-xl bg-white dark:bg-stone-900 border-2 border-emerald-500/40 shadow-lg animate-tour-result-pop ${compact ? 'p-2' : 'p-3.5'}`}>
+      <div className="flex items-start gap-3">
+        <div className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} rounded-lg overflow-hidden flex-shrink-0 ${targetImage ? '' : 'bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center'}`}>
+          {targetImage ? (
+            <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
+          ) : (
+            <Sprout className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-white`} />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between gap-2 mb-0.5">
+            <p className={`${compact ? 'text-[12px]' : 'text-sm'} font-bold text-stone-900 dark:text-white truncate`}>{targetName}</p>
+            <span className={`${compact ? 'text-[8px] px-1.5' : 'text-[10px] px-1.5'} py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold flex-shrink-0`}>98%</span>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center justify-between gap-2 mb-0.5">
-              <p className={`${compact ? 'text-[12px]' : 'text-base'} font-bold text-stone-900 dark:text-white truncate`}>{targetName}</p>
-              <span className={`${compact ? 'text-[8px] px-1.5' : 'text-[11px] px-2'} py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-bold flex-shrink-0`}>98%</span>
-            </div>
-            <p className={`${compact ? 'text-[9px]' : 'text-xs'} italic text-stone-500 dark:text-stone-400 mb-1.5 truncate`}>{targetSci}</p>
-            <div className="flex flex-wrap gap-1">
-              <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400`}>Easy</span>
-              <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-400`}>Low water</span>
-              <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400`}>Pet-safe</span>
-            </div>
+          <p className={`${compact ? 'text-[9px]' : 'text-[11px]'} italic text-stone-500 dark:text-stone-400 mb-1.5 truncate`}>{targetSci}</p>
+          <div className="flex flex-wrap gap-1">
+            <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400`}>Easy</span>
+            <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-blue-500/15 text-blue-700 dark:text-blue-400`}>Low water</span>
+            <span className={`${compact ? 'text-[8px] px-1' : 'text-[10px] px-1.5'} py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-400`}>Pet-safe</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+
+  if (compact) {
+    // MOBILE: vertical stack — camera on top, result below
+    return (
+      <div className="h-full w-full p-2 flex flex-col gap-2">
+        {CameraFrame}
+        {ResultCard}
+      </div>
+    )
+  }
+
+  // DESKTOP: side-by-side — constrained camera left, info panel right
+  return (
+    <div className="h-full w-full px-6 py-5 lg:px-10 lg:py-8 grid grid-cols-2 gap-6 items-center">
+      <div>
+        <div className="text-[11px] uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-2">
+          Plant ID
+        </div>
+        {CameraFrame}
+        <p className="mt-2 text-center text-[10px] text-stone-500 dark:text-stone-400">
+          Drag a photo or use your camera
+        </p>
+      </div>
+      <div className="space-y-3">
+        {ResultCard}
+        {/* Care preview rows — fade in alongside the result, completing the
+            "scan → identified → here's what to do" narrative. */}
+        <div className="rounded-xl border border-stone-200/70 dark:border-stone-700/60 bg-white/60 dark:bg-white/[0.03] p-3 animate-tour-result-pop" style={{ animationDelay: '1.7s' }}>
+          <p className="text-[10px] uppercase tracking-wider text-stone-500 dark:text-stone-400 mb-1.5">Care plan</p>
+          <div className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300 mb-1">
+            <Droplets className="h-3 w-3 text-blue-500" />
+            <span>Water every 2-3 weeks</span>
+          </div>
+          <div className="flex items-center gap-2 text-xs text-stone-700 dark:text-stone-300">
+            <Sun className="h-3 w-3 text-amber-500" />
+            <span>Bright indirect light</span>
           </div>
         </div>
       </div>
@@ -2493,7 +2559,7 @@ const AphydleSection: React.FC = React.memo(() => {
                     {eyebrow}
                   </div>
                   <div className="mt-1.5 flex items-baseline gap-2 justify-center sm:justify-start flex-wrap">
-                    <span className="font-brand text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-white">
+                    <span className="text-2xl sm:text-3xl font-bold tracking-tight text-stone-900 dark:text-white lowercase">
                       {title}
                     </span>
                     <span className="text-sm text-stone-500 dark:text-stone-400">

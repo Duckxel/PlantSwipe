@@ -132,19 +132,32 @@
 }
 .animate-tour-card-emerge { animation: tour-card-emerge 3.2s ease-out infinite; }
 
+/* Scan beam — one-shot. Sweep down once, then disappear off the bottom.
+   Pairs with tour-result-pop, which appears just after the beam exits and
+   stays visible for the rest of the tour-screen dwell time. */
 @keyframes tour-scan-beam {
   0%   { transform: translateY(-110%); opacity: 0; }
   10%  { opacity: 0.95; }
   85%  { opacity: 0.95; }
   100% { transform: translateY(110%); opacity: 0; }
 }
-.animate-tour-scan-beam { animation: tour-scan-beam 2.4s ease-in-out infinite; }
-
-@keyframes tour-result-pop {
-  0%, 60%  { transform: translateY(8%); opacity: 0; }
-  75%, 100%{ transform: translateY(0);  opacity: 1; }
+.animate-tour-scan-beam {
+  animation: tour-scan-beam 1.6s ease-in-out forwards;
+  animation-iteration-count: 1;
 }
-.animate-tour-result-pop { animation: tour-result-pop 2.4s ease-out infinite; }
+
+/* Result card — one-shot, held visible. Delayed start (animation-delay
+   on the element) so it appears AFTER the scan beam finishes. */
+@keyframes tour-result-pop {
+  0%   { transform: translateY(12%) scale(0.96); opacity: 0; }
+  60%  { transform: translateY(-4%) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+.animate-tour-result-pop {
+  animation: tour-result-pop 0.7s cubic-bezier(.2,.8,.2,1) 1.4s forwards;
+  animation-iteration-count: 1;
+  opacity: 0;
+}
 
 @keyframes tour-tile-in {
   0%, 8%   { transform: translateY(20%) scale(0.85); opacity: 0; }
