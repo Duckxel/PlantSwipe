@@ -367,14 +367,22 @@
 .animate-device-label-tv     { animation: device-label-tv     9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
 .animate-device-label-web    { animation: device-label-web    9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
 
-/* Plant ID card — scan beam loop for the small camera preview. */
+/* Plant ID card — scan beam loop for the small camera preview.
+   The beam is absolute-positioned inside the viewfinder; animating `top`
+   in % of the parent's height sweeps the full container regardless of
+   the beam's own height. (Old `transform: translateY(110%)` only moved
+   the beam by its own height — about 16px — which fell well short of
+   the container bottom.) */
 @keyframes plantid-scan {
-  0%   { transform: translateY(-110%); opacity: 0; }
-  10%  { opacity: 0.95; }
-  90%  { opacity: 0.95; }
-  100% { transform: translateY(110%);  opacity: 0; }
+  0%        { top: -12%; opacity: 0; }
+  12%, 88%  { opacity: 0.95; }
+  100%      { top: 108%; opacity: 0; }
 }
-.animate-plantid-scan { animation: plantid-scan 3.6s ease-in-out infinite; }
+.animate-plantid-scan {
+  animation: plantid-scan 3.6s ease-in-out infinite;
+  /* Initial off-frame so first paint doesn't flash the beam at top: 0. */
+  top: -12%;
+}
 
 /* Join toast — one-shot animation (fade-up in, hold, fade-out) for the
    "X just joined" pill that occasionally surfaces above the avatar row.

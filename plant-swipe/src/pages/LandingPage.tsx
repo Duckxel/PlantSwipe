@@ -1960,14 +1960,17 @@ const FeaturesSection: React.FC = React.memo(() => {
               <div className="absolute inset-0 overflow-hidden pointer-events-none">
                 <div className="absolute inset-x-0 h-4 bg-gradient-to-b from-transparent via-white/90 to-transparent shadow-[0_0_14px_rgba(255,255,255,0.7)] animate-plantid-scan" />
               </div>
-              {/* "Scanning..." pill */}
-              <div className="absolute top-1.5 left-1/2 -translate-x-1/2 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-black/55 backdrop-blur-sm">
+              {/* "Scanning..." pill — z-10 so the beam passes UNDER it
+                  instead of bleaching the text white as it sweeps over.
+                  Background is solid (was bg-black/55) for the same reason. */}
+              <div className="absolute top-1.5 left-1/2 -translate-x-1/2 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-stone-900/90">
                 <span className="h-1 w-1 rounded-full bg-emerald-300" />
                 <span className="text-[7px] text-white font-medium">Scanning…</span>
               </div>
-              {/* Result strip stamped at the bottom of the preview, no
-                  separate chip below — keeps the card compact. */}
-              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-2 py-1.5 flex items-center gap-1.5">
+              {/* Result strip stamped at the bottom — z-10 so the beam
+                  passes BEHIND it (no white smear over the text) on its
+                  way out the bottom of the frame. */}
+              <div className="absolute bottom-0 left-0 right-0 z-10 bg-gradient-to-t from-black/85 via-black/60 to-transparent px-2 py-1.5 flex items-center gap-1.5">
                 <CheckCircle2 className="h-3 w-3 text-emerald-300 flex-shrink-0" />
                 <span className="text-[10px] font-bold text-white truncate">
                   {approvedPlants[2]?.name || 'Monstera'}
