@@ -316,6 +316,52 @@ const LandingDataContext = React.createContext<LandingDataContextType>({
 
 const useLandingData = () => React.useContext(LandingDataContext)
 
+/* ─── PlantImage — wrapper around <img> with a built-in skeleton shimmer
+   that crossfades to the photo on load. Use everywhere a real plant image
+   is rendered so the page reads as "loading" instead of "broken" while
+   bytes come in. Falls back gracefully when src is null/empty. ──────── */
+const PlantImage: React.FC<{
+  src?: string | null
+  alt: string
+  className?: string
+  /** Use eager loading for above-the-fold critical images (hero). */
+  eager?: boolean
+  /** Optional fallback rendered when src is missing — typically a leaf icon. */
+  fallback?: React.ReactNode
+}> = React.memo(({ src, alt, className = "absolute inset-0 w-full h-full object-cover", eager = false, fallback = null }) => {
+  const [loaded, setLoaded] = React.useState(false)
+
+  // If src is missing entirely, render fallback only — no skeleton (which
+  // would imply something is on its way).
+  if (!src) {
+    return <>{fallback}</>
+  }
+
+  return (
+    <>
+      {/* Skeleton shimmer — sits behind the <img> and is hidden once it loads.
+          Uses the existing tailwind animate-shimmer (backgroundPosition cycle)
+          on a horizontal stone-tinted gradient so it reads as a placeholder
+          surface, not decoration. */}
+      {!loaded && (
+        <div
+          aria-hidden="true"
+          className="absolute inset-0 bg-gradient-to-r from-stone-200/80 via-stone-100/60 to-stone-200/80 dark:from-stone-800/80 dark:via-stone-700/60 dark:to-stone-800/80 bg-[length:200%_100%] animate-shimmer"
+        />
+      )}
+      <img
+        src={src}
+        alt={alt}
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+        onLoad={() => setLoaded(true)}
+        onError={() => setLoaded(true)}
+        className={`${className} transition-opacity duration-500 ${loaded ? "opacity-100" : "opacity-0"}`}
+      />
+    </>
+  )
+})
+
 // LazySection wrapper: renders a placeholder until the section approaches the viewport,
 // then mounts the actual component. Prevents rendering heavy below-fold content on initial load.
 const LazySection: React.FC<{ children: React.ReactNode; minHeight?: string }> = ({ children, minHeight = "200px" }) => {
@@ -480,6 +526,21 @@ const LandingPage: React.FC = () => {
           approvedPlants,
           loading: false,
         })
+
+        // Warm the browser cache: as soon as the URLs are known, fire off
+        // Image() requests so the bytes are already in transit by the time
+        // each <img> mounts. This eliminates the "text first, photos pop in
+        // a moment later" flash. Hero image (slot 0) is requested first.
+        if (typeof window !== "undefined" && approvedPlants.length > 0) {
+          // Defer slightly so we don't compete with the initial paint.
+          requestAnimationFrame(() => {
+            for (const p of approvedPlants) {
+              const preload = new Image()
+              preload.decoding = "async"
+              preload.src = p.image_url
+            }
+          })
+        }
       } catch (e) {
         console.error("Failed to load landing data:", e)
         setLandingData(prev => ({ ...prev, loading: false }))
@@ -951,13 +1012,16 @@ const HeroVisual: React.FC = () => {
               <div className="px-3 pb-2 pt-2 space-y-2.5">
                 <div className="relative aspect-[4/3] rounded-2xl overflow-hidden">
                   <div className="absolute inset-0 bg-gradient-to-br from-emerald-100 to-teal-100 dark:from-emerald-900/30 dark:to-teal-900/30" />
-                  {imageUrl ? (
-                    <img src={imageUrl} alt={plantName} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                  ) : (
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <Leaf className="h-16 w-16 text-emerald-500/50" />
-                    </div>
-                  )}
+                  <PlantImage
+                    src={imageUrl}
+                    alt={plantName}
+                    eager
+                    fallback={
+                      <div className="absolute inset-0 flex items-center justify-center">
+                        <Leaf className="h-16 w-16 text-emerald-500/50" />
+                      </div>
+                    }
+                  />
                   <div className="absolute bottom-2 left-2 right-2">
                     <div className="glass-card rounded-xl p-2 border border-white/30 dark:border-white/10">
                       <p className="text-stone-900 dark:text-white font-bold text-xs">{plantName}</p>
@@ -1094,13 +1158,16 @@ const HeroPlantDetailBrowser: React.FC = () => {
 
             {/* Image column — 4:3-feeling square with carousel dots overlay */}
             <div className="col-span-2 relative bg-gradient-to-br from-emerald-300 to-teal-500">
-              {image ? (
-                <img src={image} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Leaf className="h-24 w-24 text-white/60" />
-                </div>
-              )}
+              <PlantImage
+                src={image}
+                alt={name}
+                eager
+                fallback={
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <Leaf className="h-24 w-24 text-white/60" />
+                  </div>
+                }
+              />
               {/* Carousel dots — matches PlantDetails image carousel */}
               <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1">
                 <span className="h-1.5 w-5 rounded-full bg-white shadow" />
@@ -1338,11 +1405,11 @@ const SnapIllustration: React.FC = () => {
     <div className="absolute inset-0 flex items-center justify-center p-6">
       {/* Plant photo with viewfinder */}
       <div className="relative w-3/5 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-300 to-teal-500 shadow-xl shadow-emerald-900/10">
-        {plant?.image_url ? (
-          <img src={plant.image_url} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-        ) : (
-          <Leaf className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 text-white/60" />
-        )}
+        <PlantImage
+          src={plant?.image_url}
+          alt={name}
+          fallback={<Leaf className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 text-white/60" />}
+        />
         {/* Viewfinder corners */}
         <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-white/90 rounded-tl-md" />
         <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-white/90 rounded-tr-md" />
@@ -1401,13 +1468,15 @@ const BuildIllustration: React.FC = () => {
                 className="absolute inset-0 animate-gs-tile"
                 style={{ animationDelay: `${i * 0.65}s` }}
               >
-                {plant?.image_url ? (
-                  <img src={plant.image_url} alt={plant.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-                ) : (
-                  <div className="absolute inset-0 bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center">
-                    <Leaf className="h-5 w-5 text-white/70" />
-                  </div>
-                )}
+                <PlantImage
+                  src={plant?.image_url}
+                  alt={plant?.name || 'Plant'}
+                  fallback={
+                    <div className="absolute inset-0 bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center">
+                      <Leaf className="h-5 w-5 text-white/70" />
+                    </div>
+                  }
+                />
               </div>
             </div>
           )
@@ -1448,19 +1517,14 @@ const ThriveIllustration: React.FC = () => {
 
       {/* Plant on the pot — grows from bottom */}
       <div
-        className="absolute bottom-[calc(10%+1.75rem)] left-1/2 origin-bottom animate-gs-grow"
+        className="absolute bottom-[calc(10%+1.75rem)] left-1/2 origin-bottom animate-gs-grow h-24 w-24"
       >
-        {plant?.image_url ? (
-          <img
-            src={plant.image_url}
-            alt={plant.name}
-            loading="lazy"
-            decoding="async"
-            className="h-24 w-24 object-contain drop-shadow-lg"
-          />
-        ) : (
-          <Sprout className="h-20 w-20 text-emerald-500" />
-        )}
+        <PlantImage
+          src={plant?.image_url}
+          alt={plant?.name || 'Plant'}
+          className="absolute inset-0 w-full h-full object-contain drop-shadow-lg"
+          fallback={<Sprout className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-20 w-20 text-emerald-500" />}
+        />
       </div>
 
       {/* Bell — wiggles periodically */}
@@ -1533,21 +1597,15 @@ const FeaturesSection: React.FC = React.memo(() => {
                       key={slot}
                       className="relative h-16 w-16 rounded-xl overflow-hidden bg-gradient-to-br from-emerald-400/20 to-teal-400/20 border border-emerald-500/20 transition-transform duration-200 group-hover:-translate-y-0.5 hover:scale-105 flex items-center justify-center"
                     >
-                      {plant?.image_url ? (
-                        <>
-                          <img
-                            src={plant.image_url}
-                            alt={plant.name}
-                            loading="lazy"
-                            decoding="async"
-                            className="absolute inset-0 w-full h-full object-cover"
-                          />
-                          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5">
-                            <p className="text-[8px] text-white truncate font-medium">{plant.name}</p>
-                          </div>
-                        </>
-                      ) : (
-                        <Leaf className="h-6 w-6 text-emerald-500/50" />
+                      <PlantImage
+                        src={plant?.image_url}
+                        alt={plant?.name || 'Plant'}
+                        fallback={<Leaf className="h-6 w-6 text-emerald-500/50" />}
+                      />
+                      {plant?.image_url && (
+                        <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent px-1 py-0.5">
+                          <p className="text-[8px] text-white truncate font-medium">{plant.name}</p>
+                        </div>
                       )}
                     </div>
                   )
@@ -1948,11 +2006,11 @@ const DiscoverTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
 
         {/* Emerging card (becomes the next foreground) */}
         <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${cards[1].g} shadow-lg overflow-hidden animate-tour-card-emerge`}>
-          {cards[1].image ? (
-            <img src={cards[1].image} alt={cards[1].name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-          ) : (
-            <Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-12 w-12' : 'h-20 w-20'} text-white/40`} />
-          )}
+          <PlantImage
+            src={cards[1].image}
+            alt={cards[1].name}
+            fallback={<Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-12 w-12' : 'h-20 w-20'} text-white/40`} />}
+          />
           <div className={`absolute bottom-0 left-0 right-0 ${compact ? 'p-2' : 'p-4'}`}>
             <div className="rounded-xl bg-white/90 dark:bg-stone-900/90 backdrop-blur-sm px-2.5 py-1.5">
               <p className={`${compact ? 'text-[11px]' : 'text-sm'} font-bold text-stone-900 dark:text-white truncate`}>{cards[1].name}</p>
@@ -1963,11 +2021,11 @@ const DiscoverTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
 
         {/* Foreground card swiping right */}
         <div className={`absolute inset-0 rounded-3xl bg-gradient-to-br ${cards[0].g} shadow-xl overflow-hidden animate-tour-swipe-right`}>
-          {cards[0].image ? (
-            <img src={cards[0].image} alt={cards[0].name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-          ) : (
-            <Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-14 w-14' : 'h-24 w-24'} text-white/50`} />
-          )}
+          <PlantImage
+            src={cards[0].image}
+            alt={cards[0].name}
+            fallback={<Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-14 w-14' : 'h-24 w-24'} text-white/50`} />}
+          />
           <div className={`absolute top-2 right-2 ${compact ? 'h-6 w-6' : 'h-7 w-7'} rounded-full bg-emerald-500 flex items-center justify-center shadow-lg`}>
             <Heart className={`${compact ? 'h-3 w-3' : 'h-3.5 w-3.5'} text-white fill-white`} />
           </div>
@@ -2038,11 +2096,11 @@ const GardenTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
             className={`relative aspect-square rounded-xl bg-gradient-to-br ${tile.g} flex items-center justify-center overflow-hidden animate-tour-tile-in`}
             style={{ animationDelay: `${i * 0.18}s` }}
           >
-            {tile.image ? (
-              <img src={tile.image} alt={tile.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-            ) : (
-              <Leaf className={`${compact ? 'h-4 w-4' : 'h-6 w-6 lg:h-7 lg:w-7'} text-white/60`} />
-            )}
+            <PlantImage
+              src={tile.image}
+              alt={tile.name}
+              fallback={<Leaf className={`${compact ? 'h-4 w-4' : 'h-6 w-6 lg:h-7 lg:w-7'} text-white/60`} />}
+            />
             <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-1 py-0.5">
               <p className={`${compact ? 'text-[7px]' : 'text-[10px]'} text-white truncate font-medium`}>{tile.name}</p>
             </div>
@@ -2126,11 +2184,11 @@ const IdentifyTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
     <div className={`relative rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-300 via-green-400 to-teal-500 ${
       compact ? 'aspect-[4/3] w-full' : 'aspect-square w-full max-w-[260px] mx-auto'
     }`}>
-      {targetImage ? (
-        <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-      ) : (
-        <Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-16 w-16' : 'h-20 w-20'} text-white/60`} />
-      )}
+      <PlantImage
+        src={targetImage}
+        alt={targetName}
+        fallback={<Leaf className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 ${compact ? 'h-16 w-16' : 'h-20 w-20'} text-white/60`} />}
+      />
 
       {/* Frame brackets */}
       <div className="absolute top-2.5 left-2.5 w-5 h-5 border-t-2 border-l-2 border-white/85 rounded-tl-md" />
@@ -2158,12 +2216,12 @@ const IdentifyTourScreen: React.FC<{ compact?: boolean }> = ({ compact }) => {
   const ResultCard = (
     <div className={`rounded-xl bg-white dark:bg-stone-900 border-2 border-emerald-500/40 shadow-lg animate-tour-result-pop ${compact ? 'p-2' : 'p-3.5'}`}>
       <div className="flex items-start gap-3">
-        <div className={`${compact ? 'h-9 w-9' : 'h-11 w-11'} rounded-lg overflow-hidden flex-shrink-0 ${targetImage ? '' : 'bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center'}`}>
-          {targetImage ? (
-            <img src={targetImage} alt={targetName} loading="lazy" decoding="async" className="h-full w-full object-cover" />
-          ) : (
-            <Sprout className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-white`} />
-          )}
+        <div className={`relative ${compact ? 'h-9 w-9' : 'h-11 w-11'} rounded-lg overflow-hidden flex-shrink-0 ${targetImage ? '' : 'bg-gradient-to-br from-emerald-400 to-teal-500 flex items-center justify-center'}`}>
+          <PlantImage
+            src={targetImage}
+            alt={targetName}
+            fallback={<Sprout className={`${compact ? 'h-4 w-4' : 'h-5 w-5'} text-white`} />}
+          />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2 mb-0.5">
