@@ -815,14 +815,16 @@ const LandingPage: React.FC = () => {
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
-          {/* Mid-page (around LiveTour / GetStarted) — left side: ONE big
-              horizontal S-curve crossing from off-screen left to off-
-              screen right, bowing up then down. */}
+          {/* Mid-page (around LiveTour / GetStarted) — left side: enters
+              from off-screen left, curls into the page, exits back through
+              the left edge. Both endpoints are at x=-100 so the stem is
+              clipped by the page's overflow-hidden — no mid-page stub. */}
           <Vine
             className="top-[1700px] -left-20 w-[480px] h-[420px]"
             viewBox="0 0 460 380"
-            d="M -100,180
-               C 120,60 320,320 480,180"
+            d="M -100,100
+               C 120,40 340,180 240,260
+               S -50,260 -100,300"
             spacing={58} start={40} end={40} speed={10} tilt={30}
           />
 
@@ -847,23 +849,27 @@ const LandingPage: React.FC = () => {
             spacing={56} start={36} end={36} speed={11} tilt={30}
           />
 
-          {/* Testimonials/FAQ zone — left side: horizontal S-sweep across
-              the page, mirror of vine 3 in the opposite direction. */}
+          {/* Testimonials/FAQ zone — left side: enter and exit both
+              through the left edge so the stem doesn't visibly terminate
+              somewhere mid-page. Same loop pattern as vine 3 with a
+              different curve profile so the two don't look identical. */}
           <Vine
             className="top-[3700px] -left-16 w-[460px] h-[400px]"
             viewBox="0 0 440 380"
-            d="M -80,160
-               C 100,60 320,300 460,180"
+            d="M -80,80
+               C 100,40 320,180 220,280
+               S -40,300 -80,300"
             spacing={56} start={36} end={36} speed={10} tilt={30}
           />
 
-          {/* Bottom (around Final CTA / Aphydle) — left side: low gentle
-              wave, single arc. */}
+          {/* Bottom (around Final CTA / Aphydle) — left side: low loop,
+              both endpoints off the left edge of the page. */}
           <Vine
             className="top-[4500px] -left-16 w-[440px] h-[360px]"
             viewBox="0 0 420 340"
-            d="M -80,80
-               C 120,40 320,220 460,140"
+            d="M -80,40
+               C 100,0 320,180 200,260
+               S -40,260 -80,280"
             spacing={54} start={36} end={36} speed={10} tilt={30}
           />
         </div>
