@@ -1918,7 +1918,42 @@ const FeaturesSection: React.FC = React.memo(() => {
           </div>
           <FeatureCard icon={Camera} title={t("features.plantId.title")} description={t("features.plantId.description")} gradient="from-pink-500/10 to-rose-500/10" iconBg="bg-pink-500" />
           <FeatureCard icon={NotebookPen} title={t("features.journal.title")} description={t("features.journal.description")} gradient="from-amber-500/10 to-orange-500/10" iconBg="bg-amber-500" />
-          
+
+          {/* Aphylia Assistant — fills the row 2 / col 3 slot in the bento.
+              The promise strip mentions a "friendly assistant on call" but
+              the feature isn't pitched anywhere else, so it lives here as
+              its own card with a small chat-bubble preview to differentiate
+              from the icon-only siblings. */}
+          <div className="group relative rounded-3xl bg-gradient-to-br from-violet-500/10 to-indigo-500/10 backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-violet-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
+            <div className="inline-flex h-12 w-12 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-500 items-center justify-center mb-4 shadow-lg shadow-violet-500/30 group-hover:scale-110 transition-transform">
+              <Sparkles className="h-6 w-6 text-white" />
+            </div>
+            <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">
+              {t("features.assistant.title", { defaultValue: "Aphylia Assistant" })}
+            </h3>
+            <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed mb-4">
+              {t("features.assistant.description", { defaultValue: "Yellow leaves? Wilting? Repotting? Ask in plain English and get a clear answer in seconds." })}
+            </p>
+
+            {/* Mini chat preview — visitor question + assistant reply.
+                Subtle group-hover shift mirrors the FeatureCard reminders
+                preview so this card feels coherent in the row. */}
+            <div className="space-y-1.5">
+              <div className="flex justify-end group-hover:-translate-x-1 transition-transform">
+                <div className="px-2.5 py-1.5 rounded-xl rounded-br-sm bg-violet-500/15 border border-violet-500/20 max-w-[80%]">
+                  <p className="text-[11px] text-stone-700 dark:text-stone-200">Why are my Pothos leaves yellow?</p>
+                </div>
+              </div>
+              <div className="flex justify-start group-hover:translate-x-1 transition-transform delay-75">
+                <div className="px-2.5 py-1.5 rounded-xl rounded-bl-sm bg-white/70 dark:bg-white/5 border border-stone-200/50 dark:border-white/10 max-w-[85%]">
+                  <p className="text-[11px] text-stone-700 dark:text-stone-200">
+                    Likely overwatering. Let the top inch of soil dry out before the next drink — yellow leaves should stop after a week.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Wide Feature Card */}
           <div className="md:col-span-2 lg:col-span-2 group relative rounded-3xl bg-gradient-to-r from-purple-500/10 via-violet-500/5 to-transparent backdrop-blur-sm border border-purple-500/20 p-8 overflow-hidden hover:border-purple-500/40 transition-all duration-500">
             <div className="flex flex-col md:flex-row md:items-center gap-6">
