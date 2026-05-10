@@ -57,7 +57,6 @@ import {
   Star,
   Sparkles,
   ArrowRight,
-  Zap,
   Shield,
   Heart,
   TrendingUp,
@@ -1088,20 +1087,22 @@ const FeaturesSection: React.FC = React.memo(() => {
 
   return (
     <section id="features" className="py-12 lg:py-32 px-4 sm:px-6 lg:px-8 scroll-mt-20">
-      <div className="max-w-7xl mx-auto">
-        {/* Section Header */}
-        <div className="text-center max-w-3xl mx-auto mb-10 lg:mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/20 mb-6">
-            <Zap className="h-4 w-4 text-emerald-500" />
-            <span className="text-sm font-medium text-emerald-700 dark:text-emerald-300">
-              {t("features.badge", { defaultValue: "Powerful Features" })}
-            </span>
+      <div className="max-w-6xl mx-auto">
+        {/* Section header — left-aligned, editorial. Reframed as "the quiet
+            tools" so it doesn't repeat the louder LiveTour pitch above. */}
+        <div className="max-w-2xl mb-10 lg:mb-16">
+          <div className="text-xs uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-3">
+            {t("features.kicker", { defaultValue: "Under the hood" })}
           </div>
-          <h2 className="text-[1.75rem] sm:text-4xl lg:text-5xl font-bold tracking-tight text-stone-900 dark:text-white mb-4">
-            {t("features.title")}
+          <h2 className="text-[1.875rem] sm:text-4xl lg:text-[3rem] font-bold tracking-tight text-stone-900 dark:text-white leading-[1.1] mb-4">
+            {t("features.titleA", { defaultValue: "And a few " })}
+            <span className="italic text-emerald-600 dark:text-emerald-400 underline decoration-emerald-500/30 decoration-2 underline-offset-[6px]">
+              {t("features.titleEm", { defaultValue: "quieter tools" })}
+            </span>
+            {t("features.titleB", { defaultValue: "." })}
           </h2>
-          <p className="text-lg text-stone-600 dark:text-stone-400">
-            {t("features.subtitle")}
+          <p className="text-base sm:text-lg text-stone-600 dark:text-stone-400 max-w-xl leading-relaxed">
+            {t("features.subtitleNew", { defaultValue: "An offline-first library, a private journal, smart collections — the plumbing you don't notice until you need it." })}
           </p>
         </div>
 
