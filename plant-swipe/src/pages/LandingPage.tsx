@@ -716,17 +716,31 @@ type Avatar = {
   slot: number       // -1 = entering off-left; 0..SLOTS-1 = visible; SLOTS = leaving off-right
 }
 
-type JoinToast = { id: number; name: string }
+type JoinToast = { id: number; name: string; variantIdx: number }
 
 const SLOT_OFFSET = 22   // px between avatar centers (creates an 8px overlap on a 28px circle)
 const AVATAR_SIZE = 28
 const TRANSITION_MS = 700
-const TOAST_LIFETIME_MS = 2800
+const TOAST_LIFETIME_MS = 3200
 const SLOTS = 4
 // Probability that a given avatar swap also surfaces a "X just joined" toast.
 // Most joins are silent (avatar slides in, no fanfare); only some are
 // announced — that rarity is what makes each toast feel like a real event.
-const TOAST_PROBABILITY = 0.35
+// Lowered from 0.35 -> 0.22 alongside the cadence slowdown so toasts feel
+// like genuine moments rather than a rolling feed.
+const TOAST_PROBABILITY = 0.22
+
+// Gardening-flavored copy variants for the join toast. Picked at random
+// each time a toast fires so the surfacing reads as varied real activity
+// instead of the same "X just joined" line on repeat. Rendered as
+// `${prefix}{name}${suffix}` — name is bolded inside the toast.
+const JOIN_TOAST_VARIANTS: Array<{ prefix?: string; suffix: string }> = [
+  { suffix: " just joined" },
+  { suffix: " entered the community" },
+  { suffix: " is growing their first garden" },
+  { suffix: " is starting their plant journey" },
+  { prefix: "Welcome ", suffix: " 🌱" },
+]
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]
 const makeAvatar = (id: number, slot: number): { avatar: Avatar; name: string } => {
@@ -786,7 +800,7 @@ const LiveJoinAvatars: React.FC = () => {
       // swaps stay silent so when one fires it reads as a real event.
       if (Math.random() < TOAST_PROBABILITY) {
         if (toastTimeout) window.clearTimeout(toastTimeout)
-        setToast({ id, name })
+        setToast({ id, name, variantIdx: Math.floor(Math.random() * JOIN_TOAST_VARIANTS.length) })
         toastTimeout = window.setTimeout(() => {
           setToast((prev) => (prev?.id === id ? null : prev))
         }, TOAST_LIFETIME_MS)
@@ -798,7 +812,11 @@ const LiveJoinAvatars: React.FC = () => {
     const scheduleNext = () => {
       // Cadence is 2.5–5.5s — slow enough that each join feels noteworthy
       // rather than a constant churn of name labels.
-      const delay = 2500 + Math.random() * 3000
+      // Slowed cadence: 5–11s between joins (was 2.5–5.5s). At ~22% toast
+      // probability this means a toast fires roughly every 25–50s — rare
+      // enough that each one reads like a genuine notification rather than
+      // a constant churn.
+      const delay = 5000 + Math.random() * 6000
       nextTimeout = window.setTimeout(tick, delay)
     }
 
@@ -829,7 +847,11 @@ const LiveJoinAvatars: React.FC = () => {
         >
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 text-[10px] font-semibold whitespace-nowrap">
             <Sparkles className="h-2.5 w-2.5" strokeWidth={2.5} />
-            <span>{toast.name} just joined</span>
+            <span>
+              {JOIN_TOAST_VARIANTS[toast.variantIdx].prefix ?? ''}
+              {toast.name}
+              {JOIN_TOAST_VARIANTS[toast.variantIdx].suffix}
+            </span>
             {/* Subtle tail pointing to the leftmost avatar */}
             <span className="absolute top-full left-3 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-emerald-500" />
           </div>
@@ -975,8 +997,20 @@ const HeroSection: React.FC = React.memo(() => {
 type FloatingChipDef = {
   /** Tailwind classes positioning this chip within the device wrapper. */
   position: string
-  /** How many px the chip drifts at full cursor offset (1.0). */
-  depth: number
+  /** Per-axis drift in px at full cursor offset (1.0).
+      Different x/y values give each chip its own direction, so they don't
+      all slide along the same vector when the cursor moves. */
+  xDepth: number
+  yDepth: number
+  /** Sign multipliers (-1 for inverted parallax). Letting some chips drift
+      WITH the cursor and others AGAINST it adds to the "independent" feel. */
+  xSign?: 1 | -1
+  ySign?: 1 | -1
+  /** Optional rotation (degrees) per unit of cursor X — tilt with cursor. */
+  rotate?: number
+  /** Transition timing — different durations stop the lockstep settling. */
+  durationMs?: number
+  ease?: string
   /** Idle CSS animation class — float-slow / float / float-delayed. */
   idle: string
   icon: React.ElementType
@@ -1013,19 +1047,29 @@ const useFloatingChipsParallax = (ref: React.RefObject<HTMLElement | null>) => {
     }
   }, [ref])
 
-  // Returns inline-style with the parallax translate for a given depth.
-  return React.useCallback((depth: number): React.CSSProperties => ({
-    transform: `translate(${-coords.x * depth}px, ${-coords.y * depth}px)`,
-    transition: 'transform 0.45s cubic-bezier(.2,.7,.2,1)',
-  }), [coords])
+  // Returns the per-chip transform style. Each chip resolves its own
+  // x/y drift, sign, rotation, and timing — so chips no longer slide as
+  // a single rigid layer. Default sign is -1 (chip drifts opposite to the
+  // cursor, classic parallax) but individual chips can flip it.
+  return React.useCallback((chip: FloatingChipDef): React.CSSProperties => {
+    const xs = chip.xSign ?? -1
+    const ys = chip.ySign ?? -1
+    const tx = coords.x * chip.xDepth * xs
+    const ty = coords.y * chip.yDepth * ys
+    const rot = chip.rotate ? coords.x * chip.rotate : 0
+    return {
+      transform: `translate(${tx}px, ${ty}px) rotate(${rot}deg)`,
+      transition: `transform ${chip.durationMs ?? 450}ms ${chip.ease ?? 'cubic-bezier(.2,.7,.2,1)'}`,
+    }
+  }, [coords])
 }
 
-const FloatingChip: React.FC<{ chip: FloatingChipDef; parallax: (d: number) => React.CSSProperties }> = ({ chip, parallax }) => {
+const FloatingChip: React.FC<{ chip: FloatingChipDef; parallax: (c: FloatingChipDef) => React.CSSProperties }> = ({ chip, parallax }) => {
   const Icon = chip.icon
   return (
     <div
       className={`absolute ${chip.position} pointer-events-none z-20`}
-      style={parallax(chip.depth)}
+      style={parallax(chip)}
       aria-hidden="true"
     >
       <div className={chip.idle}>
@@ -1051,20 +1095,31 @@ const HeroVisual: React.FC = () => {
   const heroRef = React.useRef<HTMLDivElement>(null)
   const chipParallax = useFloatingChipsParallax(heroRef)
 
-  // Mobile phone chip placements — fit just outside the phone edges.
+  // Mobile phone chip placements — each chip has its own x/y bias, optional
+  // rotation, and transition timing so they no longer slide as a rigid layer.
   const phoneChips: FloatingChipDef[] = [
-    { position: '-top-3 -left-3 sm:-left-6',           depth: 18, idle: 'animate-float-slow',    icon: Check,   iconBg: 'bg-emerald-500',                              text: 'Care logged' },
-    { position: 'top-16 -right-2 sm:-right-6',          depth: 22, idle: 'animate-float',         icon: Heart,   iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500', text: '+42 today', detail: 'new likes' },
-    { position: 'bottom-12 -left-3 sm:-left-8',         depth: 16, idle: 'animate-float-delayed', icon: Leaf,    iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500', text: '10K+ plants' },
-    { position: 'bottom-2 -right-3 sm:-right-4',        depth: 24, idle: 'animate-float-slow',    icon: Flame,   iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500', text: '5-day streak' },
+    // Care logged — drifts mostly diagonally up-right, snappy timing, no rotation.
+    { position: '-top-3 -left-3 sm:-left-6', xDepth: 14, yDepth: 22, rotate: -1.5, durationMs: 380, ease: 'cubic-bezier(.18,.9,.25,1)',  idle: 'animate-float-slow',    icon: Check, iconBg: 'bg-emerald-500',                                  text: 'Care logged' },
+    // Likes — drifts mostly horizontally, slower timing, tilts noticeably with cursor.
+    { position: 'top-16 -right-2 sm:-right-6', xDepth: 32, yDepth:  8, rotate:  3,   durationMs: 620, ease: 'cubic-bezier(.3,.7,.2,1)',    idle: 'animate-float',         icon: Heart, iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500',     text: '+42 today', detail: 'new likes' },
+    // 10K plants — almost vertical drift, medium timing, slight counter-tilt.
+    { position: 'bottom-12 -left-3 sm:-left-8', xDepth:  6, yDepth: 24, rotate: -2,   durationMs: 540, ease: 'cubic-bezier(.2,.7,.2,1)',    idle: 'animate-float-delayed', icon: Leaf,  iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500',  text: '10K+ plants' },
+    // Streak — wide diagonal drift WITH the cursor (xSign flipped) so it feels like a follower, not a parallax.
+    { position: 'bottom-2 -right-3 sm:-right-4', xDepth: 20, yDepth: 18, rotate:  4,   durationMs: 480, ease: 'cubic-bezier(.4,.6,.3,1)',    idle: 'animate-float-slow',    icon: Flame, iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500',  text: '5-day streak', xSign: 1 },
   ]
 
-  // Desktop browser chip placements — sit around the browser frame.
+  // Desktop browser chip placements — each chip drifts on a different axis,
+  // with its own rotation and timing, so the four no longer move in lockstep.
   const browserChips: FloatingChipDef[] = [
-    { position: '-top-5 -left-6 xl:-left-10',           depth: 22, idle: 'animate-float-slow',    icon: Check,   iconBg: 'bg-emerald-500',                              text: 'Care logged' },
-    { position: 'top-1/4 -right-8 xl:-right-12',        depth: 28, idle: 'animate-float',         icon: Heart,   iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500', text: '+42 today', detail: 'new likes' },
-    { position: '-bottom-3 left-1/4 xl:left-1/3',       depth: 18, idle: 'animate-float-delayed', icon: Leaf,    iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500', text: '10K+ plants' },
-    { position: 'top-2/3 -right-4 xl:-right-8',         depth: 32, idle: 'animate-float-slow',    icon: Flame,   iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500', text: '5-day streak' },
+    // Care logged — primarily vertical, snappy, slight counter-tilt.
+    { position: '-top-5 -left-6 xl:-left-10',     xDepth: 12, yDepth: 28, rotate: -2,    durationMs: 400, ease: 'cubic-bezier(.18,.9,.25,1)', idle: 'animate-float-slow',    icon: Check, iconBg: 'bg-emerald-500',                                 text: 'Care logged' },
+    // Likes — strongly horizontal, slow & languid, larger tilt.
+    { position: 'top-1/4 -right-8 xl:-right-12',  xDepth: 38, yDepth: 10, rotate:  4,    durationMs: 700, ease: 'cubic-bezier(.3,.7,.2,1)',   idle: 'animate-float',         icon: Heart, iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500',    text: '+42 today', detail: 'new likes' },
+    // 10K plants — nearly all-Y drift WITH the cursor (ySign flipped),
+    // medium timing, no rotation. Reads as anchored to the floor.
+    { position: '-bottom-3 left-1/4 xl:left-1/3', xDepth:  4, yDepth: 26, rotate:  0,    durationMs: 560, ease: 'cubic-bezier(.2,.7,.2,1)',   idle: 'animate-float-delayed', icon: Leaf,  iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500', text: '10K+ plants', ySign: 1 },
+    // Streak — diagonal, fast settle, follows cursor on X (xSign flipped).
+    { position: 'top-2/3 -right-4 xl:-right-8',   xDepth: 26, yDepth: 22, rotate:  6,    durationMs: 460, ease: 'cubic-bezier(.4,.6,.3,1)',   idle: 'animate-float-slow',    icon: Flame, iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500', text: '5-day streak', xSign: 1 },
   ]
   // Below: the rendered output reuses the existing phone/browser content
   // and overlays the chips inside each breakpoint's wrapper so positions
