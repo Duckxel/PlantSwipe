@@ -1276,7 +1276,9 @@ const HeroPlantDetailBrowser: React.FC = () => {
   const name = plant?.name || 'Aglaonema'
   const sci = plant?.scientific_name || 'Aglaonema commutatum'
   const image = plant?.image_url
-  const slug = name.toLowerCase().replace(/\s+/g, '-')
+  // Real app uses UUID-based plant URLs (/plants/:id), not slugs. Show the
+  // real id when we have it, fall back to a plausible-looking placeholder.
+  const plantId = plant?.id || 'a1b2c3d4-5e6f-7g8h-9i0j-1k2l3m4n5o6p'
 
   // Real PlantInfoPage stat colors (per /src/components/plant/PlantDetails.tsx):
   // Sun=amber, Water=blue, Humidity=cyan, Maintenance=emerald, Temp=rose.
@@ -1298,7 +1300,7 @@ const HeroPlantDetailBrowser: React.FC = () => {
           <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
           <div className="ml-3 flex-1 h-6 rounded-md bg-stone-600/40 dark:bg-stone-700/60 flex items-center px-2.5 gap-1.5">
             <Globe className="h-3 w-3 text-stone-300/70" />
-            <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/plants/{slug}</span>
+            <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/plants/{plantId}</span>
           </div>
         </div>
 
@@ -2139,6 +2141,10 @@ type TourFeature = {
   caption: string
   icon: React.ElementType
   accent: { bg: string; text: string; ring: string }
+  /** Real app route for the URL bar in the browser mockup. Must match
+      a router path in PlantSwipe.tsx so visitors who click into the
+      product land on a real page, not a 404. */
+  urlPath: string
   // Per-feature dwell time. Some screens (notably Identify) need longer
   // because the scan animation runs ~1.6s and the result needs time to
   // be appreciated before the auto-advance fires.
@@ -2163,6 +2169,7 @@ const LiveTourSection: React.FC = React.memo(() => {
       caption: t("liveTour.discover.caption", { defaultValue: "Swipe through thousands of plants. Save the ones you love." }),
       icon: Heart,
       accent: { bg: 'bg-emerald-500', text: 'text-emerald-600 dark:text-emerald-400', ring: 'ring-emerald-500/40' },
+      urlPath: '/discovery',
     },
     {
       id: 'garden',
@@ -2170,6 +2177,7 @@ const LiveTourSection: React.FC = React.memo(() => {
       caption: t("liveTour.garden.caption", { defaultValue: "Your plants in one place — watch your collection grow." }),
       icon: Sprout,
       accent: { bg: 'bg-lime-500', text: 'text-lime-600 dark:text-lime-400', ring: 'ring-lime-500/40' },
+      urlPath: '/gardens',
     },
     {
       id: 'care',
@@ -2177,6 +2185,9 @@ const LiveTourSection: React.FC = React.memo(() => {
       caption: t("liveTour.care.caption", { defaultValue: "Smart, gentle nudges. Water, light, repot — only when needed." }),
       icon: Bell,
       accent: { bg: 'bg-blue-500', text: 'text-blue-600 dark:text-blue-400', ring: 'ring-blue-500/40' },
+      // No dedicated /care or /reminders route — care surfaces inside the
+      // gardens overview, so /gardens is the closest accurate landing page.
+      urlPath: '/gardens',
     },
     {
       id: 'identify',
@@ -2184,6 +2195,7 @@ const LiveTourSection: React.FC = React.memo(() => {
       caption: t("liveTour.identify.caption", { defaultValue: "Snap any plant. Get its name and care plan in seconds." }),
       icon: Camera,
       accent: { bg: 'bg-pink-500', text: 'text-pink-600 dark:text-pink-400', ring: 'ring-pink-500/40' },
+      urlPath: '/scan',
       // Identify needs longer: scan ~1.6s + result pop ~0.7s = ~2.3s of intro
       // before there's anything for the visitor to read. Give it ~5.5s total.
       cycleMs: 5500,
@@ -2300,7 +2312,7 @@ const LiveTourSection: React.FC = React.memo(() => {
                 <div className="h-3 w-3 rounded-full bg-emerald-400/80" />
                 <div className="ml-3 flex-1 h-6 rounded-md bg-stone-600/40 dark:bg-stone-700/60 flex items-center px-2.5 gap-1.5">
                   <Globe className="h-3 w-3 text-stone-300/70" />
-                  <span className="text-[11px] text-stone-300/80 truncate">aphylia.app/{current.id}</span>
+                  <span className="text-[11px] text-stone-300/80 truncate">aphylia.app{current.urlPath}</span>
                 </div>
               </div>
               <div key={current.id} className="animate-tour-screen-slide relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/9]">
