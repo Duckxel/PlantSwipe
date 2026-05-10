@@ -54,6 +54,7 @@ import {
   NotebookPen,
   Wifi,
   ChevronDown,
+  Check,
   Star,
   Sparkles,
   ArrowRight,
@@ -960,9 +961,115 @@ const HeroSection: React.FC = React.memo(() => {
   )
 })
 
+/* ─── Floating chips around the hero device ─────────────────────────────
+   These bring back the small "Care logged / +42 likes / 10K+ plants /
+   5-day streak" pills that used to live around the hero phone, but with
+   two upgrades:
+     1. Cursor parallax — chips drift opposite to the cursor when the
+        visitor hovers the hero, with each chip having its own depth so
+        they parallax at slightly different speeds.
+     2. Idle float — chips also have a slow continuous float (one of the
+        existing animate-float* variants) regardless of cursor activity.
+   The two transforms stack via outer (parallax) + inner (idle keyframe)
+   wrappers, which CSS handles cleanly without conflict. ────────────── */
+type FloatingChipDef = {
+  /** Tailwind classes positioning this chip within the device wrapper. */
+  position: string
+  /** How many px the chip drifts at full cursor offset (1.0). */
+  depth: number
+  /** Idle CSS animation class — float-slow / float / float-delayed. */
+  idle: string
+  icon: React.ElementType
+  iconBg: string
+  /** Primary text. */
+  text: string
+  /** Optional secondary text shown smaller below. */
+  detail?: string
+}
+
+const useFloatingChipsParallax = (ref: React.RefObject<HTMLElement | null>) => {
+  const [coords, setCoords] = React.useState({ x: 0, y: 0 })
+
+  React.useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+
+    const onMove = (e: MouseEvent) => {
+      const rect = el.getBoundingClientRect()
+      // Normalize cursor to -0.5..0.5 relative to the container.
+      setCoords({
+        x: ((e.clientX - rect.left) / rect.width) - 0.5,
+        y: ((e.clientY - rect.top) / rect.height) - 0.5,
+      })
+    }
+    const onLeave = () => setCoords({ x: 0, y: 0 })
+
+    el.addEventListener('mousemove', onMove)
+    el.addEventListener('mouseleave', onLeave)
+    return () => {
+      el.removeEventListener('mousemove', onMove)
+      el.removeEventListener('mouseleave', onLeave)
+    }
+  }, [ref])
+
+  // Returns inline-style with the parallax translate for a given depth.
+  return React.useCallback((depth: number): React.CSSProperties => ({
+    transform: `translate(${-coords.x * depth}px, ${-coords.y * depth}px)`,
+    transition: 'transform 0.45s cubic-bezier(.2,.7,.2,1)',
+  }), [coords])
+}
+
+const FloatingChip: React.FC<{ chip: FloatingChipDef; parallax: (d: number) => React.CSSProperties }> = ({ chip, parallax }) => {
+  const Icon = chip.icon
+  return (
+    <div
+      className={`absolute ${chip.position} pointer-events-none z-20`}
+      style={parallax(chip.depth)}
+      aria-hidden="true"
+    >
+      <div className={chip.idle}>
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/95 dark:bg-stone-800/95 backdrop-blur-sm border border-white/40 dark:border-white/10 shadow-lg shadow-emerald-900/15 dark:shadow-black/40">
+          <div className={`h-6 w-6 rounded-full ${chip.iconBg} flex items-center justify-center flex-shrink-0`}>
+            <Icon className="h-3 w-3 text-white" />
+          </div>
+          <div className="flex flex-col leading-tight">
+            <span className="text-xs font-semibold text-stone-800 dark:text-white">{chip.text}</span>
+            {chip.detail && (
+              <span className="text-[9px] text-stone-500 dark:text-stone-400">{chip.detail}</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 const HeroVisual: React.FC = () => {
   const { t } = useTranslation("Landing")
   const { heroCards: dbHeroCards } = useLandingData()
+  const heroRef = React.useRef<HTMLDivElement>(null)
+  const chipParallax = useFloatingChipsParallax(heroRef)
+
+  // Mobile phone chip placements — fit just outside the phone edges.
+  const phoneChips: FloatingChipDef[] = [
+    { position: '-top-3 -left-3 sm:-left-6',           depth: 18, idle: 'animate-float-slow',    icon: Check,   iconBg: 'bg-emerald-500',                              text: 'Care logged' },
+    { position: 'top-16 -right-2 sm:-right-6',          depth: 22, idle: 'animate-float',         icon: Heart,   iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500', text: '+42 today', detail: 'new likes' },
+    { position: 'bottom-12 -left-3 sm:-left-8',         depth: 16, idle: 'animate-float-delayed', icon: Leaf,    iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500', text: '10K+ plants' },
+    { position: 'bottom-2 -right-3 sm:-right-4',        depth: 24, idle: 'animate-float-slow',    icon: Flame,   iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500', text: '5-day streak' },
+  ]
+
+  // Desktop browser chip placements — sit around the browser frame.
+  const browserChips: FloatingChipDef[] = [
+    { position: '-top-5 -left-6 xl:-left-10',           depth: 22, idle: 'animate-float-slow',    icon: Check,   iconBg: 'bg-emerald-500',                              text: 'Care logged' },
+    { position: 'top-1/4 -right-8 xl:-right-12',        depth: 28, idle: 'animate-float',         icon: Heart,   iconBg: 'bg-gradient-to-br from-pink-500 to-rose-500', text: '+42 today', detail: 'new likes' },
+    { position: '-bottom-3 left-1/4 xl:left-1/3',       depth: 18, idle: 'animate-float-delayed', icon: Leaf,    iconBg: 'bg-gradient-to-br from-emerald-400 to-teal-500', text: '10K+ plants' },
+    { position: 'top-2/3 -right-4 xl:-right-8',         depth: 32, idle: 'animate-float-slow',    icon: Flame,   iconBg: 'bg-gradient-to-br from-orange-500 to-amber-500', text: '5-day streak' },
+  ]
+  // Below: the rendered output reuses the existing phone/browser content
+  // and overlays the chips inside each breakpoint's wrapper so positions
+  // are relative to the actual device, not the section.
+
 
   // Start with a random card for variety across different page loads
   const [activeCardIndex, setActiveCardIndex] = React.useState(() =>
@@ -998,7 +1105,7 @@ const HeroVisual: React.FC = () => {
   // REMOVED — reverted per user request
 
   return (
-    <div className="relative">
+    <div ref={heroRef} className="relative">
       {/* One soft, static glow behind the composition */}
       <div className="absolute inset-0 -m-12 bg-gradient-to-br from-emerald-500/10 via-transparent to-teal-500/10 rounded-[40%] blur-3xl pointer-events-none" />
 
@@ -1080,13 +1187,24 @@ const HeroVisual: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Floating chips around the phone — mobile only. */}
+        {phoneChips.map((chip, i) => (
+          <FloatingChip key={i} chip={chip} parallax={chipParallax} />
+        ))}
       </div>
 
       {/* Desktop browser — plant detail / encyclopedia view. Showcases the
           information depth users get on a single plant, which is unique to
           the app and not pitched anywhere else on the page. Cursor parallax
-          on hover. */}
-      <HeroPlantDetailBrowser />
+          on hover. Wrapping div carries the floating chips so positions
+          are relative to the browser, not the section. */}
+      <div className="hidden lg:block relative">
+        <HeroPlantDetailBrowser />
+        {browserChips.map((chip, i) => (
+          <FloatingChip key={i} chip={chip} parallax={chipParallax} />
+        ))}
+      </div>
     </div>
   )
 }
