@@ -61,6 +61,11 @@ import {
   Heart,
   TrendingUp,
   Globe,
+  Bookmark,
+  Share2,
+  Thermometer,
+  ChevronLeft,
+  Plus,
   Smartphone,
   Flower2,
   TreeDeciduous,
@@ -904,26 +909,29 @@ const HeroVisual: React.FC = () => {
   )
 }
 
-/* ─── HeroPlantDetailBrowser — detail view of a single approved plant.
-   Image left, name + scientific + care badges + care plan right. Pulls
-   from approvedPlants so the page always shows real species data, with
-   tasteful fallbacks if the data hasn't loaded yet. ───────────────────── */
+/* ─── HeroPlantDetailBrowser — simplified miniature of the real PlantInfoPage.
+   Top: app nav row with back / share / save / Add to Garden. Body: hero on the
+   left (square image with carousel dots), text column on the right with name,
+   scientific, common-name pills, type/utility tags, and the 5 care-stat pills
+   that are the iconic feature of the real page. Verbatim labels
+   ("Sun Level", "Watering Need", "Humidity", "Maintenance", "Temperature")
+   match plantInfo locale strings so the mockup reads true. ──────────────── */
 const HeroPlantDetailBrowser: React.FC = () => {
   const { approvedPlants } = useLandingData()
   const plant = approvedPlants[0]
-  const name = plant?.name || 'Monstera Deliciosa'
-  const sci = plant?.scientific_name || 'Monstera deliciosa'
+  const name = plant?.name || 'Aglaonema'
+  const sci = plant?.scientific_name || 'Aglaonema commutatum'
   const image = plant?.image_url
   const slug = name.toLowerCase().replace(/\s+/g, '-')
 
-  // Static-ish care attributes — these are placeholders styled to look like
-  // real encyclopedia data; in a future pass we could pull from the plants
-  // table once the relevant columns are surfaced via the landing fetch.
-  const care = [
-    { icon: Droplets, label: 'Water',    value: 'Weekly',     color: 'text-blue-500',    bg: 'bg-blue-500/10' },
-    { icon: Sun,      label: 'Light',    value: 'Bright indirect', color: 'text-amber-500', bg: 'bg-amber-500/10' },
-    { icon: Sprout,   label: 'Soil',     value: 'Well-drained',    color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
-    { icon: Heart,    label: 'Pet-safe', value: 'No',         color: 'text-rose-500',    bg: 'bg-rose-500/10' },
+  // Real PlantInfoPage stat colors (per /src/components/plant/PlantDetails.tsx):
+  // Sun=amber, Water=blue, Humidity=cyan, Maintenance=emerald, Temp=rose.
+  const stats = [
+    { icon: Sun,        label: 'Sun Level',     value: 'Bright indirect', iconCls: 'text-amber-500',   tint: 'from-amber-500/10 to-orange-500/5',    border: 'border-amber-500/20' },
+    { icon: Droplets,   label: 'Watering Need', value: 'Weekly',          iconCls: 'text-blue-500',    tint: 'from-blue-500/10 to-cyan-500/5',       border: 'border-blue-500/20' },
+    { icon: Sparkles,   label: 'Humidity',      value: 'Medium-high',     iconCls: 'text-cyan-500',    tint: 'from-cyan-500/10 to-teal-500/5',       border: 'border-cyan-500/20' },
+    { icon: Heart,      label: 'Maintenance',   value: 'Easy',            iconCls: 'text-emerald-500', tint: 'from-emerald-500/10 to-green-500/5',   border: 'border-emerald-500/20' },
+    { icon: Thermometer,label: 'Temperature',   value: '18 – 27°C',       iconCls: 'text-rose-500',    tint: 'from-rose-500/10 to-pink-500/5',       border: 'border-rose-500/20' },
   ]
 
   return (
@@ -940,78 +948,120 @@ const HeroPlantDetailBrowser: React.FC = () => {
           </div>
         </div>
 
-        {/* Viewport */}
-        <div className="relative bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-[#0f1a14] dark:via-[#111714] dark:to-[#0a1510] aspect-[16/10] overflow-hidden grid grid-cols-5">
+        {/* Viewport — light/dark adaptive, mirrors actual PlantInfoPage chrome */}
+        <div className="relative bg-white dark:bg-[#141417] aspect-[16/10] overflow-hidden flex flex-col">
 
-          {/* Image column — full-bleed plant photo */}
-          <div className="col-span-2 relative bg-gradient-to-br from-emerald-300 to-teal-500">
-            {image ? (
-              <img src={image} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <Leaf className="h-24 w-24 text-white/60" />
-              </div>
-            )}
-            <div className="absolute top-3 left-3 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/50 text-white backdrop-blur-sm text-[10px]">
-              <BookMarked className="h-3 w-3" />
-              <span>Encyclopedia</span>
+          {/* App nav row — back, breadcrumb, action buttons (share / save / add) */}
+          <div className="flex items-center justify-between px-5 py-3 border-b border-stone-200/70 dark:border-white/5">
+            <div className="flex items-center gap-2 text-[10px] text-stone-500 dark:text-stone-400">
+              <button className="h-7 w-7 rounded-lg bg-stone-100 dark:bg-white/5 flex items-center justify-center hover:bg-stone-200 dark:hover:bg-white/10 transition-colors" aria-label="Back">
+                <ChevronLeft className="h-3.5 w-3.5 text-stone-600 dark:text-stone-300" />
+              </button>
+              <span className="font-medium">Encyclopedia</span>
+              <span className="text-stone-300 dark:text-stone-600">/</span>
+              <span className="text-stone-700 dark:text-stone-200 font-semibold truncate">{name}</span>
             </div>
-            <button
-              className="absolute top-3 right-3 h-8 w-8 rounded-full bg-white/95 hover:bg-white shadow-lg flex items-center justify-center transition-transform hover:scale-105"
-              aria-label="Save"
-            >
-              <Heart className="h-4 w-4 text-rose-500" />
-            </button>
+            <div className="flex items-center gap-1.5">
+              <button className="h-7 w-7 rounded-lg bg-stone-100 dark:bg-white/5 flex items-center justify-center hover:bg-stone-200 dark:hover:bg-white/10 transition-colors" aria-label="Share">
+                <Share2 className="h-3.5 w-3.5 text-stone-600 dark:text-stone-300" />
+              </button>
+              <button className="h-7 w-7 rounded-lg bg-stone-100 dark:bg-white/5 flex items-center justify-center hover:bg-stone-200 dark:hover:bg-white/10 transition-colors" aria-label="Save">
+                <Bookmark className="h-3.5 w-3.5 text-stone-600 dark:text-stone-300" />
+              </button>
+              <button className="h-7 w-7 rounded-lg bg-rose-500/10 hover:bg-rose-500/20 flex items-center justify-center transition-colors" aria-label="Like">
+                <Heart className="h-3.5 w-3.5 text-rose-500" />
+              </button>
+              <button className="ml-1 inline-flex items-center gap-1 h-7 px-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-[10px] font-semibold shadow-sm shadow-emerald-500/30 transition-colors">
+                <Plus className="h-3 w-3" />
+                <span>Add to Garden</span>
+              </button>
+            </div>
           </div>
 
-          {/* Detail column */}
-          <div className="col-span-3 p-5 lg:p-6 flex flex-col gap-4 overflow-hidden">
-            {/* Header */}
-            <div className="animate-stagger-up" style={{ animationDelay: '0.1s' }}>
-              <p className="text-[10px] uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-1">
-                Plant detail
+          {/* Body: image on left, info on right (matches desktop PlantDetails) */}
+          <div className="flex-1 grid grid-cols-5 min-h-0">
+
+            {/* Image column — 4:3-feeling square with carousel dots overlay */}
+            <div className="col-span-2 relative bg-gradient-to-br from-emerald-300 to-teal-500">
+              {image ? (
+                <img src={image} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+              ) : (
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <Leaf className="h-24 w-24 text-white/60" />
+                </div>
+              )}
+              {/* Carousel dots — matches PlantDetails image carousel */}
+              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex items-center gap-1">
+                <span className="h-1.5 w-5 rounded-full bg-white shadow" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
+                <span className="h-1.5 w-1.5 rounded-full bg-white/60" />
+              </div>
+            </div>
+
+            {/* Detail column */}
+            <div className="col-span-3 p-5 lg:p-6 flex flex-col gap-3.5 overflow-hidden">
+
+              {/* Title block */}
+              <div className="animate-stagger-up" style={{ animationDelay: '0.1s' }}>
+                <h3 className="text-xl lg:text-[1.65rem] font-bold text-stone-900 dark:text-white leading-tight truncate">
+                  {name}
+                </h3>
+                <p className="text-[12px] italic text-stone-500 dark:text-stone-400 truncate">{sci}</p>
+                {/* Common-name pills — uppercase compact badges per the real page */}
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  <span className="text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/5 text-stone-500 dark:text-stone-400 border border-stone-200/70 dark:border-white/10">
+                    Chinese Evergreen
+                  </span>
+                  <span className="text-[8.5px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-stone-100 dark:bg-white/5 text-stone-500 dark:text-stone-400 border border-stone-200/70 dark:border-white/10">
+                    Aglaonema
+                  </span>
+                </div>
+              </div>
+
+              {/* Type / utility / season tag row */}
+              <div className="flex flex-wrap gap-1.5 animate-stagger-up" style={{ animationDelay: '0.18s' }}>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 uppercase tracking-wider">Houseplant</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-md border border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300">Ornamental</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-md border border-stone-200 dark:border-white/10 text-stone-600 dark:text-stone-300">Air-purifying</span>
+                <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20">All seasons</span>
+              </div>
+
+              {/* The 5-stat care pills — iconic part of the real page */}
+              <div className="grid grid-cols-3 gap-1.5 animate-stagger-up" style={{ animationDelay: '0.26s' }}>
+                {stats.slice(0, 3).map((s) => {
+                  const Icon = s.icon
+                  return (
+                    <div key={s.label} className={`relative overflow-hidden rounded-lg border ${s.border} bg-gradient-to-br ${s.tint} px-2 py-1.5`}>
+                      <div className="flex items-center gap-1.5">
+                        <Icon className={`h-3 w-3 ${s.iconCls} flex-shrink-0`} />
+                        <p className="text-[8.5px] uppercase tracking-wider text-stone-500 dark:text-stone-400 truncate">{s.label}</p>
+                      </div>
+                      <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100 truncate mt-0.5">{s.value}</p>
+                    </div>
+                  )
+                })}
+              </div>
+              <div className="grid grid-cols-2 gap-1.5 -mt-2 animate-stagger-up" style={{ animationDelay: '0.34s' }}>
+                {stats.slice(3).map((s) => {
+                  const Icon = s.icon
+                  return (
+                    <div key={s.label} className={`relative overflow-hidden rounded-lg border ${s.border} bg-gradient-to-br ${s.tint} px-2 py-1.5`}>
+                      <div className="flex items-center gap-1.5">
+                        <Icon className={`h-3 w-3 ${s.iconCls} flex-shrink-0`} />
+                        <p className="text-[8.5px] uppercase tracking-wider text-stone-500 dark:text-stone-400 truncate">{s.label}</p>
+                      </div>
+                      <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100 truncate mt-0.5">{s.value}</p>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Overview snippet — mimics expandable "Read more" overview */}
+              <p className="text-[11px] text-stone-600 dark:text-stone-400 leading-relaxed line-clamp-2 animate-stagger-up" style={{ animationDelay: '0.42s' }}>
+                A forgiving tropical foliage plant with striking variegated leaves. Tolerates low light and irregular watering — perfect for first-time plant parents.{' '}
+                <span className="text-emerald-600 dark:text-emerald-400 font-medium cursor-pointer">Read more</span>
               </p>
-              <h3 className="text-xl lg:text-2xl font-bold text-stone-900 dark:text-white leading-tight truncate">
-                {name}
-              </h3>
-              <p className="text-[11px] italic text-stone-500 dark:text-stone-400 truncate">{sci}</p>
-              <div className="mt-2 flex flex-wrap gap-1.5">
-                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 font-medium">Easy</span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 font-medium">Tropical</span>
-                <span className="text-[10px] px-2 py-0.5 rounded bg-violet-500/15 text-violet-700 dark:text-violet-400 font-medium">Indoor</span>
-              </div>
-            </div>
-
-            {/* Care attributes — 2x2 grid */}
-            <div className="grid grid-cols-2 gap-2">
-              {care.map((c, i) => {
-                const Icon = c.icon
-                return (
-                  <div
-                    key={c.label}
-                    className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg bg-white/70 dark:bg-white/5 border border-stone-200/60 dark:border-white/10 animate-stagger-up"
-                    style={{ animationDelay: `${0.25 + i * 0.07}s` }}
-                  >
-                    <div className={`h-7 w-7 rounded-md ${c.bg} flex items-center justify-center flex-shrink-0`}>
-                      <Icon className={`h-3.5 w-3.5 ${c.color}`} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[9px] uppercase tracking-wider text-stone-500 dark:text-stone-400">{c.label}</p>
-                      <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100 truncate">{c.value}</p>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Care plan strip */}
-            <div className="rounded-lg bg-gradient-to-r from-emerald-500/10 to-teal-500/10 border border-emerald-500/20 px-3 py-2 flex items-center gap-2 animate-stagger-up" style={{ animationDelay: '0.6s' }}>
-              <Bell className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 animate-bounce-subtle flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-[9px] uppercase tracking-wider text-emerald-700/70 dark:text-emerald-400/70">Next care</p>
-                <p className="text-[11px] font-semibold text-stone-800 dark:text-stone-100">Water in 2 days · mist weekly</p>
-              </div>
-              <ArrowRight className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
             </div>
           </div>
         </div>
