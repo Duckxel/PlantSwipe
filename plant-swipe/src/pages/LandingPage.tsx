@@ -1182,58 +1182,51 @@ const HeroPlantDetailBrowser: React.FC = () => {
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   GET STARTED SECTION - Merged "How It Works" + "Beginner Friendly"
-   One editorial moment: 3 numbered steps as the spine, with a quieter
-   trio of beginner-friendly beats underneath. No mid-page CTA card —
-   the page already has a Final CTA.
+   GET STARTED SECTION - Three illustrated stage cards.
+   Each stage shows a small motion graphic of what that step actually does
+   (Snap → Build → Thrive) instead of a paragraph of text. Text is reduced
+   to step number + tight title + one-line caption.
    ═══════════════════════════════════════════════════════════════════════════════ */
+type Stage = {
+  num: string
+  title: string
+  caption: string
+  Illustration: React.ComponentType
+  accent: string  // emerald-500, lime-500, etc — accent color for the step
+}
+
 const GetStartedSection: React.FC = React.memo(() => {
   const { t } = useTranslation("Landing")
 
-  const steps = [
+  const stages: Stage[] = [
     {
       num: "01",
-      icon: Search,
-      title: t("getStarted.step1.title", { defaultValue: t("howItWorks.step1.title", { defaultValue: "Snap a photo" }) }),
-      description: t("getStarted.step1.description", { defaultValue: t("howItWorks.step1.description", { defaultValue: "Identify any plant in seconds — no botany degree needed." }) }),
+      title: t("getStarted.step1.title", { defaultValue: "Snap any plant" }),
+      caption: t("getStarted.step1.caption", { defaultValue: "Camera or upload — get the species in two seconds." }),
+      Illustration: SnapIllustration,
+      accent: "emerald",
     },
     {
       num: "02",
-      icon: Sprout,
-      title: t("getStarted.step2.title", { defaultValue: t("howItWorks.step2.title", { defaultValue: "Add it to your garden" }) }),
-      description: t("getStarted.step2.description", { defaultValue: t("howItWorks.step2.description", { defaultValue: "We'll set up a care schedule based on your plant and your home." }) }),
+      title: t("getStarted.step2.title", { defaultValue: "Build your garden" }),
+      caption: t("getStarted.step2.caption", { defaultValue: "Add it to your collection. Organize however you like." }),
+      Illustration: BuildIllustration,
+      accent: "lime",
     },
     {
       num: "03",
-      icon: Bell,
-      title: t("getStarted.step3.title", { defaultValue: t("howItWorks.step3.title", { defaultValue: "Get gentle reminders" }) }),
-      description: t("getStarted.step3.description", { defaultValue: t("howItWorks.step3.description", { defaultValue: "Water, light, repot — only when it actually matters." }) }),
-    },
-  ]
-
-  const beats = [
-    {
-      icon: GraduationCap,
-      title: t("getStarted.beat1.title", { defaultValue: t("beginner.feature1Title", { defaultValue: "Built for first-timers" }) }),
-      description: t("getStarted.beat1.description", { defaultValue: t("beginner.feature1Desc", { defaultValue: "Every term is plain English. No jargon, no shame." }) }),
-    },
-    {
-      icon: Sparkles,
-      title: t("getStarted.beat2.title", { defaultValue: t("beginner.feature2Title", { defaultValue: "An assistant on call" }) }),
-      description: t("getStarted.beat2.description", { defaultValue: t("beginner.feature2Desc", { defaultValue: "Ask Aphylia anything — yellow leaves, pests, repotting." }) }),
-    },
-    {
-      icon: Heart,
-      title: t("getStarted.beat3.title", { defaultValue: "Forgive-as-you-grow" }),
-      description: t("getStarted.beat3.description", { defaultValue: "Miss a day? We'll re-route the schedule. No streak shame." }),
+      title: t("getStarted.step3.title", { defaultValue: "Watch them thrive" }),
+      caption: t("getStarted.step3.caption", { defaultValue: "Care reminders shaped to your plant and your home." }),
+      Illustration: ThriveIllustration,
+      accent: "blue",
     },
   ]
 
   return (
     <section id="how-it-works" className="py-12 lg:py-28 px-4 sm:px-6 lg:px-8 scroll-mt-20">
       <div className="max-w-6xl mx-auto">
-        {/* Editorial header — kicker + tight headline + one supporting line */}
-        <div className="max-w-3xl mb-10 lg:mb-16">
+        {/* Editorial header */}
+        <div className="max-w-3xl mb-10 lg:mb-14">
           <div className="text-xs uppercase tracking-[0.18em] text-emerald-600 dark:text-emerald-400 font-medium mb-3">
             {t("getStarted.kicker", { defaultValue: "Get started" })}
           </div>
@@ -1247,69 +1240,246 @@ const GetStartedSection: React.FC = React.memo(() => {
           </p>
         </div>
 
-        {/* Steps — numbered list with scroll-reveal stagger and hover micro-interactions.
-            Numbers grow + tilt slightly on hover; the connector line under each row
-            sweeps emerald → transparent left-to-right. */}
-        <div className="grid md:grid-cols-3 gap-6 lg:gap-10 mb-16 lg:mb-24">
-          {steps.map((step, i) => (
-            <div
-              key={i}
-              className="relative group animate-stagger-up"
-              style={{ animationDelay: `${i * 0.12}s` }}
-            >
-              <div className="flex items-start gap-4">
-                <span className="font-mono tabular-nums text-3xl lg:text-4xl font-bold text-emerald-500/30 dark:text-emerald-400/25 leading-none flex-shrink-0 transition-all duration-300 group-hover:text-emerald-500 dark:group-hover:text-emerald-400 group-hover:scale-110 before:content-['['] before:mr-0.5 before:opacity-50 after:content-[']'] after:ml-0.5 after:opacity-50">
-                  {step.num}
-                </span>
-                <div className="pt-1">
-                  <div className="inline-flex h-9 w-9 rounded-lg bg-emerald-500/10 items-center justify-center mb-3 transition-all duration-300 group-hover:bg-emerald-500 group-hover:rotate-6">
-                    <step.icon className="h-4 w-4 text-emerald-600 dark:text-emerald-400 transition-colors group-hover:text-white" />
-                  </div>
-                  <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-1.5">
-                    {step.title}
-                  </h3>
-                  <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
-                    {step.description}
-                  </p>
-                </div>
-              </div>
-              {/* Connector line — extends from the right edge toward the next step. */}
-              {i < steps.length - 1 && (
-                <div
-                  className="hidden md:block absolute top-6 -right-4 lg:-right-6 h-[2px] w-6 lg:w-10 bg-gradient-to-r from-emerald-500/50 to-transparent rounded-full"
-                  aria-hidden="true"
-                />
-              )}
-            </div>
+        {/* Three illustrated stage cards. Each illustration is a unique
+            looping motion graphic that demos the step. Cards lift on hover
+            and a connector arrow appears between them on desktop. */}
+        <div className="relative grid md:grid-cols-3 gap-5 lg:gap-6 mb-12 lg:mb-16">
+          {stages.map((stage, i) => (
+            <StageCard key={i} stage={stage} index={i} isLast={i === stages.length - 1} />
           ))}
         </div>
 
-        {/* Supporting beats — text-only, no card chrome, no glow. Stagger-reveal. */}
-        <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-10 lg:pt-12">
-          <div className="grid md:grid-cols-3 gap-8 lg:gap-12">
-            {beats.map((beat, i) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 animate-stagger-up"
-                style={{ animationDelay: `${0.4 + i * 0.1}s` }}
-              >
-                <beat.icon className="h-5 w-5 text-emerald-500 flex-shrink-0 mt-0.5 transition-transform duration-300 hover:scale-110 hover:rotate-6" strokeWidth={1.75} />
-                <div>
-                  <h4 className="text-sm font-semibold text-stone-900 dark:text-white mb-1">
-                    {beat.title}
-                  </h4>
-                  <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
-                    {beat.description}
-                  </p>
-                </div>
-              </div>
-            ))}
+        {/* Promise strip — single line replacing the verbose beats */}
+        <div className="border-t border-stone-200/60 dark:border-stone-800/60 pt-6 lg:pt-8">
+          <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center justify-center gap-x-8 gap-y-3 text-sm text-stone-600 dark:text-stone-400">
+            <span className="inline-flex items-center gap-2">
+              <GraduationCap className="h-4 w-4 text-emerald-500" strokeWidth={1.75} />
+              <span>{t("getStarted.promise1", { defaultValue: "Built for first-timers" })}</span>
+            </span>
+            <span className="hidden sm:inline text-stone-300 dark:text-stone-700">·</span>
+            <span className="inline-flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-emerald-500" strokeWidth={1.75} />
+              <span>{t("getStarted.promise2", { defaultValue: "Friendly assistant on call" })}</span>
+            </span>
+            <span className="hidden sm:inline text-stone-300 dark:text-stone-700">·</span>
+            <span className="inline-flex items-center gap-2">
+              <Heart className="h-4 w-4 text-emerald-500" strokeWidth={1.75} />
+              <span>{t("getStarted.promise3", { defaultValue: "No streak shame" })}</span>
+            </span>
           </div>
         </div>
       </div>
     </section>
   )
 })
+
+/* ─── StageCard — wrapper for one illustrated step. Hover lifts the card,
+   intensifies the accent border, and slightly scales the illustration to
+   give visitors something to discover when they mouse over. ───────── */
+const StageCard: React.FC<{ stage: Stage; index: number; isLast: boolean }> = ({ stage, index, isLast }) => {
+  const { num, title, caption, Illustration, accent } = stage
+  // Tailwind needs literal class strings — pre-compute them per accent.
+  const accentClasses: Record<string, { bgFrom: string; ring: string; text: string }> = {
+    emerald: { bgFrom: 'from-emerald-100/60 to-emerald-50/30 dark:from-emerald-950/30 dark:to-emerald-900/10', ring: 'group-hover:ring-emerald-500/40', text: 'text-emerald-600 dark:text-emerald-400' },
+    lime:    { bgFrom: 'from-lime-100/60 to-lime-50/30 dark:from-lime-950/30 dark:to-lime-900/10',          ring: 'group-hover:ring-lime-500/40',    text: 'text-lime-600 dark:text-lime-400' },
+    blue:    { bgFrom: 'from-blue-100/60 to-blue-50/30 dark:from-blue-950/30 dark:to-blue-900/10',          ring: 'group-hover:ring-blue-500/40',    text: 'text-blue-600 dark:text-blue-400' },
+  }
+  const a = accentClasses[accent] || accentClasses.emerald
+
+  return (
+    <div
+      className="relative group animate-stagger-up"
+      style={{ animationDelay: `${index * 0.12}s` }}
+    >
+      <div className={`relative overflow-hidden rounded-2xl border border-stone-200/70 dark:border-white/10 bg-white/60 dark:bg-white/[0.02] backdrop-blur-sm ring-1 ring-transparent ${a.ring} transition-all duration-300 hover:-translate-y-1 hover:shadow-2xl hover:shadow-emerald-900/10`}>
+        {/* Illustration — top 60-65% of the card, fixed aspect for consistency */}
+        <div className={`relative aspect-[5/4] bg-gradient-to-br ${a.bgFrom} overflow-hidden`}>
+          <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-[1.03]">
+            <Illustration />
+          </div>
+        </div>
+
+        {/* Caption */}
+        <div className="p-5 lg:p-6">
+          <div className="flex items-center gap-3 mb-2.5">
+            <span className={`font-mono tabular-nums text-[11px] font-bold ${a.text} tracking-wider`}>
+              {`[ ${num} ]`}
+            </span>
+            <div className="flex-1 h-px bg-gradient-to-r from-stone-200 dark:from-stone-700 to-transparent" />
+          </div>
+          <h3 className="text-lg lg:text-xl font-bold text-stone-900 dark:text-white mb-1.5 leading-tight">
+            {title}
+          </h3>
+          <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+            {caption}
+          </p>
+        </div>
+      </div>
+
+      {/* Connector arrow between cards — desktop only, sits between this card and the next */}
+      {!isLast && (
+        <div className="hidden md:flex absolute top-[28%] -right-4 lg:-right-5 z-10 items-center justify-center h-8 w-8 rounded-full bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 shadow-sm transition-transform duration-300 group-hover:translate-x-1">
+          <ArrowRight className="h-3.5 w-3.5 text-emerald-500" />
+        </div>
+      )}
+    </div>
+  )
+}
+
+/* ─── SnapIllustration — viewfinder + plant photo + scan beam + result chip.
+   All animations are CSS-driven loops; we sync the result chip's reveal
+   roughly to the end of each scan cycle. ──────────────────────────── */
+const SnapIllustration: React.FC = () => {
+  const { approvedPlants } = useLandingData()
+  const plant = approvedPlants[0]
+  const name = plant?.name || 'Monstera'
+
+  return (
+    <div className="absolute inset-0 flex items-center justify-center p-6">
+      {/* Plant photo with viewfinder */}
+      <div className="relative w-3/5 aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-emerald-300 to-teal-500 shadow-xl shadow-emerald-900/10">
+        {plant?.image_url ? (
+          <img src={plant.image_url} alt={name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+        ) : (
+          <Leaf className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-14 w-14 text-white/60" />
+        )}
+        {/* Viewfinder corners */}
+        <div className="absolute top-2 left-2 w-5 h-5 border-t-2 border-l-2 border-white/90 rounded-tl-md" />
+        <div className="absolute top-2 right-2 w-5 h-5 border-t-2 border-r-2 border-white/90 rounded-tr-md" />
+        <div className="absolute bottom-2 left-2 w-5 h-5 border-b-2 border-l-2 border-white/90 rounded-bl-md" />
+        <div className="absolute bottom-2 right-2 w-5 h-5 border-b-2 border-r-2 border-white/90 rounded-br-md" />
+        {/* Scan beam */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute inset-x-0 h-7 bg-gradient-to-b from-transparent via-emerald-200/95 to-transparent shadow-[0_0_22px_rgba(16,185,129,0.85)] animate-gs-scan" />
+        </div>
+        {/* Status pill */}
+        <div className="absolute top-2 left-1/2 -translate-x-1/2 flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/55 backdrop-blur-sm">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" />
+          <span className="text-[9px] text-white">Scanning…</span>
+        </div>
+      </div>
+
+      {/* Result chip — appears after each scan, holds, fades */}
+      <div className="absolute bottom-5 left-1/2 animate-gs-result">
+        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-stone-900 shadow-xl border-2 border-emerald-500">
+          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+          <span className="text-xs font-bold text-stone-900 dark:text-white truncate max-w-[140px]">{name}</span>
+          <span className="text-[10px] font-bold text-emerald-600">98%</span>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ─── BuildIllustration — 2x3 grid of garden tiles that fill in with stagger,
+   loop, and reset. Mimics watching a garden being assembled plant by plant. */
+const BuildIllustration: React.FC = () => {
+  const { approvedPlants } = useLandingData()
+
+  return (
+    <div className="absolute inset-0 p-5">
+      <div className="grid grid-cols-3 gap-2 h-full">
+        {Array.from({ length: 6 }).map((_, i) => {
+          const plant = approvedPlants[i + 2] || approvedPlants[i]
+          return (
+            <div
+              key={i}
+              className="relative rounded-xl border border-lime-500/25 bg-white/40 dark:bg-white/[0.03] overflow-hidden"
+            >
+              {/* Empty-slot grid pattern visible underneath */}
+              <div
+                className="absolute inset-0 opacity-30"
+                style={{
+                  backgroundImage:
+                    'linear-gradient(45deg, rgba(132,204,22,0.15) 25%, transparent 25%, transparent 75%, rgba(132,204,22,0.15) 75%), linear-gradient(45deg, rgba(132,204,22,0.15) 25%, transparent 25%, transparent 75%, rgba(132,204,22,0.15) 75%)',
+                  backgroundSize: '8px 8px',
+                  backgroundPosition: '0 0, 4px 4px',
+                }}
+              />
+              {/* Plant photo — fades in via stagger */}
+              <div
+                className="absolute inset-0 animate-gs-tile"
+                style={{ animationDelay: `${i * 0.65}s` }}
+              >
+                {plant?.image_url ? (
+                  <img src={plant.image_url} alt={plant.name} loading="lazy" decoding="async" className="absolute inset-0 w-full h-full object-cover" />
+                ) : (
+                  <div className="absolute inset-0 bg-gradient-to-br from-lime-400 to-green-500 flex items-center justify-center">
+                    <Leaf className="h-5 w-5 text-white/70" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      {/* Tiny header inside the card to anchor it as "your garden" */}
+      <div className="absolute top-2 left-3 flex items-center gap-1.5">
+        <Sprout className="h-3 w-3 text-lime-600 dark:text-lime-400" />
+        <span className="text-[10px] uppercase tracking-wider font-semibold text-lime-700 dark:text-lime-300">My garden</span>
+      </div>
+    </div>
+  )
+}
+
+/* ─── ThriveIllustration — potted plant that grows on a loop, with a bell
+   that rings periodically and a reminder chip that slides in from the right. */
+const ThriveIllustration: React.FC = () => {
+  const { approvedPlants } = useLandingData()
+  const plant = approvedPlants[1] || approvedPlants[0]
+
+  return (
+    <div className="absolute inset-0">
+      {/* Soft horizontal "ground" line at the base of the pot */}
+      <div className="absolute inset-x-6 bottom-[18%] h-px bg-gradient-to-r from-transparent via-blue-500/25 to-transparent" />
+
+      {/* Calendar-grid backdrop with checkmarks — static, conveys "ongoing care" */}
+      <div className="absolute top-4 left-5 right-5 grid grid-cols-7 gap-1 opacity-40">
+        {Array.from({ length: 14 }).map((_, i) => (
+          <div
+            key={i}
+            className={`aspect-square rounded-sm ${i < 9 ? 'bg-blue-500/40' : 'bg-stone-300/30 dark:bg-stone-600/20'}`}
+          />
+        ))}
+      </div>
+
+      {/* Pot at the bottom-center */}
+      <div className="absolute bottom-[10%] left-1/2 -translate-x-1/2 w-20 h-7 rounded-b-xl rounded-t-md bg-gradient-to-b from-stone-600 to-stone-800 shadow-md" />
+
+      {/* Plant on the pot — grows from bottom */}
+      <div
+        className="absolute bottom-[calc(10%+1.75rem)] left-1/2 origin-bottom animate-gs-grow"
+      >
+        {plant?.image_url ? (
+          <img
+            src={plant.image_url}
+            alt={plant.name}
+            loading="lazy"
+            decoding="async"
+            className="h-24 w-24 object-contain drop-shadow-lg"
+          />
+        ) : (
+          <Sprout className="h-20 w-20 text-emerald-500" />
+        )}
+      </div>
+
+      {/* Bell — wiggles periodically */}
+      <div className="absolute top-3 right-4">
+        <div className="h-7 w-7 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
+          <Bell className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 animate-gs-bell" />
+        </div>
+      </div>
+
+      {/* Reminder chip — slides in from the right */}
+      <div className="absolute top-3 left-3 animate-gs-notif">
+        <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white dark:bg-stone-900 shadow-md border border-blue-500/25">
+          <Droplets className="h-3 w-3 text-blue-500" />
+          <span className="text-[10px] font-semibold text-stone-800 dark:text-white">Water in 2h</span>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    FEATURES SECTION - Bento Grid Style

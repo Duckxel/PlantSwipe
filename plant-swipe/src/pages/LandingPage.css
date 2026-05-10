@@ -227,6 +227,85 @@
   animation: stagger-up 0.6s cubic-bezier(.2,.7,.2,1) both;
 }
 
+/* ───────────────────────────────────────────────────────────
+   Get Started illustrations — looping motion graphics for each
+   of the three stage cards (Snap / Build / Thrive). These are
+   the animations that make the section feel alive without any
+   visitor interaction.
+   ─────────────────────────────────────────────────────────── */
+
+/* Stage 1 — scan beam sweeping the plant photo, looped. */
+@keyframes gs-scan-loop {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 0.95; }
+  90%  { opacity: 0.95; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.animate-gs-scan { animation: gs-scan-loop 3.4s ease-in-out infinite; }
+
+/* Stage 1 — "Identified" chip pops in after the scan completes,
+   holds, then fades — looped to match the scan cycle. */
+@keyframes gs-result-loop {
+  0%, 55%   { transform: translate(-50%, 12px); opacity: 0; }
+  68%, 88%  { transform: translate(-50%, 0);    opacity: 1; }
+  100%      { transform: translate(-50%, -6px); opacity: 0; }
+}
+.animate-gs-result {
+  animation: gs-result-loop 3.4s ease-out infinite;
+  opacity: 0;
+}
+
+/* Stage 2 — each garden tile fades + scales in, holds visible
+   for the bulk of the cycle, then resets so the loop restarts.
+   Use animation-delay on each tile to stagger arrivals. */
+@keyframes gs-tile-fill {
+  0%, 4%    { transform: scale(0.6); opacity: 0; }
+  18%, 88%  { transform: scale(1);   opacity: 1; }
+  100%      { transform: scale(0.95);opacity: 0; }
+}
+.animate-gs-tile {
+  animation: gs-tile-fill 5.6s cubic-bezier(.2,.8,.2,1) infinite;
+  opacity: 0;
+}
+
+/* Stage 3 — plant grows from the bottom, mirrors the way the
+   real plant tracker visualizes growth over time. */
+@keyframes gs-grow {
+  0%        { transform: translateX(-50%) scaleY(0.55); }
+  55%, 92%  { transform: translateX(-50%) scaleY(1);    }
+  100%      { transform: translateX(-50%) scaleY(0.55); }
+}
+.animate-gs-grow {
+  animation: gs-grow 5s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* Stage 3 — bell rings periodically. Subtle wiggle, not a hard shake. */
+@keyframes gs-bell-wiggle {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  74%           { transform: rotate(-14deg); }
+  78%           { transform: rotate(10deg); }
+  82%           { transform: rotate(-6deg); }
+  86%           { transform: rotate(0deg); }
+}
+.animate-gs-bell {
+  animation: gs-bell-wiggle 4.2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+/* Stage 3 — notification chip slides in from the right, holds,
+   slides back out. Synced with the bell so the chip appears just
+   before the bell rings. */
+@keyframes gs-notif-loop {
+  0%, 40%   { transform: translateX(28px); opacity: 0; }
+  55%, 85%  { transform: translateX(0);    opacity: 1; }
+  100%      { transform: translateX(28px); opacity: 0; }
+}
+.animate-gs-notif {
+  animation: gs-notif-loop 4.2s ease-out infinite;
+  opacity: 0;
+}
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,
@@ -245,6 +324,12 @@
 .landing-section-hidden .animate-tour-notif-in,
 .landing-section-hidden .animate-tour-progress,
 .landing-section-hidden .animate-tour-tab-progress,
-.landing-section-hidden .animate-ticker-scroll {
+.landing-section-hidden .animate-ticker-scroll,
+.landing-section-hidden .animate-gs-scan,
+.landing-section-hidden .animate-gs-result,
+.landing-section-hidden .animate-gs-tile,
+.landing-section-hidden .animate-gs-grow,
+.landing-section-hidden .animate-gs-bell,
+.landing-section-hidden .animate-gs-notif {
   animation-play-state: paused;
 }
