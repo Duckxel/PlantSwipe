@@ -2194,21 +2194,6 @@ const FeaturesSection: React.FC = React.memo(() => {
   )
 })
 
-const FeatureCard: React.FC<{
-  icon: React.ElementType
-  title: string
-  description: string
-  gradient: string
-  iconBg: string
-}> = ({ icon: Icon, title, description, gradient, iconBg }) => (
-  <div className={`group relative rounded-3xl bg-gradient-to-br ${gradient} backdrop-blur-sm border border-stone-200/50 dark:border-white/10 p-6 overflow-hidden hover:border-emerald-500/30 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl`}>
-    <div className={`inline-flex h-12 w-12 rounded-xl ${iconBg} items-center justify-center mb-4 shadow-lg group-hover:scale-110 transition-transform`}>
-      <Icon className="h-6 w-6 text-white" />
-    </div>
-    <h3 className="text-lg font-semibold text-stone-900 dark:text-white mb-2">{title}</h3>
-    <p className="text-stone-600 dark:text-stone-400 text-sm leading-relaxed">{description}</p>
-  </div>
-)
 
 /* ═══════════════════════════════════════════════════════════════════════════════
    LIVE TOUR SECTION - Replaces the spinning-wheel demo.
