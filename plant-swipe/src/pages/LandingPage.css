@@ -306,6 +306,20 @@
   opacity: 0;
 }
 
+/* Join toast — one-shot animation (fade-up in, hold, fade-out) for the
+   "X just joined" pill that occasionally surfaces above the avatar row.
+   Single keyframe so React just mounts it and lets it run; we unmount
+   from state when the timer fires. */
+@keyframes join-toast {
+  0%   { transform: translateY(10px) scale(0.95); opacity: 0; }
+  12%  { transform: translateY(0)    scale(1);    opacity: 1; }
+  82%  { transform: translateY(0)    scale(1);    opacity: 1; }
+  100% { transform: translateY(-6px) scale(0.96); opacity: 0; }
+}
+.animate-join-toast {
+  animation: join-toast 2.8s cubic-bezier(.2,.7,.2,1) forwards;
+}
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,

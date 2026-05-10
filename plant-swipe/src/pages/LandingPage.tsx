@@ -710,48 +710,54 @@ const AVATAR_NAMES = [
 
 type Avatar = {
   id: number
-  name: string
   letter: string
   color: string
   slot: number       // -1 = entering off-left; 0..SLOTS-1 = visible; SLOTS = leaving off-right
-  showLabel: boolean
 }
+
+type JoinToast = { id: number; name: string }
 
 const SLOT_OFFSET = 22   // px between avatar centers (creates an 8px overlap on a 28px circle)
 const AVATAR_SIZE = 28
 const TRANSITION_MS = 700
-const LABEL_HOLD_MS = 1400
+const TOAST_LIFETIME_MS = 2800
 const SLOTS = 4
+// Probability that a given avatar swap also surfaces a "X just joined" toast.
+// Most joins are silent (avatar slides in, no fanfare); only some are
+// announced — that rarity is what makes each toast feel like a real event.
+const TOAST_PROBABILITY = 0.35
 
 const pick = <T,>(arr: T[]) => arr[Math.floor(Math.random() * arr.length)]
-const makeAvatar = (id: number, slot: number, showLabel = false): Avatar => {
+const makeAvatar = (id: number, slot: number): { avatar: Avatar; name: string } => {
   const name = pick(AVATAR_NAMES)
   return {
-    id,
+    avatar: {
+      id,
+      letter: name.charAt(0).toUpperCase(),
+      color: pick(AVATAR_COLORS),
+      slot,
+    },
     name,
-    letter: name.charAt(0).toUpperCase(),
-    color: pick(AVATAR_COLORS),
-    slot,
-    showLabel,
   }
 }
 
 const LiveJoinAvatars: React.FC = () => {
   const nextId = React.useRef(SLOTS)
   const [avatars, setAvatars] = React.useState<Avatar[]>(() =>
-    Array.from({ length: SLOTS }, (_, i) => makeAvatar(i, i))
+    Array.from({ length: SLOTS }, (_, i) => makeAvatar(i, i).avatar)
   )
+  const [toast, setToast] = React.useState<JoinToast | null>(null)
 
   React.useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
 
     let nextTimeout: number | undefined
-    let labelTimeout: number | undefined
     let cleanupTimeout: number | undefined
+    let toastTimeout: number | undefined
 
     const tick = () => {
       const id = nextId.current++
-      const newAvatar = makeAvatar(id, -1, true)
+      const { avatar: newAvatar, name } = makeAvatar(id, -1)
 
       // Step 1: shift everyone right by one slot, append the new one
       // at slot=-1 (off-canvas left, opacity 0).
@@ -775,20 +781,23 @@ const LiveJoinAvatars: React.FC = () => {
         setAvatars((prev) => prev.filter((a) => a.slot < SLOTS))
       }, TRANSITION_MS)
 
-      // Step 4: collapse the freshly-arrived label after a brief hold,
-      // leaving just the letter avatar.
-      labelTimeout = window.setTimeout(() => {
-        setAvatars((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, showLabel: false } : a))
-        )
-      }, LABEL_HOLD_MS)
+      // Step 4: occasionally announce the join with a small toast — most
+      // swaps stay silent so when one fires it reads as a real event.
+      if (Math.random() < TOAST_PROBABILITY) {
+        if (toastTimeout) window.clearTimeout(toastTimeout)
+        setToast({ id, name })
+        toastTimeout = window.setTimeout(() => {
+          setToast((prev) => (prev?.id === id ? null : prev))
+        }, TOAST_LIFETIME_MS)
+      }
 
       scheduleNext()
     }
 
     const scheduleNext = () => {
-      // Random cadence so the feed doesn't feel metronomic.
-      const delay = 1800 + Math.random() * 2700
+      // Cadence is 2.5–5.5s — slow enough that each join feels noteworthy
+      // rather than a constant churn of name labels.
+      const delay = 2500 + Math.random() * 3000
       nextTimeout = window.setTimeout(tick, delay)
     }
 
@@ -796,8 +805,8 @@ const LiveJoinAvatars: React.FC = () => {
 
     return () => {
       if (nextTimeout)    window.clearTimeout(nextTimeout)
-      if (labelTimeout)   window.clearTimeout(labelTimeout)
       if (cleanupTimeout) window.clearTimeout(cleanupTimeout)
+      if (toastTimeout)   window.clearTimeout(toastTimeout)
     }
   }, [])
 
@@ -808,8 +817,25 @@ const LiveJoinAvatars: React.FC = () => {
     <div
       className="relative"
       style={{ width: trackWidth, height: AVATAR_SIZE }}
-      aria-label="Recent joins"
+      aria-label="Recent community joins"
     >
+      {/* Join toast — surfaces above the row when a new member joins.
+          Single instance, keyed on toast.id so animation re-runs cleanly. */}
+      {toast && (
+        <div
+          key={toast.id}
+          className="absolute -top-9 left-0 z-30 animate-join-toast pointer-events-none"
+        >
+          <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-500 text-white shadow-lg shadow-emerald-900/20 text-[10px] font-semibold whitespace-nowrap">
+            <Sparkles className="h-2.5 w-2.5" strokeWidth={2.5} />
+            <span>{toast.name} just joined</span>
+            {/* Subtle tail pointing to the leftmost avatar */}
+            <span className="absolute top-full left-3 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[5px] border-t-emerald-500" />
+          </div>
+        </div>
+      )}
+
+      {/* Anonymous avatar dots — letter only, no per-avatar names. */}
       {avatars.map((a) => {
         const isVisible = a.slot >= 0 && a.slot < SLOTS
         return (
@@ -820,33 +846,14 @@ const LiveJoinAvatars: React.FC = () => {
               transform: `translateX(${a.slot * SLOT_OFFSET}px)`,
               opacity: isVisible ? 1 : 0,
               transition: `transform ${TRANSITION_MS}ms cubic-bezier(.2,.7,.2,1), opacity ${TRANSITION_MS}ms ease-out`,
-              // New avatars sit on top during their slide-in so they overlap cleanly.
               zIndex: SLOTS - a.slot,
               willChange: 'transform, opacity',
             }}
           >
-            {/* Avatar dot */}
             <span
               className={`relative h-7 w-7 rounded-full border-2 border-white dark:border-stone-800 ${a.color} flex items-center justify-center text-[10px] font-bold text-white shadow-sm`}
             >
               {a.letter}
-            </span>
-
-            {/* Floating name tag — appears for fresh arrivals, fades to just the letter. */}
-            <span
-              className="absolute left-1/2 -translate-x-1/2 -top-7 px-2 py-0.5 rounded-md bg-stone-900 dark:bg-white text-white dark:text-stone-900 text-[10px] font-semibold whitespace-nowrap shadow-md pointer-events-none"
-              style={{
-                opacity: a.showLabel ? 1 : 0,
-                transform: a.showLabel
-                  ? 'translate(-50%, 0)'
-                  : 'translate(-50%, 4px)',
-                transition: 'opacity 350ms ease-out, transform 350ms ease-out',
-              }}
-              aria-hidden={!a.showLabel}
-            >
-              {a.name}
-              {/* Tail */}
-              <span className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-[3px] border-l-transparent border-r-[3px] border-r-transparent border-t-[4px] border-t-stone-900 dark:border-t-white" />
             </span>
           </div>
         )
