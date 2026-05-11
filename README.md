@@ -189,6 +189,8 @@ Made with care by **FIVE**, **Neolite** & **Lau**
 - **Badge Management**: Create and manage badges with multilingual support
 - **Analytics Dashboard**: Charts and statistics with Recharts, including Aphydle player stats
 - **Social Card Export Studio**: Generate Instagram-grade plant cards (cover, science, gardener tip, identity) and download as ZIP
+- **Buffer Scheduling**: Schedule plant social cards to Buffer channels on a per-day timetable from `/admin/export`
+- **Plant Image Dump**: Bulk upload, group, and assign plant images at `/admin/upload/dump` with source tracking
 - **Action Logging**: Track admin actions with audit trail
 - **Security**: Token-based authentication with role-based access
 
@@ -325,6 +327,8 @@ flowchart TB
 | 📜 **Terms** | `/terms` | Terms of service |
 | 🔒 **Privacy** | `/privacy` | Privacy policy |
 | 🔧 **Admin** | `/admin` | Git, services, schema, analytics, emails |
+| 📤 **Admin Export** | `/admin/export` | Social card export + Buffer scheduling |
+| 📦 **Admin Image Dump** | `/admin/upload/dump` | Bulk plant image upload & management |
 
 ---
 
@@ -633,7 +637,7 @@ A: Yes — set `VITE_DISABLE_PWA=true` in your environment.
 | **sitemap.xml** | Dynamically generated at `/sitemap.xml` |
 
 Aphylia provides comprehensive SEO and crawler support:
-- **Structured Data**: JSON-LD schemas including FAQPage, BreadcrumbList, CollectionPage, TechArticle, Blog, and AboutPage
+- **Structured Data**: JSON-LD schemas including FAQPage, Product, BreadcrumbList, CollectionPage, TechArticle, Blog, and AboutPage
 - **Open Graph**: Rich social media previews for Discord, Twitter, LinkedIn
 - **Multi-language**: Language-specific content with proper hreflang tags
 
