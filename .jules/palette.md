@@ -58,3 +58,7 @@
 ## 2024-05-09 - Missing ARIA Labels on Icon-only Buttons in Admin Panels
 **Learning:** I found a recurring pattern in the admin interface (`AdminLandingPanel.tsx`, `AdminBugsPanel.tsx`) where icon-only buttons (like `ChevronUp`, `Trash2`, `Copy`, `X`, `RefreshCw`) lacked `aria-label` and `title` attributes, making them inaccessible to screen readers and lacking tooltips for regular users.
 **Action:** When adding or reviewing interactive components in the admin UI, always ensure that `Button` elements with `size="icon"` or standalone icons inside buttons include descriptive `aria-label` and `title` attributes to improve accessibility and UX.
+
+## 2026-05-12 - Accessible Conditional Menus
+**Learning:** Interactive elements nested within multiple conditional branches (like the 'More' menu in `PublicProfilePage`) often miss accessibility attributes because earlier occurrences set the pattern. When copying/pasting conditionally rendered UI buttons, aria labels and keyboard focus classes are easily lost.
+**Action:** Always systematically verify *all* conditionally rendered instances of an interactive element for compliance, ensuring each branch includes `aria-label`, `title`, and `focus-visible` utility classes.
