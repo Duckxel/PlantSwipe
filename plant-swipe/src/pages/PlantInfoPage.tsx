@@ -1003,7 +1003,7 @@ const PlantInfoPage: React.FC = () => {
   if (!plant) return <div className="max-w-4xl mx-auto mt-8 px-4">{t('plantInfo.plantNotFound')}</div>
 
   return (
-    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-2 sm:pt-5 pb-12 sm:pb-14 space-y-3 sm:space-y-5">
+    <div className="relative max-w-6xl mx-auto px-3 sm:px-4 lg:px-6 pt-2 sm:pt-5 pb-28 lg:pb-14 space-y-3 sm:space-y-5">
       {/* Easter Egg Hunt */}
       {id && <EasterEgg pagePath={`/plants/${id}`} />}
 
@@ -1052,67 +1052,69 @@ const PlantInfoPage: React.FC = () => {
               <Flag className="h-5 w-5" />
             </Button>
           )}
-          {/* Share Button */}
-          <div className="relative">
+          {/* Desktop-only action buttons (hidden on mobile — shown in bottom bar instead) */}
+          <div className="hidden lg:contents">
+            {/* Share Button */}
+            <div className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                size="icon"
+                className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
+                onClick={handleShare}
+                aria-label={t('common.share', { defaultValue: 'Share' })}
+              >
+                <Share2 className="h-5 w-5" />
+              </Button>
+              {shareStatus !== 'idle' && (
+                <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
+                  {shareStatus === 'copied' ? t('plantInfo:share.copied') : shareStatus === 'shared' ? t('plantInfo:share.shared') : t('plantInfo:share.error')}
+                </span>
+              )}
+            </div>
+            {/* Like Button */}
             <Button
               type="button"
-              variant="outline"
+              variant={likedIds.includes(plant?.id || '') ? 'default' : 'outline'}
               size="icon"
-              className="rounded-full border-stone-200 bg-white h-10 w-10 shadow-sm dark:border-[#3e3e42] dark:bg-[#1f1f1f]"
-              onClick={handleShare}
-              aria-label={t('common.share', { defaultValue: 'Share' })}
+              className={`rounded-full h-10 w-10 shadow-sm ${
+                likedIds.includes(plant?.id || '')
+                  ? 'bg-rose-500 hover:bg-rose-600 border-rose-500 text-white dark:bg-rose-500 dark:hover:bg-rose-600'
+                  : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
+              }`}
+              onClick={toggleLiked}
+              aria-label={likedIds.includes(plant?.id || '') ? t('common.unlike', { defaultValue: 'Unlike' }) : t('common.like', { defaultValue: 'Like' })}
             >
-              <Share2 className="h-5 w-5" />
+              <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
             </Button>
-            {shareStatus !== 'idle' && (
-              <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 text-[10px] font-medium text-emerald-600 dark:text-emerald-400 whitespace-nowrap">
-                {shareStatus === 'copied' ? t('plantInfo:share.copied') : shareStatus === 'shared' ? t('plantInfo:share.shared') : t('plantInfo:share.error')}
-              </span>
-            )}
+            <div className="w-px h-6 bg-stone-200 dark:bg-[#3e3e42] mx-0.5" />
+            {/* Save/Bookmark Button */}
+            <Button
+              type="button"
+              variant={isBookmarked ? 'default' : 'outline'}
+              size="icon"
+              className={`rounded-full h-10 w-10 shadow-sm ${
+                isBookmarked
+                  ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white dark:bg-amber-500 dark:hover:bg-amber-600'
+                  : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
+              }`}
+              onClick={handleBookmark}
+              aria-label={isBookmarked ? t('common.unsave', { defaultValue: 'Remove from bookmarks' }) : t('common.save', { defaultValue: 'Save' })}
+            >
+              <Bookmark className="h-5 w-5" fill={isBookmarked ? 'currentColor' : 'none'} />
+            </Button>
+            {/* Add to Garden Button */}
+            <Button
+              type="button"
+              variant="default"
+              className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-4 shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
+              onClick={handleAddToGarden}
+              aria-label={t('garden.add', { defaultValue: 'Add to garden' })}
+            >
+              <Plus className="h-5 w-5" />
+              <span className="ml-1.5">{t('garden.addToGarden', { defaultValue: 'Add to Garden' })}</span>
+            </Button>
           </div>
-          {/* Like Button */}
-          <Button
-            type="button"
-            variant={likedIds.includes(plant?.id || '') ? 'default' : 'outline'}
-            size="icon"
-            className={`rounded-full h-10 w-10 shadow-sm ${
-              likedIds.includes(plant?.id || '')
-                ? 'bg-rose-500 hover:bg-rose-600 border-rose-500 text-white dark:bg-rose-500 dark:hover:bg-rose-600'
-                : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
-            }`}
-            onClick={toggleLiked}
-            aria-label={likedIds.includes(plant?.id || '') ? t('common.unlike', { defaultValue: 'Unlike' }) : t('common.like', { defaultValue: 'Like' })}
-          >
-            <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
-          </Button>
-          {/* Separator between Like and Bookmark */}
-          <div className="w-px h-6 bg-stone-200 dark:bg-[#3e3e42] mx-0.5" />
-          {/* Save/Bookmark Button */}
-          <Button
-            type="button"
-            variant={isBookmarked ? 'default' : 'outline'}
-            size="icon"
-            className={`rounded-full h-10 w-10 shadow-sm ${
-              isBookmarked
-                ? 'bg-amber-500 hover:bg-amber-600 border-amber-500 text-white dark:bg-amber-500 dark:hover:bg-amber-600'
-                : 'border-stone-200 bg-white dark:border-[#3e3e42] dark:bg-[#1f1f1f]'
-            }`}
-            onClick={handleBookmark}
-            aria-label={isBookmarked ? t('common.unsave', { defaultValue: 'Remove from bookmarks' }) : t('common.save', { defaultValue: 'Save' })}
-          >
-            <Bookmark className="h-5 w-5" fill={isBookmarked ? 'currentColor' : 'none'} />
-          </Button>
-          {/* Add to Garden Button */}
-          <Button
-            type="button"
-            variant="default"
-            className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white h-10 px-3 sm:px-4 shadow-sm dark:bg-emerald-600 dark:hover:bg-emerald-700"
-            onClick={handleAddToGarden}
-            aria-label={t('garden.add', { defaultValue: 'Add to garden' })}
-          >
-            <Plus className="h-5 w-5" />
-            <span className="hidden sm:inline ml-1.5">{t('garden.addToGarden', { defaultValue: 'Add to Garden' })}</span>
-          </Button>
           {/* Edit Button (Admin/Editor) */}
           {checkEditorAccess(profile) && plant && (
             <Button
@@ -1126,6 +1128,61 @@ const PlantInfoPage: React.FC = () => {
               <Pencil className="h-5 w-5" />
             </Button>
           )}
+        </div>
+      </div>
+
+      {/* Mobile sticky bottom action bar — thumb-zone accessible */}
+      <div
+        className="fixed bottom-0 left-0 right-0 z-40 lg:hidden border-t border-stone-200/80 dark:border-[#3e3e42]/80 bg-white/80 dark:bg-[#1a1a1c]/80 backdrop-blur-xl supports-[backdrop-filter]:bg-white/70 dark:supports-[backdrop-filter]:bg-[#1a1a1c]/70 pb-[max(env(safe-area-inset-bottom),0px)]"
+        role="toolbar"
+        aria-label={t('plantInfo.actions', { defaultValue: 'Plant actions' })}
+        style={{ transform: 'translate3d(0, 0, 0)' }}
+      >
+        <div className="flex items-center justify-around gap-2 px-4 py-2 max-w-lg mx-auto">
+          <button
+            type="button"
+            onClick={handleShare}
+            className="flex flex-col items-center justify-center gap-0.5 min-w-[52px] min-h-[44px] rounded-xl text-stone-600 dark:text-stone-300 active:scale-95 transition-transform"
+            aria-label={t('common.share', { defaultValue: 'Share' })}
+          >
+            <Share2 className="h-5 w-5" />
+            <span className="text-[10px] font-medium">{t('common.share', { defaultValue: 'Share' })}</span>
+          </button>
+          <button
+            type="button"
+            onClick={toggleLiked}
+            className={`flex flex-col items-center justify-center gap-0.5 min-w-[52px] min-h-[44px] rounded-xl active:scale-95 transition-transform ${
+              likedIds.includes(plant?.id || '')
+                ? 'text-rose-500'
+                : 'text-stone-600 dark:text-stone-300'
+            }`}
+            aria-label={likedIds.includes(plant?.id || '') ? t('common.unlike', { defaultValue: 'Unlike' }) : t('common.like', { defaultValue: 'Like' })}
+          >
+            <Heart className="h-5 w-5" fill={likedIds.includes(plant?.id || '') ? 'currentColor' : 'none'} />
+            <span className="text-[10px] font-medium">{likedIds.includes(plant?.id || '') ? t('common.liked', { defaultValue: 'Liked' }) : t('common.like', { defaultValue: 'Like' })}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleBookmark}
+            className={`flex flex-col items-center justify-center gap-0.5 min-w-[52px] min-h-[44px] rounded-xl active:scale-95 transition-transform ${
+              isBookmarked
+                ? 'text-amber-500'
+                : 'text-stone-600 dark:text-stone-300'
+            }`}
+            aria-label={isBookmarked ? t('common.unsave', { defaultValue: 'Remove from bookmarks' }) : t('common.save', { defaultValue: 'Save' })}
+          >
+            <Bookmark className="h-5 w-5" fill={isBookmarked ? 'currentColor' : 'none'} />
+            <span className="text-[10px] font-medium">{isBookmarked ? t('common.saved', { defaultValue: 'Saved' }) : t('common.save', { defaultValue: 'Save' })}</span>
+          </button>
+          <button
+            type="button"
+            onClick={handleAddToGarden}
+            className="flex items-center justify-center gap-1.5 min-h-[44px] px-5 rounded-full bg-emerald-600 active:bg-emerald-700 text-white font-medium text-sm shadow-lg shadow-emerald-600/25 active:scale-95 transition-transform"
+            aria-label={t('garden.add', { defaultValue: 'Add to garden' })}
+          >
+            <Plus className="h-5 w-5" />
+            <span>{t('garden.addShort', { defaultValue: 'Garden' })}</span>
+          </button>
         </div>
       </div>
 
