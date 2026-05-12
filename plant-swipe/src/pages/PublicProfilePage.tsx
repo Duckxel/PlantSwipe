@@ -1155,7 +1155,7 @@ export default function PublicProfilePage() {
                       <Button className="rounded-2xl flex-1" variant="secondary" onClick={() => setEditOpen(true)}>
                         {t('profile.edit')}
                       </Button>
-                      <Button className="rounded-2xl" variant="secondary" size="icon" aria-label={t('common.more', { defaultValue: 'More' })} onClick={() => setMenuOpen((o) => !o)}>
+                      <Button className="rounded-2xl focus-visible:ring-2 focus-visible:ring-emerald-500" variant="secondary" size="icon" aria-label={t('common.more', { defaultValue: 'More options' })} title={t('common.more', { defaultValue: 'More options' })} onClick={() => setMenuOpen((o) => !o)}>
                         <MoreVertical className="h-4 w-4" />
                       </Button>
                       {menuOpen && menuPos && createPortal(
@@ -1207,9 +1207,11 @@ export default function PublicProfilePage() {
                       {/* 3-dots menu for report/block */}
                       <div ref={otherMenuAnchorRef}>
                         <Button 
-                          className="rounded-2xl self-start" 
+                          className="rounded-2xl self-start focus-visible:ring-2 focus-visible:ring-emerald-500"
                           variant="ghost" 
                           size="icon"
+                          aria-label={t('common.more', { defaultValue: 'More options' })}
+                          title={t('common.more', { defaultValue: 'More options' })}
                           onClick={() => setOtherMenuOpen((o) => !o)}
                         >
                           <MoreVertical className="h-4 w-4" />
@@ -1294,9 +1296,11 @@ export default function PublicProfilePage() {
                     <>
                       <div ref={otherMenuAnchorRef}>
                         <Button 
-                          className="rounded-2xl" 
+                          className="rounded-2xl focus-visible:ring-2 focus-visible:ring-emerald-500"
                           variant="ghost" 
                           size="icon"
+                          aria-label={t('common.more', { defaultValue: 'More options' })}
+                          title={t('common.more', { defaultValue: 'More options' })}
                           onClick={() => setOtherMenuOpen((o) => !o)}
                         >
                           <MoreVertical className="h-4 w-4" />
@@ -1381,9 +1385,11 @@ export default function PublicProfilePage() {
                     <>
                       <div ref={otherMenuAnchorRef}>
                         <Button 
-                          className="rounded-2xl" 
+                          className="rounded-2xl focus-visible:ring-2 focus-visible:ring-emerald-500"
                           variant="ghost" 
                           size="icon"
+                          aria-label={t('common.more', { defaultValue: 'More options' })}
+                          title={t('common.more', { defaultValue: 'More options' })}
                           onClick={() => setOtherMenuOpen((o) => !o)}
                         >
                           <MoreVertical className="h-4 w-4" />
