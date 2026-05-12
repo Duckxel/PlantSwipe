@@ -693,7 +693,10 @@ export default function PlantSwipe() {
     // This allows O(1) expansion of a color token into all its localized forms
     const aliasMap = new Map<string, Set<string>>()
 
-    colorOptions.forEach(c => {
+    // ⚡ Bolt: Use a single-pass for loop instead of multiple nested .forEach() methods and Object.values()
+    // This reduces callback overhead and intermediate array allocations
+    for (let i = 0; i < colorOptions.length; i++) {
+      const c = colorOptions[i]
       const normalizedName = c.name.toLowerCase()
       nameMap.set(normalizedName, c)
       idMap.set(c.id, c)
@@ -703,30 +706,32 @@ export default function PlantSwipe() {
       aliases.add(normalizedName)
 
       // Build children map for primary color expansion
-      c.parentIds.forEach(pid => {
+      for (let j = 0; j < c.parentIds.length; j++) {
+        const pid = c.parentIds[j]
         const existing = childrenMap.get(pid)
         if (existing) {
           existing.push(c)
         } else {
           childrenMap.set(pid, [c])
         }
-      })
+      }
       
       // Index all translations for multi-language matching
-      Object.values(c.translations).forEach(translatedName => {
+      for (const lang in c.translations) {
+        const translatedName = c.translations[lang]
         if (translatedName) {
           const tName = translatedName.toLowerCase().trim()
           translationMap.set(tName, c)
           aliases.add(tName)
         }
-      })
+      }
 
       // Populate alias map for all aliases of this color
       // All aliases point to the SAME Set instance to save memory
-      aliases.forEach(alias => {
+      for (const alias of aliases) {
         aliasMap.set(alias, aliases)
-      })
-    })
+      }
+    }
     return { nameMap, idMap, childrenMap, translationMap, aliasMap }
   }, [colorOptions])
 
@@ -1250,7 +1255,9 @@ export default function PlantSwipe() {
     // Pre-allocate a Set for tracking processed color IDs to avoid duplicate expansion
     const processedIds = new Set<string>()
     
-    normalizedColorFilters.forEach((filterColorName) => {
+    // ⚡ Bolt: Use single-pass for loop instead of .forEach() to process filters
+    for (let i = 0; i < normalizedColorFilters.length; i++) {
+      const filterColorName = normalizedColorFilters[i]
       // Add the exact filter name for direct matching
       expandedSet.add(filterColorName)
       
@@ -1265,30 +1272,34 @@ export default function PlantSwipe() {
         expandedSet.add(filterColor.name.toLowerCase())
         
         // Add all translations for this color to enable cross-language plant matching
-        Object.values(filterColor.translations).forEach(translatedName => {
+        // ⚡ Bolt: Use for...in loop instead of Object.values().forEach()
+        for (const lang in filterColor.translations) {
+          const translatedName = filterColor.translations[lang]
           if (translatedName) {
             expandedSet.add(translatedName.toLowerCase().trim())
           }
-        })
+        }
         
         // If primary color, expand to include all child colors
         if (filterColor.isPrimary) {
           const children = childrenMap.get(filterColor.id)
           if (children) {
-            for (let i = 0; i < children.length; i++) {
-              const child = children[i]
+            for (let j = 0; j < children.length; j++) {
+              const child = children[j]
               expandedSet.add(child.name.toLowerCase())
               // Also add child translations for comprehensive matching
-              Object.values(child.translations).forEach(translatedName => {
+              // ⚡ Bolt: Use for...in loop instead of Object.values().forEach()
+              for (const lang in child.translations) {
+                const translatedName = child.translations[lang]
                 if (translatedName) {
                   expandedSet.add(translatedName.toLowerCase().trim())
                 }
-              })
+              }
             }
           }
         }
       }
-    })
+    }
     
     return expandedSet
   }, [colorFilter, colorLookups])
