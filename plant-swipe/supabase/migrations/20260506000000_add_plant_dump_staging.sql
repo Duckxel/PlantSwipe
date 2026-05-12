@@ -1,15 +1,14 @@
--- ====================================================
--- Plant Image Dump: bulk upload staging tables
--- ====================================================
--- Staging tables used by the admin "Plant Image Dump" bulk uploader.
+-- Plant Image Dump bulk-upload staging tables. Mirrors
+-- plant-swipe/supabase/sync_parts/23_plant_dump.sql exactly so applying the
+-- migration on a database that has already been synced is a no-op.
+--
 -- Rows here are scratch state — once an image is matched to a plant and
 -- promoted, it cascades into plant_images and the staging row is marked
--- status='submitted'. The HTTP layer in server.js gates /api/admin/plant-dump/*
--- behind ensureEditor/ensureAdmin, but the policies below also enforce
--- admin-only access at the table level so direct PostgREST calls can't
--- read or mutate staging rows.
+-- status='submitted'. The HTTP layer in server.js gates
+-- /api/admin/plant-dump/* behind ensureEditor/ensureAdmin, but the
+-- policies below also enforce admin-only access at the table level so
+-- direct PostgREST calls can't read or mutate staging rows.
 
--- Groups for organizing dump images that belong to the same plant
 create table if not exists public.plant_dump_groups (
   id uuid primary key default gen_random_uuid(),
   name text,
@@ -19,7 +18,6 @@ create table if not exists public.plant_dump_groups (
   updated_at timestamptz not null default now()
 );
 
--- Individual images uploaded to the dump staging area
 create table if not exists public.plant_dump_images (
   id uuid primary key default gen_random_uuid(),
   bucket text not null default 'PLANTS',
@@ -45,9 +43,6 @@ create index if not exists pdi_upload_idx on public.plant_dump_images (uploaded_
 alter table public.plant_dump_images enable row level security;
 alter table public.plant_dump_groups  enable row level security;
 
--- Drop legacy wide-open policies if they exist (early versions used
--- using(true)/with check(true) which exposed staging rows — including
--- uploaded_by, original_name, and path — to any authenticated user).
 do $$ begin
   if exists (select 1 from pg_policies where schemaname='public' and tablename='plant_dump_images' and policyname='pdi_admin') then
     drop policy pdi_admin on public.plant_dump_images;
@@ -65,9 +60,6 @@ do $$ begin
     with check (public.is_admin_user((select auth.uid())));
 end $$;
 
--- Defence in depth: revoke anon completely, and revoke write privileges
--- from authenticated. Service-role traffic from server.js bypasses RLS
--- and grants entirely, so the admin Plant Dump endpoints keep working.
 revoke all on public.plant_dump_images from anon;
 revoke all on public.plant_dump_groups from anon;
 revoke insert, update, delete on public.plant_dump_images from authenticated;
