@@ -1,5 +1,19 @@
 -- Prevent non-admin users from granting themselves admin privileges.
 --
+-- HISTORY NOTE: This file was originally named
+--   20260422000000_prevent_self_admin_escalation.sql
+-- which collided with 20260422000000_migrate_admin_commentary_to_notes.sql.
+-- Supabase tracks applied migrations by their timestamp prefix, so the second
+-- file with the same version was silently skipped on `supabase db push`.
+-- Renamed to 20260422000003 on 2026-05-12. On linked environments where the
+-- original 20260422000000 version is already registered as applied for THIS
+-- file's body, run:
+--     supabase migration repair --status applied 20260422000003
+-- so the new version is recognized as already applied and not re-run.
+-- The body below is fully idempotent (create or replace function /
+-- drop trigger if exists), so a re-run on environments where the original
+-- timestamp was skipped is safe.
+--
 -- The RLS policy `profiles_update_self` permits authenticated users to update
 -- any column on their own row, including `is_admin` and `roles`. That means a
 -- malicious user could bypass the UI and call the Supabase client directly to

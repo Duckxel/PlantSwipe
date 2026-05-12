@@ -224,7 +224,9 @@ do $$ declare
     'event_user_progress',
     -- Plant Image Dump (bulk upload staging)
     'plant_dump_groups',
-    'plant_dump_images'
+    'plant_dump_images',
+    -- Aphydle Automation
+    'aphydle_buffer_schedule'
   ];
   rec record;
 begin

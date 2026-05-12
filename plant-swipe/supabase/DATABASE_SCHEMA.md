@@ -1,8 +1,8 @@
 # Aphylia Database Schema Documentation
 
-> **Last Updated:** May 11, 2026
+> **Last Updated:** May 12, 2026
 > **Database:** PostgreSQL (Supabase)  
-> **Total Tables:** 75+  
+> **Total Tables:** 78+  
 > **RLS Policies:** 250+
 
 ## Table of Contents
@@ -29,15 +29,15 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 
 ### Recent Updates (Keep Less than 10)
 - **May 11, 2026:** **Plant Image Dump staging tables + plant_images source tracking.** Added `plant_dump_groups` and `plant_dump_images` tables for bulk image upload staging at `/admin/upload/dump`. Admin-only RLS. Added `source` column to `plant_images` (`'uploaded' | 'web' | 'dump'`). Several enum tag fields (`substrate`, `mulch_type`, `nutrition_need`, `fertilizer`, `special_needs`, `biotopes`, `pollinators_attracted`, `birds_attracted`, `mammals_attracted`) now also stored in `plant_translations` for per-language values. Schema file: `23_plant_dump.sql`. Migration in `03_plants_and_colors.sql`, `04_translations_and_requests.sql`.
+- **May 12, 2026:** **Plant Dump RLS hardening + Aphydle sync fix + doc reconcile.** Replaced wide-open `using (true) with check (true)` policies on `plant_dump_images` / `plant_dump_groups` with admin-only `is_admin_user(auth.uid())` gates, plus `REVOKE` on anon and write-mode-on authenticated. Added the previously-missing companion migration `20260506000000_add_plant_dump_staging.sql`. Added `aphydle_buffer_schedule` to `allowed_tables` in `01_extensions_and_setup.sql` so the next sync purge does not drop the singleton runner config. Documented the three new tables (`aphydle_buffer_schedule`, `plant_dump_groups`, `plant_dump_images`), the new `plant_images.source` column, and the full translatable-tag-field roster on `plant_translations` (`substrate`, `mulch_type`, `nutrition_need`, `fertilizer`, `special_needs`, `biotopes`, `pollinators_attracted`, `birds_attracted`, `mammals_attracted`). Schema files: `01_extensions_and_setup.sql`, `23_plant_dump.sql`.
+- **May 5, 2026:** **Aphydle → Buffer scheduler.** New singleton-config table `aphydle_buffer_schedule` consumed by the per-minute runner in `server.js` (gated by `VITE_SERVER_NAME=MAIN`). RLS: admins read+write via `is_admin_user(auth.uid())`; anon revoked; authenticated SELECT-only. Service role bypasses RLS for the cron runner. Migration: `20260505000000_add_aphydle_buffer_schedule.sql`. Schema file: `22_aphydle_buffer_schedule.sql`.
 - **Apr 26, 2026:** **Profile field hardening + usage table REVOKE.** Extended the `prevent_self_admin_escalation` trigger to protect `roles`, `threat_level` (non-admins may only increase), `bug_points`, `shadow_ban_backup`, and `last_active_at` from client tampering. INSERT defaults also enforced. Explicitly `REVOKE INSERT/UPDATE/DELETE` on `ai_usage_events` and `scan_usage_events` from `authenticated`/`anon` for defence in depth. Migration: `20260422000002_harden_profile_and_usage.sql`. Schema files: `02_profiles_and_purge.sql`, `21_ai_and_scan_usage.sql`.
 - **Apr 22, 2026:** **AI & scan usage monitoring.** New `ai_usage_events` table logs every OpenAI request (user, feature, model, prompt/completion/total tokens, request_id, metadata). New `scan_usage_events` table logs every Kindwise plant scan (1 scan = 1 token, classification_level, success). RLS: users read own rows, admins see all. No write policies — server (service role) inserts only. No limits enforced yet; tables exist for abuse detection and future plan pricing. Schema file: `21_ai_and_scan_usage.sql`. Migration: `20260422000001_add_ai_and_scan_usage.sql`.
-- **Apr 22, 2026:** **Admin escalation prevention.** Added `BEFORE INSERT/UPDATE` trigger `prevent_self_admin_escalation` on `profiles` that blocks non-admin callers from setting `is_admin = true` or adding `'admin'` to `roles`. Service-role calls (`auth.uid() IS NULL`) pass through so server endpoints keep working. Migration: `20260422000000_prevent_self_admin_escalation.sql`. Schema file: `02_profiles_and_purge.sql`.
+- **Apr 22, 2026:** **Admin escalation prevention.** Added `BEFORE INSERT/UPDATE` trigger `prevent_self_admin_escalation` on `profiles` that blocks non-admin callers from setting `is_admin = true` or adding `'admin'` to `roles`. Service-role calls (`auth.uid() IS NULL`) pass through so server endpoints keep working. Migration: `20260422000003_prevent_self_admin_escalation.sql` (renamed from the colliding `20260422000000_*` timestamp on 2026-05-12 — run `supabase migration repair --status applied 20260422000003` against linked environments where the original version is already registered). Schema file: `02_profiles_and_purge.sql`.
 - **Apr 23, 2026:** **Dropped legacy admin_commentary + contributor_name.** Now that the data migrations have been applied, `plants.admin_commentary` is dropped and `plant_contributors.contributor_name` is removed (along with its legacy unique index and the id-or-name check constraint). `plant_contributors.contributor_id` is now `NOT NULL` with `ON DELETE CASCADE` and the single unique is `(plant_id, contributor_id)`. Orphan contributor rows that couldn't be resolved to a profile during backfill are deleted by the idempotent cleanup block in `03_plants_and_colors.sql`. Client code purged of every `adminCommentary` / `contributor_name` reference across pages, services, schema, diff helper, and server.js.
 - **Apr 22, 2026:** **Contributors keyed by profile id.** Added `plant_contributors.contributor_id` (uuid FK to `profiles`, `ON DELETE SET NULL`) alongside the existing `contributor_name` (now nullable, kept only as legacy snapshot). Replaced the case-insensitive name unique index with two partial uniques (one per id, one per legacy name) and added a check constraint requiring either an id or a non-empty name. New admin UI uses a shared user-search picker (same `SearchItem` pattern as Admin Event notifications). Migration `20260422100000_backfill_plant_contributor_ids.sql` resolves existing names to profile ids via `display_name`. Schema file: `03_plants_and_colors.sql`.
 - **Apr 22, 2026:** **Plant change history + admin notes thread.** New `plant_history` table logs per-plant admin actions (field edits, translations, AI fills, note add/edit/delete) — insert-only, admin/editor select. New `plant_admin_notes` table replaces the legacy `plants.admin_commentary` textarea with a chat-style thread (any admin can add/edit/delete any note; all mutations mirrored into `plant_history`). Schema file: `03_plants_and_colors.sql`.
 - **Apr 13, 2026:** **Native push tokens, tutorial, GDPR expansion, companion cleanup.** Added `user_fcm_tokens` table for native (Capacitor) FCM/APNs device tokens. Added `tutorial_completed` boolean column to `profiles` for onboarding tutorial persistence. Migration `20260408000000_clean_bad_companion_data.sql` bulk-cleans bad AI-filled companion data from `plants` table. Migration `20260408100000_fix_admin_event_notifications_rls.sql` fixes RLS so non-admin users can receive event notifications. GDPR delete handlers expanded to 10 additional tables (`15_gdpr_and_preferences.sql`). Schema files: `01_extensions_and_setup.sql`, `11_notifications_and_tasks.sql`, `15_gdpr_and_preferences.sql`, `17_admin_event_notifications.sql`.
-- **Apr 6, 2026:** **Events & Badges schema files.** Added `19_badges.sql` (badge catalog, translations, user badges) and `20_events.sql` (events, items, translations, registrations, user progress) to `sync_parts/`. Added `conservation_status` values `protected` and `protected_in_some_regions`. Unified `plant_part` and `edible_part` to share 12 items (added `tubers`). Fixed Phase 3 sync constraints for `conservation_status` and `plant_part`. Schema files: `03_plants_and_colors.sql`, `19_badges.sql`, `20_events.sql`.
-- **Mar 31, 2026:** **`events` admin UPDATE RLS.** The `events` table had SELECT-only policies; authenticated updates from `/admin/events` matched no policy and updated zero rows while the client still reported success. Added policy `events_update_admin` (`public.is_admin_user`) for UPDATE. Schema file: `20_events.sql`.
 
 ### Required Extensions
 ```sql
@@ -116,6 +116,8 @@ The schema is split into 23 files in `supabase/sync_parts/` for easier managemen
 | `substrate_recipe_translations` | Recipe name/description translations |
 | `requested_plants` | User-requested plants to add |
 | `plant_stocks` | Plant seed/plant availability, quantity, and pricing for the shop |
+| `plant_dump_groups` | Bulk-upload staging: groups of dump images that belong to the same plant. Admin-only. |
+| `plant_dump_images` | Bulk-upload staging: individual images awaiting plant assignment. Admin-only. Promoted rows cascade into `plant_images` with `source='dump'`. |
 
 ### Gardens
 
@@ -199,6 +201,7 @@ The schema is split into 23 files in `supabase/sync_parts/` for easier managemen
 | `admin_campaign_sends` | Campaign send records |
 | `admin_email_triggers` | Automated email triggers |
 | `admin_automatic_email_sends` | Automatic email send log |
+| `aphydle_buffer_schedule` | Singleton config row for the Aphydle → Buffer scheduler runner (per-minute cron in `server.js`). Admin-only. |
 
 ### Analytics & Audit
 
@@ -865,10 +868,17 @@ origin                  TEXT[]                    -- Countries of origin
 allergens               TEXT[]                    -- Known allergens
 poisoning_symptoms      TEXT                      -- Prevention/symptom description
 
--- Care
+-- Care (prose)
 soil_advice             TEXT                      -- Substrate/soil guidance
 mulch_advice            TEXT                      -- Mulching recommendations
 fertilizer_advice       TEXT                      -- Fertilizer guidance
+
+-- Care (translatable tag arrays — labels for enum tag keys)
+substrate               TEXT[] NOT NULL DEFAULT '{}'  -- Localized substrate tag labels
+mulch_type              TEXT[] NOT NULL DEFAULT '{}'  -- Localized mulch type labels
+nutrition_need          TEXT[] NOT NULL DEFAULT '{}'  -- Localized nutrition need labels
+fertilizer              TEXT[] NOT NULL DEFAULT '{}'  -- Localized fertilizer tag labels
+special_needs           TEXT[] NOT NULL DEFAULT '{}'  -- Localized special needs labels
 
 -- Growth
 staking_advice          TEXT                      -- Staking/support recommendations
@@ -1056,6 +1066,9 @@ plant_id        TEXT NOT NULL REFERENCES plants(id) ON DELETE CASCADE
 link            TEXT NOT NULL
 use             TEXT NOT NULL DEFAULT 'other'     -- CHECK: primary, discovery, other
 source          TEXT NOT NULL DEFAULT 'uploaded'  -- CHECK: uploaded, web, dump
+                                                  -- 'dump' ties the row back to the
+                                                  -- Plant Image Dump staging flow
+                                                  -- (plant_dump_images → plant_images)
 added_by        UUID REFERENCES auth.users(id) ON DELETE SET NULL
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE(plant_id, link)
@@ -1456,6 +1469,83 @@ created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
 
 **Schema file:** `21_ai_and_scan_usage.sql`. Migration: `20260422000001_add_ai_and_scan_usage.sql`.
 
+### `aphydle_buffer_schedule`
+
+Singleton config row consumed by the recurring "Aphydle automation" runner in `plant-swipe/server.js`. Exactly one row exists in production (id = `'default'`). The runner uses the Supabase service role (bypasses RLS), so this table is admin-only from authenticated clients; no anon access.
+
+```sql
+id                  TEXT PRIMARY KEY                       -- Pinned to 'default'
+enabled             BOOLEAN NOT NULL DEFAULT false         -- Master on/off switch
+days_of_week        TEXT[] NOT NULL DEFAULT '{}'           -- e.g. {'mon','wed','fri'}
+publish_time_local  TEXT NOT NULL DEFAULT '13:00'          -- Local-time HH:MM to publish
+run_time_local      TEXT NOT NULL DEFAULT '04:00'          -- Local-time HH:MM to fetch + host cards
+timezone            TEXT NOT NULL DEFAULT 'UTC'            -- IANA TZ snapshot (audit/display only)
+organization_id     TEXT                                   -- Buffer organization id
+channel_ids         TEXT[] NOT NULL DEFAULT '{}'           -- Buffer channel ids to post to
+last_run_at         TIMESTAMPTZ                            -- Last runner tick that did work
+last_run_for_date   DATE                                   -- Puzzle date that was processed
+last_run_status     TEXT                                   -- 'ok' | 'error' | 'skipped'
+last_run_results    JSONB                                  -- Per-channel post ids / errors
+updated_at          TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** admins read+write via `public.is_admin_user((select auth.uid()))`; anon revoked completely; authenticated has SELECT only (no INSERT/UPDATE/DELETE); service role bypasses RLS for the runner.
+
+**Retention / GDPR:** singleton config row — no per-user data. `last_run_results` JSONB can carry Buffer channel ids and admin-attributable post ids; no end-user PII.
+
+**Cron:** the every-minute runner in `plant-swipe/server.js` (gated by `VITE_SERVER_NAME=MAIN`) reads this row, decides whether today's run is due, fetches today's Aphydle puzzle, hosts the cards in Supabase storage, and queues per-channel Buffer posts at `publish_time_local`.
+
+**Schema file:** `22_aphydle_buffer_schedule.sql`. Migration: `20260505000000_add_aphydle_buffer_schedule.sql`.
+
+### `plant_dump_groups`
+
+Bulk-upload staging: groups multiple `plant_dump_images` that belong to the same plant. Admin/editor only. Rows here are scratch state — once promoted, images cascade into `plant_images` and the staging rows are marked `status='submitted'`.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name            TEXT                                       -- Optional group label
+plant_id        TEXT REFERENCES plants(id) ON DELETE SET NULL
+created_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** policy `pdg_admin` `FOR ALL TO authenticated USING/WITH CHECK public.is_admin_user((select auth.uid()))`. `REVOKE ALL FROM anon`; `REVOKE INSERT, UPDATE, DELETE FROM authenticated`; `GRANT SELECT TO authenticated`. Service role bypasses RLS.
+
+**Retention:** kept indefinitely as an admin audit trail. No automated purge today; a daily cleanup of `status IN ('submitted','deleted')` rows older than N days is a candidate follow-up but not yet implemented.
+
+**Schema file:** `23_plant_dump.sql`. Migration: `20260506000000_add_plant_dump_staging.sql`.
+
+### `plant_dump_images`
+
+Bulk-upload staging: individual images uploaded to the dump area before being assigned to a plant. Promoted images become rows in `plant_images` with `source='dump'` and the staging row is marked `status='submitted'`.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+bucket          TEXT NOT NULL DEFAULT 'PLANTS'             -- Supabase storage bucket
+path            TEXT NOT NULL                              -- Storage object path
+url             TEXT NOT NULL                              -- Public URL
+original_name   TEXT                                       -- User-supplied filename
+size_bytes      INTEGER                                    -- File size at upload
+group_id        UUID REFERENCES plant_dump_groups(id) ON DELETE SET NULL
+plant_id        TEXT REFERENCES plants(id) ON DELETE SET NULL
+uploaded_by     UUID REFERENCES auth.users(id) ON DELETE SET NULL
+uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+status          TEXT NOT NULL DEFAULT 'pending'            -- CHECK: pending, submitted, deleted
+submitted_at    TIMESTAMPTZ
+deleted_at      TIMESTAMPTZ
+```
+
+**Indexes:** partial `(status)` where `status='pending'`, `(group_id)`, `(plant_id)`, `(uploaded_at DESC)`.
+
+**RLS:** policy `pdi_admin` `FOR ALL TO authenticated USING/WITH CHECK public.is_admin_user((select auth.uid()))`. `REVOKE ALL FROM anon`; `REVOKE INSERT, UPDATE, DELETE FROM authenticated`; `GRANT SELECT TO authenticated`. Service role bypasses RLS.
+
+**Storage:** files live under `PLANTS/plants/dump/{uuid}.webp` and inherit the bucket's existing storage policies. On submit, `server.js` moves the object to `PLANTS/plants/images/{plantName}/...`.
+
+**Retention:** kept indefinitely as an admin audit trail today (see `plant_dump_groups` note). Abandoned `pending` rows whose storage object has been deleted out of band are not yet swept automatically.
+
+**Schema file:** `23_plant_dump.sql`. Migration: `20260506000000_add_plant_dump_staging.sql`.
+
 ---
 
 ## Row Level Security (RLS)
@@ -1523,6 +1613,9 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `events` | Anyone can SELECT; only admins can UPDATE (`events_update_admin` via `is_admin_user`) |
 | `ai_usage_events` | SELECT: own rows or admin; no INSERT/UPDATE/DELETE policies; `REVOKE` enforced |
 | `scan_usage_events` | SELECT: own rows or admin; no INSERT/UPDATE/DELETE policies; `REVOKE` enforced |
+| `aphydle_buffer_schedule` | Admins read+write via `is_admin_user(auth.uid())`; anon revoked; authenticated has SELECT only; service role bypasses for the cron runner |
+| `plant_dump_groups` | Admin-only via `is_admin_user(auth.uid())` (`pdg_admin`); anon revoked; authenticated INSERT/UPDATE/DELETE revoked; service role bypasses |
+| `plant_dump_images` | Admin-only via `is_admin_user(auth.uid())` (`pdi_admin`); anon revoked; authenticated INSERT/UPDATE/DELETE revoked; service role bypasses |
 | `profiles` | `prevent_self_admin_escalation` trigger blocks non-admin changes to `is_admin`, `roles`, `threat_level` (decrease), `bug_points`, `shadow_ban_backup`, `last_active_at` |
 
 ---
@@ -1540,6 +1633,7 @@ CREATE POLICY "Admins can manage all" ON table_name
 | `cleanup_old_task_occurrences` | `0 3 * * 0` (3 AM weekly) | Archive old task data |
 | `cleanup_expired_verification_codes` | `30 2 * * *` (2:30 AM daily) | Remove expired OTP codes |
 | `reminder_emails` (server-side) | `0 */3 * * *` (every 3 hours) | Send reminder emails for pending friend requests and garden invites older than 1 day |
+| `aphydle_buffer_runner` (server-side) | `* * * * *` (every minute on `VITE_SERVER_NAME=MAIN`) | Reads `aphydle_buffer_schedule`; at `run_time_local` fetches today's Aphydle puzzle and hosts the cards in Supabase storage; at `publish_time_local` queues per-channel Buffer posts. Service role bypasses RLS. |
 
 ---
 
