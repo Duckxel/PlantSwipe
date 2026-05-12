@@ -28,6 +28,7 @@ The Aphylia database is built on Supabase (PostgreSQL) with extensive use of:
 - **Real-time subscriptions** for live updates
 
 ### Recent Updates (Keep Less than 10)
+- **May 11, 2026:** **Plant Image Dump staging tables + plant_images source tracking.** Added `plant_dump_groups` and `plant_dump_images` tables for bulk image upload staging at `/admin/upload/dump`. Admin-only RLS. Added `source` column to `plant_images` (`'uploaded' | 'web' | 'dump'`). Several enum tag fields (`substrate`, `mulch_type`, `nutrition_need`, `fertilizer`, `special_needs`, `biotopes`, `pollinators_attracted`, `birds_attracted`, `mammals_attracted`) now also stored in `plant_translations` for per-language values. Schema file: `23_plant_dump.sql`. Migration in `03_plants_and_colors.sql`, `04_translations_and_requests.sql`.
 - **May 12, 2026:** **Plant Dump RLS hardening + Aphydle sync fix + doc reconcile.** Replaced wide-open `using (true) with check (true)` policies on `plant_dump_images` / `plant_dump_groups` with admin-only `is_admin_user(auth.uid())` gates, plus `REVOKE` on anon and write-mode-on authenticated. Added the previously-missing companion migration `20260506000000_add_plant_dump_staging.sql`. Added `aphydle_buffer_schedule` to `allowed_tables` in `01_extensions_and_setup.sql` so the next sync purge does not drop the singleton runner config. Documented the three new tables (`aphydle_buffer_schedule`, `plant_dump_groups`, `plant_dump_images`), the new `plant_images.source` column, and the full translatable-tag-field roster on `plant_translations` (`substrate`, `mulch_type`, `nutrition_need`, `fertilizer`, `special_needs`, `biotopes`, `pollinators_attracted`, `birds_attracted`, `mammals_attracted`). Schema files: `01_extensions_and_setup.sql`, `23_plant_dump.sql`.
 - **May 5, 2026:** **Aphydle → Buffer scheduler.** New singleton-config table `aphydle_buffer_schedule` consumed by the per-minute runner in `server.js` (gated by `VITE_SERVER_NAME=MAIN`). RLS: admins read+write via `is_admin_user(auth.uid())`; anon revoked; authenticated SELECT-only. Service role bypasses RLS for the cron runner. Migration: `20260505000000_add_aphydle_buffer_schedule.sql`. Schema file: `22_aphydle_buffer_schedule.sql`.
 - **Apr 26, 2026:** **Profile field hardening + usage table REVOKE.** Extended the `prevent_self_admin_escalation` trigger to protect `roles`, `threat_level` (non-admins may only increase), `bug_points`, `shadow_ban_backup`, and `last_active_at` from client tampering. INSERT defaults also enforced. Explicitly `REVOKE INSERT/UPDATE/DELETE` on `ai_usage_events` and `scan_usage_events` from `authenticated`/`anon` for defence in depth. Migration: `20260422000002_harden_profile_and_usage.sql`. Schema files: `02_profiles_and_purge.sql`, `21_ai_and_scan_usage.sql`.
@@ -75,7 +76,7 @@ The schema is split into 23 files in `supabase/sync_parts/` for easier managemen
 | `20_events.sql` | Event system: events, items, translations, registrations, user progress |
 | `21_ai_and_scan_usage.sql` | AI (OpenAI) token usage and plant-scan usage monitoring |
 | `22_aphydle_buffer_schedule.sql` | Singleton config row for the recurring Aphydle → Buffer scheduler |
-| `23_plant_dump.sql` | Plant Image Dump bulk-upload staging tables (`plant_dump_groups`, `plant_dump_images`) |
+| `23_plant_dump.sql` | Plant image dump: bulk upload staging tables (groups + images) |
 
 ---
 
@@ -105,7 +106,9 @@ The schema is split into 23 files in `supabase/sync_parts/` for easier managemen
 | `plant_history` | Per-plant admin change log (field edits, translations, AI fills, note actions). Insert-only; admin/editor select. |
 | `plant_admin_notes` | Chat-style editorial notes per plant. Any admin can add/edit/delete any note. Mutations mirrored into `plant_history`. |
 | `plant_pro_advices` | Professional growing tips |
-| `plant_images` | Plant image gallery |
+| `plant_images` | Plant image gallery (with source tracking: uploaded, web, dump) |
+| `plant_dump_groups` | Bulk image upload staging — groups for organizing dump images |
+| `plant_dump_images` | Bulk image upload staging — individual images |
 | `colors` | Color catalog |
 | `plant_colors` | Plant-color associations |
 | `color_translations` | Color name translations |
@@ -900,13 +903,20 @@ medicinal_history       TEXT                      -- Historical medicinal use
 aromatherapy_benefits   TEXT                      -- Aromatherapy benefits
 essential_oil_blends    TEXT                      -- Essential oil blend ideas
 
--- Ecology (translatable tag arrays)
-biotopes                TEXT[] NOT NULL DEFAULT '{}'  -- Localized biotope labels
-pollinators_attracted   TEXT[] NOT NULL DEFAULT '{}'  -- Localized pollinator labels
-birds_attracted         TEXT[] NOT NULL DEFAULT '{}'  -- Localized bird labels
-mammals_attracted       TEXT[] NOT NULL DEFAULT '{}'  -- Localized mammal labels
+-- Care translatable tag fields (enum arrays, per-language values)
+substrate               TEXT[]                    -- Substrate types (translated enum values)
+mulch_type              TEXT[]                    -- Mulch types (translated enum values)
+nutrition_need          TEXT[]                    -- Nutrition needs (translated enum values)
+fertilizer              TEXT[]                    -- Fertilizer types (translated enum values)
+special_needs           TEXT[]                    -- Special care needs (translated enum values)
 
--- Ecology (prose / generic arrays)
+-- Ecology translatable tag fields (enum arrays, per-language values)
+biotopes                TEXT[]                    -- Biotope types (translated enum values)
+pollinators_attracted   TEXT[]                    -- Pollinators attracted (translated)
+birds_attracted         TEXT[]                    -- Birds attracted (translated)
+mammals_attracted       TEXT[]                    -- Mammals attracted (translated)
+
+-- Ecology
 beneficial_roles        TEXT[]                    -- Beneficial ecological roles
 harmful_roles           TEXT[]                    -- Harmful ecological roles
 symbiosis               TEXT[]                    -- Symbiotic relationships
@@ -1063,6 +1073,49 @@ added_by        UUID REFERENCES auth.users(id) ON DELETE SET NULL
 created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
 UNIQUE(plant_id, link)
 ```
+
+### `plant_dump_groups`
+
+Groups for organizing dump images that belong to the same plant. Used by the Plant Image Dump admin feature (`/admin/upload/dump`).
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+name            TEXT
+plant_id        TEXT REFERENCES plants(id) ON DELETE SET NULL
+created_by      UUID REFERENCES auth.users(id) ON DELETE SET NULL
+created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+```
+
+**RLS:** Admin-only full access.
+
+**Schema file:** `23_plant_dump.sql`
+
+### `plant_dump_images`
+
+Individual images uploaded to the dump staging area. Images can be grouped, assigned to plants, and submitted to the main `plant_images` gallery.
+
+```sql
+id              UUID PRIMARY KEY DEFAULT gen_random_uuid()
+bucket          TEXT NOT NULL DEFAULT 'PLANTS'
+path            TEXT NOT NULL
+url             TEXT NOT NULL
+original_name   TEXT
+size_bytes      INTEGER
+group_id        UUID REFERENCES plant_dump_groups(id) ON DELETE SET NULL
+plant_id        TEXT REFERENCES plants(id) ON DELETE SET NULL
+uploaded_by     UUID REFERENCES auth.users(id) ON DELETE SET NULL
+uploaded_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+status          TEXT NOT NULL DEFAULT 'pending'  -- CHECK: pending, submitted, deleted
+submitted_at    TIMESTAMPTZ
+deleted_at      TIMESTAMPTZ
+```
+
+**RLS:** Admin-only full access.
+
+**Indexes:** `(status) WHERE status = 'pending'`, `(group_id)`, `(plant_id)`, `(uploaded_at DESC)`.
+
+**Schema file:** `23_plant_dump.sql`
 
 ### `plant_colors`
 
