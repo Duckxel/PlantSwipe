@@ -54,3 +54,7 @@
 **Learning:** Using `.map()` and `forEach` in hot paths (like processing thousands of plants) causes unnecessary intermediate array allocations, resulting in significant garbage collection pressure.
 **Action:** Replace functional array methods like `.map()` and `.forEach()` with single-pass `for` loops and pre-allocated arrays (`new Array(length)`) in performance-critical sections to reduce CPU overhead and memory footprint.
 ## 2026-05-18 - Replacing .map calls with single-pass for loops in data loading hot paths\n**Learning:** In data loading functions that process arrays containing thousands of items from database responses (e.g., `plantTranslationLoader.ts`), using `.map()` to construct new objects creates significant garbage collection overhead. Since this data loading logic is executed before rendering, minimizing array allocations improves responsiveness.\n**Action:** Use a single-pass `for` loop and pre-allocate arrays (e.g. `new Array(length)`) instead of `.map()` for array manipulation on large datasets in hot data fetching paths.
+
+## 2024-05-19 - Avoid array allocation in Object iterators with for...in
+**Learning:** Using `Object.values(obj).some(...)` and `Object.keys(obj).some(...)` in normalization logic (e.g., `normalizeClassificationValue`) creates intermediate array allocations on every invocation.
+**Action:** Replace `Object.values().some` and `Object.keys().some` with a `for...in` loop to avoid intermediate array allocations and reduce GC overhead.

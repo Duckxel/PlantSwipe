@@ -45,12 +45,20 @@ export function normalizeClassificationValue<T extends keyof PlantClassification
   if (value === undefined || value === null) return undefined
   if (Array.isArray(value) && value.length === 0) return undefined
   if (typeof value === "object" && !Array.isArray(value)) {
-    const hasEntries = Object.values(value).some((entry) => {
+    // ⚡ Bolt: Replace Object.values().some() with a for...in loop to avoid intermediate array allocation
+    let hasEntries = false
+    for (const k in value) {
+      const entry = (value as Record<string, unknown>)[k]
       if (Array.isArray(entry)) {
-        return entry.length > 0
+        if (entry.length > 0) {
+          hasEntries = true
+          break
+        }
+      } else if (entry !== undefined && entry !== null && String(entry).trim().length > 0) {
+        hasEntries = true
+        break
       }
-      return entry !== undefined && entry !== null && String(entry).trim().length > 0
-    })
+    }
     return hasEntries ? value : undefined
   }
   if (typeof value === "string" && value.trim().length === 0) {
@@ -61,10 +69,14 @@ export function normalizeClassificationValue<T extends keyof PlantClassification
 
 export function hasClassificationData(classification?: PlantClassification | null): boolean {
   if (!classification) return false
-  return Object.keys(classification).some((key) => {
+  // ⚡ Bolt: Replace Object.keys().some() with a for...in loop to avoid intermediate array allocation
+  for (const key in classification) {
     const typedKey = key as keyof PlantClassification
-    return normalizeClassificationValue(classification, typedKey) !== undefined
-  })
+    if (normalizeClassificationValue(classification, typedKey) !== undefined) {
+      return true
+    }
+  }
+  return false
 }
 
 export function formatClassificationLabel(value?: string | null): string {
