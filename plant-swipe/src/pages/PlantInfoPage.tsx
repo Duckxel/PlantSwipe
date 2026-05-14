@@ -20,7 +20,7 @@ import { getUserBookmarks, getLikesBookmarkPlantIds, togglePlantInLikesBookmark 
 import { useTranslation } from 'react-i18next'
 import { useLanguage, useLanguageNavigate } from '@/lib/i18nRouting'
 import { usePageMetadata } from '@/hooks/usePageMetadata'
-import { articleSchemaForPlant, breadcrumbSchema } from '@/lib/seo/schemas'
+import { articleSchemaForPlant, breadcrumbSchema, plantFaqSchema } from '@/lib/seo/schemas'
 import { EasterEgg } from '@events/2026_EASTER'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -598,6 +598,21 @@ const PlantInfoPage: React.FC = () => {
     const language: 'en' | 'fr' = currentLang === 'fr' ? 'fr' : 'en'
     const encyclopediaPath = language === 'fr' ? '/fr/search' : '/search'
     const plantPath = language === 'fr' ? `/fr/plants/${plant.id}` : `/plants/${plant.id}`
+    const faqSchema = plantFaqSchema({
+      name: plant.name || 'Plant',
+      sunlight: plant.sunlight ?? null,
+      wateringFrequencyWarm: plant.wateringFrequencyWarm ?? null,
+      wateringFrequencyCold: plant.wateringFrequencyCold ?? null,
+      temperatureMin: plant.temperatureMin ?? null,
+      temperatureMax: plant.temperatureMax ?? null,
+      temperatureIdeal: plant.temperatureIdeal ?? null,
+      careLevel: plant.careLevel ?? null,
+      toxicityHuman: plant.toxicityHuman ?? null,
+      toxicityPets: plant.toxicityPets ?? null,
+      livingSpace: plant.livingSpace ?? null,
+      pests: plant.pests ?? null,
+      diseases: plant.diseases ?? null,
+    })
     return [
       articleSchemaForPlant({
         id: plant.id,
@@ -614,6 +629,7 @@ const PlantInfoPage: React.FC = () => {
         { name: t('seo.search.breadcrumb', { defaultValue: 'Encyclopedia' }), url: encyclopediaPath },
         { name: plant.name || 'Plant', url: plantPath },
       ]),
+      ...(faqSchema ? [faqSchema] : []),
     ]
   }, [plant, primaryImage, plantDescription, currentLang, t])
 
