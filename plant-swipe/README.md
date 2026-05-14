@@ -94,6 +94,7 @@ flowchart TB
         Resend[Resend Email API]
         OpenAI[OpenAI API]
         Sentry[Sentry Monitoring]
+        Buffer[Buffer Social Scheduling]
     end
     
     PWA --> SW
@@ -307,6 +308,12 @@ OPENAI_API_KEY=your-openai-api-key
 PLANTSWIPE_SITE_URL=https://aphylia.app
 SITEMAP_DEFAULT_LANGUAGE=en
 SITEMAP_MAX_PLANT_URLS=1000
+
+# Social Media Scheduling (optional, admin-only)
+BUFFER=your-buffer-api-key
+
+# Server Identity (optional — gates the Buffer schedule runner to one box)
+VITE_SERVER_NAME=MAIN
 ```
 
 </details>
@@ -644,6 +651,11 @@ Weekly task breakdowns.
 | `POST` | `/api/admin/log-action` | Log admin action |
 | `POST` | `/api/admin/upload` | Upload media file |
 | `POST` | `/api/admin/refresh-aphydle` | Pull and rebuild Aphydle sub-app |
+| `POST` | `/api/admin/plant-dump/upload` | Upload images to the dump staging area |
+| `GET` | `/api/admin/plant-dump/list` | List dump images and groups |
+| `GET` | `/api/admin/buffer/organizations` | List Buffer organizations |
+| `GET` | `/api/admin/buffer/channels` | List Buffer channels for an organization |
+| `POST` | `/api/admin/buffer/post` | Schedule a post to Buffer |
 | `GET` | `/api/image-proxy` | Proxy third-party plant images to bypass CORS |
 
 </details>
