@@ -350,31 +350,23 @@ export async function renderAphyliaCardsForPlant(plantId, deps) {
 
   registerFonts();
 
-  const [bundle, ai, staticAssets, icons] = await Promise.all([
+  const [bundle, staticAssets, icons] = await Promise.all([
     loadPlantBundle(supabase, plantId),
-    fetchAiContent({
-      baseUrl: aiContentBaseUrl,
-      endpoint: aiContentEndpoint,
-      plantName: String(plantId), // overwritten below once bundle loads
-    }).catch(() => ({ historicalFact: "", gardenerTip: "", postDescription: "" })),
     loadStaticAssets(),
     loadIconSet(),
   ]);
 
-  // Re-fetch AI with the actual plant fields. The pre-fetch above keeps the
-  // promise.all symmetric but the placeholder name produced empty content;
-  // here we run the real call now that the bundle is in hand.
-  const realAi = await fetchAiContent({
+  // AI content needs the real plant fields to produce useful copy, so it
+  // runs after the bundle resolves. Static assets + icons load in parallel
+  // with the bundle above so this serial step doesn't add real latency.
+  const aiFinal = await fetchAiContent({
     baseUrl: aiContentBaseUrl,
     endpoint: aiContentEndpoint,
     plantName: String(bundle.plant.name || "").trim(),
     scientificName: String(bundle.plant.scientific_name_species || "").trim(),
     family: String(bundle.plant.family || "").trim(),
     variety: bundle.variety,
-  });
-  const aiFinal = realAi.postDescription || realAi.historicalFact || realAi.gardenerTip
-    ? realAi
-    : ai;
+  }).catch(() => ({ historicalFact: "", gardenerTip: "", postDescription: "" }));
 
   const plantName = String(bundle.plant.name || "Plant");
   const plantUrl = `${primaryDomainUrl || "https://aphylia.app"}/plants/${bundle.plant.id || plantId}`;
