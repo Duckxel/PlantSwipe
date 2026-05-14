@@ -32,6 +32,7 @@ import {
   canvasesToCardBlobs,
 } from "@/components/admin/AdminExportBufferSchedule";
 import { AdminExportAphydlePanel } from "@/components/admin/AdminExportAphydlePanel";
+import { AdminExportAphyliaAutomation } from "@/components/admin/AdminExportAphyliaAutomation";
 import { SearchItem, type SearchItemOption } from "@/components/ui/search-item";
 import {
   ImageViewer,
@@ -2828,6 +2829,8 @@ export function AdminExportPanel() {
           disabled={loading || exporting}
         />
       )}
+
+      <AdminExportAphyliaAutomation />
 
       <ImageViewer
         {...viewer.props}
