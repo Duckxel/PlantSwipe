@@ -1,5 +1,26 @@
 /* Landing Page Animations - extracted for better caching and parsing performance */
 
+/* ───────────────────────────────────────────────────────────
+   Liana / vine system — flowing curves of leaves that drift
+   along SVG paths. Used as ambient garden decoration behind
+   page content. Vine stem color flips with theme so the watermark
+   stays subtle but visible against either background.
+   ─────────────────────────────────────────────────────────── */
+:root        { --landing-vine-stem: #4f8665; }  /* light mode */
+.dark        { --landing-vine-stem: #2c5238; }  /* dark mode  */
+
+/* Per-leaf wobble — adds subtle texture on top of the path-travel motion.
+   The traveling leaves provide the main "flowing serpent" animation. */
+@keyframes leaf-wobble {
+  0%   { transform: rotate(-0.9deg); }
+  50%  { transform: rotate(0.9deg);  }
+  100% { transform: rotate(-0.9deg); }
+}
+.leaf-wobble {
+  transform-origin: 0 0;
+  animation: leaf-wobble 6s ease-in-out infinite;
+}
+
 @keyframes float {
   0%, 100% { transform: translateY(0px) rotate(0deg); }
   50% { transform: translateY(-20px) rotate(3deg); }
@@ -115,6 +136,289 @@
   filter: brightness(0) saturate(100%) invert(15%) opacity(0.7);
 }
 
+/* ───────────────────────────────────────────────────────────
+   Live Tour animations — drive the in-screen motion of each
+   feature demo (swipe, scan beam, stagger fill, notification stack)
+   ─────────────────────────────────────────────────────────── */
+@keyframes tour-swipe-right {
+  0%, 18%   { transform: translate(0, 0) rotate(0deg); opacity: 1; }
+  35%       { transform: translate(60%, -4%) rotate(12deg); opacity: 1; }
+  50%, 100% { transform: translate(120%, -8%) rotate(20deg); opacity: 0; }
+}
+.animate-tour-swipe-right { animation: tour-swipe-right 3.2s ease-in-out infinite; }
+
+@keyframes tour-card-emerge {
+  0%, 30%   { transform: translateY(8%) scale(0.94); opacity: 0; }
+  55%, 100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-tour-card-emerge { animation: tour-card-emerge 3.2s ease-out infinite; }
+
+/* Scan beam — one-shot. Sweep down once, then disappear off the bottom.
+   Pairs with tour-result-pop, which appears just after the beam exits and
+   stays visible for the rest of the tour-screen dwell time. */
+@keyframes tour-scan-beam {
+  0%   { transform: translateY(-110%); opacity: 0; }
+  10%  { opacity: 0.95; }
+  85%  { opacity: 0.95; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.animate-tour-scan-beam {
+  animation: tour-scan-beam 1.6s ease-in-out forwards;
+  animation-iteration-count: 1;
+}
+
+/* Result card — one-shot, held visible. Delayed start (animation-delay
+   on the element) so it appears AFTER the scan beam finishes. */
+@keyframes tour-result-pop {
+  0%   { transform: translateY(12%) scale(0.96); opacity: 0; }
+  60%  { transform: translateY(-4%) scale(1.02); opacity: 1; }
+  100% { transform: translateY(0)    scale(1);    opacity: 1; }
+}
+.animate-tour-result-pop {
+  animation: tour-result-pop 0.7s cubic-bezier(.2,.8,.2,1) 1.4s forwards;
+  animation-iteration-count: 1;
+  opacity: 0;
+}
+
+@keyframes tour-tile-in {
+  0%, 8%   { transform: translateY(20%) scale(0.85); opacity: 0; }
+  60%      { transform: translateY(0) scale(1); opacity: 1; }
+  90%, 100%{ transform: translateY(0) scale(1); opacity: 1; }
+}
+.animate-tour-tile-in {
+  animation: tour-tile-in 4s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes tour-notif-in {
+  0%, 5%   { transform: translateY(-110%); opacity: 0; }
+  20%, 90% { transform: translateY(0); opacity: 1; }
+  100%     { transform: translateY(-110%); opacity: 0; }
+}
+.animate-tour-notif-in {
+  animation: tour-notif-in 4s ease-out infinite;
+  opacity: 0;
+}
+
+@keyframes tour-progress-fill {
+  0%   { width: 0%; }
+  100% { width: var(--tour-fill, 70%); }
+}
+.animate-tour-progress { animation: tour-progress-fill 2s ease-out infinite alternate; }
+
+@keyframes tour-screen-fade-in {
+  0%   { transform: translateY(6px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-tour-screen { animation: tour-screen-fade-in 0.45s ease-out; }
+
+/* Slide-in from the right — used when LiveTour switches feature.
+   Combines a translate with opacity so the previous content visually
+   "passes through" as the new one arrives. */
+@keyframes tour-screen-slide-in {
+  0%   { transform: translate3d(24px, 0, 0); opacity: 0; }
+  100% { transform: translate3d(0, 0, 0); opacity: 1; }
+}
+.animate-tour-screen-slide { animation: tour-screen-slide-in 0.55s cubic-bezier(.2,.7,.2,1); }
+
+/* Tab progress fill — driven by a CSS variable for cycle duration so the
+   bar finishes exactly when the auto-advance fires. */
+@keyframes tour-tab-progress {
+  0%   { width: 0%; }
+  100% { width: 100%; }
+}
+.animate-tour-tab-progress {
+  animation: tour-tab-progress var(--tour-cycle, 4.5s) linear forwards;
+}
+
+/* Marquee — used by the live activity ticker. Single duplicate row inside,
+   shifted by -50% so the loop is seamless. */
+@keyframes ticker-scroll {
+  0%   { transform: translate3d(0, 0, 0); }
+  100% { transform: translate3d(-50%, 0, 0); }
+}
+.animate-ticker-scroll { animation: ticker-scroll 28s linear infinite; }
+
+/* Stagger-reveal — one-shot fade-up. Use animation-delay (inline) per item. */
+@keyframes stagger-up {
+  0%   { transform: translateY(14px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+.animate-stagger-up {
+  animation: stagger-up 0.6s cubic-bezier(.2,.7,.2,1) both;
+}
+
+/* ───────────────────────────────────────────────────────────
+   Get Started illustrations — looping motion graphics for each
+   of the three stage cards (Snap / Build / Thrive). These are
+   the animations that make the section feel alive without any
+   visitor interaction.
+   ─────────────────────────────────────────────────────────── */
+
+/* Stage 1 — scan beam sweeping the plant photo, looped. */
+@keyframes gs-scan-loop {
+  0%   { transform: translateY(-100%); opacity: 0; }
+  10%  { opacity: 0.95; }
+  90%  { opacity: 0.95; }
+  100% { transform: translateY(110%); opacity: 0; }
+}
+.animate-gs-scan { animation: gs-scan-loop 3.4s ease-in-out infinite; }
+
+/* Stage 1 — "Identified" chip pops in after the scan completes,
+   holds, then fades — looped to match the scan cycle. */
+@keyframes gs-result-loop {
+  0%, 55%   { transform: translate(-50%, 12px); opacity: 0; }
+  68%, 88%  { transform: translate(-50%, 0);    opacity: 1; }
+  100%      { transform: translate(-50%, -6px); opacity: 0; }
+}
+.animate-gs-result {
+  animation: gs-result-loop 3.4s ease-out infinite;
+  opacity: 0;
+}
+
+/* Stage 2 — each garden tile fades + scales in, holds visible
+   for the bulk of the cycle, then resets so the loop restarts.
+   Use animation-delay on each tile to stagger arrivals. */
+@keyframes gs-tile-fill {
+  0%, 4%    { transform: scale(0.6); opacity: 0; }
+  18%, 88%  { transform: scale(1);   opacity: 1; }
+  100%      { transform: scale(0.95);opacity: 0; }
+}
+.animate-gs-tile {
+  animation: gs-tile-fill 5.6s cubic-bezier(.2,.8,.2,1) infinite;
+  opacity: 0;
+}
+
+/* Stage 3 — plant grows from the bottom, mirrors the way the
+   real plant tracker visualizes growth over time. */
+@keyframes gs-grow {
+  0%        { transform: translateX(-50%) scaleY(0.55); }
+  55%, 92%  { transform: translateX(-50%) scaleY(1);    }
+  100%      { transform: translateX(-50%) scaleY(0.55); }
+}
+.animate-gs-grow {
+  animation: gs-grow 5s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+/* Stage 3 — bell rings periodically. Subtle wiggle, not a hard shake. */
+@keyframes gs-bell-wiggle {
+  0%, 70%, 100% { transform: rotate(0deg); }
+  74%           { transform: rotate(-14deg); }
+  78%           { transform: rotate(10deg); }
+  82%           { transform: rotate(-6deg); }
+  86%           { transform: rotate(0deg); }
+}
+.animate-gs-bell {
+  animation: gs-bell-wiggle 4.2s ease-in-out infinite;
+  transform-origin: top center;
+}
+
+/* Stage 3 — notification chip slides in from the right, holds,
+   slides back out. Synced with the bell so the chip appears just
+   before the bell rings. */
+@keyframes gs-notif-loop {
+  0%, 40%   { transform: translateX(28px); opacity: 0; }
+  55%, 85%  { transform: translateX(0);    opacity: 1; }
+  100%      { transform: translateX(28px); opacity: 0; }
+}
+.animate-gs-notif {
+  animation: gs-notif-loop 4.2s ease-out infinite;
+  opacity: 0;
+}
+
+/* Stage 3 — weekly calendar cell check. Each day fills (scales up + fades
+   in) on its own staggered delay, holds visible through the bulk of the
+   loop, and resets together so the visitor watches the week "fill in"
+   over and over. Pair with inline animation-delay for the stagger. */
+@keyframes gs-week-day {
+  0%, 8%    { transform: scale(0.4); opacity: 0; }
+  22%, 92%  { transform: scale(1);   opacity: 1; }
+  100%      { transform: scale(0.55);opacity: 0; }
+}
+.animate-gs-week-day {
+  animation: gs-week-day 5.5s cubic-bezier(.2,.8,.2,1) infinite;
+  opacity: 0;
+}
+
+/* ───────────────────────────────────────────────────────────
+   Cross-Device card — morphing screen between phone / TV / laptop.
+   The frame cycles aspect ratio and border-radius to suggest the
+   same content reflowing across devices. ~3s per device with a
+   smooth ~0.7s morph between them.
+   ─────────────────────────────────────────────────────────── */
+@keyframes device-morph {
+  0%, 22%   { width: 56px;  height: 96px; border-radius: 14px; }
+  33%, 55%  { width: 128px; height: 80px; border-radius: 10px; }
+  66%, 88%  { width: 144px; height: 88px; border-radius: 8px;  }
+  100%      { width: 56px;  height: 96px; border-radius: 14px; }
+}
+.animate-device-morph {
+  animation: device-morph 9s cubic-bezier(.6,0,.4,1) infinite;
+}
+
+/* Laptop base — only visible when the frame is in laptop shape. */
+@keyframes device-laptop-base {
+  0%, 60%   { opacity: 0; transform: scaleX(0.3); }
+  68%, 88%  { opacity: 1; transform: scaleX(1);   }
+  100%      { opacity: 0; transform: scaleX(0.3); }
+}
+.animate-device-laptop-base {
+  animation: device-laptop-base 9s cubic-bezier(.6,0,.4,1) infinite;
+  opacity: 0;
+  transform-origin: center;
+}
+
+/* TV stand — only visible when the frame is in TV shape. */
+@keyframes device-tv-stand {
+  0%, 26%   { opacity: 0; }
+  33%, 55%  { opacity: 1; }
+  62%, 100% { opacity: 0; }
+}
+.animate-device-tv-stand {
+  animation: device-tv-stand 9s cubic-bezier(.6,0,.4,1) infinite;
+  opacity: 0;
+}
+
+/* Per-device labels under the frame — each fades in during its window. */
+@keyframes device-label-mobile { 0%, 22%   { opacity: 1; } 28%, 100% { opacity: 0; } }
+@keyframes device-label-tv     { 0%, 28%   { opacity: 0; } 33%, 55%  { opacity: 1; } 62%, 100% { opacity: 0; } }
+@keyframes device-label-web    { 0%, 62%   { opacity: 0; } 66%, 88%  { opacity: 1; } 94%, 100% { opacity: 0; } }
+.animate-device-label-mobile { animation: device-label-mobile 9s cubic-bezier(.6,0,.4,1) infinite; }
+.animate-device-label-tv     { animation: device-label-tv     9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
+.animate-device-label-web    { animation: device-label-web    9s cubic-bezier(.6,0,.4,1) infinite; opacity: 0; }
+
+/* Plant ID card — scan beam loop for the small camera preview.
+   The beam is absolute-positioned inside the viewfinder; animating `top`
+   in % of the parent's height sweeps the full container regardless of
+   the beam's own height. (Old `transform: translateY(110%)` only moved
+   the beam by its own height — about 16px — which fell well short of
+   the container bottom.) */
+@keyframes plantid-scan {
+  0%        { top: -12%; opacity: 0; }
+  12%, 88%  { opacity: 0.95; }
+  100%      { top: 108%; opacity: 0; }
+}
+.animate-plantid-scan {
+  animation: plantid-scan 3.6s ease-in-out infinite;
+  /* Initial off-frame so first paint doesn't flash the beam at top: 0. */
+  top: -12%;
+}
+
+/* Join toast — one-shot animation (fade-up in, hold, fade-out) for the
+   "X just joined" pill that occasionally surfaces above the avatar row.
+   Single keyframe so React just mounts it and lets it run; we unmount
+   from state when the timer fires. */
+@keyframes join-toast {
+  0%   { transform: translateY(10px) scale(0.95); opacity: 0; }
+  12%  { transform: translateY(0)    scale(1);    opacity: 1; }
+  82%  { transform: translateY(0)    scale(1);    opacity: 1; }
+  100% { transform: translateY(-6px) scale(0.96); opacity: 0; }
+}
+.animate-join-toast {
+  animation: join-toast 2.8s cubic-bezier(.2,.7,.2,1) forwards;
+}
+
 /* Pause animations when section is not visible (controlled via JS) */
 .landing-section-hidden .animate-float,
 .landing-section-hidden .animate-float-slow,
@@ -124,6 +428,29 @@
 .landing-section-hidden .animate-marquee,
 .landing-section-hidden .animate-spin-slow,
 .landing-section-hidden .animate-counter-spin-slow,
-.landing-section-hidden .animate-bounce-subtle {
+.landing-section-hidden .animate-bounce-subtle,
+.landing-section-hidden .animate-tour-swipe-right,
+.landing-section-hidden .animate-tour-card-emerge,
+.landing-section-hidden .animate-tour-scan-beam,
+.landing-section-hidden .animate-tour-result-pop,
+.landing-section-hidden .animate-tour-tile-in,
+.landing-section-hidden .animate-tour-notif-in,
+.landing-section-hidden .animate-tour-progress,
+.landing-section-hidden .animate-tour-tab-progress,
+.landing-section-hidden .animate-ticker-scroll,
+.landing-section-hidden .animate-gs-scan,
+.landing-section-hidden .animate-gs-result,
+.landing-section-hidden .animate-gs-tile,
+.landing-section-hidden .animate-gs-grow,
+.landing-section-hidden .animate-gs-bell,
+.landing-section-hidden .animate-gs-notif,
+.landing-section-hidden .animate-gs-week-day,
+.landing-section-hidden .animate-device-morph,
+.landing-section-hidden .animate-device-laptop-base,
+.landing-section-hidden .animate-device-tv-stand,
+.landing-section-hidden .animate-device-label-mobile,
+.landing-section-hidden .animate-device-label-tv,
+.landing-section-hidden .animate-device-label-web,
+.landing-section-hidden .animate-plantid-scan {
   animation-play-state: paused;
 }
