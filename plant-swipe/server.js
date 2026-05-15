@@ -5384,6 +5384,17 @@ async function fetchBufferChannelServices() {
 // Schedule a post on one or more Buffer channels. Shared by the manual
 // admin route and the Aphydle automation worker. Each channel gets its
 // own createPost mutation — Buffer rejects mixed-service inputs.
+//
+// Image attachment shape is taken from Buffer's docs
+// (https://developers.buffer.com/examples/create-image-post.html):
+//
+//   assets: [{ image: { url: "https://…" } }, …]
+//
+// `assets` is [AssetInput!], `AssetInput.image` is `ImageAssetInput`,
+// `ImageAssetInput.url` is String. Earlier introspection-based fallbacks
+// landed on shallower fields ({ image: "url" } as scalar, etc.) — Buffer
+// accepted those mutations but silently dropped the media, so FB/X
+// posts went out without images and IG rejected the post.
 async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaUrls, channelServices }) {
   const safeText = String(text || '')
   const ids = (channelIds || []).map((c) => String(c || '').trim()).filter(Boolean)
@@ -5393,6 +5404,17 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   const services = channelServices || (await fetchBufferChannelServices())
 
   const gqlString = (v) => JSON.stringify(String(v ?? ''))
+  const buildAssetsLiteral = (service) => {
+    if (!urls.length) return ''
+    const cap = service === 'twitter' ? 4 : urls.length
+    const list = urls.slice(0, cap)
+    if (!list.length) return ''
+    const items = list.map((u) => `{ image: { url: ${gqlString(u)} } }`).join(', ')
+    return `, assets: [${items}]`
+  }
+  // Legacy introspection-based shape — only used if Buffer rejects the
+  // hardcoded `assets: [{ image: { url } }]` shape, which would mean the
+  // schema changed again.
   const assetsPartFor = (shape, service) => {
     if (!shape || shape.kind === 'none') return ''
     const cap = service === 'twitter' ? Math.min(4, shape.twitterCap || 4) : (shape.twitterCap || urls.length)
@@ -5432,13 +5454,16 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   const buildMutation = (shape, channelId, service) => {
     const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
     const postText = service === 'twitter' ? truncateForTwitter(safeText) : safeText
+    // Attempt 0 uses the documented hardcoded shape. Later attempts fall
+    // back to introspection-derived shapes in case Buffer's schema drifted.
+    const assetsPart = shape ? assetsPartFor(shape, service) : buildAssetsLiteral(service)
     return `
       mutation CreatePost {
         createPost(input: {
           text: ${gqlString(postText)},
           channelId: ${gqlString(channelId)},
           schedulingType: automatic,
-          mode: ${mode}${dueAtPart}${assetsPartFor(shape, service)}${metadataFor(service)}
+          mode: ${mode}${dueAtPart}${assetsPart}${metadataFor(service)}
         }) {
           ... on PostActionSuccess { post { id text dueAt } }
           ... on MutationError { message }
@@ -5460,34 +5485,37 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
 
   const attemptForChannel = async (channelId, service) => {
     let lastErr = ''
+    // First attempt: documented `assets: [{ image: { url } }]`. Subsequent
+    // attempts: introspection-discovered shape (rotating on failure).
     for (let attempt = 0; attempt < 5; attempt++) {
-      const shape = urls.length ? await introspectBufferAssetsShape() : { kind: 'none' }
+      const shape = attempt === 0
+        ? null
+        : (urls.length ? await introspectBufferAssetsShape() : { kind: 'none' })
       const mutation = buildMutation(shape, channelId, service)
+      const shapeLabel = shape ? `${shape.kind}/${shape.field || '-'}` : 'hardcoded'
       let cp = null
       try {
         const data = await callBufferGraphQL(mutation)
         cp = data?.createPost
         if (cp?.post) {
-          console.log(`[buffer] post ok shape=${shape.kind} field=${shape.field || '-'} channel=${channelId}`)
-          return { ok: true, post: cp.post, shape: shape.kind }
+          console.log(`[buffer] post ok shape=${shapeLabel} channel=${channelId}`)
+          return { ok: true, post: cp.post, shape: shapeLabel }
         }
         const msg = cp?.message || 'Unknown Buffer response'
-        // Business-logic "needs an image" → shape was wrong even though it
-        // parsed. Invalidate and retry with the next candidate.
-        if (urls.length && shape.kind !== 'none' && isMediaMissingError(msg)) {
-          console.warn(`[buffer] post rejected (media not attached) with shape=${shape.kind} field=${shape.field}; trying next shape. msg: ${msg.slice(0, 240)}`)
+        if (urls.length && isMediaMissingError(msg)) {
+          console.warn(`[buffer] post rejected (media not attached) shape=${shapeLabel}; trying next. msg: ${msg.slice(0, 240)}`)
           console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
-          resetBufferAssetsShapeCache(`channel=${channelId} media-missing attempt=${attempt}`)
+          if (shape) resetBufferAssetsShapeCache(`channel=${channelId} media-missing attempt=${attempt}`)
           lastErr = msg
           continue
         }
-        return { ok: false, error: msg, shape: shape.kind }
+        return { ok: false, error: msg, shape: shapeLabel }
       } catch (e) {
         lastErr = e?.message || String(e)
-        if (urls.length && shape.kind !== 'none' && isSchemaShapeError(lastErr)) {
-          console.warn(`[buffer] mutation rejected (validation) with shape=${shape.kind} (${shape.field}/${shape.urlField || shape.innerField || ''}); trying a different shape. err: ${lastErr.slice(0, 240)}`)
+        if (urls.length && isSchemaShapeError(lastErr)) {
+          console.warn(`[buffer] mutation rejected (validation) shape=${shapeLabel}; trying next. err: ${lastErr.slice(0, 240)}`)
           console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
-          resetBufferAssetsShapeCache(`channel=${channelId} attempt=${attempt} err=${lastErr.slice(0, 80)}`)
+          if (shape) resetBufferAssetsShapeCache(`channel=${channelId} attempt=${attempt} err=${lastErr.slice(0, 80)}`)
           continue
         }
         return { ok: false, error: lastErr }
