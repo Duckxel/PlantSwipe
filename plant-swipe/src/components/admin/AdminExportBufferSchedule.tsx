@@ -27,6 +27,7 @@ type BufferOrganization = { id: string; name: string }
 type BufferChannel = { id: string; name: string; service: string }
 type ScheduleResult = {
   channelId: string
+  service?: string
   ok: boolean
   post?: { id: string; text: string; dueAt?: string | null }
   error?: string
@@ -300,7 +301,19 @@ export const AdminExportBufferSchedule: React.FC<AdminExportBufferScheduleProps>
       } else {
         const failed = list.filter((r) => !r.ok)
         if (failed.length) {
-          setSubmitError(`Some posts failed: ${failed.map((f) => f.error || "Unknown").join("; ")}`)
+          const labelFor = (svc?: string) =>
+            svc ? (SERVICE_LABELS[svc.toLowerCase()] || svc) : "channel"
+          const parts = failed.map((f) => {
+            const ch = channels.find((c) => c.id === f.channelId)
+            const svc = labelFor(f.service || ch?.service)
+            const name = ch?.name ? ` (${ch.name})` : ""
+            return `${svc}${name}: ${f.error || "Unknown"}`
+          })
+          const succeeded = list.filter((r) => r.ok)
+          const succeededLabel = succeeded.length
+            ? ` ${succeeded.length} other channel${succeeded.length === 1 ? "" : "s"} posted successfully.`
+            : ""
+          setSubmitError(`Failed on ${failed.length} of ${list.length} channel${list.length === 1 ? "" : "s"}:\n• ${parts.join("\n• ")}${succeededLabel}`)
         } else if (!resp.ok) {
           setSubmitError(data?.error || `Schedule failed (${resp.status})`)
         }
@@ -466,7 +479,7 @@ export const AdminExportBufferSchedule: React.FC<AdminExportBufferScheduleProps>
         {submitError && (
           <div className="flex items-start gap-2 rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900 dark:border-red-700 dark:bg-red-950/40 dark:text-red-200">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>{submitError}</div>
+            <div className="whitespace-pre-wrap">{submitError}</div>
           </div>
         )}
 
