@@ -54,8 +54,16 @@ type ScheduleConfig = {
 type UpcomingPlant = {
   id: string
   name: string | null
-  source: "pinned" | "featured-random" | "fallback-random"
+  source: "pinned" | "featured-random" | "featured-random-repeat" | "fallback-random" | "fallback-random-repeat"
 } | null
+
+type PostHistoryEntry = {
+  plantId: string
+  plantName: string | null
+  postedAt: string
+  channelIds: string[]
+  source: string | null
+}
 
 const SUPPORTED_SERVICES = ["instagram", "facebook", "twitter"] as const
 const SERVICE_LABELS: Record<string, string> = {
@@ -78,6 +86,8 @@ function sourceBadge(source: UpcomingPlant): { label: string; tone: "pinned" | "
   if (!source) return { label: "—", tone: "auto" }
   if (source.source === "pinned") return { label: "Pinned", tone: "pinned" }
   if (source.source === "featured-random") return { label: "Auto · Featured this month", tone: "auto" }
+  if (source.source === "featured-random-repeat") return { label: "Auto · Featured (cooldown exhausted)", tone: "auto" }
+  if (source.source === "fallback-random-repeat") return { label: "Auto · Fallback (cooldown exhausted)", tone: "auto" }
   return { label: "Auto · Fallback (no featured plant)", tone: "auto" }
 }
 
@@ -121,6 +131,8 @@ export const AdminExportAphyliaAutomation: React.FC = () => {
   const [lastRunStatus, setLastRunStatus] = React.useState<string | null>(null)
   const [lastRunForDate, setLastRunForDate] = React.useState<string | null>(null)
   const [lastPostedPlantId, setLastPostedPlantId] = React.useState<string | null>(null)
+  const [history, setHistory] = React.useState<PostHistoryEntry[]>([])
+  const [repeatCooldownDays, setRepeatCooldownDays] = React.useState<number>(21)
 
   // -- Loaders -----------------------------------------------------------
   const loadConfig = React.useCallback(async () => {
@@ -154,6 +166,10 @@ export const AdminExportAphyliaAutomation: React.FC = () => {
       setLastRunForDate(cfg.last_run_for_date || null)
       setLastPostedPlantId(cfg.last_posted_plant_id || null)
       setUpcomingPreview((data?.upcoming || null) as UpcomingPlant)
+      setHistory(Array.isArray(data?.history) ? (data.history as PostHistoryEntry[]) : [])
+      if (typeof data?.repeatCooldownDays === "number") {
+        setRepeatCooldownDays(data.repeatCooldownDays)
+      }
     } catch (e) {
       setLoadError(e instanceof Error ? e.message : "Failed to load schedule")
     } finally {
@@ -683,6 +699,44 @@ export const AdminExportAphyliaAutomation: React.FC = () => {
         <div>For date: <span className="text-stone-800 dark:text-stone-100">{lastRunForDate || "—"}</span></div>
         <div>Status: <span className="text-stone-800 dark:text-stone-100">{lastRunStatus || "—"}</span></div>
         <div>Plant: <span className="text-stone-800 dark:text-stone-100 font-mono">{lastPostedPlantId || "—"}</span></div>
+      </div>
+
+      {/* Recently posted — drives the cooldown */}
+      <div className="rounded-lg border border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-[#1a1a1d] p-3 text-xs text-stone-600 dark:text-stone-300">
+        <div className="mb-1 flex items-baseline justify-between gap-2">
+          <div className="font-semibold uppercase tracking-wide text-stone-500">Recently posted</div>
+          <div className="text-[11px] text-stone-500">
+            Plants posted in the last {repeatCooldownDays} days are excluded from the random pool.
+          </div>
+        </div>
+        {history.length === 0 ? (
+          <div className="text-stone-500">No posts yet — the runner will populate this list after its first successful publish.</div>
+        ) : (
+          <ul className="divide-y divide-stone-200 dark:divide-stone-800">
+            {history.map((h, i) => {
+              const inCooldown =
+                Date.now() - new Date(h.postedAt).getTime() < repeatCooldownDays * 24 * 60 * 60 * 1000
+              return (
+                <li key={`${h.plantId}-${i}`} className="py-1.5 flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <span className="font-medium text-stone-800 dark:text-stone-100 truncate">
+                      {h.plantName || h.plantId}
+                    </span>
+                    <span className="ml-1 text-[11px] text-stone-500 font-mono">({h.plantId.slice(0, 8)})</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    {inCooldown && (
+                      <span className="rounded-full border border-amber-300 bg-amber-50 px-2 py-0.5 text-[11px] text-amber-800 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                        cooldown
+                      </span>
+                    )}
+                    <span className="text-stone-500">{formatTimestamp(h.postedAt)}</span>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
       {/* Save / Run errors */}

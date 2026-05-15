@@ -6115,6 +6115,23 @@ async function ensureAphyliaScheduleTable() {
     // table existed without them.
     await sql`alter table public.aphylia_buffer_schedule add column if not exists upcoming_plant_id text`
     await sql`alter table public.aphylia_buffer_schedule add column if not exists last_posted_plant_id text`
+    // Per-run history so the picker can avoid repeating a plant that was
+    // recently posted. We keep the whole log (not just a rolling window)
+    // so the admin can review what's been published — pruning is left to
+    // ops if the table ever gets large.
+    await sql`
+      create table if not exists public.aphylia_buffer_post_history (
+        id bigserial primary key,
+        plant_id text not null,
+        plant_name text,
+        posted_at timestamptz not null default now(),
+        channel_ids text[] not null default '{}',
+        source text,
+        success boolean not null default true
+      )
+    `
+    await sql`create index if not exists aphylia_buffer_post_history_plant_idx on public.aphylia_buffer_post_history (plant_id, posted_at desc)`
+    await sql`create index if not exists aphylia_buffer_post_history_posted_at_idx on public.aphylia_buffer_post_history (posted_at desc)`
     return true
   } catch (e) {
     console.warn('[aphylia-schedule] ensure table failed:', e?.message || e)
@@ -6207,6 +6224,31 @@ function validateAphyliaScheduleInput(body) {
 // featured_month array contains the current month (in the configured
 // timezone). Falls back to any non-in_progress plant if the featured
 // pool is empty.
+// How long a plant is "cooling off" after a successful run. Plants
+// published within this window are filtered out of the random pool so
+// the same one isn't picked two weeks in a row. We stop short of the
+// full month (28 days) so a plant featured in only one month can still
+// rotate before the month ends — anyone wanting longer gaps can pin
+// the plant explicitly.
+const APHYLIA_REPEAT_COOLDOWN_DAYS = 21
+
+async function loadRecentlyPostedPlantIds(days = APHYLIA_REPEAT_COOLDOWN_DAYS) {
+  if (!sql) return new Set()
+  try {
+    await ensureAphyliaScheduleTable()
+    const rows = await sql`
+      select distinct plant_id
+      from public.aphylia_buffer_post_history
+      where success = true
+        and posted_at >= now() - (${days} || ' days')::interval
+    `
+    return new Set((rows || []).map((r) => String(r.plant_id || '')).filter(Boolean))
+  } catch (e) {
+    console.warn('[aphylia-schedule] history load failed:', e?.message || e)
+    return new Set()
+  }
+}
+
 async function pickAphyliaUpcomingPlant({ pinnedId, monthIndex }) {
   if (!supabaseServiceClient) throw new Error('Supabase service client not configured')
   if (pinnedId) {
@@ -6219,6 +6261,17 @@ async function pickAphyliaUpcomingPlant({ pinnedId, monthIndex }) {
     if (!data) throw new Error(`Pinned plant ${pinnedId} not found`)
     return { id: data.id, name: data.name, source: 'pinned' }
   }
+  // Filter out anything posted in the last cooldown window so the picker
+  // walks the full Featured pool before circling back. Falls through to
+  // including-everything only if the cooldown leaves an empty pool.
+  const recentlyPosted = await loadRecentlyPostedPlantIds()
+  const filterRecent = (rows) => {
+    const all = Array.isArray(rows) ? rows : []
+    if (!recentlyPosted.size) return { fresh: all, hadCooldown: false }
+    const fresh = all.filter((p) => !recentlyPosted.has(String(p.id)))
+    return { fresh, hadCooldown: fresh.length !== all.length }
+  }
+
   const monthSlug = MONTH_SLUGS[(Number(monthIndex) - 1 + 12) % 12]
   const { data: featured, error: ferr } = await supabaseServiceClient
     .from('plants')
@@ -6226,22 +6279,34 @@ async function pickAphyliaUpcomingPlant({ pinnedId, monthIndex }) {
     .or('status.is.null,status.neq.in_progress')
     .contains('featured_month', [monthSlug])
   if (ferr) throw new Error(`Failed to query featured plants: ${ferr.message}`)
-  const pool = Array.isArray(featured) ? featured : []
-  if (pool.length) {
-    const pick = pool[Math.floor(Math.random() * pool.length)]
+  const featuredAll = Array.isArray(featured) ? featured : []
+  const { fresh: featuredFresh } = filterRecent(featuredAll)
+  if (featuredFresh.length) {
+    const pick = featuredFresh[Math.floor(Math.random() * featuredFresh.length)]
     return { id: pick.id, name: pick.name, source: 'featured-random' }
   }
-  // Fallback: any plant
+  if (featuredAll.length) {
+    // Cooldown wiped the featured pool — fall back to a random featured
+    // plant even if it was posted recently, so a thin pool doesn't break
+    // the schedule.
+    const pick = featuredAll[Math.floor(Math.random() * featuredAll.length)]
+    console.warn(`[aphylia-schedule] all featured plants for ${monthSlug} were posted within ${APHYLIA_REPEAT_COOLDOWN_DAYS}d; reusing ${pick.id}`)
+    return { id: pick.id, name: pick.name, source: 'featured-random-repeat' }
+  }
+  // No featured plants this month — fall through to any active plant.
   const { data: anyData, error: aerr } = await supabaseServiceClient
     .from('plants')
     .select('id, name, status')
     .or('status.is.null,status.neq.in_progress')
-    .limit(50)
+    .limit(200)
   if (aerr) throw new Error(`Failed to query plants: ${aerr.message}`)
-  const anyPool = Array.isArray(anyData) ? anyData : []
-  if (!anyPool.length) throw new Error('No eligible plants in the database')
-  const pick = anyPool[Math.floor(Math.random() * anyPool.length)]
-  return { id: pick.id, name: pick.name, source: 'fallback-random' }
+  const anyAll = Array.isArray(anyData) ? anyData : []
+  const { fresh: anyFresh } = filterRecent(anyAll)
+  const pool = anyFresh.length ? anyFresh : anyAll
+  if (!pool.length) throw new Error('No eligible plants in the database')
+  const pick = pool[Math.floor(Math.random() * pool.length)]
+  const source = anyFresh.length ? 'fallback-random' : 'fallback-random-repeat'
+  return { id: pick.id, name: pick.name, source }
 }
 
 function computeAphyliaDueAt(cfg) {
@@ -6333,6 +6398,21 @@ async function recordAphyliaRun(forDate, status, details) {
           last_posted_plant_id = ${lastPostedPlantId}
       where id = ${APHYLIA_SCHEDULE_ID}
     `
+    // History row — only for runs that actually scheduled a Buffer post
+    // (not dry-runs, not errors with no plant pick). The picker uses
+    // `success = true` rows to know what's still in cooldown.
+    if (lastPostedPlantId && !details?.dryRun && status === 'ok') {
+      const channelIds = Array.isArray(details?.results)
+        ? details.results.filter((r) => r?.ok).map((r) => String(r.channelId || '')).filter(Boolean)
+        : []
+      const source = details?.pickedPlant?.source || null
+      const plantName = details?.pickedPlant?.name || null
+      await sql`
+        insert into public.aphylia_buffer_post_history
+          (plant_id, plant_name, channel_ids, source, success)
+        values (${lastPostedPlantId}, ${plantName}, ${channelIds}, ${source}, true)
+      `
+    }
   } catch (e) {
     console.warn('[aphylia-schedule] record run failed:', e?.message || e)
   }
@@ -6390,6 +6470,29 @@ app.get('/api/admin/aphylia-schedule', async (req, res) => {
       // Don't fail the whole request just because we couldn't preview.
       console.warn('[aphylia-schedule] upcoming preview failed:', e?.message || e)
     }
+    // Recent post history so the UI can show what's been published and
+    // explain why a plant is/isn't in the random pool.
+    let history = []
+    if (sql) {
+      try {
+        const rows = await sql`
+          select plant_id, plant_name, posted_at, channel_ids, source
+          from public.aphylia_buffer_post_history
+          where success = true
+          order by posted_at desc
+          limit 20
+        `
+        history = (rows || []).map((r) => ({
+          plantId: r.plant_id,
+          plantName: r.plant_name,
+          postedAt: r.posted_at,
+          channelIds: Array.isArray(r.channel_ids) ? r.channel_ids : [],
+          source: r.source,
+        }))
+      } catch (e) {
+        console.warn('[aphylia-schedule] history fetch failed:', e?.message || e)
+      }
+    }
     res.json({
       ok: true,
       reservedMinutes: Array.from(APHYDLE_RESERVED_MINUTES),
@@ -6408,6 +6511,8 @@ app.get('/api/admin/aphylia-schedule', async (req, res) => {
         upcoming_plant_id: null,
       },
       upcoming,
+      history,
+      repeatCooldownDays: APHYLIA_REPEAT_COOLDOWN_DAYS,
     })
   } catch (e) {
     console.error('[aphylia-schedule:get] failed:', e?.message || e)
