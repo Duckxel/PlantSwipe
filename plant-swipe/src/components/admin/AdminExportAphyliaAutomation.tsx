@@ -74,7 +74,7 @@ function formatTimestamp(s?: string | null): string {
   return d.toLocaleString()
 }
 
-function sourceBadge(source: UpcomingPlant extends infer T ? (T extends null ? never : T) : never): { label: string; tone: "pinned" | "auto" } {
+function sourceBadge(source: UpcomingPlant): { label: string; tone: "pinned" | "auto" } {
   if (!source) return { label: "—", tone: "auto" }
   if (source.source === "pinned") return { label: "Pinned", tone: "pinned" }
   if (source.source === "featured-random") return { label: "Auto · Featured this month", tone: "auto" }
