@@ -5133,13 +5133,47 @@ async function uploadCardToStorage(file) {
   return url
 }
 
-// Buffer's GraphQL schema for media attachments has shifted at least twice
-// (originally `media: [{url, type}]`, then `assets: AssetsInput { images: [...] }`,
-// and now `assets` is typed as a singular `AssetInput` with no `images` field).
-// Rather than guess, introspect CreatePostInput once and remember the actual
-// shape so we send a payload Buffer accepts. Cached for the process lifetime.
+// Buffer's GraphQL schema for media attachments has shifted several times
+// (`media: [{url, type}]` → `assets: AssetsInput { images: [...] }` →
+// `assets: AssetInput`/`[ImageAssetInput!]`). Rather than guess, introspect
+// CreatePostInput once and remember the actual shape. Cached for the
+// process lifetime; can be reset via `resetBufferAssetsShapeCache()` after
+// a mutation fails so the next call re-discovers.
 let bufferAssetsShapeCache = null
 let bufferAssetsShapePromise = null
+const bufferShapesAlreadyTried = new Set()
+
+function resetBufferAssetsShapeCache(reason) {
+  if (bufferAssetsShapeCache) {
+    const key = JSON.stringify({
+      kind: bufferAssetsShapeCache.kind,
+      field: bufferAssetsShapeCache.field,
+      urlField: bufferAssetsShapeCache.urlField,
+      innerField: bufferAssetsShapeCache.innerField,
+    })
+    bufferShapesAlreadyTried.add(key)
+    console.warn(`[buffer] invalidating cached media shape (${reason || 'unknown'}): ${key}`)
+  }
+  bufferAssetsShapeCache = null
+}
+
+// Walk a GraphQL type ref tree, returning the unwrapped scalar/named type
+// name and whether the path included a LIST. Returns { name, kind, isList }.
+function unwrapBufferType(t) {
+  let isList = false
+  let cur = t
+  while (cur && (cur.kind === 'NON_NULL' || cur.kind === 'LIST')) {
+    if (cur.kind === 'LIST') isList = true
+    cur = cur.ofType
+  }
+  return { name: cur?.name || '', kind: cur?.kind || '', isList }
+}
+
+const URL_FIELD_NAMES = [
+  'url', 'picture', 'image', 'src', 'href',
+  'imageurl', 'pictureurl', 'srcurl', 'mediaurl', 'asseturl', 'photourl',
+  'thumbnail', 'thumb',
+]
 
 async function introspectBufferAssetsShape() {
   if (bufferAssetsShapeCache) return bufferAssetsShapeCache
@@ -5151,7 +5185,7 @@ async function introspectBufferAssetsShape() {
           createPostInput: __type(name: "CreatePostInput") {
             inputFields {
               name
-              type { name kind ofType { name kind ofType { name kind ofType { name kind } } } }
+              type { name kind ofType { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
             }
           }
         }
@@ -5159,128 +5193,151 @@ async function introspectBufferAssetsShape() {
       const fields = Array.isArray(data?.createPostInput?.inputFields)
         ? data.createPostInput.inputFields
         : []
-      // Find a media-ish field on CreatePostInput — common candidates are
-      // `media`, `assets`, `attachments`, `imageAssets`. Pick the first one
-      // whose type (after unwrapping NON_NULL/LIST) has fields we can shape.
       const mediaCandidates = fields.filter((f) => {
         const n = String(f?.name || '').toLowerCase()
         return /(media|asset|attachment|image|picture|photo)/i.test(n)
       })
       const candidates = []
       for (const f of mediaCandidates) {
-        // Unwrap NON_NULL / LIST wrappers
-        let t = f.type
-        let isList = false
-        while (t && (t.kind === 'NON_NULL' || t.kind === 'LIST')) {
-          if (t.kind === 'LIST') isList = true
-          t = t.ofType
-        }
-        const typeName = t?.name || ''
-        if (!typeName) continue
-        candidates.push({ field: f.name, typeName, isList })
+        const u = unwrapBufferType(f.type)
+        if (!u.name) continue
+        candidates.push({ field: f.name, typeName: u.name, typeKind: u.kind, isList: u.isList })
       }
-      // For each candidate, introspect its fields to figure out how to set
-      // an image URL (e.g. { url: "..." } or { picture: "..." }).
+
+      // Introspect sub-types: we need both inputFields AND the kind, so we
+      // can tell scalars from input objects.
       const sub = {}
+      const typeKinds = {}
       const typeNames = Array.from(new Set(candidates.map((c) => c.typeName)))
       if (typeNames.length) {
         const subQuery = `
           query IntrospectSubTypes {
             ${typeNames.map((n, i) => `t${i}: __type(name: ${JSON.stringify(n)}) {
               name
-              inputFields { name type { name kind ofType { name kind ofType { name kind } } } }
+              kind
+              inputFields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
             }`).join('\n')}
           }
         `
         const subData = await callBufferGraphQL(subQuery)
         for (const k of Object.keys(subData || {})) {
           const t = subData[k]
-          if (t?.name) sub[t.name] = t.inputFields || []
+          if (t?.name) {
+            sub[t.name] = Array.isArray(t.inputFields) ? t.inputFields : []
+            typeKinds[t.name] = t.kind || ''
+          }
         }
       }
-      // Decide on a shape. Preference order:
-      //   1) A list field whose item type has a String-like `url`/`picture` field — pass plain {url:""} per item.
-      //   2) A scalar field whose type has a List-of-AssetInput field (legacy `assets: AssetsInput { images: [...] }`).
-      //   3) Fallback: first candidate, treat as object with `url`.
-      const findUrlSubField = (typeName) => {
+
+      // Find a url-ish sub-field whose UNWRAPPED type is a SCALAR (String,
+      // ID, or a custom scalar). Refusing nested-object subfields prevents
+      // us from sending `{ url: "string" }` to a field that actually wants
+      // another object — the exact failure mode the user just hit.
+      const findScalarUrlSubField = (typeName) => {
         const fs = sub[typeName] || []
         for (const f of fs) {
           const n = String(f?.name || '').toLowerCase()
-          if (n === 'url' || n === 'picture' || n === 'image' || n === 'src' || n === 'href') {
-            return f.name
-          }
+          if (!URL_FIELD_NAMES.includes(n)) continue
+          const u = unwrapBufferType(f.type)
+          if (u.isList) continue
+          if (u.kind === 'SCALAR') return f.name
         }
         return null
       }
       const findListOfImagesSubField = (typeName) => {
         const fs = sub[typeName] || []
         for (const f of fs) {
-          let t = f.type
-          let isList = false
-          while (t && (t.kind === 'NON_NULL' || t.kind === 'LIST')) {
-            if (t.kind === 'LIST') isList = true
-            t = t.ofType
-          }
-          if (isList && t?.name) return { listField: f.name, itemType: t.name }
+          const u = unwrapBufferType(f.type)
+          if (u.isList && u.name) return { listField: f.name, itemType: u.name, itemKind: u.kind }
         }
         return null
       }
+      // True when this is a list whose item type is itself a scalar (custom
+      // scalar like ImageAssetInput-as-URL, or builtin String/ID). In that
+      // case Buffer expects bare URL strings as list items, not objects.
+      const isScalarListCandidate = (c) => {
+        if (!c.isList) return false
+        const kind = typeKinds[c.typeName]
+        return kind === 'SCALAR'
+      }
 
-      // Try 1: list-typed candidate with a url-ish sub-field
+      // Skip any shape already known to fail this process.
+      const isAlreadyTried = (shape) => {
+        const key = JSON.stringify({
+          kind: shape.kind, field: shape.field, urlField: shape.urlField, innerField: shape.innerField,
+        })
+        return bufferShapesAlreadyTried.has(key)
+      }
+
+      const trial = (shape, log) => {
+        if (isAlreadyTried(shape)) return null
+        bufferAssetsShapeCache = shape
+        console.log(`[buffer] schema discovered: ${log}`)
+        return bufferAssetsShapeCache
+      }
+
+      // Try 1: list-typed candidate with a SCALAR url-ish sub-field.
       for (const c of candidates) {
         if (!c.isList) continue
-        const urlField = findUrlSubField(c.typeName)
-        if (urlField) {
-          bufferAssetsShapeCache = {
-            kind: 'list',
-            field: c.field,
-            urlField,
-            twitterCap: 4,
-          }
-          console.log(`[buffer] schema discovered: ${c.field}: [${c.typeName} { ${urlField}: ... }]`)
-          return bufferAssetsShapeCache
-        }
+        if (isScalarListCandidate(c)) continue
+        const urlField = findScalarUrlSubField(c.typeName)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'list', field: c.field, urlField, twitterCap: 4 },
+          `${c.field}: [${c.typeName} { ${urlField}: String }]`,
+        )
+        if (r) return r
       }
-      // Try 2: scalar candidate that wraps a list of image inputs
+      // Try 2: scalar-list candidate (bare URL strings as items).
+      for (const c of candidates) {
+        if (!isScalarListCandidate(c)) continue
+        const r = trial(
+          { kind: 'bare-list', field: c.field, twitterCap: 4 },
+          `${c.field}: [${c.typeName} (scalar URL strings)]`,
+        )
+        if (r) return r
+      }
+      // Try 3: non-list candidate whose type wraps a list of image inputs
+      // (legacy `assets: AssetsInput { images: [ImageAssetInput!] }`).
       for (const c of candidates) {
         if (c.isList) continue
         const inner = findListOfImagesSubField(c.typeName)
         if (!inner) continue
-        const urlField = findUrlSubField(inner.itemType)
-        if (urlField) {
-          bufferAssetsShapeCache = {
-            kind: 'wrapped-list',
-            field: c.field,
-            innerField: inner.listField,
-            urlField,
-            twitterCap: 4,
-          }
-          console.log(`[buffer] schema discovered: ${c.field}: { ${inner.listField}: [${inner.itemType} { ${urlField}: ... }] }`)
-          return bufferAssetsShapeCache
+        if (inner.itemKind === 'SCALAR') {
+          const r = trial(
+            { kind: 'wrapped-bare-list', field: c.field, innerField: inner.listField, twitterCap: 4 },
+            `${c.field}: { ${inner.listField}: [${inner.itemType} (scalar URL strings)] }`,
+          )
+          if (r) return r
+          continue
         }
+        const urlField = findScalarUrlSubField(inner.itemType)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'wrapped-list', field: c.field, innerField: inner.listField, urlField, twitterCap: 4 },
+          `${c.field}: { ${inner.listField}: [${inner.itemType} { ${urlField}: String }] }`,
+        )
+        if (r) return r
       }
-      // Try 3: scalar candidate where the type itself has a url-ish field
-      // (single-image attach — best we can do, repeats won't be possible).
+      // Try 4: non-list candidate where the type itself has a scalar url-ish
+      // field (single-image attach).
       for (const c of candidates) {
         if (c.isList) continue
-        const urlField = findUrlSubField(c.typeName)
-        if (urlField) {
-          bufferAssetsShapeCache = {
-            kind: 'scalar',
-            field: c.field,
-            urlField,
-            twitterCap: 1,
-          }
-          console.log(`[buffer] schema discovered: ${c.field}: { ${urlField}: ... } (single image only)`)
-          return bufferAssetsShapeCache
-        }
+        const urlField = findScalarUrlSubField(c.typeName)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'scalar', field: c.field, urlField, twitterCap: 1 },
+          `${c.field}: { ${urlField}: String } (single image only)`,
+        )
+        if (r) return r
       }
       console.warn('[buffer] schema introspection produced no usable media shape; posts will be text-only')
+      console.warn('[buffer] candidates:', JSON.stringify(candidates))
+      console.warn('[buffer] sub-types:', JSON.stringify(Object.entries(sub).map(([k, v]) => [k, typeKinds[k], v.map((f) => ({ name: f.name, type: unwrapBufferType(f.type) }))])))
       bufferAssetsShapeCache = { kind: 'none' }
       return bufferAssetsShapeCache
     } catch (e) {
       console.warn('[buffer] introspection failed:', e?.message || e)
-      // Don't cache failures — try again next call.
       return { kind: 'none' }
     } finally {
       bufferAssetsShapePromise = null
@@ -5321,25 +5378,31 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   const dueAt = dueAtIso ? String(dueAtIso) : ''
   const mode = dueAt ? 'customScheduled' : 'addToQueue'
   const services = channelServices || (await fetchBufferChannelServices())
-  const assetsShape = urls.length ? await introspectBufferAssetsShape() : { kind: 'none' }
 
   const gqlString = (v) => JSON.stringify(String(v ?? ''))
-  const assetsPartFor = (service) => {
-    if (assetsShape.kind === 'none') return ''
-    const cap = service === 'twitter' ? Math.min(4, assetsShape.twitterCap || 4) : (assetsShape.twitterCap || urls.length)
+  const assetsPartFor = (shape, service) => {
+    if (!shape || shape.kind === 'none') return ''
+    const cap = service === 'twitter' ? Math.min(4, shape.twitterCap || 4) : (shape.twitterCap || urls.length)
     const list = urls.slice(0, cap)
     if (!list.length) return ''
-    if (assetsShape.kind === 'list') {
-      const items = list.map((u) => `{ ${assetsShape.urlField}: ${gqlString(u)} }`).join(', ')
-      return `, ${assetsShape.field}: [${items}]`
+    if (shape.kind === 'list') {
+      const items = list.map((u) => `{ ${shape.urlField}: ${gqlString(u)} }`).join(', ')
+      return `, ${shape.field}: [${items}]`
     }
-    if (assetsShape.kind === 'wrapped-list') {
-      const items = list.map((u) => `{ ${assetsShape.urlField}: ${gqlString(u)} }`).join(', ')
-      return `, ${assetsShape.field}: { ${assetsShape.innerField}: [${items}] }`
+    if (shape.kind === 'bare-list') {
+      const items = list.map((u) => gqlString(u)).join(', ')
+      return `, ${shape.field}: [${items}]`
     }
-    if (assetsShape.kind === 'scalar') {
-      // Schema only allows one — first image wins.
-      return `, ${assetsShape.field}: { ${assetsShape.urlField}: ${gqlString(list[0])} }`
+    if (shape.kind === 'wrapped-list') {
+      const items = list.map((u) => `{ ${shape.urlField}: ${gqlString(u)} }`).join(', ')
+      return `, ${shape.field}: { ${shape.innerField}: [${items}] }`
+    }
+    if (shape.kind === 'wrapped-bare-list') {
+      const items = list.map((u) => gqlString(u)).join(', ')
+      return `, ${shape.field}: { ${shape.innerField}: [${items}] }`
+    }
+    if (shape.kind === 'scalar') {
+      return `, ${shape.field}: { ${shape.urlField}: ${gqlString(list[0])} }`
     }
     return ''
   }
@@ -5352,7 +5415,7 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
     if (service === 'facebook') return `, metadata: { facebook: { type: post } }`
     return ''
   }
-  const buildMutation = (channelId, service) => {
+  const buildMutation = (shape, channelId, service) => {
     const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
     const postText = service === 'twitter' ? truncateForTwitter(safeText) : safeText
     return `
@@ -5361,7 +5424,7 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
           text: ${gqlString(postText)},
           channelId: ${gqlString(channelId)},
           schedulingType: automatic,
-          mode: ${mode}${dueAtPart}${assetsPartFor(service)}${metadataFor(service)}
+          mode: ${mode}${dueAtPart}${assetsPartFor(shape, service)}${metadataFor(service)}
         }) {
           ... on PostActionSuccess { post { id text dueAt } }
           ... on MutationError { message }
@@ -5370,21 +5433,46 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
     `
   }
 
+  // Buffer schema-validation errors look like "Expected value of type 'X',
+  // found ...". When we hit one, the cached shape is wrong — invalidate it,
+  // re-introspect (which skips the just-tried shape), and retry once.
+  const isSchemaShapeError = (msg) => /GRAPHQL_VALIDATION_FAILED|Expected value of type|Field ".*" is not defined by type/i.test(String(msg || ''))
+
+  // Try a mutation with the current shape; if it fails due to schema
+  // validation, swap shapes and retry. We allow up to 4 attempts (covers
+  // list → bare-list → wrapped-list → wrapped-bare-list → scalar → none).
+  const attemptForChannel = async (channelId, service) => {
+    let lastErr = ''
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const shape = urls.length ? await introspectBufferAssetsShape() : { kind: 'none' }
+      const mutation = buildMutation(shape, channelId, service)
+      try {
+        const data = await callBufferGraphQL(mutation)
+        const cp = data?.createPost
+        if (cp?.post) return { ok: true, post: cp.post, shape: shape.kind }
+        if (cp?.message) return { ok: false, error: cp.message, shape: shape.kind }
+        return { ok: false, error: 'Unknown Buffer response', shape: shape.kind }
+      } catch (e) {
+        lastErr = e?.message || String(e)
+        if (urls.length && shape.kind !== 'none' && isSchemaShapeError(lastErr)) {
+          console.warn(`[buffer] mutation rejected with shape=${shape.kind} (${shape.field}/${shape.urlField || shape.innerField || ''}); trying a different shape. err: ${lastErr.slice(0, 240)}`)
+          resetBufferAssetsShapeCache(`channel=${channelId} attempt=${attempt} err=${lastErr.slice(0, 80)}`)
+          continue
+        }
+        return { ok: false, error: lastErr }
+      }
+    }
+    return { ok: false, error: lastErr || 'All media shapes rejected by Buffer' }
+  }
+
   const results = []
   for (const channelId of ids) {
     const service = services[channelId] || ''
-    try {
-      const data = await callBufferGraphQL(buildMutation(channelId, service))
-      const cp = data?.createPost
-      if (cp?.post) {
-        results.push({ channelId, service, ok: true, post: cp.post })
-      } else if (cp?.message) {
-        results.push({ channelId, service, ok: false, error: cp.message })
-      } else {
-        results.push({ channelId, service, ok: false, error: 'Unknown Buffer response' })
-      }
-    } catch (e) {
-      results.push({ channelId, service, ok: false, error: e?.message || 'Buffer request failed' })
+    const r = await attemptForChannel(channelId, service)
+    if (r.ok) {
+      results.push({ channelId, service, ok: true, post: r.post })
+    } else {
+      results.push({ channelId, service, ok: false, error: r.error })
     }
   }
   return results
