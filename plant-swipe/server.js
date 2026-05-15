@@ -5197,12 +5197,25 @@ async function introspectBufferAssetsShape() {
         const n = String(f?.name || '').toLowerCase()
         return /(media|asset|attachment|image|picture|photo)/i.test(n)
       })
+      // Rank candidates so we try the most-likely-to-be-the-media-field
+      // first. Empirically Buffer's createPost wants `media`/`assets` and
+      // ignores noisier fields like `imageMetadata`, `mediaSettings`, etc.
+      const rankCandidate = (name) => {
+        const n = String(name || '').toLowerCase()
+        if (n === 'media' || n === 'assets' || n === 'mediaitems' || n === 'attachments') return 0
+        if (n === 'images' || n === 'photos' || n === 'pictures') return 1
+        if (/(media|asset|attachment)/.test(n) && !/(setting|option|metadata|config|policy)/.test(n)) return 2
+        if (/(image|picture|photo)/.test(n) && !/(setting|option|metadata|config|policy)/.test(n)) return 3
+        return 9
+      }
+      mediaCandidates.sort((a, b) => rankCandidate(a.name) - rankCandidate(b.name))
       const candidates = []
       for (const f of mediaCandidates) {
         const u = unwrapBufferType(f.type)
         if (!u.name) continue
         candidates.push({ field: f.name, typeName: u.name, typeKind: u.kind, isList: u.isList })
       }
+      console.log('[buffer] CreatePostInput media candidates:', JSON.stringify(candidates))
 
       // Introspect sub-types: we need both inputFields AND the kind, so we
       // can tell scalars from input objects.
@@ -5409,8 +5422,9 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   const truncateForTwitter = (s) => (!s || s.length <= 280 ? s : s.slice(0, 277).trimEnd() + '…')
   const metadataFor = (service) => {
     if (service === 'instagram') {
-      const igType = urls.length > 1 ? 'carousel' : 'post'
-      return `, metadata: { instagram: { type: ${igType}, shouldShareToFeed: true } }`
+      // Buffer recently deprecated the `carousel` post type — multi-image
+      // posts now use type=post too. Valid IG types are post, story, reel.
+      return `, metadata: { instagram: { type: post, shouldShareToFeed: true } }`
     }
     if (service === 'facebook') return `, metadata: { facebook: { type: post } }`
     return ''
@@ -5438,24 +5452,41 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   // re-introspect (which skips the just-tried shape), and retry once.
   const isSchemaShapeError = (msg) => /GRAPHQL_VALIDATION_FAILED|Expected value of type|Field ".*" is not defined by type/i.test(String(msg || ''))
 
-  // Try a mutation with the current shape; if it fails due to schema
-  // validation, swap shapes and retry. We allow up to 4 attempts (covers
-  // list → bare-list → wrapped-list → wrapped-bare-list → scalar → none).
+  // A business-logic rejection where Buffer accepted the GraphQL but said
+  // the post has no media (i.e. our chosen field exists but isn't where
+  // Buffer reads attachments from). Treated like a schema mismatch:
+  // invalidate the cached shape and try the next candidate.
+  const isMediaMissingError = (msg) => /require[ds]? at least one image|require[ds]? at least one video|no media|images required/i.test(String(msg || ''))
+
   const attemptForChannel = async (channelId, service) => {
     let lastErr = ''
     for (let attempt = 0; attempt < 5; attempt++) {
       const shape = urls.length ? await introspectBufferAssetsShape() : { kind: 'none' }
       const mutation = buildMutation(shape, channelId, service)
+      let cp = null
       try {
         const data = await callBufferGraphQL(mutation)
-        const cp = data?.createPost
-        if (cp?.post) return { ok: true, post: cp.post, shape: shape.kind }
-        if (cp?.message) return { ok: false, error: cp.message, shape: shape.kind }
-        return { ok: false, error: 'Unknown Buffer response', shape: shape.kind }
+        cp = data?.createPost
+        if (cp?.post) {
+          console.log(`[buffer] post ok shape=${shape.kind} field=${shape.field || '-'} channel=${channelId}`)
+          return { ok: true, post: cp.post, shape: shape.kind }
+        }
+        const msg = cp?.message || 'Unknown Buffer response'
+        // Business-logic "needs an image" → shape was wrong even though it
+        // parsed. Invalidate and retry with the next candidate.
+        if (urls.length && shape.kind !== 'none' && isMediaMissingError(msg)) {
+          console.warn(`[buffer] post rejected (media not attached) with shape=${shape.kind} field=${shape.field}; trying next shape. msg: ${msg.slice(0, 240)}`)
+          console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
+          resetBufferAssetsShapeCache(`channel=${channelId} media-missing attempt=${attempt}`)
+          lastErr = msg
+          continue
+        }
+        return { ok: false, error: msg, shape: shape.kind }
       } catch (e) {
         lastErr = e?.message || String(e)
         if (urls.length && shape.kind !== 'none' && isSchemaShapeError(lastErr)) {
-          console.warn(`[buffer] mutation rejected with shape=${shape.kind} (${shape.field}/${shape.urlField || shape.innerField || ''}); trying a different shape. err: ${lastErr.slice(0, 240)}`)
+          console.warn(`[buffer] mutation rejected (validation) with shape=${shape.kind} (${shape.field}/${shape.urlField || shape.innerField || ''}); trying a different shape. err: ${lastErr.slice(0, 240)}`)
+          console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
           resetBufferAssetsShapeCache(`channel=${channelId} attempt=${attempt} err=${lastErr.slice(0, 80)}`)
           continue
         }
@@ -5553,6 +5584,43 @@ app.options('/api/admin/buffer/post', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.status(204).end()
 })
+
+// Diagnose Buffer's actual CreatePostInput schema. Forces a fresh
+// introspection (bypassing the process-lifetime cache) and returns the
+// candidate fields, their types, and the shape we'd choose. Useful when a
+// post is rejected with "Instagram posts require at least one image" —
+// hit this endpoint to see which field we're putting URLs into and
+// whether there's a better candidate.
+app.get('/api/admin/buffer/debug-schema', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    resetBufferAssetsShapeCache('debug-schema endpoint')
+    bufferShapesAlreadyTried.clear()
+    const shape = await introspectBufferAssetsShape()
+    const raw = await callBufferGraphQL(`
+      query DumpCreatePostInput {
+        createPostInput: __type(name: "CreatePostInput") {
+          name
+          inputFields {
+            name
+            type { name kind ofType { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
+          }
+        }
+      }
+    `).catch((e) => ({ error: e?.message || String(e) }))
+    res.json({ ok: true, shape, createPostInput: raw?.createPostInput || raw })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    res.status(status).json({ error: e?.message || 'Failed to introspect Buffer schema' })
+  }
+})
+
+app.options('/api/admin/buffer/debug-schema', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+
 
 // =====================================================================
 // Aphydle automation: schedule today's daily puzzle to Buffer on a
