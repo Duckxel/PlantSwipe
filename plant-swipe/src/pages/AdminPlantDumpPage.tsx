@@ -548,9 +548,15 @@ export function AdminPlantDumpPage() {
      Derived state
   ----------------------------------------------------------------------- */
   const ungroupedImages = images.filter(i => !i.group_id)
-  const doneCount = queue.filter(f => f.status === "done").length
-  const uploadingCountDisplay = queue.filter(f => f.status === "uploading").length
-  const errorCount = queue.filter(f => f.status === "error").length
+
+  // ⚡ Bolt: Calculate multiple queue status counts using a single-pass loop instead of chained .filter().length calls
+  let doneCount = 0, uploadingCountDisplay = 0, errorCount = 0;
+  for (let i = 0; i < queue.length; i++) {
+    const status = queue[i].status;
+    if (status === "done") doneCount++;
+    else if (status === "uploading") uploadingCountDisplay++;
+    else if (status === "error") errorCount++;
+  }
 
   /* -----------------------------------------------------------------------
      Render helpers
