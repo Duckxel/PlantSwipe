@@ -2705,6 +2705,8 @@ const TestimonialsTab: React.FC<{
                     setUserSearchQuery("")
                   }}
                   className="rounded-xl h-8 w-8"
+                  aria-label="Close user profile picker"
+                  title="Close user profile picker"
                 >
                   <X className="h-4 w-4" />
                 </Button>
@@ -3182,6 +3184,8 @@ const DemoFeaturesTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFeature(index, "up")}
                         disabled={index === 0 || selectedLang !== "en"}
+                        aria-label="Move feature up"
+                        title="Move feature up"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </Button>
@@ -3194,6 +3198,8 @@ const DemoFeaturesTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFeature(index, "down")}
                         disabled={index === localFeatures.length - 1 || selectedLang !== "en"}
+                        aria-label="Move feature down"
+                        title="Move feature down"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -3297,6 +3303,8 @@ const DemoFeaturesTab: React.FC<{
                           "rounded-xl",
                           feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
                         )}
+                        aria-label={feature.is_active ? "Hide feature" : "Show feature"}
+                        title={feature.is_active ? "Hide feature" : "Show feature"}
                       >
                         {feature.is_active ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
                       </Button>
@@ -3306,6 +3314,8 @@ const DemoFeaturesTab: React.FC<{
                         onClick={() => deleteFeature(feature.id)}
                         disabled={selectedLang !== "en"}
                         className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
+                        aria-label="Delete feature"
+                        title="Delete feature"
                       >
                         <Trash2 className="h-4 w-4" />
                       </Button>
@@ -4257,6 +4267,8 @@ const ShowcaseTab: React.FC<{
                     size="icon"
                     onClick={() => setLocalConfig({ ...localConfig, cover_image_url: null })}
                     className="rounded-xl"
+                    aria-label="Remove cover image"
+                    title="Remove cover image"
                   >
                     <X className="h-4 w-4" />
                   </Button>
