@@ -1,7 +1,7 @@
 {
   "name": "aphylia",
   "private": true,
-  "version": "7.0.0",
+  "version": "7.1.0",
   "type": "module",
   "scripts": {
     "sync:brand-assets": "node scripts/sync-brand-assets.mjs",
