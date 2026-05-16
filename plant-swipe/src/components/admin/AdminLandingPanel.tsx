@@ -2699,6 +2699,7 @@ const TestimonialsTab: React.FC<{
                 <Button
                   variant="ghost"
                   size="icon"
+                  aria-label="Close user picker"
                   onClick={() => {
                     setUserPickerOpen(false)
                     setEditingId(null)
@@ -3182,6 +3183,7 @@ const DemoFeaturesTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFeature(index, "up")}
                         disabled={index === 0 || selectedLang !== "en"}
+                        aria-label="Move feature up"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </Button>
@@ -3194,6 +3196,7 @@ const DemoFeaturesTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFeature(index, "down")}
                         disabled={index === localFeatures.length - 1 || selectedLang !== "en"}
+                        aria-label="Move feature down"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -3293,6 +3296,7 @@ const DemoFeaturesTab: React.FC<{
                         size="icon"
                         onClick={() => updateLocalFeature(feature.id, { is_active: !feature.is_active })}
                         disabled={selectedLang !== "en"}
+                        aria-label={feature.is_active ? "Deactivate feature" : "Activate feature"}
                         className={cn(
                           "rounded-xl",
                           feature.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
@@ -3305,6 +3309,7 @@ const DemoFeaturesTab: React.FC<{
                         size="icon"
                         onClick={() => deleteFeature(feature.id)}
                         disabled={selectedLang !== "en"}
+                        aria-label="Delete feature"
                         className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -3705,6 +3710,7 @@ const FAQTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFAQ(index, "up")}
                         disabled={index === 0 || selectedLang !== "en"}
+                        aria-label="Move FAQ up"
                       >
                         <ChevronUp className="h-4 w-4" />
                       </Button>
@@ -3717,6 +3723,7 @@ const FAQTab: React.FC<{
                         className="h-6 w-6"
                         onClick={() => moveFAQ(index, "down")}
                         disabled={index === localItems.length - 1 || selectedLang !== "en"}
+                        aria-label="Move FAQ down"
                       >
                         <ChevronDown className="h-4 w-4" />
                       </Button>
@@ -3755,6 +3762,7 @@ const FAQTab: React.FC<{
                         size="icon"
                         onClick={() => updateLocalFAQ(item.id, { is_active: !item.is_active })}
                         disabled={selectedLang !== "en"}
+                        aria-label={item.is_active ? "Deactivate FAQ" : "Activate FAQ"}
                         className={cn(
                           "rounded-xl",
                           item.is_active ? "text-emerald-600 bg-emerald-50 dark:bg-emerald-900/20" : "text-stone-400"
@@ -3767,6 +3775,7 @@ const FAQTab: React.FC<{
                         size="icon"
                         onClick={() => deleteFAQ(item.id)}
                         disabled={selectedLang !== "en"}
+                        aria-label="Delete FAQ"
                         className="rounded-xl text-red-500 hover:text-red-600 hover:bg-red-50"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -4257,6 +4266,7 @@ const ShowcaseTab: React.FC<{
                     size="icon"
                     onClick={() => setLocalConfig({ ...localConfig, cover_image_url: null })}
                     className="rounded-xl"
+                    aria-label="Remove cover image"
                   >
                     <X className="h-4 w-4" />
                   </Button>
@@ -4530,6 +4540,7 @@ const ShowcaseTab: React.FC<{
                   size="icon"
                   onClick={() => removeTask(task.id)}
                   className="text-red-500 hover:text-red-600 hover:bg-red-50"
+                  aria-label="Remove task"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -4601,6 +4612,7 @@ const ShowcaseTab: React.FC<{
                   size="icon"
                   onClick={() => removeMember(member.id)}
                   className="text-red-500 hover:text-red-600 hover:bg-red-50 flex-shrink-0"
+                  aria-label="Remove member"
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
