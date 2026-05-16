@@ -5133,6 +5133,232 @@ async function uploadCardToStorage(file) {
   return url
 }
 
+// Buffer's GraphQL schema for media attachments has shifted several times
+// (`media: [{url, type}]` → `assets: AssetsInput { images: [...] }` →
+// `assets: AssetInput`/`[ImageAssetInput!]`). Rather than guess, introspect
+// CreatePostInput once and remember the actual shape. Cached for the
+// process lifetime; can be reset via `resetBufferAssetsShapeCache()` after
+// a mutation fails so the next call re-discovers.
+let bufferAssetsShapeCache = null
+let bufferAssetsShapePromise = null
+const bufferShapesAlreadyTried = new Set()
+
+function resetBufferAssetsShapeCache(reason) {
+  if (bufferAssetsShapeCache) {
+    const key = JSON.stringify({
+      kind: bufferAssetsShapeCache.kind,
+      field: bufferAssetsShapeCache.field,
+      urlField: bufferAssetsShapeCache.urlField,
+      innerField: bufferAssetsShapeCache.innerField,
+    })
+    bufferShapesAlreadyTried.add(key)
+    console.warn(`[buffer] invalidating cached media shape (${reason || 'unknown'}): ${key}`)
+  }
+  bufferAssetsShapeCache = null
+}
+
+// Walk a GraphQL type ref tree, returning the unwrapped scalar/named type
+// name and whether the path included a LIST. Returns { name, kind, isList }.
+function unwrapBufferType(t) {
+  let isList = false
+  let cur = t
+  while (cur && (cur.kind === 'NON_NULL' || cur.kind === 'LIST')) {
+    if (cur.kind === 'LIST') isList = true
+    cur = cur.ofType
+  }
+  return { name: cur?.name || '', kind: cur?.kind || '', isList }
+}
+
+const URL_FIELD_NAMES = [
+  'url', 'picture', 'image', 'src', 'href',
+  'imageurl', 'pictureurl', 'srcurl', 'mediaurl', 'asseturl', 'photourl',
+  'thumbnail', 'thumb',
+]
+
+async function introspectBufferAssetsShape() {
+  if (bufferAssetsShapeCache) return bufferAssetsShapeCache
+  if (bufferAssetsShapePromise) return bufferAssetsShapePromise
+  bufferAssetsShapePromise = (async () => {
+    try {
+      const data = await callBufferGraphQL(`
+        query IntrospectCreatePostInput {
+          createPostInput: __type(name: "CreatePostInput") {
+            inputFields {
+              name
+              type { name kind ofType { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
+            }
+          }
+        }
+      `)
+      const fields = Array.isArray(data?.createPostInput?.inputFields)
+        ? data.createPostInput.inputFields
+        : []
+      const mediaCandidates = fields.filter((f) => {
+        const n = String(f?.name || '').toLowerCase()
+        return /(media|asset|attachment|image|picture|photo)/i.test(n)
+      })
+      // Rank candidates so we try the most-likely-to-be-the-media-field
+      // first. Empirically Buffer's createPost wants `media`/`assets` and
+      // ignores noisier fields like `imageMetadata`, `mediaSettings`, etc.
+      const rankCandidate = (name) => {
+        const n = String(name || '').toLowerCase()
+        if (n === 'media' || n === 'assets' || n === 'mediaitems' || n === 'attachments') return 0
+        if (n === 'images' || n === 'photos' || n === 'pictures') return 1
+        if (/(media|asset|attachment)/.test(n) && !/(setting|option|metadata|config|policy)/.test(n)) return 2
+        if (/(image|picture|photo)/.test(n) && !/(setting|option|metadata|config|policy)/.test(n)) return 3
+        return 9
+      }
+      mediaCandidates.sort((a, b) => rankCandidate(a.name) - rankCandidate(b.name))
+      const candidates = []
+      for (const f of mediaCandidates) {
+        const u = unwrapBufferType(f.type)
+        if (!u.name) continue
+        candidates.push({ field: f.name, typeName: u.name, typeKind: u.kind, isList: u.isList })
+      }
+      console.log('[buffer] CreatePostInput media candidates:', JSON.stringify(candidates))
+
+      // Introspect sub-types: we need both inputFields AND the kind, so we
+      // can tell scalars from input objects.
+      const sub = {}
+      const typeKinds = {}
+      const typeNames = Array.from(new Set(candidates.map((c) => c.typeName)))
+      if (typeNames.length) {
+        const subQuery = `
+          query IntrospectSubTypes {
+            ${typeNames.map((n, i) => `t${i}: __type(name: ${JSON.stringify(n)}) {
+              name
+              kind
+              inputFields { name type { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
+            }`).join('\n')}
+          }
+        `
+        const subData = await callBufferGraphQL(subQuery)
+        for (const k of Object.keys(subData || {})) {
+          const t = subData[k]
+          if (t?.name) {
+            sub[t.name] = Array.isArray(t.inputFields) ? t.inputFields : []
+            typeKinds[t.name] = t.kind || ''
+          }
+        }
+      }
+
+      // Find a url-ish sub-field whose UNWRAPPED type is a SCALAR (String,
+      // ID, or a custom scalar). Refusing nested-object subfields prevents
+      // us from sending `{ url: "string" }` to a field that actually wants
+      // another object — the exact failure mode the user just hit.
+      const findScalarUrlSubField = (typeName) => {
+        const fs = sub[typeName] || []
+        for (const f of fs) {
+          const n = String(f?.name || '').toLowerCase()
+          if (!URL_FIELD_NAMES.includes(n)) continue
+          const u = unwrapBufferType(f.type)
+          if (u.isList) continue
+          if (u.kind === 'SCALAR') return f.name
+        }
+        return null
+      }
+      const findListOfImagesSubField = (typeName) => {
+        const fs = sub[typeName] || []
+        for (const f of fs) {
+          const u = unwrapBufferType(f.type)
+          if (u.isList && u.name) return { listField: f.name, itemType: u.name, itemKind: u.kind }
+        }
+        return null
+      }
+      // True when this is a list whose item type is itself a scalar (custom
+      // scalar like ImageAssetInput-as-URL, or builtin String/ID). In that
+      // case Buffer expects bare URL strings as list items, not objects.
+      const isScalarListCandidate = (c) => {
+        if (!c.isList) return false
+        const kind = typeKinds[c.typeName]
+        return kind === 'SCALAR'
+      }
+
+      // Skip any shape already known to fail this process.
+      const isAlreadyTried = (shape) => {
+        const key = JSON.stringify({
+          kind: shape.kind, field: shape.field, urlField: shape.urlField, innerField: shape.innerField,
+        })
+        return bufferShapesAlreadyTried.has(key)
+      }
+
+      const trial = (shape, log) => {
+        if (isAlreadyTried(shape)) return null
+        bufferAssetsShapeCache = shape
+        console.log(`[buffer] schema discovered: ${log}`)
+        return bufferAssetsShapeCache
+      }
+
+      // Try 1: list-typed candidate with a SCALAR url-ish sub-field.
+      for (const c of candidates) {
+        if (!c.isList) continue
+        if (isScalarListCandidate(c)) continue
+        const urlField = findScalarUrlSubField(c.typeName)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'list', field: c.field, urlField, twitterCap: 4 },
+          `${c.field}: [${c.typeName} { ${urlField}: String }]`,
+        )
+        if (r) return r
+      }
+      // Try 2: scalar-list candidate (bare URL strings as items).
+      for (const c of candidates) {
+        if (!isScalarListCandidate(c)) continue
+        const r = trial(
+          { kind: 'bare-list', field: c.field, twitterCap: 4 },
+          `${c.field}: [${c.typeName} (scalar URL strings)]`,
+        )
+        if (r) return r
+      }
+      // Try 3: non-list candidate whose type wraps a list of image inputs
+      // (legacy `assets: AssetsInput { images: [ImageAssetInput!] }`).
+      for (const c of candidates) {
+        if (c.isList) continue
+        const inner = findListOfImagesSubField(c.typeName)
+        if (!inner) continue
+        if (inner.itemKind === 'SCALAR') {
+          const r = trial(
+            { kind: 'wrapped-bare-list', field: c.field, innerField: inner.listField, twitterCap: 4 },
+            `${c.field}: { ${inner.listField}: [${inner.itemType} (scalar URL strings)] }`,
+          )
+          if (r) return r
+          continue
+        }
+        const urlField = findScalarUrlSubField(inner.itemType)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'wrapped-list', field: c.field, innerField: inner.listField, urlField, twitterCap: 4 },
+          `${c.field}: { ${inner.listField}: [${inner.itemType} { ${urlField}: String }] }`,
+        )
+        if (r) return r
+      }
+      // Try 4: non-list candidate where the type itself has a scalar url-ish
+      // field (single-image attach).
+      for (const c of candidates) {
+        if (c.isList) continue
+        const urlField = findScalarUrlSubField(c.typeName)
+        if (!urlField) continue
+        const r = trial(
+          { kind: 'scalar', field: c.field, urlField, twitterCap: 1 },
+          `${c.field}: { ${urlField}: String } (single image only)`,
+        )
+        if (r) return r
+      }
+      console.warn('[buffer] schema introspection produced no usable media shape; posts will be text-only')
+      console.warn('[buffer] candidates:', JSON.stringify(candidates))
+      console.warn('[buffer] sub-types:', JSON.stringify(Object.entries(sub).map(([k, v]) => [k, typeKinds[k], v.map((f) => ({ name: f.name, type: unwrapBufferType(f.type) }))])))
+      bufferAssetsShapeCache = { kind: 'none' }
+      return bufferAssetsShapeCache
+    } catch (e) {
+      console.warn('[buffer] introspection failed:', e?.message || e)
+      return { kind: 'none' }
+    } finally {
+      bufferAssetsShapePromise = null
+    }
+  })()
+  return bufferAssetsShapePromise
+}
+
 // Look up each Buffer channel's service (instagram, facebook, twitter, …) so
 // the post payload can be tuned per-platform. Returns a Map<channelId, service>.
 async function fetchBufferChannelServices() {
@@ -5158,6 +5384,17 @@ async function fetchBufferChannelServices() {
 // Schedule a post on one or more Buffer channels. Shared by the manual
 // admin route and the Aphydle automation worker. Each channel gets its
 // own createPost mutation — Buffer rejects mixed-service inputs.
+//
+// Image attachment shape is taken from Buffer's docs
+// (https://developers.buffer.com/examples/create-image-post.html):
+//
+//   assets: [{ image: { url: "https://…" } }, …]
+//
+// `assets` is [AssetInput!], `AssetInput.image` is `ImageAssetInput`,
+// `ImageAssetInput.url` is String. Earlier introspection-based fallbacks
+// landed on shallower fields ({ image: "url" } as scalar, etc.) — Buffer
+// accepted those mutations but silently dropped the media, so FB/X
+// posts went out without images and IG rejected the post.
 async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaUrls, channelServices }) {
   const safeText = String(text || '')
   const ids = (channelIds || []).map((c) => String(c || '').trim()).filter(Boolean)
@@ -5167,30 +5404,66 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
   const services = channelServices || (await fetchBufferChannelServices())
 
   const gqlString = (v) => JSON.stringify(String(v ?? ''))
-  const assetsPartFor = (service) => {
-    const list = service === 'twitter' ? urls.slice(0, 4) : urls
+  const buildAssetsLiteral = (service) => {
+    if (!urls.length) return ''
+    const cap = service === 'twitter' ? 4 : urls.length
+    const list = urls.slice(0, cap)
     if (!list.length) return ''
-    return `, assets: { images: [${list.map((u) => `{ url: ${gqlString(u)} }`).join(', ')}] }`
+    const items = list.map((u) => `{ image: { url: ${gqlString(u)} } }`).join(', ')
+    return `, assets: [${items}]`
+  }
+  // Legacy introspection-based shape — only used if Buffer rejects the
+  // hardcoded `assets: [{ image: { url } }]` shape, which would mean the
+  // schema changed again.
+  const assetsPartFor = (shape, service) => {
+    if (!shape || shape.kind === 'none') return ''
+    const cap = service === 'twitter' ? Math.min(4, shape.twitterCap || 4) : (shape.twitterCap || urls.length)
+    const list = urls.slice(0, cap)
+    if (!list.length) return ''
+    if (shape.kind === 'list') {
+      const items = list.map((u) => `{ ${shape.urlField}: ${gqlString(u)} }`).join(', ')
+      return `, ${shape.field}: [${items}]`
+    }
+    if (shape.kind === 'bare-list') {
+      const items = list.map((u) => gqlString(u)).join(', ')
+      return `, ${shape.field}: [${items}]`
+    }
+    if (shape.kind === 'wrapped-list') {
+      const items = list.map((u) => `{ ${shape.urlField}: ${gqlString(u)} }`).join(', ')
+      return `, ${shape.field}: { ${shape.innerField}: [${items}] }`
+    }
+    if (shape.kind === 'wrapped-bare-list') {
+      const items = list.map((u) => gqlString(u)).join(', ')
+      return `, ${shape.field}: { ${shape.innerField}: [${items}] }`
+    }
+    if (shape.kind === 'scalar') {
+      return `, ${shape.field}: { ${shape.urlField}: ${gqlString(list[0])} }`
+    }
+    return ''
   }
   const truncateForTwitter = (s) => (!s || s.length <= 280 ? s : s.slice(0, 277).trimEnd() + '…')
   const metadataFor = (service) => {
     if (service === 'instagram') {
-      const igType = urls.length > 1 ? 'carousel' : 'post'
-      return `, metadata: { instagram: { type: ${igType}, shouldShareToFeed: true } }`
+      // Buffer recently deprecated the `carousel` post type — multi-image
+      // posts now use type=post too. Valid IG types are post, story, reel.
+      return `, metadata: { instagram: { type: post, shouldShareToFeed: true } }`
     }
     if (service === 'facebook') return `, metadata: { facebook: { type: post } }`
     return ''
   }
-  const buildMutation = (channelId, service) => {
+  const buildMutation = (shape, channelId, service) => {
     const dueAtPart = dueAt ? `, dueAt: ${gqlString(dueAt)}` : ''
     const postText = service === 'twitter' ? truncateForTwitter(safeText) : safeText
+    // Attempt 0 uses the documented hardcoded shape. Later attempts fall
+    // back to introspection-derived shapes in case Buffer's schema drifted.
+    const assetsPart = shape ? assetsPartFor(shape, service) : buildAssetsLiteral(service)
     return `
       mutation CreatePost {
         createPost(input: {
           text: ${gqlString(postText)},
           channelId: ${gqlString(channelId)},
           schedulingType: automatic,
-          mode: ${mode}${dueAtPart}${assetsPartFor(service)}${metadataFor(service)}
+          mode: ${mode}${dueAtPart}${assetsPart}${metadataFor(service)}
         }) {
           ... on PostActionSuccess { post { id text dueAt } }
           ... on MutationError { message }
@@ -5199,21 +5472,66 @@ async function createBufferPostsForChannels({ text, channelIds, dueAtIso, mediaU
     `
   }
 
+  // Buffer schema-validation errors look like "Expected value of type 'X',
+  // found ...". When we hit one, the cached shape is wrong — invalidate it,
+  // re-introspect (which skips the just-tried shape), and retry once.
+  const isSchemaShapeError = (msg) => /GRAPHQL_VALIDATION_FAILED|Expected value of type|Field ".*" is not defined by type/i.test(String(msg || ''))
+
+  // A business-logic rejection where Buffer accepted the GraphQL but said
+  // the post has no media (i.e. our chosen field exists but isn't where
+  // Buffer reads attachments from). Treated like a schema mismatch:
+  // invalidate the cached shape and try the next candidate.
+  const isMediaMissingError = (msg) => /require[ds]? at least one image|require[ds]? at least one video|no media|images required/i.test(String(msg || ''))
+
+  const attemptForChannel = async (channelId, service) => {
+    let lastErr = ''
+    // First attempt: documented `assets: [{ image: { url } }]`. Subsequent
+    // attempts: introspection-discovered shape (rotating on failure).
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const shape = attempt === 0
+        ? null
+        : (urls.length ? await introspectBufferAssetsShape() : { kind: 'none' })
+      const mutation = buildMutation(shape, channelId, service)
+      const shapeLabel = shape ? `${shape.kind}/${shape.field || '-'}` : 'hardcoded'
+      let cp = null
+      try {
+        const data = await callBufferGraphQL(mutation)
+        cp = data?.createPost
+        if (cp?.post) {
+          console.log(`[buffer] post ok shape=${shapeLabel} channel=${channelId}`)
+          return { ok: true, post: cp.post, shape: shapeLabel }
+        }
+        const msg = cp?.message || 'Unknown Buffer response'
+        if (urls.length && isMediaMissingError(msg)) {
+          console.warn(`[buffer] post rejected (media not attached) shape=${shapeLabel}; trying next. msg: ${msg.slice(0, 240)}`)
+          console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
+          if (shape) resetBufferAssetsShapeCache(`channel=${channelId} media-missing attempt=${attempt}`)
+          lastErr = msg
+          continue
+        }
+        return { ok: false, error: msg, shape: shapeLabel }
+      } catch (e) {
+        lastErr = e?.message || String(e)
+        if (urls.length && isSchemaShapeError(lastErr)) {
+          console.warn(`[buffer] mutation rejected (validation) shape=${shapeLabel}; trying next. err: ${lastErr.slice(0, 240)}`)
+          console.warn(`[buffer] failing mutation (truncated): ${mutation.replace(/\s+/g, ' ').slice(0, 500)}`)
+          if (shape) resetBufferAssetsShapeCache(`channel=${channelId} attempt=${attempt} err=${lastErr.slice(0, 80)}`)
+          continue
+        }
+        return { ok: false, error: lastErr }
+      }
+    }
+    return { ok: false, error: lastErr || 'All media shapes rejected by Buffer' }
+  }
+
   const results = []
   for (const channelId of ids) {
     const service = services[channelId] || ''
-    try {
-      const data = await callBufferGraphQL(buildMutation(channelId, service))
-      const cp = data?.createPost
-      if (cp?.post) {
-        results.push({ channelId, service, ok: true, post: cp.post })
-      } else if (cp?.message) {
-        results.push({ channelId, service, ok: false, error: cp.message })
-      } else {
-        results.push({ channelId, service, ok: false, error: 'Unknown Buffer response' })
-      }
-    } catch (e) {
-      results.push({ channelId, service, ok: false, error: e?.message || 'Buffer request failed' })
+    const r = await attemptForChannel(channelId, service)
+    if (r.ok) {
+      results.push({ channelId, service, ok: true, post: r.post })
+    } else {
+      results.push({ channelId, service, ok: false, error: r.error })
     }
   }
   return results
@@ -5294,6 +5612,43 @@ app.options('/api/admin/buffer/post', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
   res.status(204).end()
 })
+
+// Diagnose Buffer's actual CreatePostInput schema. Forces a fresh
+// introspection (bypassing the process-lifetime cache) and returns the
+// candidate fields, their types, and the shape we'd choose. Useful when a
+// post is rejected with "Instagram posts require at least one image" —
+// hit this endpoint to see which field we're putting URLs into and
+// whether there's a better candidate.
+app.get('/api/admin/buffer/debug-schema', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    resetBufferAssetsShapeCache('debug-schema endpoint')
+    bufferShapesAlreadyTried.clear()
+    const shape = await introspectBufferAssetsShape()
+    const raw = await callBufferGraphQL(`
+      query DumpCreatePostInput {
+        createPostInput: __type(name: "CreatePostInput") {
+          name
+          inputFields {
+            name
+            type { name kind ofType { name kind ofType { name kind ofType { name kind ofType { name kind } } } } }
+          }
+        }
+      }
+    `).catch((e) => ({ error: e?.message || String(e) }))
+    res.json({ ok: true, shape, createPostInput: raw?.createPostInput || raw })
+  } catch (e) {
+    const status = e?.statusCode && Number.isInteger(e.statusCode) ? e.statusCode : 500
+    res.status(status).json({ error: e?.message || 'Failed to introspect Buffer schema' })
+  }
+})
+
+app.options('/api/admin/buffer/debug-schema', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.status(204).end()
+})
+
 
 // =====================================================================
 // Aphydle automation: schedule today's daily puzzle to Buffer on a
@@ -5716,6 +6071,555 @@ app.options('/api/admin/aphydle-schedule', (_req, res) => {
 })
 app.options('/api/admin/aphydle-schedule/run-now', (_req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+
+// =====================================================================
+// Aphylia (plant card) automation: same shape as the Aphydle scheduler
+// above, but for the social-media plant cards from /admin/export. The
+// admin picks one plant explicitly OR leaves it unset to let the runner
+// pick a random "Featured this month" plant. Cards are rendered
+// server-side from the saved bundle (admin-uploaded via the Export
+// panel — see uploadAphyliaBundle below) and posted via the same
+// shared `createBufferPostsForChannels` helper as Aphydle.
+
+const APHYLIA_SCHEDULE_ID = 'default'
+const MONTH_SLUGS = [
+  'january','february','march','april','may','june',
+  'july','august','september','october','november','december',
+]
+
+async function ensureAphyliaScheduleTable() {
+  if (!sql) return false
+  try {
+    await sql`
+      create table if not exists public.aphylia_buffer_schedule (
+        id text primary key,
+        enabled boolean not null default false,
+        days_of_week text[] not null default '{}',
+        publish_time_local text not null default '13:00',
+        run_time_local text not null default '04:00',
+        timezone text not null default 'UTC',
+        organization_id text,
+        channel_ids text[] not null default '{}',
+        upcoming_plant_id text,
+        last_posted_plant_id text,
+        last_run_at timestamptz,
+        last_run_for_date date,
+        last_run_status text,
+        last_run_results jsonb,
+        updated_at timestamptz not null default now()
+      )
+    `
+    // Forward-compatibility: add columns if a previous version of this
+    // table existed without them.
+    await sql`alter table public.aphylia_buffer_schedule add column if not exists upcoming_plant_id text`
+    await sql`alter table public.aphylia_buffer_schedule add column if not exists last_posted_plant_id text`
+    // Per-run history so the picker can avoid repeating a plant that was
+    // recently posted. We keep the whole log (not just a rolling window)
+    // so the admin can review what's been published — pruning is left to
+    // ops if the table ever gets large.
+    await sql`
+      create table if not exists public.aphylia_buffer_post_history (
+        id bigserial primary key,
+        plant_id text not null,
+        plant_name text,
+        posted_at timestamptz not null default now(),
+        channel_ids text[] not null default '{}',
+        source text,
+        success boolean not null default true
+      )
+    `
+    await sql`create index if not exists aphylia_buffer_post_history_plant_idx on public.aphylia_buffer_post_history (plant_id, posted_at desc)`
+    await sql`create index if not exists aphylia_buffer_post_history_posted_at_idx on public.aphylia_buffer_post_history (posted_at desc)`
+    return true
+  } catch (e) {
+    console.warn('[aphylia-schedule] ensure table failed:', e?.message || e)
+    return false
+  }
+}
+
+async function loadAphyliaScheduleConfig() {
+  if (!sql) return null
+  try {
+    await ensureAphyliaScheduleTable()
+    const rows = await sql`
+      select * from public.aphylia_buffer_schedule where id = ${APHYLIA_SCHEDULE_ID} limit 1
+    `
+    return rows?.[0] || null
+  } catch (e) {
+    console.warn('[aphylia-schedule] load failed:', e?.message || e)
+    return null
+  }
+}
+
+// Lazy-load the server-side Aphylia card renderer. Mirrors how Aphydle's
+// puzzleApi.mjs imports its shared cardRenderer + @napi-rs/canvas. The
+// renderer module is loaded on first use so the server still boots when
+// @napi-rs/canvas hasn't been installed (e.g. on a dev box that hasn't
+// run `npm install` since this feature was added).
+let aphyliaRendererPromise = null
+async function loadAphyliaRenderer() {
+  if (aphyliaRendererPromise) return aphyliaRendererPromise
+  aphyliaRendererPromise = (async () => {
+    try {
+      const mod = await import('./server/aphyliaCardRenderer.mjs')
+      if (typeof mod?.renderAphyliaCardsForPlant !== 'function') {
+        throw new Error('aphyliaCardRenderer.mjs missing renderAphyliaCardsForPlant export')
+      }
+      return mod
+    } catch (e) {
+      // Don't cache failures — re-try on the next call so a deploy that
+      // adds the module can take effect without restarting the process.
+      aphyliaRendererPromise = null
+      throw e
+    }
+  })()
+  return aphyliaRendererPromise
+}
+
+async function renderAphyliaCardsForPlant(plantId) {
+  const mod = await loadAphyliaRenderer()
+  return mod.renderAphyliaCardsForPlant(plantId, {
+    supabase: supabaseServiceClient,
+    uploadCardToStorage,
+    primaryDomainUrl: PRIMARY_DOMAIN_URL,
+    aiContentEndpoint: '/api/admin/ai/plant-export-content',
+    aiContentBaseUrl: `http://127.0.0.1:${process.env.PORT || 3000}`,
+  })
+}
+
+function validateAphyliaScheduleInput(body) {
+  const out = {}
+  out.enabled = !!body.enabled
+  const days = Array.isArray(body.days_of_week) ? body.days_of_week : []
+  out.days_of_week = days
+    .map((d) => String(d || '').trim().toLowerCase().slice(0, 3))
+    .filter((d) => APHYDLE_DAYS.includes(d))
+  const timeRe = /^([01]\d|2[0-3]):([0-5]\d)$/
+  const publishTime = String(body.publish_time_local || '').trim()
+  const runTime = String(body.run_time_local || '').trim()
+  if (!timeRe.test(publishTime)) throw new Error('publish_time_local must be HH:MM (24h)')
+  if (!timeRe.test(runTime)) throw new Error('run_time_local must be HH:MM (24h)')
+  if (APHYDLE_RESERVED_MINUTES.has(runTime)) {
+    throw new Error(
+      `run_time_local ${runTime} clashes with a reserved system job. Pick another minute.`,
+    )
+  }
+  out.publish_time_local = publishTime
+  out.run_time_local = runTime
+  out.timezone = aphydleServerTimezone()
+  out.organization_id = body.organization_id ? String(body.organization_id).trim() : null
+  const channels = Array.isArray(body.channel_ids) ? body.channel_ids : []
+  out.channel_ids = channels.map((c) => String(c || '').trim()).filter(Boolean)
+  // upcoming_plant_id is optional: empty string / null means "auto-pick a
+  // random featured plant on each run".
+  const upcoming = body.upcoming_plant_id
+  out.upcoming_plant_id = upcoming ? String(upcoming).trim() : null
+  return out
+}
+
+// Resolve the "next plant" for an Aphylia automation tick. If the admin
+// pinned a plant, return it. Otherwise, draw a random plant whose
+// featured_month array contains the current month (in the configured
+// timezone). Falls back to any non-in_progress plant if the featured
+// pool is empty.
+// How long a plant is "cooling off" after a successful run. Plants
+// published within this window are filtered out of the random pool so
+// the same one isn't picked two weeks in a row. We stop short of the
+// full month (28 days) so a plant featured in only one month can still
+// rotate before the month ends — anyone wanting longer gaps can pin
+// the plant explicitly.
+const APHYLIA_REPEAT_COOLDOWN_DAYS = 21
+
+async function loadRecentlyPostedPlantIds(days = APHYLIA_REPEAT_COOLDOWN_DAYS) {
+  if (!sql) return new Set()
+  try {
+    await ensureAphyliaScheduleTable()
+    const rows = await sql`
+      select distinct plant_id
+      from public.aphylia_buffer_post_history
+      where success = true
+        and posted_at >= now() - (${days} || ' days')::interval
+    `
+    return new Set((rows || []).map((r) => String(r.plant_id || '')).filter(Boolean))
+  } catch (e) {
+    console.warn('[aphylia-schedule] history load failed:', e?.message || e)
+    return new Set()
+  }
+}
+
+async function pickAphyliaUpcomingPlant({ pinnedId, monthIndex }) {
+  if (!supabaseServiceClient) throw new Error('Supabase service client not configured')
+  if (pinnedId) {
+    const { data, error } = await supabaseServiceClient
+      .from('plants')
+      .select('id, name, status')
+      .eq('id', pinnedId)
+      .maybeSingle()
+    if (error) throw new Error(`Failed to load pinned plant: ${error.message}`)
+    if (!data) throw new Error(`Pinned plant ${pinnedId} not found`)
+    return { id: data.id, name: data.name, source: 'pinned' }
+  }
+  // Filter out anything posted in the last cooldown window so the picker
+  // walks the full Featured pool before circling back. Falls through to
+  // including-everything only if the cooldown leaves an empty pool.
+  const recentlyPosted = await loadRecentlyPostedPlantIds()
+  const filterRecent = (rows) => {
+    const all = Array.isArray(rows) ? rows : []
+    if (!recentlyPosted.size) return { fresh: all, hadCooldown: false }
+    const fresh = all.filter((p) => !recentlyPosted.has(String(p.id)))
+    return { fresh, hadCooldown: fresh.length !== all.length }
+  }
+
+  const monthSlug = MONTH_SLUGS[(Number(monthIndex) - 1 + 12) % 12]
+  const { data: featured, error: ferr } = await supabaseServiceClient
+    .from('plants')
+    .select('id, name, status, featured_month')
+    .or('status.is.null,status.neq.in_progress')
+    .contains('featured_month', [monthSlug])
+  if (ferr) throw new Error(`Failed to query featured plants: ${ferr.message}`)
+  const featuredAll = Array.isArray(featured) ? featured : []
+  const { fresh: featuredFresh } = filterRecent(featuredAll)
+  if (featuredFresh.length) {
+    const pick = featuredFresh[Math.floor(Math.random() * featuredFresh.length)]
+    return { id: pick.id, name: pick.name, source: 'featured-random' }
+  }
+  if (featuredAll.length) {
+    // Cooldown wiped the featured pool — fall back to a random featured
+    // plant even if it was posted recently, so a thin pool doesn't break
+    // the schedule.
+    const pick = featuredAll[Math.floor(Math.random() * featuredAll.length)]
+    console.warn(`[aphylia-schedule] all featured plants for ${monthSlug} were posted within ${APHYLIA_REPEAT_COOLDOWN_DAYS}d; reusing ${pick.id}`)
+    return { id: pick.id, name: pick.name, source: 'featured-random-repeat' }
+  }
+  // No featured plants this month — fall through to any active plant.
+  const { data: anyData, error: aerr } = await supabaseServiceClient
+    .from('plants')
+    .select('id, name, status')
+    .or('status.is.null,status.neq.in_progress')
+    .limit(200)
+  if (aerr) throw new Error(`Failed to query plants: ${aerr.message}`)
+  const anyAll = Array.isArray(anyData) ? anyData : []
+  const { fresh: anyFresh } = filterRecent(anyAll)
+  const pool = anyFresh.length ? anyFresh : anyAll
+  if (!pool.length) throw new Error('No eligible plants in the database')
+  const pick = pool[Math.floor(Math.random() * pool.length)]
+  const source = anyFresh.length ? 'fallback-random' : 'fallback-random-repeat'
+  return { id: pick.id, name: pick.name, source }
+}
+
+function computeAphyliaDueAt(cfg) {
+  // Same logic as computeAphydleDueAt — re-implemented inline so a future
+  // schema split (different timezone field, etc.) is easy.
+  const tz = aphydleServerTimezone()
+  const [hh, mm] = String(cfg.publish_time_local || '13:00').split(':').map((v) => Number.parseInt(v, 10))
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+  })
+  const today = fmt.format(new Date())
+  const [y, m, d] = today.split('-').map((v) => Number.parseInt(v, 10))
+  const utcGuess = new Date(Date.UTC(y, (m || 1) - 1, d || 1, hh || 0, mm || 0, 0))
+  const localStr = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+  }).formatToParts(utcGuess).reduce((acc, p) => { acc[p.type] = p.value; return acc }, {})
+  const localAsUtc = Date.UTC(
+    Number(localStr.year), Number(localStr.month) - 1, Number(localStr.day),
+    Number(localStr.hour) % 24, Number(localStr.minute), Number(localStr.second || 0),
+  )
+  const offsetMs = localAsUtc - utcGuess.getTime()
+  const due = new Date(utcGuess.getTime() - offsetMs)
+  if (due.getTime() <= Date.now() + 60_000) return null
+  return due.toISOString()
+}
+
+async function runAphyliaAutomation(cfg, { dryRun = false } = {}) {
+  if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) {
+    return { ok: false, error: 'No channel_ids configured' }
+  }
+  const tz = aphydleServerTimezone()
+  const monthIndex = Number(new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, month: 'numeric',
+  }).format(new Date()))
+  const pick = await pickAphyliaUpcomingPlant({
+    pinnedId: cfg.upcoming_plant_id || null,
+    monthIndex,
+  })
+  // Server-side render: mirrors Aphydle's puzzleApi flow. Falls back to a
+  // descriptive error if the renderer module isn't installed yet (so the
+  // schedule UI works even before the @napi-rs/canvas + shared renderer
+  // refactor lands).
+  let renderResult
+  try {
+    renderResult = await renderAphyliaCardsForPlant(pick.id)
+  } catch (e) {
+    return {
+      ok: false,
+      error: `Failed to render cards for plant ${pick.id} (${pick.name || ''}): ${e?.message || e}`,
+      pickedPlant: pick,
+    }
+  }
+  const mediaUrls = renderResult.cardUrls || []
+  const caption = renderResult.caption || ''
+  if (!mediaUrls.length || !caption.trim()) {
+    return { ok: false, error: 'Renderer produced no cards or caption.', pickedPlant: pick }
+  }
+  const dueAtIso = computeAphyliaDueAt(cfg)
+  if (dryRun) {
+    return {
+      ok: true, dryRun: true,
+      pickedPlant: pick, caption, dueAtIso, mediaUrls, channels: cfg.channel_ids,
+    }
+  }
+  const channelServices = await fetchBufferChannelServices()
+  const results = await createBufferPostsForChannels({
+    text: caption,
+    channelIds: cfg.channel_ids,
+    dueAtIso,
+    mediaUrls,
+    channelServices,
+  })
+  const allOk = results.length > 0 && results.every((r) => r.ok)
+  return { ok: allOk, results, pickedPlant: pick, dueAtIso, mediaUrls }
+}
+
+async function recordAphyliaRun(forDate, status, details) {
+  if (!sql) return
+  try {
+    const lastPostedPlantId = details?.pickedPlant?.id || null
+    await sql`
+      update public.aphylia_buffer_schedule
+      set last_run_at = now(),
+          last_run_for_date = ${forDate || null},
+          last_run_status = ${String(status || '').slice(0, 64)},
+          last_run_results = ${sql.json(details || {})},
+          last_posted_plant_id = ${lastPostedPlantId}
+      where id = ${APHYLIA_SCHEDULE_ID}
+    `
+    // History row — only for runs that actually scheduled a Buffer post
+    // (not dry-runs, not errors with no plant pick). The picker uses
+    // `success = true` rows to know what's still in cooldown.
+    if (lastPostedPlantId && !details?.dryRun && status === 'ok') {
+      const channelIds = Array.isArray(details?.results)
+        ? details.results.filter((r) => r?.ok).map((r) => String(r.channelId || '')).filter(Boolean)
+        : []
+      const source = details?.pickedPlant?.source || null
+      const plantName = details?.pickedPlant?.name || null
+      await sql`
+        insert into public.aphylia_buffer_post_history
+          (plant_id, plant_name, channel_ids, source, success)
+        values (${lastPostedPlantId}, ${plantName}, ${channelIds}, ${source}, true)
+      `
+    }
+  } catch (e) {
+    console.warn('[aphylia-schedule] record run failed:', e?.message || e)
+  }
+}
+
+cron.schedule('* * * * *', async () => {
+  if (!isAphydleAutomationRunner()) return
+  const cfg = await loadAphyliaScheduleConfig()
+  if (!cfg || !cfg.enabled) return
+  if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) return
+  const tz = aphydleServerTimezone()
+  const now = new Date()
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, hour12: false,
+    weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit',
+  }).formatToParts(now).reduce((acc, p) => { acc[p.type] = p.value; return acc }, {})
+  const weekday = String(parts.weekday || '').toLowerCase().slice(0, 3)
+  const hhmm = `${parts.hour}:${parts.minute}`
+  const today = `${parts.year}-${parts.month}-${parts.day}`
+  const days = Array.isArray(cfg.days_of_week) ? cfg.days_of_week : []
+  if (!days.includes(weekday)) return
+  if (hhmm !== cfg.run_time_local) return
+  if (cfg.last_run_for_date && String(cfg.last_run_for_date).slice(0, 10) === today) return
+  console.log(`[aphylia-schedule] firing for ${today} ${hhmm} ${tz} on ${weekday}`)
+  try {
+    const result = await runAphyliaAutomation(cfg)
+    await recordAphyliaRun(today, result.ok ? 'ok' : 'partial', result)
+    console.log('[aphylia-schedule] run done:', result.ok ? 'ok' : 'partial')
+  } catch (e) {
+    console.error('[aphylia-schedule] run failed:', e?.message || e)
+    await recordAphyliaRun(today, 'error', { error: e?.message || String(e) })
+  }
+})
+
+app.get('/api/admin/aphylia-schedule', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    await ensureAphyliaScheduleTable()
+    const cfg = await loadAphyliaScheduleConfig()
+    const serverTimezone = aphydleServerTimezone()
+    // Resolve a preview of the upcoming plant so the UI can render it
+    // without making an extra round-trip.
+    let upcoming = null
+    try {
+      const monthIndex = Number(new Intl.DateTimeFormat('en-US', {
+        timeZone: serverTimezone, month: 'numeric',
+      }).format(new Date()))
+      upcoming = await pickAphyliaUpcomingPlant({
+        pinnedId: cfg?.upcoming_plant_id || null,
+        monthIndex,
+      })
+    } catch (e) {
+      // Don't fail the whole request just because we couldn't preview.
+      console.warn('[aphylia-schedule] upcoming preview failed:', e?.message || e)
+    }
+    // Recent post history so the UI can show what's been published and
+    // explain why a plant is/isn't in the random pool.
+    let history = []
+    if (sql) {
+      try {
+        const rows = await sql`
+          select plant_id, plant_name, posted_at, channel_ids, source
+          from public.aphylia_buffer_post_history
+          where success = true
+          order by posted_at desc
+          limit 20
+        `
+        history = (rows || []).map((r) => ({
+          plantId: r.plant_id,
+          plantName: r.plant_name,
+          postedAt: r.posted_at,
+          channelIds: Array.isArray(r.channel_ids) ? r.channel_ids : [],
+          source: r.source,
+        }))
+      } catch (e) {
+        console.warn('[aphylia-schedule] history fetch failed:', e?.message || e)
+      }
+    }
+    res.json({
+      ok: true,
+      reservedMinutes: Array.from(APHYDLE_RESERVED_MINUTES),
+      serverTimezone,
+      serverName: aphydleServerName(),
+      isAutomationRunner: isAphydleAutomationRunner(),
+      config: cfg || {
+        id: APHYLIA_SCHEDULE_ID,
+        enabled: false,
+        days_of_week: [],
+        publish_time_local: '13:00',
+        run_time_local: '04:00',
+        timezone: serverTimezone,
+        organization_id: null,
+        channel_ids: [],
+        upcoming_plant_id: null,
+      },
+      upcoming,
+      history,
+      repeatCooldownDays: APHYLIA_REPEAT_COOLDOWN_DAYS,
+    })
+  } catch (e) {
+    console.error('[aphylia-schedule:get] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to load schedule' })
+  }
+})
+
+app.put('/api/admin/aphylia-schedule', express.json({ limit: '32kb' }), async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!sql) { res.status(503).json({ error: 'Database not configured' }); return }
+    let next
+    try { next = validateAphyliaScheduleInput(req.body || {}) }
+    catch (ve) { res.status(400).json({ error: ve.message }); return }
+    await ensureAphyliaScheduleTable()
+    await sql`
+      insert into public.aphylia_buffer_schedule (
+        id, enabled, days_of_week, publish_time_local, run_time_local,
+        timezone, organization_id, channel_ids, upcoming_plant_id, updated_at
+      ) values (
+        ${APHYLIA_SCHEDULE_ID}, ${next.enabled}, ${next.days_of_week},
+        ${next.publish_time_local}, ${next.run_time_local}, ${next.timezone},
+        ${next.organization_id}, ${next.channel_ids}, ${next.upcoming_plant_id}, now()
+      )
+      on conflict (id) do update set
+        enabled = excluded.enabled,
+        days_of_week = excluded.days_of_week,
+        publish_time_local = excluded.publish_time_local,
+        run_time_local = excluded.run_time_local,
+        timezone = excluded.timezone,
+        organization_id = excluded.organization_id,
+        channel_ids = excluded.channel_ids,
+        upcoming_plant_id = excluded.upcoming_plant_id,
+        updated_at = now()
+    `
+    const cfg = await loadAphyliaScheduleConfig()
+    res.json({ ok: true, config: cfg })
+  } catch (e) {
+    console.error('[aphylia-schedule:put] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to save schedule' })
+  }
+})
+
+app.post('/api/admin/aphylia-schedule/run-now', express.json({ limit: '8kb' }), async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    const cfg = await loadAphyliaScheduleConfig()
+    if (!cfg) { res.status(400).json({ error: 'No saved schedule yet — save the form once before running.' }); return }
+    if (!Array.isArray(cfg.channel_ids) || !cfg.channel_ids.length) {
+      res.status(400).json({ error: 'No channels configured' }); return
+    }
+    const dryRun = !!(req.body && req.body.dryRun)
+    const result = await runAphyliaAutomation(cfg, { dryRun })
+    if (!dryRun) {
+      const today = new Intl.DateTimeFormat('en-CA', {
+        timeZone: aphydleServerTimezone(),
+        year: 'numeric', month: '2-digit', day: '2-digit',
+      }).format(new Date())
+      await recordAphyliaRun(today, result.ok ? 'ok' : 'partial', result)
+    }
+    res.status(result.ok ? 200 : 207).json(result)
+  } catch (e) {
+    console.error('[aphylia-schedule:run-now] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to run schedule' })
+  }
+})
+
+// Helper for the UI — list "Featured this month" plants so the picker
+// can show the auto-selection pool. Also returns the currently-resolved
+// upcoming pick for the given pinned plant id (or null for auto).
+app.get('/api/admin/aphylia-schedule/featured-plants', async (req, res) => {
+  try {
+    const adminId = await ensureAdmin(req, res)
+    if (!adminId) return
+    if (!supabaseServiceClient) { res.status(503).json({ error: 'Supabase service client not configured' }); return }
+    const tz = aphydleServerTimezone()
+    const monthIndex = Number(new Intl.DateTimeFormat('en-US', {
+      timeZone: tz, month: 'numeric',
+    }).format(new Date()))
+    const monthSlug = MONTH_SLUGS[(monthIndex - 1 + 12) % 12]
+    const { data, error } = await supabaseServiceClient
+      .from('plants')
+      .select('id, name, status, featured_month')
+      .or('status.is.null,status.neq.in_progress')
+      .contains('featured_month', [monthSlug])
+      .order('name')
+    if (error) { res.status(500).json({ error: error.message }); return }
+    const pool = (data || []).map((p) => ({ id: p.id, name: p.name }))
+    res.json({ ok: true, monthSlug, monthIndex, pool })
+  } catch (e) {
+    console.error('[aphylia-schedule:featured-plants] failed:', e?.message || e)
+    res.status(500).json({ error: e?.message || 'Failed to load featured plants' })
+  }
+})
+
+app.options('/api/admin/aphylia-schedule', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,PUT,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/aphylia-schedule/run-now', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS')
+  res.status(204).end()
+})
+app.options('/api/admin/aphylia-schedule/featured-plants', (_req, res) => {
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
   res.status(204).end()
 })
 
